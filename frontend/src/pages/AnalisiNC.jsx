@@ -19,15 +19,13 @@ export default function AnalisiNC() {
 
   // ── Stato generazione MAIN ─────────────────────────────
   const [nomeCartella, setNomeCartella] = useState('')
-  const [selectedIds, setSelectedIds] = useState(new Set())   // id entry selezionate
-  const [mainPreview, setMainPreview] = useState(null)        // { contenuto, nome_file }
+  const [percorsoCartella, setPercorsoCartella] = useState('')  // percorso disco per salvataggio backend
+  const [selectedIds, setSelectedIds] = useState(new Set())
+  const [mainPreview, setMainPreview] = useState(null)
   const [mainBusy, setMainBusy] = useState(false)
   const [mainError, setMainError] = useState(null)
   const [showPreview, setShowPreview] = useState(false)
-  const dirHandleRef = useRef(null)   // FileSystemDirectoryHandle catturato al drag/open
-
-  // ── File System Access API support ────────────────────
-  const fsSupportata = typeof window !== 'undefined' && 'showSaveFilePicker' in window
+  const dirHandleRef = useRef(null)
 
   // ── Gestione file ──────────────────────────────────────
   const addFiles = useCallback((files, dirHandle = null) => {
@@ -165,56 +163,17 @@ export default function AnalisiNC() {
 
   const handleGeneraMain = async () => {
     if (!nomeCartella.trim()) { setMainError('Inserisci il nome della cartella in macchina'); return }
+    if (!percorsoCartella.trim()) { setMainError('Inserisci il percorso della cartella di destinazione'); return }
     const programmi = buildProgrammi()
     if (!programmi.length) { setMainError('Seleziona almeno un programma'); return }
     setMainBusy(true); setMainError(null)
     try {
-      const { blob, filename } = await api.generaMain({ nome_cartella: nomeCartella, programmi })
-      const text = await blob.text()
-
-      // ── Caso 1: abbiamo già la directory handle dal drag della cartella ──
-      if (dirHandleRef.current) {
-        try {
-          await dirHandleRef.current.queryPermission({ mode: 'readwrite' }) === 'granted' ||
-            await dirHandleRef.current.requestPermission({ mode: 'readwrite' })
-          const fileHandle = await dirHandleRef.current.getFileHandle(filename, { create: true })
-          const writable = await fileHandle.createWritable()
-          await writable.write(text)
-          await writable.close()
-          setGlobalSuccess(`✓ ${filename} salvato nella cartella sorgente`)
-          setShowPreview(false)
-          return
-        } catch (fsErr) {
-          console.warn('Dir handle fallito, chiedo cartella manualmente:', fsErr)
-          dirHandleRef.current = null
-        }
-      }
-
-      // ── Caso 2: chiedi la cartella di destinazione con showDirectoryPicker ──
-      if ('showDirectoryPicker' in window) {
-        try {
-          const dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' })
-          const fileHandle = await dirHandle.getFileHandle(filename, { create: true })
-          const writable = await fileHandle.createWritable()
-          await writable.write(text)
-          await writable.close()
-          // Memorizza per usi successivi nella stessa sessione
-          dirHandleRef.current = dirHandle
-          setGlobalSuccess(`✓ ${filename} salvato`)
-          setShowPreview(false)
-          return
-        } catch (pickerErr) {
-          if (pickerErr.name === 'AbortError') { setMainBusy(false); return }
-          console.warn('showDirectoryPicker fallito, fallback download:', pickerErr)
-        }
-      }
-
-      // ── Caso 3: fallback download classico ──
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url; a.download = filename; a.click()
-      URL.revokeObjectURL(url)
-      setGlobalSuccess(`${filename} scaricato — sposta manualmente nella cartella programmi`)
+      const res = await api.salvaMain({
+        nome_cartella: nomeCartella,
+        percorso_cartella: percorsoCartella,
+        programmi,
+      })
+      setGlobalSuccess(`✓ ${res.nome_file} salvato in ${res.percorso_file}`)
       setShowPreview(false)
     } catch (e) {
       setMainError(e.message)
@@ -469,31 +428,56 @@ export default function AnalisiNC() {
             <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>Genera File MAIN</span>
           </div>
 
-          {/* Riga: nome cartella */}
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-            <label style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: '0.08em', flexShrink: 0 }}>
-              CARTELLA IN MACCHINA
-            </label>
-            <input
-              type="text"
-              value={nomeCartella}
-              onChange={e => { setNomeCartella(e.target.value); setMainPreview(null); setMainError(null) }}
-              placeholder="es. TEST"
-              style={{
-                background: 'var(--bg-base)', border: '1px solid var(--border-bright)',
-                borderRadius: 'var(--radius-sm)', padding: '6px 12px',
-                color: 'var(--text-primary)', fontFamily: 'var(--font-mono)',
-                fontSize: 13, fontWeight: 700, textTransform: 'uppercase',
-                width: 160, outline: 'none',
-              }}
-              onFocus={e => e.target.style.borderColor = 'var(--cyan)'}
-              onBlur={e => e.target.style.borderColor = 'var(--border-bright)'}
-            />
-            {nomeCartella.trim() && (
-              <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
-                → 0_MAIN_{nomeCartella.trim().toUpperCase()}.MPF
-              </span>
-            )}
+          {/* Riga: nome cartella + percorso */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+              <label style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: '0.08em', flexShrink: 0, width: 160 }}>
+                NOME CARTELLA MACCHINA
+              </label>
+              <input
+                type="text"
+                value={nomeCartella}
+                onChange={e => { setNomeCartella(e.target.value); setMainPreview(null); setMainError(null) }}
+                placeholder="es. TEST"
+                style={{
+                  background: 'var(--bg-base)', border: '1px solid var(--border-bright)',
+                  borderRadius: 'var(--radius-sm)', padding: '6px 12px',
+                  color: 'var(--text-primary)', fontFamily: 'var(--font-mono)',
+                  fontSize: 13, fontWeight: 700, textTransform: 'uppercase',
+                  width: 160, outline: 'none',
+                }}
+                onFocus={e => e.target.style.borderColor = 'var(--cyan)'}
+                onBlur={e => e.target.style.borderColor = 'var(--border-bright)'}
+              />
+              {nomeCartella.trim() && (
+                <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
+                  → 0_MAIN_{nomeCartella.trim().toUpperCase()}.MPF
+                </span>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+              <label style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: '0.08em', flexShrink: 0, width: 160 }}>
+                CARTELLA DI DESTINAZIONE
+              </label>
+              <input
+                type="text"
+                value={percorsoCartella}
+                onChange={e => { setPercorsoCartella(e.target.value); setMainError(null) }}
+                placeholder="es. C:\Programmi\TEST"
+                style={{
+                  background: 'var(--bg-base)', border: '1px solid var(--border-bright)',
+                  borderRadius: 'var(--radius-sm)', padding: '6px 12px',
+                  color: 'var(--text-primary)', fontFamily: 'var(--font-mono)',
+                  fontSize: 12, flex: 1, minWidth: 260, outline: 'none',
+                }}
+                onFocus={e => e.target.style.borderColor = 'var(--cyan)'}
+                onBlur={e => e.target.style.borderColor = 'var(--border-bright)'}
+              />
+            </div>
+            <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', paddingLeft: 170 }}>
+              Il file MAIN verrà scritto direttamente in questa cartella dal server
+            </div>
           </div>
 
           {/* Selezione programmi */}
@@ -552,16 +536,11 @@ export default function AnalisiNC() {
             <button
               className="btn btn-primary"
               onClick={handleGeneraMain}
-              disabled={mainBusy || selectedIds.size === 0 || !nomeCartella.trim()}
+              disabled={mainBusy || selectedIds.size === 0 || !nomeCartella.trim() || !percorsoCartella.trim()}
               style={{ fontSize: 12 }}
             >
-              {mainBusy ? <><Spinner small /> Salvataggio...</> : `💾 Genera MAIN (${selectedIds.size} pgm)`}
+              {mainBusy ? <><Spinner small /> Salvataggio...</> : `💾 Salva MAIN (${selectedIds.size} pgm)`}
             </button>
-            <span style={{ fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
-              {dirHandleRef.current
-                ? '→ salva nella cartella già selezionata'
-                : '→ ti chiede la cartella di destinazione'}
-            </span>
           </div>
 
           {/* Anteprima testo */}
@@ -585,10 +564,10 @@ export default function AnalisiNC() {
               <button
                 className="btn btn-primary"
                 onClick={handleGeneraMain}
-                disabled={mainBusy}
+                disabled={mainBusy || !percorsoCartella.trim()}
                 style={{ alignSelf: 'flex-end', fontSize: 12 }}
               >
-                {mainBusy ? <><Spinner small /> Generazione...</> : '⬇ Scarica MAIN'}
+                {mainBusy ? <><Spinner small /> Salvataggio...</> : '💾 Salva MAIN'}
               </button>
             </div>
           )}

@@ -87,6 +87,7 @@ export const api = {
   setCalibraMode:       (body)      => request('PUT',    '/analisi-nc/calibra-mode', body),
   anteprimaMain:        (body)      => request('POST',   '/analisi-nc/anteprima-main', body),
   generaMain:           (body)      => download('POST',  '/analisi-nc/genera-main', body),
+  salvaMain:            (body)      => request('POST',   '/analisi-nc/salva-main', body),
 
   // ── Health ────────────────────────────────────────────
   health:               ()          => fetch('/health').then(r => r.json()),

@@ -359,6 +359,17 @@ class GeneraMainRequest(BaseModel):
     nome_cartella: str               # es. "TEST"
     programmi: List[ProgrammaNC]     # programmi selezionati dall'operatore
 
+class SalvaMainRequest(BaseModel):
+    nome_cartella: str               # es. "TEST"
+    percorso_cartella: str           # es. "C:/Tool_App/TEST" — cartella dove scrivere
+    programmi: List[ProgrammaNC]
+
+class SalvaMainResponse(BaseModel):
+    ok: bool
+    percorso_file: str               # percorso completo del file scritto
+    nome_file: str
+    messaggio: str
+
 class AnteprimeMainResponse(BaseModel):
     contenuto: str                   # testo del file MAIN
     nome_file: str                   # es. "0_MAIN_TEST.MPF"
@@ -472,4 +483,64 @@ async def genera_main(body: GeneraMainRequest):
         content=contenuto.encode("utf-8"),
         media_type="application/octet-stream",
         headers={"Content-Disposition": f'attachment; filename="{nome_file}"'},
+    )
+
+
+@router.post(
+    "/salva-main",
+    response_model=SalvaMainResponse,
+    summary="Genera e salva il MAIN direttamente sul disco del server",
+)
+async def salva_main(body: SalvaMainRequest):
+    """
+    Genera il file MAIN e lo scrive direttamente nella cartella indicata
+    dall'operatore (percorso sul filesystem del server/PC locale).
+    
+    Usato quando il browser non supporta File System Access API o
+    quando l'app gira in rete locale — il backend scrive direttamente
+    nella cartella sorgente dei programmi NC.
+    """
+    if not body.nome_cartella.strip():
+        raise HTTPException(status_code=422, detail="nome_cartella non può essere vuoto")
+    if not body.percorso_cartella.strip():
+        raise HTTPException(status_code=422, detail="percorso_cartella non può essere vuoto")
+    if not body.programmi:
+        raise HTTPException(status_code=422, detail="Seleziona almeno un programma")
+
+    cartella_upper = body.nome_cartella.strip().upper()
+    contenuto = _build_main_content(cartella_upper, body.programmi)
+    nome_file = f"0_MAIN_{cartella_upper}.MPF"
+
+    # Normalizza il percorso (gestisce sia / che \ e path relativi)
+    import pathlib
+    try:
+        dest_dir = pathlib.Path(body.percorso_cartella.strip()).expanduser().resolve()
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=f"Percorso non valido: {e}")
+
+    if not dest_dir.exists():
+        raise HTTPException(
+            status_code=422,
+            detail=f"Cartella non trovata: {dest_dir}. Verifica il percorso."
+        )
+    if not dest_dir.is_dir():
+        raise HTTPException(status_code=422, detail=f"Il percorso non è una cartella: {dest_dir}")
+
+    percorso_file = dest_dir / nome_file
+    try:
+        percorso_file.write_text(contenuto, encoding="utf-8")
+    except PermissionError:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Permesso negato: impossibile scrivere in {dest_dir}"
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Errore scrittura file: {e}")
+
+    log.info(f"MAIN salvato su disco: {percorso_file} ({len(body.programmi)} programmi)")
+    return SalvaMainResponse(
+        ok=True,
+        percorso_file=str(percorso_file),
+        nome_file=nome_file,
+        messaggio=f"File salvato in: {percorso_file}",
     )

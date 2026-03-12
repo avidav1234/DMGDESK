@@ -14,13 +14,16 @@ POST /api/analisi-nc/anteprima-main     → restituisce preview testuale del MAI
 
 import io
 import os
+import json as _json
+import pathlib
 import tempfile
 from datetime import datetime
+from typing import List, Optional
+
 import pandas as pd
 from fastapi import APIRouter, HTTPException, UploadFile, File, Query
 from fastapi.responses import Response
 from pydantic import BaseModel
-from typing import List, Optional
 
 from api.deps import get_db_principale, get_db_smontati, get_db_bussole
 from logic.nc_analyzer import estrai_tutti_utensili_da_file, confronta_utensili_logica
@@ -512,7 +515,6 @@ async def salva_main(body: SalvaMainRequest):
     nome_file = f"0_MAIN_{cartella_upper}.MPF"
 
     # Normalizza il percorso (gestisce sia / che \ e path relativi)
-    import pathlib
     try:
         dest_dir = pathlib.Path(body.percorso_cartella.strip()).expanduser().resolve()
     except Exception as e:
@@ -549,14 +551,12 @@ async def salva_main(body: SalvaMainRequest):
 
 # ── Cartelle recenti + sfoglia filesystem ──────────────────
 
-import json as _json
-
 _RECENTI_FILE = pathlib.Path("cartelle_recenti.json")
 _MAX_RECENTI  = 8
 
 def _load_recenti() -> list:
     try:
-        return _json.loads(_recenti_file_path().read_text(encoding="utf-8"))
+        return _json.loads(_RECENTI_FILE.read_text(encoding="utf-8"))
     except Exception:
         return []
 
@@ -567,15 +567,12 @@ def _save_recente(percorso: str):
         if percorso in items:
             items.remove(percorso)
         items.insert(0, percorso)
-        _recenti_file_path().write_text(
+        _RECENTI_FILE.write_text(
             _json.dumps(items[:_MAX_RECENTI], ensure_ascii=False, indent=2),
             encoding="utf-8"
         )
     except Exception:
         pass
-
-def _recenti_file_path() -> pathlib.Path:
-    return _RECENTI_FILE
 
 
 class CartelleBrowseResponse(BaseModel):

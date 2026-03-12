@@ -88,7 +88,7 @@ def genera_programma_main(df_macchina, nome_cartella="MAIN", calibra_logic=None)
                 
                 # Aggiungi CALIBRA ONLY se necessario
                 if calibra_logic and calibra_logic.needs_calibra_only(alias, idx, total_tools):
-                    calibra_cmd = calibra_logic.get_calibra_command(pos)
+                    calibra_cmd = calibra_logic.get_calibra_command()
                     f.write(f"{calibra_cmd}\n")
                     calibra_count += 1
             

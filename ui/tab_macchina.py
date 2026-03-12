@@ -344,69 +344,53 @@ class TabMacchina:
                 messagebox.showerror("Errore", err)
     
     def _a_scaffale(self):
-        """Sposta utensile a scaffale."""
+        """Sposta utensile da macchina a scaffale (mantiene alias, libera posizione)."""
         sel = self.tree.selection()
         if not sel:
             messagebox.showwarning("Attenzione", "Seleziona un utensile")
             return
-        
-        if not messagebox.askyesno("Conferma Spostamento", 
-                                   "Spostare l'utensile a scaffale?\n\n"
-                                   "L'utensile manterrà posizione e alias."):
-            return
-        
+
         item = self.tree.item(sel[0])
         idx = item['tags'][0]
-        
-        # Cambia stato a "Scaffale"
-        self.main.df.at[idx, 'Stato'] = 'Scaffale'
-        
-        # Salva database
+        alias = self.main.df.at[idx, 'Alias']
+        pos = self.main.df.at[idx, 'Posizione']
+
+        if not messagebox.askyesno("Conferma Spostamento",
+                                   f"Spostare a scaffale?\n\n"
+                                   f"Alias: {alias}\n"
+                                   f"Posizione liberata: {pos}"):
+            return
+
+        self.main.df.at[idx, 'Stato_Utensile'] = STATO_SCAFFALE
+        self.main.df.at[idx, 'Posizione'] = ""
+
         success, err = salva_database(self.main.df, self.main.db_path)
-        
         if success:
             self.main.refresh_all_tabs()
             self.main._update_status()
-            messagebox.showinfo("Successo", "Utensile spostato a scaffale")
+            messagebox.showinfo("Successo", f"Utensile spostato a scaffale\n{alias}")
         else:
             messagebox.showerror("Errore", err)
     
     def _smonta(self):
-        """Smonta utensile."""
+        """Smonta utensile: separa utensile base, holder e bussola."""
+        sel = self.tree.selection()
+        if not sel:
+            messagebox.showwarning("Attenzione", "Seleziona un utensile")
+            return
+
+        item = self.tree.item(sel[0])
+        idx = item['tags'][0]
+        alias = self.main.df.at[idx, 'Alias']
+        pos = self.main.df.at[idx, 'Posizione']
+
+        if not messagebox.askyesno("Conferma Smontaggio",
+                                   f"Smontare utensile in posizione {pos}?\n\n"
+                                   f"Alias: {alias}\n\n"
+                                   f"Utensile, holder e bussola verranno separati."):
+            return
+
         try:
-            print("\n=== DEBUG SMONTAGGIO ===")
-            
-            sel = self.tree.selection()
-            print(f"1. Selezione: {sel}")
-            
-            if not sel:
-                messagebox.showwarning("Attenzione", "Seleziona un utensile")
-                return
-            
-            if not messagebox.askyesno("Conferma", "Smontare utensile?"):
-                print("2. Utente ha annullato")
-                return
-            
-            print("2. Conferma OK")
-            
-            item = self.tree.item(sel[0])
-            idx = item['tags'][0]
-            print(f"3. Item idx: {idx}")
-            
-            alias = self.main.df.at[idx, 'Alias']
-            pos = self.main.df.at[idx, 'Posizione']
-            print(f"4. Alias: {alias}, Pos: {pos}")
-            
-            # Verifica db_paths
-            print(f"5. db_paths: {self.main.db_paths}")
-            
-            # Verifica DataFrame prima
-            print(f"6. df_utensili_smontati len: {len(self.main.df_utensili_smontati)}")
-            print(f"   df_holder_smontati len: {len(self.main.df_holder_smontati)}")
-            print(f"   df_bussole len: {len(self.main.df_bussole_idraulico)}")
-            
-            # Smonta con separazione holder + bussola
-            print("7. Chiamata smonta_utensile_completo...")
             success, msg, df_ut, df_h, df_b = smonta_utensile_completo(
                 alias,
                 self.main.db_paths,
@@ -415,50 +399,28 @@ class TabMacchina:
                 self.main.df_bussole_idraulico,
                 provenienza=f"Pos. {pos}"
             )
-            
-            print(f"8. Success: {success}, Msg: {msg}")
-            
+
             if success:
-                # Aggiorna DataFrame in memoria
                 self.main.df_utensili_smontati = df_ut
                 self.main.df_holder_smontati = df_h
                 self.main.df_bussole_idraulico = df_b
-                
-                print(f"9. DataFrame aggiornati in memoria")
-                print(f"   df_utensili_smontati len: {len(df_ut)}")
-                print(f"   df_holder_smontati len: {len(df_h)}")
-                print(f"   df_bussole len: {len(df_b)}")
-                
-                # Rimuovi da principale
+
                 self.main.df = self.main.df.drop(idx).reset_index(drop=True)
-                success_save, err = salva_database(self.main.df, self.main.db_path)
-                print(f"10. Salvataggio DB principale: {success_save}")
-                
-                # Refresh UI
-                print("11. Refresh UI...")
+                salva_database(self.main.df, self.main.db_path)
+
                 self.main.refresh_all_tabs()
                 self.main._update_status()
-                
-                print("12. Mostra messaggio successo")
-                messagebox.showinfo("Successo", msg)
-                print("=== SMONTAGGIO COMPLETATO ===\n")
+                messagebox.showinfo("Smontaggio completato", msg)
             else:
-                print(f"ERRORE: {msg}")
-                messagebox.showerror("Errore", msg)
-                
+                messagebox.showerror("Errore smontaggio", msg)
+
         except Exception as e:
             import traceback
-            error_msg = f"ERRORE CRITICO:\n{e}\n\nStacktrace:\n{traceback.format_exc()}"
-            print(error_msg)
-            messagebox.showerror("Errore Critico", error_msg)
-            
-            # Refresh UI
+            messagebox.showerror("Errore Critico",
+                                 f"Errore durante lo smontaggio:\n{e}\n\n"
+                                 f"{traceback.format_exc()}")
             self.main.refresh_all_tabs()
             self.main._update_status()
-            
-            messagebox.showinfo("Successo", msg)
-        else:
-            messagebox.showerror("Errore", msg)
     
     def _elimina(self):
         """Elimina utensile."""

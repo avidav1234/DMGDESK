@@ -46,8 +46,16 @@ def get_db_principale():
     paths = get_db_paths(config["database_path"])
     df, err = carica_database(paths["principale"])
     if err:
-        log.error(f"Errore caricamento DB principale: {err}")
-        raise HTTPException(status_code=500, detail=f"Errore database: {err}")
+        log.error(f"Errore caricamento DB principale: {err} | path: {paths['principale']}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"{err} | Percorso: {paths['principale']}"
+        )
+    for col in ("Alias", "Posizione", "Stato_Utensile"):
+        if col not in df.columns:
+            msg = f"Colonna '{col}' mancante nel CSV. Colonne trovate: {df.columns.tolist()}"
+            log.error(msg)
+            raise HTTPException(status_code=500, detail=msg)
     return df, paths
 
 

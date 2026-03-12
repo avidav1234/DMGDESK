@@ -61,3 +61,44 @@ async def root():
 async def health():
     """Endpoint di health check — utile per monitoraggio."""
     return {"status": "ok"}
+
+
+@app.get("/api/debug", tags=["Status"])
+async def debug_config():
+    """Diagnostica configurazione — mostra cosa vede il server (percorsi, colonne CSV, errori)."""
+    import os, json
+    from database.db_handler import carica_configurazione, get_db_paths, carica_database
+
+    try:
+        config = carica_configurazione()
+    except Exception as e:
+        return {"errore_config": str(e)}
+
+    db_path = config.get("database_path", "")
+    paths = get_db_paths(db_path)
+
+    result = {
+        "config_json": config,
+        "cwd": os.getcwd(),
+        "file_principale": {
+            "path": paths["principale"],
+            "esiste": os.path.exists(paths["principale"]),
+        },
+        "file_smontati": {
+            "path": paths["utensili_smontati"],
+            "esiste": os.path.exists(paths["utensili_smontati"]),
+        },
+    }
+
+    if os.path.exists(paths["principale"]):
+        df, err = carica_database(paths["principale"])
+        result["db_principale"] = {
+            "errore": err,
+            "righe": len(df),
+            "colonne": df.columns.tolist(),
+            "stati_utensile": df["Stato_Utensile"].value_counts().to_dict() if "Stato_Utensile" in df.columns else "COLONNA MANCANTE",
+        }
+    else:
+        result["db_principale"] = {"errore": "File non trovato"}
+
+    return result

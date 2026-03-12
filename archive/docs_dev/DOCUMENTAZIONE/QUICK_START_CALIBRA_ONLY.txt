@@ -1,0 +1,189 @@
+# ⚡ CALIBRA ONLY CONFIGURABILE - INSTALLAZIONE RAPIDA
+
+## 📦 HAI GIÀ RICEVUTO 5 FILE:
+
+1. **ui/calibra_only_settings_dialog.py** - Popup impostazioni ⚙️
+2. **logic/calibra_only_logic.py** - Logica 4 modalità
+3. **logic/main_generator_v14.py** - Generatore MAIN migliorato
+4. **GUIDA_CALIBRA_ONLY_COMPLETA.md** - Guida dettagliata
+5. **INTEGRAZIONE_TAB_MACCHINA.py** - Esempi codice
+
+---
+
+## 🚀 INSTALLAZIONE IN 3 PASSI
+
+### **PASSO 1: Copia 3 file nel progetto**
+
+```
+tool_manager_v14/
+├── ui/
+│   └── calibra_only_settings_dialog.py    ← COPIA QUI
+└── logic/
+    ├── calibra_only_logic.py              ← COPIA QUI
+    └── main_generator_v14.py              ← COPIA QUI (rinomina in main_generator.py)
+```
+
+---
+
+### **PASSO 2: Aggiungi al tab_macchina.py**
+
+#### **A) Import (all'inizio file):**
+```python
+from ui.calibra_only_settings_dialog import show_calibra_settings
+from logic.calibra_only_logic import get_calibra_logic
+from logic.main_generator import genera_programma_main_with_preview
+```
+
+#### **B) Toolbar (dove crei i pulsanti):**
+```python
+# Gruppo MAIN con pulsante impostazioni
+main_group = ctk.CTkFrame(toolbar, fg_color="transparent")
+main_group.pack(side="left", padx=10)
+
+# GENERA MAIN
+ctk.CTkButton(
+    main_group, 
+    text="📝 GENERA MAIN", 
+    width=140, height=40,
+    command=self._genera_main
+).pack(side="left", padx=2)
+
+# IMPOSTAZIONI ⚙️
+ctk.CTkButton(
+    main_group, 
+    text="⚙️", 
+    width=45, height=40,
+    fg_color="#9E9E9E",
+    command=self._apri_impostazioni_calibra
+).pack(side="left", padx=2)
+```
+
+#### **C) Funzioni (alla fine della classe):**
+```python
+def _apri_impostazioni_calibra(self):
+    """Apre popup impostazioni."""
+    show_calibra_settings(self.parent)
+
+def _genera_main(self):
+    """Genera MAIN con CALIBRA ONLY configurabile."""
+    if self.main.df.empty:
+        messagebox.showwarning("Attenzione", "Nessun utensile")
+        return
+    
+    df_macchina = self.main.df[
+        self.main.df['Stato_Utensile'] == 'IN_MACCHINA'
+    ].copy()
+    
+    if df_macchina.empty:
+        messagebox.showwarning("Attenzione", "Nessun utensile in macchina")
+        return
+    
+    # GENERA CON PREVIEW
+    success, msg = genera_programma_main_with_preview(
+        df_macchina, 
+        nome_cartella="MAIN",
+        parent=self.parent
+    )
+    
+    if success:
+        messagebox.showinfo("✅ Successo", msg)
+    elif msg not in ["Annullato", "Generazione annullata"]:
+        messagebox.showerror("Errore", msg)
+```
+
+---
+
+### **PASSO 3: Test**
+
+```powershell
+python main.py
+```
+
+1. Vai al tab "In Macchina"
+2. Click su **⚙️** → Vedi popup con 4 opzioni
+3. Scegli modalità e salva
+4. Click su **📝 GENERA MAIN** → Vedi anteprima
+5. Conferma → MAIN generato!
+
+---
+
+## 🎯 LE 4 MODALITÀ
+
+### **❌ Mai**
+```
+Nessun CALIBRA ONLY nel MAIN
+```
+
+### **▶️ Solo Inizio**
+```
+CALIBRA ONLY solo per T1 (primo utensile)
+```
+
+### **✨ Finitura**
+```
+CALIBRA ONLY per ogni utensile FF (frese finitura)
+
+T1 (FF10R0.5L50F60G3)
+G65 P9832 T1 ;CALIBRA ONLY    ← FF!
+T2 (FS12R1L60F70H8)
+T3 (FF8R0.3L40F50G2)
+G65 P9832 T3 ;CALIBRA ONLY    ← FF!
+```
+
+### **⚡ Avanzato**
+```
+FF sempre + ogni 3° richiamo dello stesso utensile
+
+T1 (FF10R0.5L50F60G3)
+G65 P9832 T1 ;CALIBRA ONLY    ← FF!
+T2 (FS12R1L60F70H8)
+T3 (FS12R1L60F70H8)            ← 2° richiamo
+T4 (FS12R1L60F70H8)
+G65 P9832 T4 ;CALIBRA ONLY    ← 3° richiamo!
+```
+
+---
+
+## 📊 ESEMPIO ANTEPRIMA
+
+Prima di generare, vedi:
+
+```
+┌────────────────────────────────────┐
+│  📊 ANTEPRIMA CALIBRA ONLY         │
+├────────────────────────────────────┤
+│ ⚙️ Modalità: ✨ Finitura           │
+│                                    │
+│ 🔧 Utensili totali: 12             │
+│ 📏 Con CALIBRA ONLY: 4             │
+│ 📈 Percentuale: 33.3%              │
+│                                    │
+│ Procedere?         [No] [Sì]      │
+└────────────────────────────────────┘
+```
+
+---
+
+## ✅ FATTO!
+
+**Con questi 3 passi hai:**
+- ✅ Pulsante ⚙️ impostazioni
+- ✅ Popup con 4 modalità
+- ✅ Anteprima prima di generare
+- ✅ CALIBRA ONLY intelligente
+
+---
+
+## 📁 DOVE SONO I FILE?
+
+Tutti i file sono già stati forniti nei messaggi precedenti!
+
+Cerca:
+- `calibra_only_settings_dialog.py`
+- `calibra_only_logic.py`
+- `main_generator_v14.py`
+- `GUIDA_CALIBRA_ONLY_COMPLETA.md`
+
+---
+
+**IMPLEMENTA SUBITO! 🚀**

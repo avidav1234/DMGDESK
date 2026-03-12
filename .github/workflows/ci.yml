@@ -1,0 +1,170 @@
+# ─────────────────────────────────────────────────────────────────
+#  Tool Manager V14 — Pipeline CI/CD
+#  GitHub Actions: test automatici ad ogni push e pull request
+# ─────────────────────────────────────────────────────────────────
+#
+#  COSA FA:
+#    1. Esegue tutti i test pytest su ogni push al branch main
+#    2. Controlla su Python 3.11 e 3.12 (matrix)
+#    3. Genera report di copertura (coverage)
+#    4. Crea la release .zip del codice quando tagghi (es. v14.1)
+#
+#  QUANDO SCATTA:
+#    - push su main  → test completi
+#    - pull request  → test completi (protezione branch)
+#    - tag v*        → test + build release zip
+# ─────────────────────────────────────────────────────────────────
+
+name: CI — Test & Build
+
+on:
+  push:
+    branches: [ main ]
+    tags:     [ 'v*.*' ]          # es. v14.1, v14.2
+  pull_request:
+    branches: [ main ]
+
+jobs:
+
+  # ════════════════════════════════════════════════════════════
+  #  JOB 1: test
+  #  Esegue pytest su due versioni Python in parallelo
+  # ════════════════════════════════════════════════════════════
+  test:
+    name: Test (Python ${{ matrix.python-version }})
+    runs-on: windows-latest        # Stessa OS del PC in officina
+
+    strategy:
+      fail-fast: false             # Entrambe le versioni completano anche se una fallisce
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+
+      # 1. Scarica il codice dal repository
+      - name: Checkout codice
+        uses: actions/checkout@v4
+
+      # 2. Installa Python
+      - name: Configura Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip               # Cache dipendenze → build più veloci
+
+      # 3. Installa dipendenze
+      #    customtkinter richiede display → in CI usiamo solo le lib headless
+      - name: Installa dipendenze
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pytest-cov
+          pip install pandas numpy
+          # customtkinter ha bisogno di Tk — in CI testiamo solo la logica pura
+          pip install customtkinter || echo "customtkinter non disponibile in CI (atteso)"
+
+      # 4. Esegui i test con coverage
+      - name: Esegui test pytest
+        run: |
+          python -m pytest tests/ -v --tb=short ^
+            --cov=logic ^
+            --cov=database ^
+            --cov=utils ^
+            --cov-report=term-missing ^
+            --cov-report=xml:coverage.xml
+        shell: cmd
+
+      # 5. Upload report coverage (visibile nella tab Actions)
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: matrix.python-version == '3.12'   # Solo una versione carica il report
+        with:
+          name: coverage-report
+          path: coverage.xml
+          retention-days: 30
+
+
+  # ════════════════════════════════════════════════════════════
+  #  JOB 2: build-release
+  #  Crea un archivio .zip del progetto quando pubblichi un tag
+  #  es: git tag v14.1 && git push origin v14.1
+  # ════════════════════════════════════════════════════════════
+  build-release:
+    name: Build Release ZIP
+    runs-on: windows-latest
+    needs: test                    # Parte SOLO se i test sono verdi
+    if: startsWith(github.ref, 'refs/tags/v')   # Solo su tag
+
+    steps:
+
+      - name: Checkout codice
+        uses: actions/checkout@v4
+
+      - name: Configura Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Installa dipendenze
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas numpy customtkinter || true
+
+      - name: Crea archivio release
+        run: |
+          python -c "
+          import zipfile, os, pathlib
+
+          tag = os.environ.get('GITHUB_REF_NAME', 'vX.X')
+          zip_name = f'ToolManager_{tag}.zip'
+
+          # File/cartelle da INCLUDERE nel rilascio
+          include = {
+              'main.py', 'requirements.txt', 'README.md',
+              '.gitignore', 'app_icon.ico',
+          }
+          include_dirs = {'config', 'database', 'logic', 'ui', 'utils', 'tests'}
+          exclude_suffixes = {'.pyc', '.pyo'}
+          exclude_dirs = {'__pycache__', 'archive', 'logs', '.git', '.github'}
+
+          with zipfile.ZipFile(zip_name, 'w', zipfile.ZIP_DEFLATED) as zf:
+              # File root
+              for f in include:
+                  if os.path.exists(f):
+                      zf.write(f, f'ToolManager/{f}')
+
+              # Cartelle moduli
+              for d in include_dirs:
+                  for root, dirs, files in os.walk(d):
+                      dirs[:] = [x for x in dirs if x not in exclude_dirs]
+                      for fname in files:
+                          if not any(fname.endswith(s) for s in exclude_suffixes):
+                              full = os.path.join(root, fname)
+                              zf.write(full, f'ToolManager/{full}')
+
+          print(f'Creato: {zip_name}')
+          "
+        env:
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+
+      # Pubblica la release su GitHub con il file zip allegato
+      - name: Pubblica GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: "ToolManager_*.zip"
+          generate_release_notes: true    # Auto-genera note da commit
+          body: |
+            ## Tool Manager ${{ github.ref_name }}
+
+            ### Installazione
+            1. Scarica `ToolManager_${{ github.ref_name }}.zip`
+            2. Estrai in `C:\Tool_App\`
+            3. `pip install -r requirements.txt`
+            4. `python main.py`
+
+            ### Test
+            ```
+            pytest tests/ -v
+            ```
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

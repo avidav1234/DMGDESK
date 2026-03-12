@@ -1,0 +1,41 @@
+🚀 AVVIO RAPIDO - TOOL MANAGER V12.4
+
+1️⃣ INSTALLA DIPENDENZE
+   pip install -r requirements.txt
+
+2️⃣ AVVIA APP
+   python main.py
+
+3️⃣ CARICA DATABASE
+   Click [📁 DATABASE]
+   Seleziona: Database_DMG160U.csv
+
+✅ FATTO!
+
+---
+
+💡 VUOI CAMBIARE DESIGN?
+   Apri: config/theme.py
+   Modifica colori/font
+   Riavvia app
+
+---
+
+📁 STRUTTURA:
+   config/    → Configurazione (design qui!)
+   database/  → Backend CSV
+   ui/        → Interfaccia tab
+   logic/     → Analisi NC, MAIN, calibrazione
+   utils/     → Dialog riutilizzabili
+
+---
+
+🎯 TAB DISPONIBILI:
+   🔧 In Macchina    → Utensili montati + MAIN
+   🏠 Scaffale       → Utensili pronti
+   📦 Smontati       → Montaggio con holder/bussole
+   🔩 Holder+Bussole → Inventario split
+
+---
+
+📖 Leggi README_FINALE.md per dettagli completi

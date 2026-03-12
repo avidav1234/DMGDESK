@@ -1,0 +1,31 @@
+📦 INSTALLAZIONE RAPIDA V13
+═══════════════════════════════════════
+
+1️⃣ BACKUP V12.4
+   Fai backup della cartella tool_manager_v12_4
+
+2️⃣ SOSTITUISCI FILE
+
+   Copia questi file nella cartella tool_manager_v12_4/:
+
+   logic/code_generator_logic.py    → logic/
+   ui/tab_generatore.py             → ui/
+   ui/main_window.py                → ui/  (SOSTITUISCI)
+
+3️⃣ AVVIA
+   python main.py
+
+4️⃣ VERIFICA
+   - Vedi nuovo tab "📝 Generatore"
+   - Genera codice test
+   - Click [SCAFFALE] o [MACCHINA]
+   - Verifica decremento holder
+
+═══════════════════════════════════════
+
+✅ FATTO! V13 funzionante!
+
+Note:
+- Tutti gli altri file restano invariati
+- Database compatibile con V12.4
+- Nessuna migrazione necessaria

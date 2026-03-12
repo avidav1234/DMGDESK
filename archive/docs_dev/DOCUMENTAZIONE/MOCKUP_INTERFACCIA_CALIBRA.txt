@@ -1,0 +1,240 @@
+# 🎨 MOCKUP INTERFACCIA - CALIBRA ONLY CONFIGURABILE
+
+## 📱 COME APPARE L'INTERFACCIA
+
+### **1. TOOLBAR TAB "IN MACCHINA"**
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        TAB: 🔧 IN MACCHINA                                  │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌────────────┐  ┌────────────┐  ┌────────────┐   ╱╱   ┌──────────┐ ┌───┐ │
+│  │ ➕ Aggiungi│  │ ✏️ Modifica │  │ 🗑️ Elimina │   ╱╱   │📝 GENERA │ │⚙️ │ │
+│  │            │  │            │  │            │   ╱╱   │   MAIN   │ │   │ │
+│  └────────────┘  └────────────┘  └────────────┘   ╱╱   └──────────┘ └───┘ │
+│                                                          │            │     │
+│                                                          └────────────┴─────┘
+│                                                          NUOVO!              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Quando clicki su ⚙️:**
+
+---
+
+### **2. POPUP IMPOSTAZIONI CALIBRA ONLY**
+
+```
+╔══════════════════════════════════════════════════════════════════════════╗
+║                                                                          ║
+║  ┌─────────────────────────────────────────────────────────────────┐    ║
+║  │  ⚙️ CONFIGURAZIONE CALIBRA ONLY                                 │    ║
+║  └─────────────────────────────────────────────────────────────────┘    ║
+║                                                                          ║
+║  Scegli quando inserire CALIBRA ONLY nel programma MAIN:                ║
+║                                                                          ║
+║  ┌──────────────────────────────────────────────────────────────────┐   ║
+║  │                                                                  │   ║
+║  │  ○ ❌ Mai - Nessun CALIBRA ONLY                                 │   ║
+║  │     Il MAIN non conterrà alcun comando di calibrazione          │   ║
+║  │                                                                  │   ║
+║  │  ○ ▶️ Solo Inizio - CALIBRA ONLY per primo richiamo             │   ║
+║  │     CALIBRA ONLY solo per il primo utensile del programma       │   ║
+║  │                                                                  │   ║
+║  │  ● ✨ Finitura - Ogni utensile di finitura (FF)  ← SELEZIONATO │   ║
+║  │     CALIBRA ONLY per tutti gli utensili FF (frese finitura)     │   ║
+║  │                                                                  │   ║
+║  │  ○ ⚡ Avanzato - Finitura + ogni 3 richiami                     │   ║
+║  │     FF sempre + ogni terzo uso dello stesso utensile            │   ║
+║  │                                                                  │   ║
+║  └──────────────────────────────────────────────────────────────────┘   ║
+║                                                                          ║
+║                                          ┌──────────┐  ┌──────────┐     ║
+║                                          │❌ Annulla│  │✅ Salva  │     ║
+║                                          └──────────┘  └──────────┘     ║
+║                                                                          ║
+╚══════════════════════════════════════════════════════════════════════════╝
+```
+
+**Quando salvi, le impostazioni vengono ricordate!**
+
+---
+
+### **3. CLICK SU "GENERA MAIN" → ANTEPRIMA**
+
+```
+╔═══════════════════════════════════════════════════╗
+║                                                   ║
+║  📊 ANTEPRIMA CALIBRA ONLY                        ║
+║                                                   ║
+║  ⚙️ Modalità: ✨ Tutti gli utensili FF            ║
+║                                                   ║
+║  🔧 Utensili totali: 12                           ║
+║  📏 Con CALIBRA ONLY: 4                           ║
+║  📈 Percentuale: 33.3%                            ║
+║                                                   ║
+║  Procedere con la generazione?                   ║
+║                                                   ║
+║                         ┌─────┐  ┌─────┐         ║
+║                         │ No  │  │ Sì  │         ║
+║                         └─────┘  └─────┘         ║
+║                                                   ║
+╚═══════════════════════════════════════════════════╝
+```
+
+**Click "Sì" → Genera MAIN con le impostazioni scelte!**
+
+---
+
+### **4. FILE MAIN GENERATO**
+
+#### **Modalità: ✨ Finitura**
+
+```gcode
+; PROGRAMMA MAIN O9999 - MAIN
+; Generato: 2025-12-26 11:30
+; Utensili: 12
+; CALIBRA ONLY: ✨ Tutti gli utensili FF
+%
+O9999
+;
+T1 (FF10R0.5L50F60G3)
+G65 P9832 T1 ;CALIBRA ONLY    ← FF, quindi calibra!
+T2 (FS12R1L60F70H8)            ← FS, niente calibra
+T3 (P10-30VDF60E3)             ← P, niente calibra
+T4 (FF8R0.3L40F50G2)
+G65 P9832 T4 ;CALIBRA ONLY    ← FF, quindi calibra!
+T5 (FS12R1L60F70H8)            ← FS, niente calibra
+T6 (PI8-25VDF55G2)             ← PI, niente calibra
+T7 (FF6R0.2L35F45G1)
+G65 P9832 T7 ;CALIBRA ONLY    ← FF, quindi calibra!
+T8 (R60R2L10F80H10)            ← R, niente calibra
+T9 (D100R3L5F90H12)            ← D, niente calibra
+T10 (FF12R0.8L55F65G3)
+G65 P9832 T10 ;CALIBRA ONLY   ← FF, quindi calibra!
+T11 (SMS10X90F60H8)            ← SMS, niente calibra
+T12 (FS15R1.2L70F75H9)         ← FS, niente calibra
+;
+M30
+%
+```
+
+**4 utensili FF → 4 CALIBRA ONLY! ✅**
+
+---
+
+#### **Modalità: ⚡ Avanzato**
+
+```gcode
+; PROGRAMMA MAIN O9999 - MAIN
+; Generato: 2025-12-26 11:35
+; Utensili: 15
+; CALIBRA ONLY: ⚡ FF + ogni 3 richiami
+%
+O9999
+;
+T1 (FF10R0.5L50F60G3)
+G65 P9832 T1 ;CALIBRA ONLY    ← FF sempre!
+T2 (FS12R1L60F70H8)            ← 1° richiamo FS12
+T3 (P10-30VDF60E3)
+T4 (FS12R1L60F70H8)            ← 2° richiamo FS12
+T5 (FF8R0.3L40F50G2)
+G65 P9832 T5 ;CALIBRA ONLY    ← FF sempre!
+T6 (FS12R1L60F70H8)
+G65 P9832 T6 ;CALIBRA ONLY    ← 3° richiamo FS12!
+T7 (P10-30VDF60E3)             ← 2° richiamo P10
+T8 (FS12R1L60F70H8)            ← 4° richiamo FS12
+T9 (P10-30VDF60E3)
+G65 P9832 T9 ;CALIBRA ONLY    ← 3° richiamo P10!
+T10 (FF6R0.2L35F45G1)
+G65 P9832 T10 ;CALIBRA ONLY   ← FF sempre!
+...
+;
+M30
+%
+```
+
+**Calibra:**
+- ✅ Tutti i FF
+- ✅ Ogni 3° richiamo dello stesso utensile (anche se FS, P, ecc)
+
+---
+
+## 🎯 VANTAGGI
+
+### **Per l'operatore:**
+- ⚡ **Controllo totale** - Decide quando calibrare
+- 🎛️ **4 modalità** - Dalla più veloce alla più precisa
+- 👁️ **Preview** - Vede prima cosa verrà generato
+- 💾 **Ricorda** - Impostazioni salvate automaticamente
+
+### **Per la produzione:**
+- ⏱️ **Risparmio tempo** - Evita calibrazioni inutili (modalità Mai/Inizio)
+- 🎯 **Precisione** - Calibra solo dove serve (modalità Finitura)
+- 🔄 **Flessibilità** - Modalità Avanzata per lavorazioni lunghe
+- 📊 **Tracciabilità** - Statistiche in anteprima
+
+---
+
+## 📝 CLASSIFICAZIONE UTENSILI
+
+```
+FINITURA (FF):
+✅ FF10R0.5L50F60G3
+✅ FFHSC12R1L60F70E2
+✅ FFPI8R0.3L40F50G1
+✅ FF6R0.2L35F45G1
+
+SGROSATURA (tutto il resto):
+❌ FS12R1L60F70H8     (Fresa Sgrosso)
+❌ FSHSC10R0.8L55F65  (Fresa Sgrosso HSC)
+❌ P10-30VDF60E3      (Punta)
+❌ PI8-25VDF55G2      (Punta Integrale)
+❌ R60R2L10F80H10     (Coda Rondine)
+❌ D100R3L5F90H12     (Disco)
+❌ SMS10X90F60H8      (Smussatore)
+❌ C20X45F70H6        (Caletto)
+```
+
+**Logica:** Solo gli utensili che iniziano con `FF` sono finitura.
+
+---
+
+## 🚀 WORKFLOW COMPLETO
+
+```
+1. Operatore apre tab "In Macchina"
+   ↓
+2. Click su ⚙️ (impostazioni)
+   ↓
+3. Sceglie modalità (es: ✨ Finitura)
+   ↓
+4. Click ✅ Salva
+   ↓
+5. Click 📝 GENERA MAIN
+   ↓
+6. Vede anteprima con statistiche
+   ↓
+7. Click "Sì" per confermare
+   ↓
+8. File O9999_MAIN.MPF generato!
+   ↓
+9. CALIBRA ONLY inseriti secondo configurazione
+```
+
+**Totale: ~30 secondi! ⚡**
+
+---
+
+## ✅ RECAP
+
+**Con questo upgrade hai:**
+- ✅ Pulsante ⚙️ accanto a GENERA MAIN
+- ✅ Popup configurazione (4 modalità)
+- ✅ Preview prima di generare
+- ✅ CALIBRA ONLY intelligente
+- ✅ Impostazioni salvate automaticamente
+- ✅ Supporto FF sempre + ogni 3° richiamo
+
+**Tutto il codice è già pronto nei file forniti!** 🎉

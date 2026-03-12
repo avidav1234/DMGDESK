@@ -26,7 +26,7 @@ export default function AnalisiNC() {
   const [mainError, setMainError] = useState(null)
   const [showPreview, setShowPreview] = useState(false)
   const [cartelleRecenti, setCartelleRecenti] = useState([])
-  const inputDirRef = useRef()   // input webkitdirectory nascosto
+
 
   // Carica cartelle recenti all'avvio
   useEffect(() => {
@@ -40,45 +40,17 @@ export default function AnalisiNC() {
     () => sessionStorage.getItem('tm_percorso_base') || ''
   )
 
-  // Quando l'operatore sceglie la cartella col picker webkitdirectory
-  const handleDirPick = (e) => {
-    const all = Array.from(e.target.files)
-    if (!all.length) return
 
-    // Estrai nome cartella da webkitRelativePath (es. "Fase-2/4297_007.mpf" → "Fase-2")
-    const nomeDir = all[0].webkitRelativePath.split('/')[0]
-    setNomeCartella(nomeDir)
 
-    // Filtra solo file NC — ignora tutto il resto (63 file → solo .MPF)
-    const valid = all.filter(f => /\.(mpf|nc|spf)$/i.test(f.name))
-    if (valid.length > 0) {
-      setEntries(prev => [...prev, ...valid.map(f => ({
-        id: ++idRef.current, file: f, status: 'pending', result: null, error: null
-      }))])
-    }
+  // Percorso completo calcolato da base + nome cartella
+  const percorsoCompleto = percorsoBase.trim() && nomeCartella.trim()
+    ? `${percorsoBase.trim().replace(/[\\/]+$/, '')}\\${nomeCartella.trim()}`
+    : percorsoCartella
 
-    // Costruisci percorso completo se abbiamo il base
-    const base = sessionStorage.getItem('tm_percorso_base') || ''
-    if (base) {
-      const sep = base.includes('/') ? '/' : '\\'
-      setPercorsoCartella(`${base}${sep}${nomeDir}`)
-    }
-
-    e.target.value = ''
-  }
-
-  // Salva percorso base quando l'operatore lo inserisce
   const handlePercorsoBaseChange = (val) => {
     setPercorsoBase(val)
     sessionStorage.setItem('tm_percorso_base', val)
-    // Aggiorna subito il percorso completo se abbiamo già il nome cartella
-    if (nomeCartella.trim() && val.trim()) {
-      const sep = val.includes('/') ? '/' : '\\'
-      setPercorsoCartella(`${val}${sep}${nomeCartella}`)
-    }
   }
-
-  const handleSfogliaDirClick = () => inputDirRef.current.click()
   const addFiles = useCallback((files) => {
     const valid = Array.from(files).filter(f => /\.(mpf|nc|spf)$/i.test(f.name))
     if (!valid.length) return
@@ -210,28 +182,22 @@ export default function AnalisiNC() {
     }
   }
 
-  const handleSfoglia = handleSfogliaDirClick  // alias per compatibilità UI
+
 
   const handleGeneraMain = async () => {
-    if (!nomeCartella.trim()) { setMainError('Inserisci il nome della cartella in macchina'); return }
-    if (!percorsoCartella.trim()) { setMainError('Inserisci o seleziona la cartella di destinazione'); return }
+    if (!nomeCartella.trim()) { setMainError('Inserisci il nome della cartella (es. Fase-2)'); return }
+    if (!percorsoCompleto.trim()) { setMainError('Inserisci il percorso base'); return }
     const programmi = buildProgrammi()
     if (!programmi.length) { setMainError('Seleziona almeno un programma'); return }
     setMainBusy(true); setMainError(null)
     try {
       const res = await api.salvaMain({
         nome_cartella: nomeCartella,
-        percorso_cartella: percorsoCartella,
+        percorso_cartella: percorsoCompleto,
         programmi,
       })
-      // Memorizza percorso base (tutto tranne l'ultima cartella) per la prossima volta
-      const parts = percorsoCartella.replace(/\\/g, '/').split('/')
-      parts.pop()
-      const base = parts.join('/') || percorsoCartella
-      sessionStorage.setItem('tm_percorso_base', base)
       setGlobalSuccess(`✓ ${res.nome_file} salvato in ${res.percorso_file}`)
       setShowPreview(false)
-      // Aggiorna lista recenti
       api.cartelleRecenti().then(r => setCartelleRecenti(r.cartelle || [])).catch(() => {})
     } catch (e) {
       setMainError(e.message)
@@ -428,99 +394,83 @@ export default function AnalisiNC() {
           {/* Riga: nome cartella + percorso */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
 
-            {/* Input nascosto webkitdirectory */}
-            <input ref={inputDirRef} type="file" webkitdirectory="" multiple
-              style={{ display: 'none' }} onChange={handleDirPick} />
-
-            {/* Percorso base — mostrato solo se non ancora configurato */}
-            {!percorsoBase && (
-              <div style={{ background: 'rgba(255,180,0,0.07)', border: '1px solid rgba(255,180,0,0.25)', borderRadius: 'var(--radius-sm)', padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--amber)', letterSpacing: '0.06em' }}>
-                  ⚙ CONFIGURAZIONE INIZIALE — inserisci il percorso base una volta sola
-                </div>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <input
-                    type="text"
-                    value={percorsoBase}
-                    onChange={e => handlePercorsoBaseChange(e.target.value)}
-                    placeholder="es. P:\DMG_DMC_160U\4297\0007"
-                    style={{
-                      background: 'var(--bg-base)', border: '1px solid var(--border-bright)',
-                      borderRadius: 'var(--radius-sm)', padding: '6px 12px',
-                      color: 'var(--text-primary)', fontFamily: 'var(--font-mono)',
-                      fontSize: 12, flex: 1, outline: 'none',
-                    }}
-                    onFocus={e => e.target.style.borderColor = 'var(--amber)'}
-                    onBlur={e => e.target.style.borderColor = 'var(--border-bright)'}
-                  />
-                </div>
-                <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
-                  Corrisponde alla cartella padre delle cartelle programma (es. 0007 che contiene Fase-2, Fase-3…)
-                </div>
-              </div>
-            )}
-
-            {/* Se percorso base già configurato: mostralo compatto con opzione modifica */}
-            {percorsoBase && (
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', width: 160, flexShrink: 0 }}>PERCORSO BASE</span>
-                <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', flex: 1 }}>{percorsoBase}</span>
-                <button onClick={() => { setPercorsoBase(''); sessionStorage.removeItem('tm_percorso_base') }}
-                  style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 11, fontFamily: 'var(--font-mono)' }}>
-                  ✎ modifica
-                </button>
-              </div>
-            )}
-
-            {/* Bottone scegli cartella */}
+            {/* Percorso base — una volta sola */}
             <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', width: 160, flexShrink: 0 }}>CARTELLA PROGRAMMI</span>
-              <button
-                className="btn btn-ghost"
-                onClick={handleSfogliaDirClick}
-                style={{ fontSize: 12 }}
-                title="Apre la dialog — carica i .MPF e compila automaticamente nome e percorso"
-              >
-                📁 Scegli cartella programmi
-              </button>
-              {nomeCartella && (
-                <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--cyan)', fontWeight: 700 }}>
-                  {nomeCartella}
-                </span>
-              )}
+              <label style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: '0.08em', flexShrink: 0, width: 130 }}>
+                PERCORSO BASE
+              </label>
+              <input
+                type="text"
+                value={percorsoBase}
+                onChange={e => handlePercorsoBaseChange(e.target.value)}
+                placeholder="es. P:\DMG_DMC_160U\4297\0007"
+                style={{
+                  background: 'var(--bg-base)', border: '1px solid var(--border-bright)',
+                  borderRadius: 'var(--radius-sm)', padding: '6px 12px',
+                  color: 'var(--text-primary)', fontFamily: 'var(--font-mono)',
+                  fontSize: 12, flex: 1, outline: 'none',
+                }}
+                onFocus={e => e.target.style.borderColor = 'var(--cyan)'}
+                onBlur={e => e.target.style.borderColor = 'var(--border-bright)'}
+              />
+            </div>
+
+            {/* Nome sottocartella */}
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+              <label style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: '0.08em', flexShrink: 0, width: 130 }}>
+                CARTELLA
+              </label>
+              <input
+                type="text"
+                value={nomeCartella}
+                onChange={e => { setNomeCartella(e.target.value); setMainPreview(null); setMainError(null) }}
+                placeholder="es. Fase-2"
+                style={{
+                  background: 'var(--bg-base)', border: '1px solid var(--border-bright)',
+                  borderRadius: 'var(--radius-sm)', padding: '6px 12px',
+                  color: 'var(--text-primary)', fontFamily: 'var(--font-mono)',
+                  fontSize: 13, fontWeight: 700, width: 180, outline: 'none',
+                }}
+                onFocus={e => e.target.style.borderColor = 'var(--cyan)'}
+                onBlur={e => e.target.style.borderColor = 'var(--border-bright)'}
+              />
             </div>
 
             {/* Percorso completo risultante */}
-            {percorsoCartella && (
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center', paddingLeft: 170, flexWrap: 'wrap' }}>
-                <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>SALVERÀ IN →</span>
+            {percorsoCompleto && (
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', paddingLeft: 140, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>SALVERÀ →</span>
                 <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--green)' }}>
-                  {percorsoCartella}\0_MAIN_{nomeCartella.toUpperCase()}.MPF
+                  {percorsoCompleto}\0_MAIN_{nomeCartella.toUpperCase()}.MPF
                 </span>
               </div>
             )}
 
             {/* Cartelle recenti */}
             {cartelleRecenti.length > 0 && (
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', paddingLeft: 170 }}>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', paddingLeft: 140 }}>
                 <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>RECENTI:</span>
-                {cartelleRecenti.map(c => (
-                  <button key={c} onClick={() => {
-                    setPercorsoCartella(c)
-                    const nome = c.replace(/\\/g, '/').split('/').pop()
-                    if (nome) setNomeCartella(nome)
-                    setMainError(null)
-                  }} style={{
-                    background: percorsoCartella === c ? 'rgba(0,225,255,0.10)' : 'var(--bg-base)',
-                    border: `1px solid ${percorsoCartella === c ? 'var(--cyan)' : 'var(--border)'}`,
-                    borderRadius: 'var(--radius-sm)', padding: '3px 10px',
-                    fontSize: 11, fontFamily: 'var(--font-mono)',
-                    color: percorsoCartella === c ? 'var(--cyan)' : 'var(--text-secondary)',
-                    cursor: 'pointer', transition: 'all 0.15s',
-                  }}>
-                    {c.replace(/\\/g, '/').split('/').pop() || c}
-                  </button>
-                ))}
+                {cartelleRecenti.map(c => {
+                  const nomePart = c.replace(/\\/g, '/').split('/').pop() || c
+                  const basePart = c.replace(/\\/g, '/').split('/').slice(0, -1).join('\\')
+                  return (
+                    <button key={c} onClick={() => {
+                      setNomeCartella(nomePart)
+                      setPercorsoBase(basePart)
+                      sessionStorage.setItem('tm_percorso_base', basePart)
+                      setMainError(null)
+                    }} style={{
+                      background: nomeCartella === nomePart && percorsoBase === basePart ? 'rgba(0,225,255,0.10)' : 'var(--bg-base)',
+                      border: `1px solid ${nomeCartella === nomePart && percorsoBase === basePart ? 'var(--cyan)' : 'var(--border)'}`,
+                      borderRadius: 'var(--radius-sm)', padding: '3px 10px',
+                      fontSize: 11, fontFamily: 'var(--font-mono)',
+                      color: nomeCartella === nomePart ? 'var(--cyan)' : 'var(--text-secondary)',
+                      cursor: 'pointer', transition: 'all 0.15s',
+                    }}>
+                      {nomePart}
+                    </button>
+                  )
+                })}
               </div>
             )}
           </div>

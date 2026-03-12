@@ -1,0 +1,55 @@
+# ═══════════════════════════════════════════════════════════════
+#  Tool Manager V14 — Docker Compose
+#  Avvia tutto con un comando: docker compose up -d
+#
+#  Servizi:
+#    backend  → FastAPI su porta 8000 (interna)
+#    frontend → React + Nginx su porta 80 (pubblica in LAN)
+#
+#  Accesso dalla LAN:
+#    http://IP-PC-OFFICINA       → Dashboard web
+#    http://IP-PC-OFFICINA/docs  → API Docs FastAPI
+# ═══════════════════════════════════════════════════════════════
+
+services:
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: toolmanager-backend
+    restart: unless-stopped
+    volumes:
+      # I CSV rimangono sul PC host — non dentro il container
+      - ./data:/data
+      - ./logs:/app/logs
+      - ./config.json:/app/config.json
+      - ./calibra_only_settings.json:/app/calibra_only_settings.json
+    environment:
+      - TM_DEBUG=0
+    networks:
+      - toolmanager
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: toolmanager-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"        # Dashboard web → http://IP-PC
+      - "8000:8000"    # Espone anche il backend direttamente (per debug)
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - toolmanager
+
+networks:
+  toolmanager:
+    driver: bridge

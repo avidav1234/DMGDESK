@@ -62,6 +62,7 @@ export const api = {
   aggiungiSmontato:     (body)      => request('POST',   '/smontati/', body),
   modificaSmontato:     (id, body)  => request('PATCH',  `/smontati/${id}`, body),
   eliminaSmontato:      (id)        => request('DELETE', `/smontati/${id}`),
+  montaSmontato:        (id, body)  => request('POST',   `/smontati/${id}/monta`, body),
 
   // ── Holder & Bussole ──────────────────────────────────
   getHolder:            ()          => request('GET',    '/holder-bussole/holder/'),

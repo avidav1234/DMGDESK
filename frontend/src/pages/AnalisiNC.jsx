@@ -172,48 +172,49 @@ export default function AnalisiNC() {
       const { blob, filename } = await api.generaMain({ nome_cartella: nomeCartella, programmi })
       const text = await blob.text()
 
-      // ── Caso 1: abbiamo la directory handle dal drag ──
+      // ── Caso 1: abbiamo già la directory handle dal drag della cartella ──
       if (dirHandleRef.current) {
         try {
+          await dirHandleRef.current.queryPermission({ mode: 'readwrite' }) === 'granted' ||
+            await dirHandleRef.current.requestPermission({ mode: 'readwrite' })
           const fileHandle = await dirHandleRef.current.getFileHandle(filename, { create: true })
           const writable = await fileHandle.createWritable()
           await writable.write(text)
           await writable.close()
-          setGlobalSuccess(`${filename} salvato nella cartella sorgente`)
+          setGlobalSuccess(`✓ ${filename} salvato nella cartella sorgente`)
           setShowPreview(false)
           return
         } catch (fsErr) {
-          // Permesso revocato o altro errore → fallthrough
-          console.warn('Dir handle non più valido, fallback a picker:', fsErr)
+          console.warn('Dir handle fallito, chiedo cartella manualmente:', fsErr)
           dirHandleRef.current = null
         }
       }
 
-      // ── Caso 2: File System Access API disponibile → showSaveFilePicker ──
-      if (fsSupportata) {
+      // ── Caso 2: chiedi la cartella di destinazione con showDirectoryPicker ──
+      if ('showDirectoryPicker' in window) {
         try {
-          const handle = await window.showSaveFilePicker({
-            suggestedName: filename,
-            types: [{ description: 'CNC Program', accept: { 'text/plain': ['.mpf', '.MPF'] } }],
-          })
-          const writable = await handle.createWritable()
+          const dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' })
+          const fileHandle = await dirHandle.getFileHandle(filename, { create: true })
+          const writable = await fileHandle.createWritable()
           await writable.write(text)
           await writable.close()
-          setGlobalSuccess(`${filename} salvato`)
+          // Memorizza per usi successivi nella stessa sessione
+          dirHandleRef.current = dirHandle
+          setGlobalSuccess(`✓ ${filename} salvato`)
           setShowPreview(false)
           return
         } catch (pickerErr) {
-          if (pickerErr.name === 'AbortError') { setMainBusy(false); return } // utente ha annullato
-          console.warn('showSaveFilePicker fallito, fallback download:', pickerErr)
+          if (pickerErr.name === 'AbortError') { setMainBusy(false); return }
+          console.warn('showDirectoryPicker fallito, fallback download:', pickerErr)
         }
       }
 
-      // ── Caso 3: fallback download classico (Firefox / contesti non supportati) ──
+      // ── Caso 3: fallback download classico ──
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url; a.download = filename; a.click()
       URL.revokeObjectURL(url)
-      setGlobalSuccess(`${filename} scaricato (salva manualmente nella cartella corretta)`)
+      setGlobalSuccess(`${filename} scaricato — sposta manualmente nella cartella programmi`)
       setShowPreview(false)
     } catch (e) {
       setMainError(e.message)
@@ -558,10 +559,8 @@ export default function AnalisiNC() {
             </button>
             <span style={{ fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
               {dirHandleRef.current
-                ? '→ salva nella cartella sorgente'
-                : fsSupportata
-                  ? '→ ti chiede dove salvare'
-                  : '→ download nel browser'}
+                ? '→ salva nella cartella già selezionata'
+                : '→ ti chiede la cartella di destinazione'}
             </span>
           </div>
 

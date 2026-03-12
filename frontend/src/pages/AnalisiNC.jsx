@@ -26,14 +26,50 @@ export default function AnalisiNC() {
   const [mainError, setMainError] = useState(null)
   const [showPreview, setShowPreview] = useState(false)
   const [cartelleRecenti, setCartelleRecenti] = useState([])
-  const [sfogliaBusy, setSfogliaBusy] = useState(false)
+  const inputDirRef = useRef()   // input webkitdirectory nascosto
 
   // Carica cartelle recenti all'avvio
   useEffect(() => {
     api.cartelleRecenti().then(r => setCartelleRecenti(r.cartelle || [])).catch(() => {})
+    // Ripristina percorso base dall'ultima sessione
+    const saved = sessionStorage.getItem('tm_percorso_base')
+    if (saved) setPercorsoCartella(saved)
   }, [])
 
-  // ── Gestione file ──────────────────────────────────────
+  // Quando l'operatore sceglie una cartella col picker webkitdirectory,
+  // estraiamo il percorso base dai webkitRelativePath dei file
+  const handleDirPick = (e) => {
+    const files = Array.from(e.target.files)
+    if (!files.length) return
+    // webkitRelativePath = "NomeCartella/file.mpf"
+    // Il percorso base è tutto ciò che precede NomeCartella nel path reale,
+    // ma il browser non lo espone. Usiamo il nome della cartella come riferimento
+    // e chiediamo all'utente di confermare/completare il percorso base una volta sola.
+    const relPath = files[0].webkitRelativePath  // es. "TEST/4297_007.mpf"
+    const nomeDir = relPath.split('/')[0]        // es. "TEST"
+
+    // Auto-compila il nome cartella macchina
+    setNomeCartella(nomeDir)
+
+    // Carica i file NC nella lista analisi
+    const valid = files.filter(f => /\.(mpf|nc|spf)$/i.test(f.name))
+    if (valid.length > 0) {
+      setEntries(prev => [...prev, ...valid.map(f => ({
+        id: ++idRef.current, file: f, status: 'pending', result: null, error: null
+      }))])
+    }
+
+    // Cerca di costruire percorso da cartelle recenti o percorso salvato
+    const base = sessionStorage.getItem('tm_percorso_base') || ''
+    if (base) {
+      const sep = base.includes('/') ? '/' : '\\'
+      setPercorsoCartella(`${base}${sep}${nomeDir}`)
+    }
+    // Altrimenti l'operatore inserisce il percorso base una volta
+    e.target.value = ''
+  }
+
+  const handleSfogliaDirClick = () => inputDirRef.current.click()
   const addFiles = useCallback((files) => {
     const valid = Array.from(files).filter(f => /\.(mpf|nc|spf)$/i.test(f.name))
     if (!valid.length) return
@@ -165,18 +201,7 @@ export default function AnalisiNC() {
     }
   }
 
-  const handleSfoglia = async () => {
-    setSfogliaBusy(true)
-    try {
-      const res = await api.cartelleSfoglia()
-      setPercorsoCartella(res.percorso)
-      setMainError(null)
-    } catch (e) {
-      if (!e.message.includes('204')) setMainError(`Sfoglia: ${e.message}`)
-    } finally {
-      setSfogliaBusy(false)
-    }
-  }
+  const handleSfoglia = handleSfogliaDirClick  // alias per compatibilità UI
 
   const handleGeneraMain = async () => {
     if (!nomeCartella.trim()) { setMainError('Inserisci il nome della cartella in macchina'); return }
@@ -190,6 +215,11 @@ export default function AnalisiNC() {
         percorso_cartella: percorsoCartella,
         programmi,
       })
+      // Memorizza percorso base (tutto tranne l'ultima cartella) per la prossima volta
+      const parts = percorsoCartella.replace(/\\/g, '/').split('/')
+      parts.pop()
+      const base = parts.join('/') || percorsoCartella
+      sessionStorage.setItem('tm_percorso_base', base)
       setGlobalSuccess(`✓ ${res.nome_file} salvato in ${res.percorso_file}`)
       setShowPreview(false)
       // Aggiorna lista recenti
@@ -414,6 +444,17 @@ export default function AnalisiNC() {
               )}
             </div>
 
+            {/* Input nascosto per selezione cartella */}
+            <input
+              ref={inputDirRef}
+              type="file"
+              // @ts-ignore
+              webkitdirectory=""
+              multiple
+              style={{ display: 'none' }}
+              onChange={handleDirPick}
+            />
+
             <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
               <label style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: '0.08em', flexShrink: 0, width: 160 }}>
                 CARTELLA DI DESTINAZIONE
@@ -422,7 +463,7 @@ export default function AnalisiNC() {
                 type="text"
                 value={percorsoCartella}
                 onChange={e => { setPercorsoCartella(e.target.value); setMainError(null) }}
-                placeholder="es. C:\Programmi\TEST"
+                placeholder={sessionStorage.getItem('tm_percorso_base') ? `es. ${sessionStorage.getItem('tm_percorso_base')}\\TEST` : 'es. C:\\Programmi\\TEST'}
                 style={{
                   background: 'var(--bg-base)', border: '1px solid var(--border-bright)',
                   borderRadius: 'var(--radius-sm)', padding: '6px 12px',
@@ -434,23 +475,28 @@ export default function AnalisiNC() {
               />
               <button
                 className="btn btn-ghost"
-                onClick={handleSfoglia}
-                disabled={sfogliaBusy}
+                onClick={handleSfogliaDirClick}
                 style={{ fontSize: 12, flexShrink: 0 }}
-                title="Apri dialog per scegliere la cartella"
+                title="Scegli cartella — compila automaticamente nome e percorso"
               >
-                {sfogliaBusy ? <Spinner small /> : '📁 Sfoglia'}
+                📁 Scegli cartella
               </button>
             </div>
 
-            {/* Dropdown cartelle recenti */}
+            {/* Cartelle recenti */}
             {cartelleRecenti.length > 0 && (
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', paddingLeft: 170 }}>
                 <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>RECENTI:</span>
                 {cartelleRecenti.map(c => (
                   <button
                     key={c}
-                    onClick={() => { setPercorsoCartella(c); setMainError(null) }}
+                    onClick={() => {
+                      setPercorsoCartella(c)
+                      // Estrai nome cartella e auto-compila
+                      const nome = c.replace(/\\/g, '/').split('/').pop()
+                      if (nome) setNomeCartella(nome)
+                      setMainError(null)
+                    }}
                     style={{
                       background: percorsoCartella === c ? 'rgba(0,225,255,0.10)' : 'var(--bg-base)',
                       border: `1px solid ${percorsoCartella === c ? 'var(--cyan)' : 'var(--border)'}`,
@@ -460,13 +506,13 @@ export default function AnalisiNC() {
                       cursor: 'pointer', transition: 'all 0.15s',
                     }}
                   >
-                    {c.split(/[\\/]/).pop() || c}
+                    {c.replace(/\\/g, '/').split('/').pop() || c}
                   </button>
                 ))}
               </div>
             )}
             <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', paddingLeft: 170 }}>
-              Il file MAIN verrà scritto direttamente in questa cartella
+              💡 Clicca "Scegli cartella" per auto-compilare nome cartella e percorso
             </div>
           </div>
 

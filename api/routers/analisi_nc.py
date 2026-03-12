@@ -537,6 +537,7 @@ async def salva_main(body: SalvaMainRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Errore scrittura file: {e}")
 
+    _save_recente(str(dest_dir))
     log.info(f"MAIN salvato su disco: {percorso_file} ({len(body.programmi)} programmi)")
     return SalvaMainResponse(
         ok=True,
@@ -544,3 +545,78 @@ async def salva_main(body: SalvaMainRequest):
         nome_file=nome_file,
         messaggio=f"File salvato in: {percorso_file}",
     )
+
+
+# ── Cartelle recenti + sfoglia filesystem ──────────────────
+
+import json as _json
+
+_RECENTI_FILE = pathlib.Path("cartelle_recenti.json")
+_MAX_RECENTI  = 8
+
+def _load_recenti() -> list:
+    try:
+        return _json.loads(_recenti_file_path().read_text(encoding="utf-8"))
+    except Exception:
+        return []
+
+def _save_recente(percorso: str):
+    try:
+        items = _load_recenti()
+        percorso = str(pathlib.Path(percorso).resolve())
+        if percorso in items:
+            items.remove(percorso)
+        items.insert(0, percorso)
+        _recenti_file_path().write_text(
+            _json.dumps(items[:_MAX_RECENTI], ensure_ascii=False, indent=2),
+            encoding="utf-8"
+        )
+    except Exception:
+        pass
+
+def _recenti_file_path() -> pathlib.Path:
+    return _RECENTI_FILE
+
+
+class CartelleBrowseResponse(BaseModel):
+    percorso: str
+
+
+@router.get(
+    "/cartelle-recenti",
+    summary="Lista cartelle usate di recente per il MAIN",
+)
+async def cartelle_recenti():
+    """Restituisce le ultime cartelle usate per salvare il MAIN."""
+    return {"cartelle": _load_recenti()}
+
+
+@router.get(
+    "/sfoglia-cartella",
+    response_model=CartelleBrowseResponse,
+    summary="Apre dialog nativa Windows per scegliere cartella",
+)
+async def sfoglia_cartella():
+    """
+    Apre tkinter.filedialog.askdirectory() sul server (stesso PC).
+    Restituisce il percorso scelto dall'operatore.
+    Funziona solo quando backend e schermo sono sullo stesso PC.
+    """
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes('-topmost', True)
+        percorso = filedialog.askdirectory(
+            title="Seleziona la cartella dei programmi NC",
+            parent=root,
+        )
+        root.destroy()
+        if not percorso:
+            raise HTTPException(status_code=204, detail="Nessuna cartella selezionata")
+        return CartelleBrowseResponse(percorso=str(pathlib.Path(percorso)))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Errore dialog: {e}")

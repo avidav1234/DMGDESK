@@ -1,5 +1,5 @@
 // pages/AnalisiNC.jsx — Analisi multi-file NC con aggiungi-a-scaffale e generazione MAIN
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { api } from '../api/client'
 
 export default function AnalisiNC() {
@@ -19,13 +19,19 @@ export default function AnalisiNC() {
 
   // ── Stato generazione MAIN ─────────────────────────────
   const [nomeCartella, setNomeCartella] = useState('')
-  const [percorsoCartella, setPercorsoCartella] = useState('')  // percorso disco per salvataggio backend
+  const [percorsoCartella, setPercorsoCartella] = useState('')
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [mainPreview, setMainPreview] = useState(null)
   const [mainBusy, setMainBusy] = useState(false)
   const [mainError, setMainError] = useState(null)
   const [showPreview, setShowPreview] = useState(false)
-  const dirHandleRef = useRef(null)   // non più usato, tenuto per retrocompatibilità
+  const [cartelleRecenti, setCartelleRecenti] = useState([])
+  const [sfogliaBusy, setSfogliaBusy] = useState(false)
+
+  // Carica cartelle recenti all'avvio
+  useEffect(() => {
+    api.cartelleRecenti().then(r => setCartelleRecenti(r.cartelle || [])).catch(() => {})
+  }, [])
 
   // ── Gestione file ──────────────────────────────────────
   const addFiles = useCallback((files) => {
@@ -159,9 +165,22 @@ export default function AnalisiNC() {
     }
   }
 
+  const handleSfoglia = async () => {
+    setSfogliaBusy(true)
+    try {
+      const res = await api.cartelleSfoglia()
+      setPercorsoCartella(res.percorso)
+      setMainError(null)
+    } catch (e) {
+      if (!e.message.includes('204')) setMainError(`Sfoglia: ${e.message}`)
+    } finally {
+      setSfogliaBusy(false)
+    }
+  }
+
   const handleGeneraMain = async () => {
     if (!nomeCartella.trim()) { setMainError('Inserisci il nome della cartella in macchina'); return }
-    if (!percorsoCartella.trim()) { setMainError('Inserisci il percorso della cartella di destinazione'); return }
+    if (!percorsoCartella.trim()) { setMainError('Inserisci o seleziona la cartella di destinazione'); return }
     const programmi = buildProgrammi()
     if (!programmi.length) { setMainError('Seleziona almeno un programma'); return }
     setMainBusy(true); setMainError(null)
@@ -173,6 +192,8 @@ export default function AnalisiNC() {
       })
       setGlobalSuccess(`✓ ${res.nome_file} salvato in ${res.percorso_file}`)
       setShowPreview(false)
+      // Aggiorna lista recenti
+      api.cartelleRecenti().then(r => setCartelleRecenti(r.cartelle || [])).catch(() => {})
     } catch (e) {
       setMainError(e.message)
     } finally {
@@ -406,14 +427,46 @@ export default function AnalisiNC() {
                   background: 'var(--bg-base)', border: '1px solid var(--border-bright)',
                   borderRadius: 'var(--radius-sm)', padding: '6px 12px',
                   color: 'var(--text-primary)', fontFamily: 'var(--font-mono)',
-                  fontSize: 12, flex: 1, minWidth: 260, outline: 'none',
+                  fontSize: 12, flex: 1, minWidth: 200, outline: 'none',
                 }}
                 onFocus={e => e.target.style.borderColor = 'var(--cyan)'}
                 onBlur={e => e.target.style.borderColor = 'var(--border-bright)'}
               />
+              <button
+                className="btn btn-ghost"
+                onClick={handleSfoglia}
+                disabled={sfogliaBusy}
+                style={{ fontSize: 12, flexShrink: 0 }}
+                title="Apri dialog per scegliere la cartella"
+              >
+                {sfogliaBusy ? <Spinner small /> : '📁 Sfoglia'}
+              </button>
             </div>
+
+            {/* Dropdown cartelle recenti */}
+            {cartelleRecenti.length > 0 && (
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', paddingLeft: 170 }}>
+                <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>RECENTI:</span>
+                {cartelleRecenti.map(c => (
+                  <button
+                    key={c}
+                    onClick={() => { setPercorsoCartella(c); setMainError(null) }}
+                    style={{
+                      background: percorsoCartella === c ? 'rgba(0,225,255,0.10)' : 'var(--bg-base)',
+                      border: `1px solid ${percorsoCartella === c ? 'var(--cyan)' : 'var(--border)'}`,
+                      borderRadius: 'var(--radius-sm)', padding: '3px 10px',
+                      fontSize: 11, fontFamily: 'var(--font-mono)',
+                      color: percorsoCartella === c ? 'var(--cyan)' : 'var(--text-secondary)',
+                      cursor: 'pointer', transition: 'all 0.15s',
+                    }}
+                  >
+                    {c.split(/[\\/]/).pop() || c}
+                  </button>
+                ))}
+              </div>
+            )}
             <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', paddingLeft: 170 }}>
-              Il file MAIN verrà scritto direttamente in questa cartella dal server
+              Il file MAIN verrà scritto direttamente in questa cartella
             </div>
           </div>
 

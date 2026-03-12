@@ -88,6 +88,8 @@ export const api = {
   anteprimaMain:        (body)      => request('POST',   '/analisi-nc/anteprima-main', body),
   generaMain:           (body)      => download('POST',  '/analisi-nc/genera-main', body),
   salvaMain:            (body)      => request('POST',   '/analisi-nc/salva-main', body),
+  cartelleSfoglia:      ()          => request('GET',    '/analisi-nc/sfoglia-cartella'),
+  cartelleRecenti:      ()          => request('GET',    '/analisi-nc/cartelle-recenti'),
 
   // ── Health ────────────────────────────────────────────
   health:               ()          => fetch('/health').then(r => r.json()),

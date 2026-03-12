@@ -221,10 +221,6 @@ export default function AnalisiNC() {
       setMainBusy(false)
     }
   }
-    } finally {
-      setMainBusy(false)
-    }
-  }
 
   return (
     <div className="fade-in" style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 20 }}>

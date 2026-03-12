@@ -1,4 +1,4 @@
-// pages/AnalisiNC.jsx — Analisi multi-file NC con aggiungi-a-scaffale
+// pages/AnalisiNC.jsx — Analisi multi-file NC con aggiungi-a-scaffale e generazione MAIN
 import { useState, useRef, useCallback } from 'react'
 import { api } from '../api/client'
 
@@ -16,6 +16,14 @@ export default function AnalisiNC() {
   const [addBusy, setAddBusy] = useState(false)
   const [addError, setAddError] = useState(null)
   const [globalSuccess, setGlobalSuccess] = useState(null)
+
+  // ── Stato generazione MAIN ─────────────────────────────
+  const [nomeCartella, setNomeCartella] = useState('')
+  const [selectedIds, setSelectedIds] = useState(new Set())   // id entry selezionate
+  const [mainPreview, setMainPreview] = useState(null)        // { contenuto, nome_file }
+  const [mainBusy, setMainBusy] = useState(false)
+  const [mainError, setMainError] = useState(null)
+  const [showPreview, setShowPreview] = useState(false)
 
   // ── Gestione file ──────────────────────────────────────
   const addFiles = useCallback((files) => {
@@ -112,6 +120,63 @@ export default function AnalisiNC() {
   const allMancanti = [...new Set(done.flatMap(e => e.result?.mancanti ?? []))]
   const hasPending  = entries.some(e => e.status === 'pending' || e.status === 'error')
   const isRunning   = entries.some(e => e.status === 'analyzing')
+
+  // ── Helpers Genera MAIN ───────────────────────────────
+  const toggleSelectEntry = (id) => {
+    setSelectedIds(prev => {
+      const s = new Set(prev)
+      s.has(id) ? s.delete(id) : s.add(id)
+      return s
+    })
+    setMainPreview(null)
+    setMainError(null)
+  }
+
+  const buildProgrammi = () =>
+    done
+      .filter(e => selectedIds.has(e.id))
+      .map(e => ({
+        nome_file: e.file.name,
+        utensile_principale: e.result?.utensili_nel_file?.[0]?.alias ?? '—',
+        num_cambi: e.result?.totale_file ?? 1,
+      }))
+
+  const handleAnteprimaMain = async () => {
+    if (!nomeCartella.trim()) { setMainError('Inserisci il nome della cartella in macchina'); return }
+    const programmi = buildProgrammi()
+    if (!programmi.length) { setMainError('Seleziona almeno un programma'); return }
+    setMainBusy(true); setMainError(null)
+    try {
+      const res = await api.anteprimaMain({ nome_cartella: nomeCartella, programmi })
+      setMainPreview(res)
+      setShowPreview(true)
+    } catch (e) {
+      setMainError(e.message)
+    } finally {
+      setMainBusy(false)
+    }
+  }
+
+  const handleGeneraMain = async () => {
+    if (!nomeCartella.trim()) { setMainError('Inserisci il nome della cartella in macchina'); return }
+    const programmi = buildProgrammi()
+    if (!programmi.length) { setMainError('Seleziona almeno un programma'); return }
+    setMainBusy(true); setMainError(null)
+    try {
+      const { blob, filename } = await api.generaMain({ nome_cartella: nomeCartella, programmi })
+      // Trigger download nel browser
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url; a.download = filename; a.click()
+      URL.revokeObjectURL(url)
+      setGlobalSuccess(`${filename} scaricato`)
+      setShowPreview(false)
+    } catch (e) {
+      setMainError(e.message)
+    } finally {
+      setMainBusy(false)
+    }
+  }
 
   return (
     <div className="fade-in" style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -280,6 +345,142 @@ export default function AnalisiNC() {
             <path d="M14 14h12M14 20h12M14 26h7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
           </svg>
           <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Trascina i file NC per iniziare</div>
+        </div>
+      )}
+
+      {/* ── Sezione Genera MAIN ── */}
+      {done.length > 0 && (
+        <div className="fade-in" style={{
+          background: 'var(--bg-card)', border: '1px solid var(--border)',
+          borderRadius: 'var(--radius)', padding: '18px 20px',
+          display: 'flex', flexDirection: 'column', gap: 14,
+        }}>
+          {/* Titolo sezione */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ color: 'var(--cyan)', flexShrink: 0 }}>
+              <path d="M2 13V3l5 2.5L12 3v10l-5-2.5L2 13Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+            </svg>
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>Genera File MAIN</span>
+          </div>
+
+          {/* Riga: nome cartella */}
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            <label style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: '0.08em', flexShrink: 0 }}>
+              CARTELLA IN MACCHINA
+            </label>
+            <input
+              type="text"
+              value={nomeCartella}
+              onChange={e => { setNomeCartella(e.target.value); setMainPreview(null); setMainError(null) }}
+              placeholder="es. TEST"
+              style={{
+                background: 'var(--bg-base)', border: '1px solid var(--border-bright)',
+                borderRadius: 'var(--radius-sm)', padding: '6px 12px',
+                color: 'var(--text-primary)', fontFamily: 'var(--font-mono)',
+                fontSize: 13, fontWeight: 700, textTransform: 'uppercase',
+                width: 160, outline: 'none',
+              }}
+              onFocus={e => e.target.style.borderColor = 'var(--cyan)'}
+              onBlur={e => e.target.style.borderColor = 'var(--border-bright)'}
+            />
+            {nomeCartella.trim() && (
+              <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
+                → 0_MAIN_{nomeCartella.trim().toUpperCase()}.MPF
+              </span>
+            )}
+          </div>
+
+          {/* Selezione programmi */}
+          <div>
+            <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: '0.08em', marginBottom: 8 }}>
+              SELEZIONA PROGRAMMI DA INCLUDERE
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+              {done.map(e => {
+                const n = e.result?.totale_mancanti ?? 0
+                const sel = selectedIds.has(e.id)
+                return (
+                  <label key={e.id} style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '7px 12px',
+                    background: sel ? 'rgba(0,225,255,0.06)' : 'var(--bg-base)',
+                    border: `1px solid ${sel ? 'var(--cyan)' : 'var(--border)'}`,
+                    borderRadius: 'var(--radius-sm)', cursor: 'pointer',
+                    transition: 'all 0.15s',
+                  }}>
+                    <input
+                      type="checkbox"
+                      checked={sel}
+                      onChange={() => toggleSelectEntry(e.id)}
+                      style={{ accentColor: 'var(--cyan)', width: 13, height: 13, flexShrink: 0 }}
+                    />
+                    <span className="mono" style={{ fontSize: 13, fontWeight: 600, flex: 1 }}>{e.file.name}</span>
+                    <span style={{ fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+                      {e.result?.totale_file ?? 0} utensili
+                    </span>
+                    {n > 0 && <span style={{ fontSize: 11, color: 'var(--red)', fontWeight: 700 }}>⚠ {n} mancanti</span>}
+                    {n === 0 && <span style={{ fontSize: 11, color: 'var(--green)' }}>✓ ok</span>}
+                  </label>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Errore generazione */}
+          {mainError && (
+            <div style={{ background: 'rgba(255,68,85,0.09)', border: '1px solid rgba(255,68,85,0.3)', borderRadius: 'var(--radius-sm)', padding: '8px 12px', fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--red)' }}>
+              ⚠ {mainError}
+            </div>
+          )}
+
+          {/* Bottoni azioni */}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button
+              className="btn btn-ghost"
+              onClick={handleAnteprimaMain}
+              disabled={mainBusy || selectedIds.size === 0 || !nomeCartella.trim()}
+              style={{ fontSize: 12 }}
+            >
+              {mainBusy && !showPreview ? <><Spinner small /> Caricamento...</> : '👁 Anteprima'}
+            </button>
+            <button
+              className="btn btn-primary"
+              onClick={handleGeneraMain}
+              disabled={mainBusy || selectedIds.size === 0 || !nomeCartella.trim()}
+              style={{ fontSize: 12 }}
+            >
+              {mainBusy ? <><Spinner small /> Generazione...</> : `⬇ Genera MAIN (${selectedIds.size} pgm)`}
+            </button>
+          </div>
+
+          {/* Anteprima testo */}
+          {showPreview && mainPreview && (
+            <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--cyan)', letterSpacing: '0.08em' }}>
+                  ANTEPRIMA: {mainPreview.nome_file}
+                </span>
+                <button onClick={() => setShowPreview(false)} style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 14 }}>✕</button>
+              </div>
+              <pre style={{
+                background: 'var(--bg-base)', border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-sm)', padding: '12px 14px',
+                fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)',
+                lineHeight: 1.65, overflowX: 'auto', maxHeight: 300, overflowY: 'auto',
+                margin: 0,
+              }}>
+                {mainPreview.contenuto}
+              </pre>
+              <button
+                className="btn btn-primary"
+                onClick={handleGeneraMain}
+                disabled={mainBusy}
+                style={{ alignSelf: 'flex-end', fontSize: 12 }}
+              >
+                {mainBusy ? <><Spinner small /> Generazione...</> : '⬇ Scarica MAIN'}
+              </button>
+            </div>
+          )}
         </div>
       )}
 

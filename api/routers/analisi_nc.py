@@ -8,14 +8,19 @@ GET  /api/analisi-nc/info-alias         → parse alias CNC: utensile + holder +
 POST /api/analisi-nc/aggiungi-a-scaffale → aggiunge utensile mancante a scaffale
 GET  /api/analisi-nc/calibra-mode       → modalità CALIBRA ONLY attiva
 PUT  /api/analisi-nc/calibra-mode       → cambia modalità CALIBRA ONLY
+POST /api/analisi-nc/genera-main        → genera e scarica il file MAIN .MPF
+POST /api/analisi-nc/anteprima-main     → restituisce preview testuale del MAIN
 """
 
+import io
 import os
 import tempfile
+from datetime import datetime
 import pandas as pd
 from fastapi import APIRouter, HTTPException, UploadFile, File, Query
+from fastapi.responses import Response
 from pydantic import BaseModel
-from typing import Optional
+from typing import List, Optional
 
 from api.deps import get_db_principale, get_db_smontati, get_db_bussole
 from logic.nc_analyzer import estrai_tutti_utensili_da_file, confronta_utensili_logica
@@ -340,4 +345,131 @@ async def aggiungi_a_scaffale(body: AggiungiAScaffaleRequest):
         holder_usato=holder_cod,
         bussola_usata=bussola_cod,
         messaggio=" · ".join(parti),
+    )
+
+
+# ── Genera MAIN ────────────────────────────────────────────
+
+class ProgrammaNC(BaseModel):
+    nome_file: str                   # es. "4297_007_03_001.mpf"
+    utensile_principale: str         # primo alias trovato nel file (per commento)
+    num_cambi: int = 1               # numero cambi utensile nel programma
+
+class GeneraMainRequest(BaseModel):
+    nome_cartella: str               # es. "TEST"
+    programmi: List[ProgrammaNC]     # programmi selezionati dall'operatore
+
+class AnteprimeMainResponse(BaseModel):
+    contenuto: str                   # testo del file MAIN
+    nome_file: str                   # es. "0_MAIN_TEST.MPF"
+
+
+def _build_main_content(nome_cartella: str, programmi: List[ProgrammaNC]) -> str:
+    """
+    Genera il contenuto testuale del file MAIN secondo il formato V14.
+    Esempio di output atteso: vedi 0_MAIN_TEST.MPF allegato.
+    """
+    cartella_upper = nome_cartella.strip().upper()
+    lines = []
+
+    # ── Header ──────────────────────────────────────────────
+    lines.append(f"; Main Program V14 - CALIBRA ONLY Configurabile")
+    lines.append(f"; Progetto: {cartella_upper}")
+    lines.append(f"; CALIBRA ONLY: \u274c Nessun CALIBRA ONLY")
+    lines.append(f";--------------------------------------------------")
+    # La riga EXTCALL del MAIN stesso è commentata (come nel file esempio)
+    nome_main = f"0_MAIN_{cartella_upper}"
+    lines.append(f";EXTCALL (\"/_N_WKS_DIR/_N_{cartella_upper}_WPD/_N_{nome_main}_MPF\")")
+    lines.append("")
+    lines.append("")
+
+    # ── Un blocco per ogni programma ────────────────────────
+    for i, pgm in enumerate(programmi, start=1):
+        nome_base = pgm.nome_file.upper().replace(".", "_")
+        # rimuove eventuale estensione se già inclusa nel nome_base
+        if nome_base.endswith("_MPF"):
+            nome_path = nome_base
+        else:
+            nome_path = nome_base + "_MPF"
+
+        lines.append(f"; ===== FILE {i}: {pgm.nome_file} =====")
+        lines.append(f"; Utensili: {pgm.num_cambi} cambi")
+        lines.append("")
+        lines.append(f"; Utensile principale: {pgm.utensile_principale}")
+        lines.append(f"EXTCALL (\"/_N_WKS_DIR/_N_{cartella_upper}_WPD/_N_{nome_path}\")")
+        lines.append("IF _B_ERRNO <> 0 GOTOF FINE")
+        lines.append("STOPRE")
+        lines.append("")
+
+    # ── Statistiche ─────────────────────────────────────────
+    lines.append("; ===== STATISTICHE V14 =====")
+    lines.append(f"; TOTALE utensili processati: {len(programmi)}")
+    lines.append(f"; CALIBRA ONLY inseriti: 0")
+    lines.append(f"; Modalità: \u274c Nessun CALIBRA ONLY")
+    lines.append("; ============================")
+    lines.append("")
+    lines.append("FINE:")
+    lines.append("M67")
+    lines.append("M30")
+    lines.append("")
+
+    return "\n".join(lines)
+
+
+@router.post(
+    "/anteprima-main",
+    response_model=AnteprimeMainResponse,
+    summary="Anteprima testuale del file MAIN",
+)
+async def anteprima_main(body: GeneraMainRequest):
+    """
+    Restituisce il contenuto testuale del MAIN senza scaricarlo.
+    Utile per mostrare un'anteprima all'operatore prima di confermare.
+    """
+    if not body.nome_cartella.strip():
+        raise HTTPException(status_code=422, detail="nome_cartella non può essere vuoto")
+    if not body.programmi:
+        raise HTTPException(status_code=422, detail="Seleziona almeno un programma")
+
+    cartella_upper = body.nome_cartella.strip().upper()
+    contenuto = _build_main_content(cartella_upper, body.programmi)
+    nome_file = f"0_MAIN_{cartella_upper}.MPF"
+
+    log.info(f"Anteprima MAIN: {nome_file} ({len(body.programmi)} programmi)")
+    return AnteprimeMainResponse(contenuto=contenuto, nome_file=nome_file)
+
+
+@router.post(
+    "/genera-main",
+    summary="Genera e scarica il file MAIN .MPF",
+    response_class=Response,
+    responses={
+        200: {
+            "content": {"application/octet-stream": {}},
+            "description": "File .MPF scaricabile",
+        }
+    },
+)
+async def genera_main(body: GeneraMainRequest):
+    """
+    Genera il file MAIN O9999 secondo il formato V14 e lo restituisce
+    come file da scaricare (.MPF).
+
+    Il nome del file scaricato sarà: 0_MAIN_{NOME_CARTELLA}.MPF
+    """
+    if not body.nome_cartella.strip():
+        raise HTTPException(status_code=422, detail="nome_cartella non può essere vuoto")
+    if not body.programmi:
+        raise HTTPException(status_code=422, detail="Seleziona almeno un programma")
+
+    cartella_upper = body.nome_cartella.strip().upper()
+    contenuto = _build_main_content(cartella_upper, body.programmi)
+    nome_file = f"0_MAIN_{cartella_upper}.MPF"
+
+    log.info(f"MAIN generato: {nome_file} ({len(body.programmi)} programmi)")
+
+    return Response(
+        content=contenuto.encode("utf-8"),
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{nome_file}"'},
     )

@@ -26,6 +26,25 @@ async function request(method, path, body = null) {
   return res.json()
 }
 
+// Download binario — restituisce { blob, filename }
+async function download(method, path, body = null) {
+  const opts = {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+  }
+  if (body) opts.body = JSON.stringify(body)
+  const res = await fetch(`${BASE}${path}`, opts)
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }))
+    throw new Error(err.detail || `HTTP ${res.status}`)
+  }
+  const cd = res.headers.get('Content-Disposition') || ''
+  const match = cd.match(/filename="?([^"]+)"?/)
+  const filename = match ? match[1] : 'file.MPF'
+  const blob = await res.blob()
+  return { blob, filename }
+}
+
 export const api = {
   // ── Macchina ──────────────────────────────────────────
   getMacchina:          ()          => request('GET',    '/macchina/'),
@@ -65,6 +84,8 @@ export const api = {
   aggiungiAScaffale:    (body)      => request('POST',   '/analisi-nc/aggiungi-a-scaffale', body),
   getCalibraMode:       ()          => request('GET',    '/analisi-nc/calibra-mode'),
   setCalibraMode:       (body)      => request('PUT',    '/analisi-nc/calibra-mode', body),
+  anteprimaMain:        (body)      => request('POST',   '/analisi-nc/anteprima-main', body),
+  generaMain:           (body)      => download('POST',  '/analisi-nc/genera-main', body),
 
   // ── Health ────────────────────────────────────────────
   health:               ()          => fetch('/health').then(r => r.json()),

@@ -19,7 +19,6 @@ export default function AnalisiNC() {
 
   // ── Stato generazione MAIN ─────────────────────────────
   const [nomeCartella, setNomeCartella] = useState('')
-  const [percorsoCartella, setPercorsoCartella] = useState('')
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [mainPreview, setMainPreview] = useState(null)
   const [mainBusy, setMainBusy] = useState(false)
@@ -27,29 +26,44 @@ export default function AnalisiNC() {
   const [showPreview, setShowPreview] = useState(false)
   const [cartelleRecenti, setCartelleRecenti] = useState([])
 
+  // percorsoBase viene dal server (config.json) — null = non ancora configurato
+  const [percorsoBase, setPercorsoBase] = useState(null)   // es. "P:\\DMG_DMC_160U\\4297"
+  const [percorsoBaseInput, setPercorsoBaseInput] = useState('')
+  const [percorsoBaseBusy, setPercorsoBaseBusy] = useState(false)
 
-  // Carica cartelle recenti all'avvio
+  // Percorso completo = percorsoBase + \ + nomeCartella (auto-costruito)
+  const percorsoCompleto = percorsoBase && nomeCartella.trim()
+    ? `${percorsoBase.replace(/[\\/]+$/, '')}\\${nomeCartella.trim()}`
+    : ''
+
+  // Al mount: carica percorso base dal server + cartelle recenti
   useEffect(() => {
-    api.cartelleRecenti().then(r => setCartelleRecenti(r.cartelle || [])).catch(() => {})
-    // Ripristina percorso base dall'ultima sessione
-    const saved = sessionStorage.getItem('tm_percorso_base')
-    if (saved) setPercorsoCartella(saved)
+    api.getPercorsoNc()
+      .then(r => {
+        if (r.percorso_nc_base) {
+          setPercorsoBase(r.percorso_nc_base)
+          setPercorsoBaseInput(r.percorso_nc_base)
+        }
+      })
+      .catch(() => {})
+    api.cartelleRecenti()
+      .then(r => setCartelleRecenti(r.cartelle || []))
+      .catch(() => {})
   }, [])
 
-  const [percorsoBase, setPercorsoBase] = useState(
-    () => sessionStorage.getItem('tm_percorso_base') || ''
-  )
-
-
-
-  // Percorso completo calcolato da base + nome cartella
-  const percorsoCompleto = percorsoBase.trim() && nomeCartella.trim()
-    ? `${percorsoBase.trim().replace(/[\\/]+$/, '')}\\${nomeCartella.trim()}`
-    : percorsoCartella
-
-  const handlePercorsoBaseChange = (val) => {
-    setPercorsoBase(val)
-    sessionStorage.setItem('tm_percorso_base', val)
+  // Salva percorso base sul server
+  const handleSalvaPercorsoBase = async () => {
+    const val = percorsoBaseInput.trim().replace(/[\\/]+$/, '')
+    if (!val) return
+    setPercorsoBaseBusy(true)
+    try {
+      const r = await api.setPercorsoNc(val)
+      setPercorsoBase(r.percorso_nc_base)
+    } catch (e) {
+      setMainError(`Errore salvataggio percorso: ${e.message}`)
+    } finally {
+      setPercorsoBaseBusy(false)
+    }
   }
   const addFiles = useCallback((files) => {
     const valid = Array.from(files).filter(f => /\.(mpf|nc|spf)$/i.test(f.name))
@@ -394,35 +408,60 @@ export default function AnalisiNC() {
           {/* Riga: nome cartella + percorso */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
 
-            {/* Percorso base — una volta sola */}
-            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-              <label style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: '0.08em', flexShrink: 0, width: 130 }}>
-                PERCORSO BASE
-              </label>
-              <input
-                type="text"
-                value={percorsoBase}
-                onChange={e => handlePercorsoBaseChange(e.target.value)}
-                placeholder="es. P:\DMG_DMC_160U\4297\0007"
-                style={{
-                  background: 'var(--bg-base)', border: '1px solid var(--border-bright)',
-                  borderRadius: 'var(--radius-sm)', padding: '6px 12px',
-                  color: 'var(--text-primary)', fontFamily: 'var(--font-mono)',
-                  fontSize: 12, flex: 1, outline: 'none',
-                }}
-                onFocus={e => e.target.style.borderColor = 'var(--cyan)'}
-                onBlur={e => e.target.style.borderColor = 'var(--border-bright)'}
-              />
-            </div>
+            {/* Percorso base — banner solo se non ancora configurato */}
+            {percorsoBase === null && (
+              <div style={{
+                background: 'rgba(255,180,0,0.07)', border: '1px solid rgba(255,180,0,0.3)',
+                borderRadius: 'var(--radius-sm)', padding: '12px 14px',
+                display: 'flex', flexDirection: 'column', gap: 8,
+              }}>
+                <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--amber)', fontWeight: 700 }}>
+                  ⚙ CONFIGURAZIONE — inserisci il percorso base una volta sola
+                </div>
+                <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+                  Cartella padre che contiene Fase-2, Fase-3, SQUADRA... (es. P:\DMG_DMC_160U\4297\0007)
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input type="text" value={percorsoBaseInput}
+                    onChange={e => setPercorsoBaseInput(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleSalvaPercorsoBase()}
+                    placeholder="P:\DMG_DMC_160U\4297\0007"
+                    style={{
+                      background: 'var(--bg-base)', border: '1px solid var(--border-bright)',
+                      borderRadius: 'var(--radius-sm)', padding: '6px 12px',
+                      color: 'var(--text-primary)', fontFamily: 'var(--font-mono)',
+                      fontSize: 12, flex: 1, outline: 'none',
+                    }}
+                    onFocus={e => e.target.style.borderColor = 'var(--amber)'}
+                    onBlur={e => e.target.style.borderColor = 'var(--border-bright)'}
+                  />
+                  <button className="btn btn-primary" onClick={handleSalvaPercorsoBase}
+                    disabled={percorsoBaseBusy || !percorsoBaseInput.trim()}
+                    style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
+                    {percorsoBaseBusy ? '...' : '💾 Salva'}
+                  </button>
+                </div>
+              </div>
+            )}
 
-            {/* Nome sottocartella */}
+            {/* Percorso base configurato — riga compatta con modifica */}
+            {percorsoBase !== null && (
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', width: 130, flexShrink: 0 }}>PERCORSO BASE</span>
+                <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', flex: 1 }}>{percorsoBase}</span>
+                <button onClick={() => { setPercorsoBase(null); setPercorsoBaseInput(percorsoBase || '') }}
+                  style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 11, padding: '0 4px' }}>
+                  ✎
+                </button>
+              </div>
+            )}
+
+            {/* Nome cartella — unico campo che l'operatore compila */}
             <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-              <label style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: '0.08em', flexShrink: 0, width: 130 }}>
+              <label style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', flexShrink: 0, width: 130 }}>
                 CARTELLA
               </label>
-              <input
-                type="text"
-                value={nomeCartella}
+              <input type="text" value={nomeCartella}
                 onChange={e => { setNomeCartella(e.target.value); setMainPreview(null); setMainError(null) }}
                 placeholder="es. Fase-2"
                 style={{
@@ -434,11 +473,28 @@ export default function AnalisiNC() {
                 onFocus={e => e.target.style.borderColor = 'var(--cyan)'}
                 onBlur={e => e.target.style.borderColor = 'var(--border-bright)'}
               />
+              {/* Cartelle recenti come pill inline */}
+              {cartelleRecenti.map(c => {
+                const nomePart = c.replace(/\\/g, '/').split('/').pop() || c
+                return (
+                  <button key={c} onClick={() => { setNomeCartella(nomePart); setMainError(null) }}
+                    style={{
+                      background: nomeCartella === nomePart ? 'rgba(0,225,255,0.12)' : 'var(--bg-base)',
+                      border: `1px solid ${nomeCartella === nomePart ? 'var(--cyan)' : 'var(--border)'}`,
+                      borderRadius: 'var(--radius-sm)', padding: '3px 10px',
+                      fontSize: 11, fontFamily: 'var(--font-mono)',
+                      color: nomeCartella === nomePart ? 'var(--cyan)' : 'var(--text-secondary)',
+                      cursor: 'pointer',
+                    }}>
+                    {nomePart}
+                  </button>
+                )
+              })}
             </div>
 
-            {/* Percorso completo risultante */}
+            {/* Preview percorso completo */}
             {percorsoCompleto && (
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center', paddingLeft: 140, flexWrap: 'wrap' }}>
+              <div style={{ paddingLeft: 138, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                 <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>SALVERÀ →</span>
                 <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--green)' }}>
                   {percorsoCompleto}\0_MAIN_{nomeCartella.toUpperCase()}.MPF
@@ -446,34 +502,8 @@ export default function AnalisiNC() {
               </div>
             )}
 
-            {/* Cartelle recenti */}
-            {cartelleRecenti.length > 0 && (
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', paddingLeft: 140 }}>
-                <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>RECENTI:</span>
-                {cartelleRecenti.map(c => {
-                  const nomePart = c.replace(/\\/g, '/').split('/').pop() || c
-                  const basePart = c.replace(/\\/g, '/').split('/').slice(0, -1).join('\\')
-                  return (
-                    <button key={c} onClick={() => {
-                      setNomeCartella(nomePart)
-                      setPercorsoBase(basePart)
-                      sessionStorage.setItem('tm_percorso_base', basePart)
-                      setMainError(null)
-                    }} style={{
-                      background: nomeCartella === nomePart && percorsoBase === basePart ? 'rgba(0,225,255,0.10)' : 'var(--bg-base)',
-                      border: `1px solid ${nomeCartella === nomePart && percorsoBase === basePart ? 'var(--cyan)' : 'var(--border)'}`,
-                      borderRadius: 'var(--radius-sm)', padding: '3px 10px',
-                      fontSize: 11, fontFamily: 'var(--font-mono)',
-                      color: nomeCartella === nomePart ? 'var(--cyan)' : 'var(--text-secondary)',
-                      cursor: 'pointer', transition: 'all 0.15s',
-                    }}>
-                      {nomePart}
-                    </button>
-                  )
-                })}
-              </div>
-            )}
           </div>
+
 
           {/* Selezione programmi */}
           <div>
@@ -531,7 +561,7 @@ export default function AnalisiNC() {
             <button
               className="btn btn-primary"
               onClick={handleGeneraMain}
-              disabled={mainBusy || selectedIds.size === 0 || !nomeCartella.trim() || !percorsoCartella.trim()}
+              disabled={mainBusy || selectedIds.size === 0 || !nomeCartella.trim() || !percorsoCompleto}
               style={{ fontSize: 12 }}
             >
               {mainBusy ? <><Spinner small /> Salvataggio...</> : `💾 Salva MAIN (${selectedIds.size} pgm)`}
@@ -559,7 +589,7 @@ export default function AnalisiNC() {
               <button
                 className="btn btn-primary"
                 onClick={handleGeneraMain}
-                disabled={mainBusy || !percorsoCartella.trim()}
+                disabled={mainBusy || !percorsoCompleto}
                 style={{ alignSelf: 'flex-end', fontSize: 12 }}
               >
                 {mainBusy ? <><Spinner small /> Salvataggio...</> : '💾 Salva MAIN'}

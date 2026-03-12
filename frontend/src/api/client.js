@@ -91,6 +91,10 @@ export const api = {
   cartelleSfoglia:      ()          => request('GET',    '/analisi-nc/sfoglia-cartella'),
   cartelleRecenti:      ()          => request('GET',    '/analisi-nc/cartelle-recenti'),
 
+  // Configurazione percorso NC base (salvato in config.json sul server — una volta sola)
+  getPercorsoNc:        ()          => request('GET',    '/config/percorso-nc'),
+  setPercorsoNc:        (percorso)  => request('PUT',    '/config/percorso-nc', { percorso_nc_base: percorso }),
+
   // ── Health ────────────────────────────────────────────
   health:               ()          => fetch('/health').then(r => r.json()),
 }

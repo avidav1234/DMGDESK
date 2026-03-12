@@ -35,7 +35,8 @@ export const api = {
 
   // ── Scaffale ──────────────────────────────────────────
   getScaffale:          ()          => request('GET',    '/scaffale/'),
-  spostaInMacchina:     (body)      => request('POST',   '/scaffale/sposta-in-macchina', body),
+  spostaInMacchina:     (body)      => request('POST',   '/scaffale/sposta-in-macchina', body),   // body: { alias, nuova_posizione_macchina }
+  rimuoviDaScaffale:    (alias)     => request('DELETE', `/scaffale/${encodeURIComponent(alias)}`),
 
   // ── Smontati ──────────────────────────────────────────
   getSmontati:          ()          => request('GET',    '/smontati/'),
@@ -60,6 +61,8 @@ export const api = {
 
   // ── Analisi NC ────────────────────────────────────────
   analizzaNC:           (file)      => { const fd = new FormData(); fd.append('file', file); return request('POST', '/analisi-nc/analizza', fd) },
+  infoAlias:            (alias)     => request('GET',    `/analisi-nc/info-alias?alias=${encodeURIComponent(alias)}`),
+  aggiungiAScaffale:    (body)      => request('POST',   '/analisi-nc/aggiungi-a-scaffale', body),
   getCalibraMode:       ()          => request('GET',    '/analisi-nc/calibra-mode'),
   setCalibraMode:       (body)      => request('PUT',    '/analisi-nc/calibra-mode', body),
 

@@ -25,14 +25,12 @@ export default function AnalisiNC() {
   const [mainBusy, setMainBusy] = useState(false)
   const [mainError, setMainError] = useState(null)
   const [showPreview, setShowPreview] = useState(false)
-  const dirHandleRef = useRef(null)
+  const dirHandleRef = useRef(null)   // non più usato, tenuto per retrocompatibilità
 
   // ── Gestione file ──────────────────────────────────────
-  const addFiles = useCallback((files, dirHandle = null) => {
+  const addFiles = useCallback((files) => {
     const valid = Array.from(files).filter(f => /\.(mpf|nc|spf)$/i.test(f.name))
     if (!valid.length) return
-    // Salva il directory handle se disponibile (viene dal drag con items)
-    if (dirHandle) dirHandleRef.current = dirHandle
     setEntries(prev => [...prev, ...valid.map(f => ({
       id: ++idRef.current, file: f, status: 'pending', result: null, error: null
     }))])
@@ -201,64 +199,10 @@ export default function AnalisiNC() {
       {/* ── Dropzone + bottoni ── */}
       <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
         <div
-          onClick={async () => {
-            // Se File System Access API disponibile: usiamo showOpenFilePicker per avere il dirHandle
-            if (fsSupportata) {
-              try {
-                const handles = await window.showOpenFilePicker({
-                  multiple: true,
-                  types: [{ description: 'CNC Programs', accept: { 'text/plain': ['.mpf', '.nc', '.spf'] } }],
-                })
-                if (!handles.length) return
-                // Recupera la directory parent dal primo file handle
-                // (showOpenFilePicker non espone direttamente la dir, usiamo fallback)
-                const files = await Promise.all(handles.map(h => h.getFile()))
-                addFiles(files)
-                return
-              } catch (err) {
-                if (err.name === 'AbortError') return
-                // Fallback a input classico
-              }
-            }
-            inputRef.current.click()
-          }}
+          onClick={() => inputRef.current.click()}
           onDragOver={e => { e.preventDefault(); setDragging(true) }}
           onDragLeave={() => setDragging(false)}
-          onDrop={async e => {
-            e.preventDefault(); setDragging(false)
-            // Prova a catturare il FileSystemDirectoryHandle tramite DataTransferItem API
-            if (e.dataTransfer.items && fsSupportata) {
-              const items = Array.from(e.dataTransfer.items)
-              let capturedDirHandle = null
-              const files = []
-              for (const item of items) {
-                if (item.kind !== 'file') continue
-                try {
-                  const handle = await item.getAsFileSystemHandle()
-                  if (handle.kind === 'directory') {
-                    // Se l'utente trascina una cartella, leggi i file dentro
-                    capturedDirHandle = handle
-                    for await (const [, fh] of handle.entries()) {
-                      if (fh.kind === 'file' && /\.(mpf|nc|spf)$/i.test(fh.name)) {
-                        files.push(await fh.getFile())
-                      }
-                    }
-                  } else {
-                    // File singolo — cattura la dir parent via webkitRelativePath non disponibile,
-                    // quindi usiamo il file normale; la dir sarà scelta via showSaveFilePicker
-                    files.push(await handle.getFile())
-                  }
-                } catch {
-                  // Fallback: usa il file classico
-                  const f = item.getAsFile()
-                  if (f) files.push(f)
-                }
-              }
-              addFiles(files, capturedDirHandle)
-            } else {
-              addFiles(e.dataTransfer.files)
-            }
-          }}
+          onDrop={e => { e.preventDefault(); setDragging(false); addFiles(e.dataTransfer.files) }}
           style={{
             flex: 1, border: `1px dashed ${dragging ? 'var(--cyan)' : 'var(--border-bright)'}`,
             borderRadius: 'var(--radius)', padding: '16px 20px',
@@ -275,14 +219,7 @@ export default function AnalisiNC() {
           </svg>
           <div>
             <div style={{ fontSize: 13, fontWeight: 600 }}>Trascina i file NC</div>
-            <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 1 }}>
-              .MPF · .NC · .SPF — trascina la cartella per salvare il MAIN automaticamente
-            </div>
-            {dirHandleRef.current && (
-              <div style={{ fontSize: 10, color: 'var(--cyan)', marginTop: 3, fontFamily: 'var(--font-mono)' }}>
-                📁 Cartella rilevata — il MAIN verrà salvato qui
-              </div>
-            )}
+            <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 1 }}>.MPF · .NC · .SPF — più file insieme</div>
           </div>
         </div>
         {entries.length > 0 && (

@@ -171,10 +171,10 @@ export default function Generatore() {
               <div className="card" style={{ padding: 20 }}>
                 <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 10 }}>ANTEPRIMA CODICE NC</div>
                 <pre className="mono" style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.8, background: 'var(--bg-base)', padding: 16, borderRadius: 'var(--radius-sm)', overflow: 'auto' }}>
-{`T="${result.nome}"
+{`T="${result.commento}"
 D1
 M6
-; ${result.commento}`}
+; ${result.nome}`}
                 </pre>
               </div>
             </div>

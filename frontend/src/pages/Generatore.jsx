@@ -41,14 +41,36 @@ export default function Generatore() {
   }
 
   const copia = (text, key) => {
-    navigator.clipboard.writeText(text).then(() => { setCopied(key); setTimeout(() => setCopied(null), 2000) })
+    // navigator.clipboard richiede HTTPS — fallback execCommand per HTTP su LAN
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text)
+        .then(() => { setCopied(key); setTimeout(() => setCopied(null), 2000) })
+        .catch(() => copiaFallback(text, key))
+    } else {
+      copiaFallback(text, key)
+    }
+  }
+
+  const copiaFallback = (text, key) => {
+    const el = document.createElement('textarea')
+    el.value = text
+    el.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0'
+    document.body.appendChild(el)
+    el.focus()
+    el.select()
+    try {
+      document.execCommand('copy')
+      setCopied(key)
+      setTimeout(() => setCopied(null), 2000)
+    } catch (_) {}
+    document.body.removeChild(el)
   }
 
   if (loading) return <Loader text="Caricamento catalogo..." />
 
   return (
     <div className="fade-in" style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <SectionHeader title="Generatore Codici" subtitle="Genera nome e commento CNC per utensile" />
+      <SectionHeader title="Generatore Codici" subtitle="Genera Nome CAM e Alias CNC per utensile" />
       <ErrorBanner message={error} onClose={() => setError(null)} />
 
       <div style={{ display: 'flex', gap: 16, flex: 1, overflow: 'hidden' }}>
@@ -129,8 +151,8 @@ export default function Generatore() {
           {result ? (
             <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {[
-                { label: 'NOME CNC (Alias)', value: result.nome, key: 'nome' },
-                { label: 'COMMENTO',          value: result.commento, key: 'commento' },
+                { label: 'NOME CAM',          value: result.nome,     key: 'nome' },
+                { label: 'NOME CNC (ALIAS)',   value: result.commento, key: 'commento' },
               ].map(({ label, value, key }) => (
                 <div key={key} className="card" style={{ padding: 20 }}>
                   <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 10 }}>{label}</div>

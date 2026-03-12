@@ -2,12 +2,12 @@
 import { NavLink } from 'react-router-dom'
 
 const NAV = [
+  { to: '/analisi-nc',      icon: '📄', label: 'Analisi NC',        sub: 'File MPF' },
   { to: '/macchina',        icon: '⚙',  label: 'In Macchina',     sub: 'Carosello CNC' },
   { to: '/scaffale',        icon: '📦', label: 'Scaffale',         sub: 'Assemblati' },
   { to: '/smontati',        icon: '🔧', label: 'Smontati',         sub: 'Archivio' },
   { to: '/holder-bussole',  icon: '🔩', label: 'Holder & Bussole', sub: 'Inventario' },
   { to: '/generatore',      icon: '⌨',  label: 'Generatore',       sub: 'Codici CNC' },
-  { to: '/analisi-nc',      icon: '📄', label: 'Analisi NC',        sub: 'File MPF' },
 ]
 
 export default function Sidebar() {

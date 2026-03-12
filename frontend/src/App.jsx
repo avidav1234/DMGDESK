@@ -20,7 +20,7 @@ export default function App() {
           background: 'var(--bg-base)',
         }}>
           <Routes>
-            <Route path="/"               element={<Navigate to="/macchina" replace />} />
+            <Route path="/"               element={<Navigate to="/analisi-nc" replace />} />
             <Route path="/macchina"       element={<Macchina />} />
             <Route path="/scaffale"       element={<Scaffale />} />
             <Route path="/smontati"       element={<Smontati />} />

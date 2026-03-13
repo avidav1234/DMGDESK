@@ -38,8 +38,8 @@ export default function AnalisiNC() {
   const [posizione, setPosizione] = useState('')
 
   // Percorso di salvataggio = radice + commessa + posizione
-  const percorsoSalvataggio = radiceNc && commessa.trim() && posizione.trim()
-    ? `${radiceNc.replace(/[\\/]+$/, '')}\\${commessa.trim()}\\${posizione.trim()}`
+  const percorsoSalvataggio = radiceNcInput.trim() && commessa.trim() && posizione.trim()
+    ? `${radiceNcInput.trim().replace(/[\\/]+$/, '')}\\${commessa.trim()}\\${posizione.trim()}`
     : ''
 
   // Al mount: carica radice NC dal server + cartelle recenti
@@ -414,55 +414,26 @@ export default function AnalisiNC() {
           {/* Percorso + campi operatore */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
 
-            {/* Radice NC — banner configurazione se non ancora impostata */}
-            {radiceNc === null ? (
-              <div style={{
-                background: 'rgba(255,180,0,0.07)', border: '1px solid rgba(255,180,0,0.3)',
-                borderRadius: 'var(--radius-sm)', padding: '12px 14px',
-                display: 'flex', flexDirection: 'column', gap: 8,
-              }}>
-                <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--amber)', fontWeight: 700 }}>
-                  ⚙ CONFIGURAZIONE — percorso radice (una volta sola)
-                </div>
-                <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
-                  Es. P:\DMG_DMC_160U — la parte fissa comune a tutte le commesse
-                </div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <input type="text" value={radiceNcInput}
-                    onChange={e => setRadiceNcInput(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && handleSalvaRadiceNc()}
-                    placeholder="P:\DMG_DMC_160U"
-                    style={{
-                      background: 'var(--bg-base)', border: '1px solid var(--border-bright)',
-                      borderRadius: 'var(--radius-sm)', padding: '6px 12px',
-                      color: 'var(--text-primary)', fontFamily: 'var(--font-mono)',
-                      fontSize: 12, flex: 1, outline: 'none',
-                    }}
-                    onFocus={e => e.target.style.borderColor = 'var(--amber)'}
-                    onBlur={e => e.target.style.borderColor = 'var(--border-bright)'}
-                  />
-                  <button className="btn btn-primary" onClick={handleSalvaRadiceNc}
-                    disabled={radiceNcBusy || !radiceNcInput.trim()}
-                    style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
-                    {radiceNcBusy ? '...' : '💾 Salva'}
-                  </button>
-                </div>
-              </div>
-            ) : (
-              /* Radice configurata — riga compatta */
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', width: 90, flexShrink: 0 }}>RADICE</span>
-                <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>{radiceNc}</span>
-                <button onClick={() => { setRadiceNc(null); setRadiceNcInput(radiceNc || '') }}
-                  style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 11, padding: '0 4px' }}>
-                  ✎
-                </button>
-              </div>
-            )}
+            {/* Radice NC — sempre visibile, editabile inline */}
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', width: 90, flexShrink: 0 }}>RADICE</span>
+              <input type="text" value={radiceNcInput}
+                onChange={e => setRadiceNcInput(e.target.value)}
+                onBlur={handleSalvaRadiceNc}
+                onKeyDown={e => e.key === 'Enter' && handleSalvaRadiceNc()}
+                placeholder="P:\DMG_DMC_160U"
+                style={{
+                  background: 'transparent', border: 'none', borderBottom: '1px solid var(--border)',
+                  padding: '2px 4px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)',
+                  fontSize: 11, width: 260, outline: 'none',
+                }}
+                onFocus={e => e.target.style.borderBottomColor = 'var(--cyan)'}
+              />
+              {radiceNcBusy && <span style={{ fontSize: 10, color: 'var(--text-dim)' }}>...</span>}
+            </div>
 
             {/* Campi operatore: commessa + posizione */}
-            {radiceNc !== null && (
-              <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
                 <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', width: 90, flexShrink: 0 }}>COMMESSA</span>
                 <input type="text" value={commessa}
                   onChange={e => { setCommessa(e.target.value.replace(/[^a-zA-Z0-9_\-]/g, '')); setMainError(null) }}
@@ -509,7 +480,6 @@ export default function AnalisiNC() {
                   )
                 })}
               </div>
-            )}
 
             {/* CARTELLA MACCHINA — nome WPD per gli EXTCALL */}
             <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>

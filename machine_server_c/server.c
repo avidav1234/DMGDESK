@@ -232,10 +232,10 @@ DWORD WINAPI handle_client(LPVOID param)
     json_get_string(header_buf, "comando",  comando,  sizeof(comando));
     json_get_string(header_buf, "progetto", progetto, sizeof(progetto));
 
-    /* Cartella destinazione */
+    /* Cartella destinazione - aggiunge .WPD se progetto specificato */
     char destdir[MAX_PATH_LEN * 2];
     if (strlen(progetto) > 0)
-        sprintf(destdir, "%s\\%s", g_basepath, progetto);
+        sprintf(destdir, "%s\\%s.WPD", g_basepath, progetto);
     else
         strncpy(destdir, g_basepath, sizeof(destdir) - 1);
 
@@ -285,11 +285,12 @@ DWORD WINAPI handle_client(LPVOID param)
         json_get_string(header_buf, "filename", filename, sizeof(filename));
         filesize = json_get_int(header_buf, "filesize");
 
-        /* Crea cartella se non esiste */
+        /* Verifica cartella - deve essere creata dall'HMI Sinumerik */
         if (GetFileAttributesA(destdir) == INVALID_FILE_ATTRIBUTES) {
-            create_dir_recursive(destdir);
-            sprintf(logbuf, "Cartella creata: %s", destdir);
+            sprintf(logbuf, "ERRORE: cartella non trovata: %s", destdir);
             log_msg(logbuf);
+            send_str(client, "ERRORE: cartella progetto non esiste. Crearla prima dall'HMI Sinumerik.");
+            goto cleanup;
         }
 
         /* Ricevi file */

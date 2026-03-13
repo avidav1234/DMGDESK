@@ -27,14 +27,15 @@ export default function AnalisiNC() {
   const [cartelleRecenti, setCartelleRecenti] = useState([])
 
   // percorsoBase viene dal server (config.json) — null = non ancora configurato
-  const [percorsoBase, setPercorsoBase] = useState(null)   // es. "P:\\DMG_DMC_160U\\4297"
+  // percorsoBase = percorso COMPLETO dove salvare il file (es. "P:\DMG_DMC_160U\4348\0221\Fase-3")
+  // nomeCartella = nome cartella logica nella macchina CNC (per EXTCALL, es. "FASE-3")
+  // Il file viene salvato direttamente in percorsoBase, senza aggiungere nomeCartella
+  const [percorsoBase, setPercorsoBase] = useState(null)
   const [percorsoBaseInput, setPercorsoBaseInput] = useState('')
   const [percorsoBaseBusy, setPercorsoBaseBusy] = useState(false)
 
-  // Percorso completo = percorsoBase + \ + nomeCartella (auto-costruito)
-  const percorsoCompleto = percorsoBase && nomeCartella.trim()
-    ? `${percorsoBase.replace(/[\\/]+$/, '')}\\${nomeCartella.trim()}`
-    : ''
+  // Il percorso di salvataggio è direttamente percorsoBase (non si aggiunge nomeCartella)
+  const percorsoSalvataggio = percorsoBase?.trim() || ''
 
   // Al mount: carica percorso base dal server + cartelle recenti
   useEffect(() => {
@@ -200,14 +201,14 @@ export default function AnalisiNC() {
 
   const handleGeneraMain = async () => {
     if (!nomeCartella.trim()) { setMainError('Inserisci il nome della cartella (es. Fase-2)'); return }
-    if (!percorsoCompleto.trim()) { setMainError('Inserisci il percorso base'); return }
+    if (!percorsoSalvataggio.trim()) { setMainError('Inserisci il percorso base'); return }
     const programmi = buildProgrammi()
     if (!programmi.length) { setMainError('Seleziona almeno un programma'); return }
     setMainBusy(true); setMainError(null)
     try {
       const res = await api.salvaMain({
         nome_cartella: nomeCartella,
-        percorso_cartella: percorsoCompleto,
+        percorso_cartella: percorsoSalvataggio,
         programmi,
       })
       setGlobalSuccess(`✓ ${res.nome_file} salvato in ${res.percorso_file}`)
@@ -447,7 +448,7 @@ export default function AnalisiNC() {
             {/* Percorso base configurato — riga compatta con modifica */}
             {percorsoBase !== null && (
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', width: 130, flexShrink: 0 }}>PERCORSO BASE</span>
+                <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', width: 130, flexShrink: 0 }}>PERCORSO SALVATAGGIO</span>
                 <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', flex: 1 }}>{percorsoBase}</span>
                 <button onClick={() => { setPercorsoBase(null); setPercorsoBaseInput(percorsoBase || '') }}
                   style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 11, padding: '0 4px' }}>
@@ -456,14 +457,14 @@ export default function AnalisiNC() {
               </div>
             )}
 
-            {/* Nome cartella — unico campo che l'operatore compila */}
+            {/* Nome cartella macchina CNC — per gli EXTCALL nel MAIN */}
             <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
               <label style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', flexShrink: 0, width: 130 }}>
-                CARTELLA
+                CARTELLA MACCHINA
               </label>
               <input type="text" value={nomeCartella}
                 onChange={e => { setNomeCartella(e.target.value); setMainPreview(null); setMainError(null) }}
-                placeholder="es. Fase-2"
+                placeholder="es. Fase-3"
                 style={{
                   background: 'var(--bg-base)', border: '1px solid var(--border-bright)',
                   borderRadius: 'var(--radius-sm)', padding: '6px 12px',
@@ -473,31 +474,17 @@ export default function AnalisiNC() {
                 onFocus={e => e.target.style.borderColor = 'var(--cyan)'}
                 onBlur={e => e.target.style.borderColor = 'var(--border-bright)'}
               />
-              {/* Cartelle recenti come pill inline */}
-              {cartelleRecenti.map(c => {
-                const nomePart = c.replace(/\\/g, '/').split('/').pop() || c
-                return (
-                  <button key={c} onClick={() => { setNomeCartella(nomePart); setMainError(null) }}
-                    style={{
-                      background: nomeCartella === nomePart ? 'rgba(0,225,255,0.12)' : 'var(--bg-base)',
-                      border: `1px solid ${nomeCartella === nomePart ? 'var(--cyan)' : 'var(--border)'}`,
-                      borderRadius: 'var(--radius-sm)', padding: '3px 10px',
-                      fontSize: 11, fontFamily: 'var(--font-mono)',
-                      color: nomeCartella === nomePart ? 'var(--cyan)' : 'var(--text-secondary)',
-                      cursor: 'pointer',
-                    }}>
-                    {nomePart}
-                  </button>
-                )
-              })}
+              <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
+                nome cartella WPD nella macchina CNC (usato negli EXTCALL)
+              </span>
             </div>
 
-            {/* Preview percorso completo */}
-            {percorsoCompleto && (
-              <div style={{ paddingLeft: 138, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            {/* Preview: dove verrà salvato il file */}
+            {percorsoSalvataggio && nomeCartella.trim() && (
+              <div style={{ paddingLeft: 140, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                 <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>SALVERÀ →</span>
                 <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--green)' }}>
-                  {percorsoCompleto}\0_MAIN_{nomeCartella.toUpperCase()}.MPF
+                  {percorsoSalvataggio}\0_MAIN_{nomeCartella.trim().toUpperCase()}.MPF
                 </span>
               </div>
             )}
@@ -561,7 +548,7 @@ export default function AnalisiNC() {
             <button
               className="btn btn-primary"
               onClick={handleGeneraMain}
-              disabled={mainBusy || selectedIds.size === 0 || !nomeCartella.trim() || !percorsoCompleto}
+              disabled={mainBusy || selectedIds.size === 0 || !nomeCartella.trim() || !percorsoSalvataggio}
               style={{ fontSize: 12 }}
             >
               {mainBusy ? <><Spinner small /> Salvataggio...</> : `💾 Salva MAIN (${selectedIds.size} pgm)`}
@@ -589,7 +576,7 @@ export default function AnalisiNC() {
               <button
                 className="btn btn-primary"
                 onClick={handleGeneraMain}
-                disabled={mainBusy || !percorsoCompleto}
+                disabled={mainBusy || !percorsoSalvataggio}
                 style={{ alignSelf: 'flex-end', fontSize: 12 }}
               >
                 {mainBusy ? <><Spinner small /> Salvataggio...</> : '💾 Salva MAIN'}

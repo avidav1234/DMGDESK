@@ -44,6 +44,7 @@ pyinstaller --noconfirm ^
     --add-data "ui;ui" ^
     --add-data "logic;logic" ^
     --add-data "utils;utils" ^
+    --add-data "machine_client.py;." ^
     --hidden-import customtkinter ^
     --hidden-import pandas ^
     --hidden-import PIL ^

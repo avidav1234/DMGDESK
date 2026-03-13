@@ -36,10 +36,11 @@ export default function AnalisiNC() {
   const [radiceNcBusy, setRadiceNcBusy] = useState(false)
   const [commessa, setCommessa] = useState('')
   const [posizione, setPosizione] = useState('')
+  const [fase, setFase] = useState('')
 
-  // Percorso di salvataggio = radice + commessa + posizione
+  // Percorso di salvataggio = radice + commessa + posizione [+ fase opzionale]
   const percorsoSalvataggio = radiceNcInput.trim() && commessa.trim() && posizione.trim()
-    ? `${radiceNcInput.trim().replace(/[\\/]+$/, '')}\\${commessa.trim()}\\${posizione.trim()}`
+    ? [radiceNcInput.trim().replace(/[\\/]+$/, ''), commessa.trim(), posizione.trim(), ...(fase.trim() ? [fase.trim()] : [])].join('\\')
     : ''
 
   // Al mount: carica radice NC dal server + cartelle recenti
@@ -459,6 +460,20 @@ export default function AnalisiNC() {
                   }}
                   onFocus={e => e.target.style.borderColor = 'var(--cyan)'}
                   onBlur={e => e.target.style.borderColor = 'var(--border-bright)'}
+                />
+                <span style={{ fontSize: 13, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>╲</span>
+                <input type="text" value={fase}
+                  onChange={e => { setFase(e.target.value.replace(/[^a-zA-Z0-9_\-]/g, '')); setMainError(null) }}
+                  placeholder="Fase-2 (opz.)"
+                  style={{
+                    background: 'var(--bg-base)', border: '1px solid var(--border)',
+                    borderRadius: 'var(--radius-sm)', padding: '6px 10px',
+                    color: fase ? 'var(--text-primary)' : 'var(--text-dim)',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 13, fontWeight: fase ? 700 : 400, width: 130, outline: 'none',
+                  }}
+                  onFocus={e => e.target.style.borderColor = 'var(--cyan)'}
+                  onBlur={e => e.target.style.borderColor = 'var(--border)'}
                 />
                 {/* Cartelle recenti */}
                 {cartelleRecenti.length > 0 && cartelleRecenti.slice(0, 5).map(c => {

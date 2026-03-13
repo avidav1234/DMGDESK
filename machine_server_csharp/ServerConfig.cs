@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Text;
 
 namespace MachineServer
 {
@@ -70,10 +71,4 @@ namespace MachineServer
     }
 }
 
-// Necessario per .NET 2.0 dove Encoding.UTF8 è già disponibile ma
-// File.ReadAllLines con encoding potrebbe non esserlo su alcuni build —
-// usiamo la versione semplice come fallback.
-namespace System.IO
-{
-    // Estensione di compatibilità .NET 2.0
-}
+

@@ -146,7 +146,7 @@ class TabAnalisiNC:
     def _pulisci_lista(self):
         """Pulisce lista file."""
         self.file_paths = []
-        self._sorgente_dir = ""
+        self._files_da_inviare = []
         self.list_files.delete("1.0", "end")
         self.tree.delete(*self.tree.get_children())
         self.btn_invia.configure(state="disabled")
@@ -417,8 +417,8 @@ class TabAnalisiNC:
             with open(save_path, 'w', encoding='utf-8') as f:
                 f.write(gcode_content)
             
-            # Memorizza la cartella sorgente per il pulsante INVIA
-            self._sorgente_dir = os.path.dirname(save_path)
+            # Memorizza lista esatta: file analizzati + MAIN generato
+            self._files_da_inviare = list(self.file_paths) + [save_path]
             
             # Abilita pulsante INVIA ALLA MACCHINA
             self.btn_invia.configure(state="normal")
@@ -441,16 +441,16 @@ class TabAnalisiNC:
         if not nome_progetto:
             return messagebox.showwarning("Attenzione", "Nome progetto mancante")
         
-        sorgente_dir = getattr(self, "_sorgente_dir", "")
-        if not sorgente_dir or not os.path.isdir(sorgente_dir):
+        files_da_inviare = getattr(self, "_files_da_inviare", [])
+        if not files_da_inviare:
             return messagebox.showwarning(
                 "Attenzione",
-                "Cartella sorgente non trovata.\n"
-                "Genera prima il MAIN per impostare la cartella di origine."
+                "Nessun file da inviare.\n"
+                "Genera prima il MAIN."
             )
         
         from ui.dialog_invia_macchina import apri_dialog_invia
-        apri_dialog_invia(self.parent, sorgente_dir, nome_progetto)
+        apri_dialog_invia(self.parent, files_da_inviare, nome_progetto)
 
     def _apri_impostazioni_calibra(self):
         """Apre dialog impostazioni CALIBRA ONLY."""

@@ -26,24 +26,29 @@ export default function AnalisiNC() {
   const [showPreview, setShowPreview] = useState(false)
   const [cartelleRecenti, setCartelleRecenti] = useState([])
 
-  // percorsoBase viene dal server (config.json) — null = non ancora configurato
-  // percorsoBase = percorso COMPLETO dove salvare il file (es. "P:\DMG_DMC_160U\4348\0221\Fase-3")
-  // nomeCartella = nome cartella logica nella macchina CNC (per EXTCALL, es. "FASE-3")
-  // Il file viene salvato direttamente in percorsoBase, senza aggiungere nomeCartella
-  const [percorsoBase, setPercorsoBase] = useState(null)
-  const [percorsoBaseInput, setPercorsoBaseInput] = useState('')
-  const [percorsoBaseBusy, setPercorsoBaseBusy] = useState(false)
+  // Percorso composto da 3 parti:
+  // - radiceNc: parte fissa da config (es. "P:\DMG_DMC_160U") — salvata sul server
+  // - commessa: inserita dall'operatore (es. "4348")
+  // - posizione: inserita dall'operatore (es. "0221")
+  // Risultato: radiceNc\commessa\posizione  →  P:\DMG_DMC_160U\4348\0221
+  const [radiceNc, setRadiceNc] = useState(null)          // dal server, null = non configurato
+  const [radiceNcInput, setRadiceNcInput] = useState('')
+  const [radiceNcBusy, setRadiceNcBusy] = useState(false)
+  const [commessa, setCommessa] = useState('')
+  const [posizione, setPosizione] = useState('')
 
-  // Il percorso di salvataggio è direttamente percorsoBase (non si aggiunge nomeCartella)
-  const percorsoSalvataggio = percorsoBase?.trim() || ''
+  // Percorso di salvataggio = radice + commessa + posizione
+  const percorsoSalvataggio = radiceNc && commessa.trim() && posizione.trim()
+    ? `${radiceNc.replace(/[\\/]+$/, '')}\\${commessa.trim()}\\${posizione.trim()}`
+    : ''
 
-  // Al mount: carica percorso base dal server + cartelle recenti
+  // Al mount: carica radice NC dal server + cartelle recenti
   useEffect(() => {
     api.getPercorsoNc()
       .then(r => {
         if (r.percorso_nc_base) {
-          setPercorsoBase(r.percorso_nc_base)
-          setPercorsoBaseInput(r.percorso_nc_base)
+          setRadiceNc(r.percorso_nc_base)
+          setRadiceNcInput(r.percorso_nc_base)
         }
       })
       .catch(() => {})
@@ -52,18 +57,18 @@ export default function AnalisiNC() {
       .catch(() => {})
   }, [])
 
-  // Salva percorso base sul server
-  const handleSalvaPercorsoBase = async () => {
-    const val = percorsoBaseInput.trim().replace(/[\\/]+$/, '')
+  // Salva radice NC sul server (una volta sola)
+  const handleSalvaRadiceNc = async () => {
+    const val = radiceNcInput.trim().replace(/[\\/]+$/, '')
     if (!val) return
-    setPercorsoBaseBusy(true)
+    setRadiceNcBusy(true)
     try {
       const r = await api.setPercorsoNc(val)
-      setPercorsoBase(r.percorso_nc_base)
+      setRadiceNc(r.percorso_nc_base)
     } catch (e) {
-      setMainError(`Errore salvataggio percorso: ${e.message}`)
+      setMainError(`Errore salvataggio: ${e.message}`)
     } finally {
-      setPercorsoBaseBusy(false)
+      setRadiceNcBusy(false)
     }
   }
   const addFiles = useCallback((files) => {
@@ -406,27 +411,27 @@ export default function AnalisiNC() {
             <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>Genera File MAIN</span>
           </div>
 
-          {/* Riga: nome cartella + percorso */}
+          {/* Percorso + campi operatore */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
 
-            {/* Percorso base — banner solo se non ancora configurato */}
-            {percorsoBase === null && (
+            {/* Radice NC — banner configurazione se non ancora impostata */}
+            {radiceNc === null ? (
               <div style={{
                 background: 'rgba(255,180,0,0.07)', border: '1px solid rgba(255,180,0,0.3)',
                 borderRadius: 'var(--radius-sm)', padding: '12px 14px',
                 display: 'flex', flexDirection: 'column', gap: 8,
               }}>
                 <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--amber)', fontWeight: 700 }}>
-                  ⚙ CONFIGURAZIONE — inserisci il percorso base una volta sola
+                  ⚙ CONFIGURAZIONE — percorso radice (una volta sola)
                 </div>
                 <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
-                  Cartella padre che contiene Fase-2, Fase-3, SQUADRA... (es. P:\DMG_DMC_160U\4297\0007)
+                  Es. P:\DMG_DMC_160U — la parte fissa comune a tutte le commesse
                 </div>
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <input type="text" value={percorsoBaseInput}
-                    onChange={e => setPercorsoBaseInput(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && handleSalvaPercorsoBase()}
-                    placeholder="P:\DMG_DMC_160U\4297\0007"
+                  <input type="text" value={radiceNcInput}
+                    onChange={e => setRadiceNcInput(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleSalvaRadiceNc()}
+                    placeholder="P:\DMG_DMC_160U"
                     style={{
                       background: 'var(--bg-base)', border: '1px solid var(--border-bright)',
                       borderRadius: 'var(--radius-sm)', padding: '6px 12px',
@@ -436,52 +441,101 @@ export default function AnalisiNC() {
                     onFocus={e => e.target.style.borderColor = 'var(--amber)'}
                     onBlur={e => e.target.style.borderColor = 'var(--border-bright)'}
                   />
-                  <button className="btn btn-primary" onClick={handleSalvaPercorsoBase}
-                    disabled={percorsoBaseBusy || !percorsoBaseInput.trim()}
+                  <button className="btn btn-primary" onClick={handleSalvaRadiceNc}
+                    disabled={radiceNcBusy || !radiceNcInput.trim()}
                     style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
-                    {percorsoBaseBusy ? '...' : '💾 Salva'}
+                    {radiceNcBusy ? '...' : '💾 Salva'}
                   </button>
                 </div>
               </div>
-            )}
-
-            {/* Percorso base configurato — riga compatta con modifica */}
-            {percorsoBase !== null && (
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', width: 130, flexShrink: 0 }}>PERCORSO SALVATAGGIO</span>
-                <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', flex: 1 }}>{percorsoBase}</span>
-                <button onClick={() => { setPercorsoBase(null); setPercorsoBaseInput(percorsoBase || '') }}
+            ) : (
+              /* Radice configurata — riga compatta */
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', width: 90, flexShrink: 0 }}>RADICE</span>
+                <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>{radiceNc}</span>
+                <button onClick={() => { setRadiceNc(null); setRadiceNcInput(radiceNc || '') }}
                   style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 11, padding: '0 4px' }}>
                   ✎
                 </button>
               </div>
             )}
 
-            {/* Nome cartella macchina CNC — per gli EXTCALL nel MAIN */}
+            {/* Campi operatore: commessa + posizione */}
+            {radiceNc !== null && (
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', width: 90, flexShrink: 0 }}>COMMESSA</span>
+                <input type="text" value={commessa}
+                  onChange={e => { setCommessa(e.target.value.replace(/[^a-zA-Z0-9_\-]/g, '')); setMainError(null) }}
+                  placeholder="4348"
+                  style={{
+                    background: 'var(--bg-base)', border: '1px solid var(--border-bright)',
+                    borderRadius: 'var(--radius-sm)', padding: '6px 10px',
+                    color: 'var(--text-primary)', fontFamily: 'var(--font-mono)',
+                    fontSize: 13, fontWeight: 700, width: 100, outline: 'none',
+                  }}
+                  onFocus={e => e.target.style.borderColor = 'var(--cyan)'}
+                  onBlur={e => e.target.style.borderColor = 'var(--border-bright)'}
+                />
+                <span style={{ fontSize: 13, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>╲</span>
+                <input type="text" value={posizione}
+                  onChange={e => { setPosizione(e.target.value.replace(/[^a-zA-Z0-9_\-]/g, '')); setMainError(null) }}
+                  placeholder="0221"
+                  style={{
+                    background: 'var(--bg-base)', border: '1px solid var(--border-bright)',
+                    borderRadius: 'var(--radius-sm)', padding: '6px 10px',
+                    color: 'var(--text-primary)', fontFamily: 'var(--font-mono)',
+                    fontSize: 13, fontWeight: 700, width: 100, outline: 'none',
+                  }}
+                  onFocus={e => e.target.style.borderColor = 'var(--cyan)'}
+                  onBlur={e => e.target.style.borderColor = 'var(--border-bright)'}
+                />
+                {/* Cartelle recenti */}
+                {cartelleRecenti.length > 0 && cartelleRecenti.slice(0, 5).map(c => {
+                  const parts = c.replace(/\\/g, '/').split('/')
+                  const pos = parts.at(-1) || ''
+                  const com = parts.at(-2) || ''
+                  return (
+                    <button key={c} onClick={() => { setCommessa(com); setPosizione(pos); setMainError(null) }}
+                      style={{
+                        background: commessa === com && posizione === pos ? 'rgba(0,225,255,0.12)' : 'var(--bg-base)',
+                        border: `1px solid ${commessa === com && posizione === pos ? 'var(--cyan)' : 'var(--border)'}`,
+                        borderRadius: 'var(--radius-sm)', padding: '3px 10px',
+                        fontSize: 11, fontFamily: 'var(--font-mono)',
+                        color: commessa === com && posizione === pos ? 'var(--cyan)' : 'var(--text-secondary)',
+                        cursor: 'pointer',
+                      }}>
+                      {com}\{pos}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* CARTELLA MACCHINA — nome WPD per gli EXTCALL */}
             <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-              <label style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', flexShrink: 0, width: 130 }}>
-                CARTELLA MACCHINA
+              <label style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', flexShrink: 0, width: 90 }}>
+                CARTELLA CNC
               </label>
               <input type="text" value={nomeCartella}
                 onChange={e => { setNomeCartella(e.target.value); setMainPreview(null); setMainError(null) }}
                 placeholder="es. Fase-3"
                 style={{
                   background: 'var(--bg-base)', border: '1px solid var(--border-bright)',
-                  borderRadius: 'var(--radius-sm)', padding: '6px 12px',
+                  borderRadius: 'var(--radius-sm)', padding: '6px 10px',
                   color: 'var(--text-primary)', fontFamily: 'var(--font-mono)',
-                  fontSize: 13, fontWeight: 700, width: 180, outline: 'none',
+                  fontSize: 13, fontWeight: 700, width: 160, outline: 'none',
                 }}
                 onFocus={e => e.target.style.borderColor = 'var(--cyan)'}
                 onBlur={e => e.target.style.borderColor = 'var(--border-bright)'}
               />
               <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
-                nome cartella WPD nella macchina CNC (usato negli EXTCALL)
+                nome WPD nella macchina (EXTCALL)
               </span>
             </div>
 
-            {/* Preview: dove verrà salvato il file */}
+            {/* Preview percorso finale */}
             {percorsoSalvataggio && nomeCartella.trim() && (
-              <div style={{ paddingLeft: 140, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <div style={{ paddingLeft: 100, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                 <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>SALVERÀ →</span>
                 <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--green)' }}>
                   {percorsoSalvataggio}\0_MAIN_{nomeCartella.trim().toUpperCase()}.MPF
@@ -490,6 +544,7 @@ export default function AnalisiNC() {
             )}
 
           </div>
+
 
 
           {/* Selezione programmi */}

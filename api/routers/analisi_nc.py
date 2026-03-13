@@ -514,9 +514,14 @@ async def salva_main(body: SalvaMainRequest):
     contenuto = _build_main_content(cartella_upper, body.programmi)
     nome_file = f"0_MAIN_{cartella_upper}.MPF"
 
-    # Normalizza il percorso (gestisce sia / che \ e path relativi)
+    # Normalizza il percorso — NON usare .resolve() su percorsi UNC (\\server\share)
+    # perché su Linux/server potrebbe alterare il path. Usiamo il percorso così com'è.
     try:
-        dest_dir = pathlib.Path(body.percorso_cartella.strip()).expanduser().resolve()
+        percorso_raw = body.percorso_cartella.strip()
+        # Normalizza separatori ma preserva il prefisso UNC \\
+        dest_dir = pathlib.PureWindowsPath(percorso_raw)
+        # Per le operazioni reali sul filesystem usiamo Path diretto
+        dest_dir = pathlib.Path(percorso_raw)
     except Exception as e:
         raise HTTPException(status_code=422, detail=f"Percorso non valido: {e}")
 

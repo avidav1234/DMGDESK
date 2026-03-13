@@ -5,6 +5,7 @@ from tkinter import filedialog, messagebox
 import tkinter.ttk as ttk
 import os
 import re
+import shutil
 
 from config.theme import *
 from config.constants import *
@@ -22,6 +23,7 @@ class TabAnalisiNC:
         self.parent = parent
         self.main = main_window
         self.file_paths = []
+        self._main_generato_path = None   # path dell'ultimo MAIN generato
         
         self._create_ui()
     
@@ -51,6 +53,19 @@ class TabAnalisiNC:
         ctk.CTkButton(toolbar, text="🔄 Reset",
                      command=self._pulisci_lista,
                      **get_button_style("neutral", "medium")).pack(side="left", padx=5)
+
+        # Pulsante INVIA ALLA MACCHINA (abilitato solo dopo GENERA MAIN)
+        self.btn_invia = ctk.CTkButton(
+            toolbar,
+            text="📤 INVIA ALLA MACCHINA",
+            command=self._invia_alla_macchina,
+            fg_color="#4CAF50",
+            hover_color="#388E3C",
+            font=get_font("medium", bold=True),
+            height=40,
+            state="disabled"
+        )
+        self.btn_invia.pack(side="left", padx=10)
         
         # Nome cartella + GENERA MAIN + Impostazioni
         ctk.CTkLabel(toolbar, text="📁", font=get_font("normal")).pack(side="right", padx=2)
@@ -131,8 +146,10 @@ class TabAnalisiNC:
     def _pulisci_lista(self):
         """Pulisce lista file."""
         self.file_paths = []
+        self._sorgente_dir = ""
         self.list_files.delete("1.0", "end")
         self.tree.delete(*self.tree.get_children())
+        self.btn_invia.configure(state="disabled")
     
     def _aggiorna_lista(self):
         """Aggiorna visualizzazione lista file."""
@@ -374,27 +391,20 @@ class TabAnalisiNC:
             # Importa funzione generazione V14
             try:
                 from logic.nc_analyzer_v14_update import genera_programma_main_gcode_v14
-                
-                # Genera MAIN con logica V14 configurabile
                 gcode_content, main_filename = genera_programma_main_gcode_v14(
-                    self.file_paths,
-                    nome_progetto,
-                    calibra_logic
-                )
+                    self.file_paths, nome_progetto, calibra_logic)
             except ImportError:
-                # Fallback: usa vecchia funzione se V14 non disponibile
                 from logic.nc_analyzer import genera_programma_main_gcode
-                
                 gcode_content, main_filename = genera_programma_main_gcode(
-                    self.file_paths,
-                    nome_progetto
-                )
+                    self.file_paths, nome_progetto)
             
-            # Dialog salvataggio
+            # Dialog salvataggio — propone la stessa cartella dei file sorgente
+            sorgente_dir = os.path.dirname(self.file_paths[0]) if self.file_paths else ""
+            
             from tkinter import filedialog
-            
             save_path = filedialog.asksaveasfilename(
                 title="Salva Programma MAIN",
+                initialdir=sorgente_dir,
                 initialfile=main_filename,
                 defaultextension=".MPF",
                 filetypes=[("MPF Program", "*.MPF"), ("All", "*.*")]
@@ -407,17 +417,41 @@ class TabAnalisiNC:
             with open(save_path, 'w', encoding='utf-8') as f:
                 f.write(gcode_content)
             
-            # Messaggio successo con modalità
+            # Memorizza la cartella sorgente per il pulsante INVIA
+            self._sorgente_dir = os.path.dirname(save_path)
+            
+            # Abilita pulsante INVIA ALLA MACCHINA
+            self.btn_invia.configure(state="normal")
+            
             mode_desc = calibra_logic.get_mode_description()
             messagebox.showinfo("Successo", 
                               f"✅ MAIN generato:\n{save_path}\n\n"
-                              f"⚙️ Modalità CALIBRA ONLY:\n{mode_desc}")
+                              f"⚙️ Modalità CALIBRA ONLY:\n{mode_desc}\n\n"
+                              f"Puoi ora inviare i programmi alla macchina\n"
+                              f"con il pulsante 📤 INVIA ALLA MACCHINA")
             
         except Exception as e:
             import traceback
             error_details = traceback.format_exc()
             messagebox.showerror("Errore", f"Errore generazione:\n{e}\n\nDettagli:\n{error_details}")
     
+    def _invia_alla_macchina(self):
+        """Apre il dialog di invio programmi alla macchina."""
+        nome_progetto = self.entry_nome_cartella.get().strip()
+        if not nome_progetto:
+            return messagebox.showwarning("Attenzione", "Nome progetto mancante")
+        
+        sorgente_dir = getattr(self, "_sorgente_dir", "")
+        if not sorgente_dir or not os.path.isdir(sorgente_dir):
+            return messagebox.showwarning(
+                "Attenzione",
+                "Cartella sorgente non trovata.\n"
+                "Genera prima il MAIN per impostare la cartella di origine."
+            )
+        
+        from ui.dialog_invia_macchina import apri_dialog_invia
+        apri_dialog_invia(self.parent, sorgente_dir, nome_progetto)
+
     def _apri_impostazioni_calibra(self):
         """Apre dialog impostazioni CALIBRA ONLY."""
         show_calibra_settings(self.parent)

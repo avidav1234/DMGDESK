@@ -56,6 +56,10 @@ class MachineClient:
         Restituisce (successo: bool, messaggio: str)
         """
         filename = os.path.basename(filepath)
+        # Sinumerik vuole nomi MAIUSCOLI e senza estensione .MPF
+        filename_siemens = filename.upper()
+        if filename_siemens.endswith(".MPF"):
+            filename_siemens = filename_siemens[:-4]
         try:
             with open(filepath, "rb") as f:
                 content = f.read()
@@ -64,7 +68,7 @@ class MachineClient:
             header = json.dumps({
                 "comando":  "INVIA",
                 "progetto": progetto,
-                "filename": filename,
+                "filename": filename_siemens,
                 "filesize": filesize
             }) + "\n"
 

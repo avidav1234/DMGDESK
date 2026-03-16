@@ -207,6 +207,80 @@ void send_str(SOCKET s, const char *msg)
     send(s, msg, strlen(msg), 0);
 }
 
+
+/* ── Generazione _dhinf.000 ─────────────────────────────────────────────── */
+
+#define DHINF_RECORD_SIZE  71
+#define DHINF_FILENAME     "_dhinf.000"
+
+static void make_siemens_name(const char *original, int index, char *out)
+{
+    static const char counter_chars[] = "_0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-";
+    int len = (int)strlen(original);
+    int i;
+    if (len <= 8) {
+        strncpy(out, original, 8); out[len] = '\0'; return;
+    }
+    if (index == 0) {
+        strncpy(out, original, 8); out[8] = '\0';
+    } else {
+        int ci = (index < (int)(sizeof(counter_chars)-1)) ? index : (int)(sizeof(counter_chars)-2);
+        out[0] = original[0]; out[1] = counter_chars[ci];
+        for (i = 2; i < 8; i++) out[i] = original[i];
+        out[8] = '\0';
+    }
+}
+
+static void dhinf_update(const char *destdir, const char *filename)
+{
+    char dhinf_path[MAX_PATH_LEN * 2];
+    unsigned char record[DHINF_RECORD_SIZE];
+    unsigned char existing[DHINF_RECORD_SIZE];
+    FILE *f;
+    int found = 0, nrecords = 0, i, snlen, onlen;
+    char siemens_name[16];
+    char logbuf[1024];
+
+    sprintf(dhinf_path, "%s\\%s", destdir, DHINF_FILENAME);
+
+    f = fopen(dhinf_path, "rb");
+    if (f) {
+        while (fread(existing, 1, DHINF_RECORD_SIZE, f) == DHINF_RECORD_SIZE) {
+            char orig_in_file[32] = {0};
+            strncpy(orig_in_file, (char*)existing + 13, 24);
+            if (strcmp(orig_in_file, filename) == 0) { found = 1; break; }
+            nrecords++;
+        }
+        fclose(f);
+        if (found) return;
+    }
+
+    make_siemens_name(filename, nrecords, siemens_name);
+
+    memset(record, 0, DHINF_RECORD_SIZE);
+    record[0]='M'; record[1]='P'; record[2]='F'; record[3]=0;
+    snlen = (int)strlen(siemens_name);
+    for (i = 0; i < snlen && i < 8; i++) record[4+i] = (unsigned char)siemens_name[i];
+    record[4+snlen] = 0;
+    onlen = (int)strlen(filename);
+    for (i = 0; i < onlen && i < 24; i++) record[13+i] = (unsigned char)filename[i];
+    record[13+onlen] = 0;
+    record[39] = 0x2a;
+    record[65]='6'; record[66]='5'; record[67]='7';
+    record[68]='7'; record[69]='5'; record[70]=0;
+
+    f = fopen(dhinf_path, "ab");
+    if (f) {
+        fwrite(record, 1, DHINF_RECORD_SIZE, f);
+        fclose(f);
+        sprintf(logbuf, "dhinf: aggiunto %s -> %s", filename, siemens_name);
+        log_msg(logbuf);
+    } else {
+        sprintf(logbuf, "WARN: impossibile aggiornare %s", dhinf_path);
+        log_msg(logbuf);
+    }
+}
+
 /* ── Gestione connessione client (thread) ───────────────────────────────── */
 
 DWORD WINAPI handle_client(LPVOID param)
@@ -326,6 +400,9 @@ DWORD WINAPI handle_client(LPVOID param)
         fwrite(filebuf, 1, filesize, f);
         fclose(f);
         free(filebuf);
+
+        /* Aggiorna _dhinf.000 per far riconoscere il file come MPF */
+        dhinf_update(destdir, filename);
 
         sprintf(logbuf, "OK  %s  (%d bytes) -> %s", filename, filesize, destdir);
         log_msg(logbuf);

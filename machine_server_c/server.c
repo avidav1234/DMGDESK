@@ -1,494 +1,370 @@
 /*
- * MachineServer - Server TCP per DMG Sinumerik 840D
- * Compatibile Windows XP / 2000 - nessuna dipendenza
- * Compilare con: gcc -o MachineServer.exe server.c -lws2_32
- * Oppure con MinGW: mingw32-gcc -o MachineServer.exe server.c -lws2_32
+ * server.c - MachineServer per trasferimento NC a Siemens 840D PowerLine
+ * Versione con registrazione NCK via Job32dll.InterpretJob
+ *
+ * Compilazione (da Linux con MinGW):
+ *   i686-w64-mingw32-gcc -o MachineServer.exe server.c -lws2_32 -lshlwapi
+ *
+ * Protocollo socket (porta configurabile in server_config.ini):
+ *   CHECK: { "cmd":"CHECK", "progetto":"NOME" }
+ *         → risposta JSON con lista file esistenti
+ *   INVIA: { "cmd":"INVIA", "progetto":"NOME", "filename":"PROG", "filesize":N }
+ *         → poi N bytes del file → risposta OK o ERRORE
  */
 
-#define _WIN32_WINNT 0x0501  /* Windows XP */
 #include <winsock2.h>
 #include <windows.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <shlwapi.h>
 
 #pragma comment(lib, "ws2_32.lib")
+#pragma comment(lib, "shlwapi.lib")
 
-/* ── Configurazione ─────────────────────────────────────────────────────── */
+/* ============================================================
+ * Configurazione
+ * ============================================================ */
+#define CFG_FILE        "server_config.ini"
+#define INI_MMC         "F:\\hmi_adv\\MMC.INI"
+#define DEFAULT_PORT    9999
+#define DEFAULT_BASE    "F:\\dh\\wks.dir"
+#define DEFAULT_TMPDIR  "d:\\tmp"
+#define JOB_FILENAME    "job_tmp.in"
+#define BUF_SIZE        65536
+#define MAX_PATH_LEN    512
 
-#define DEFAULT_PORT     9999
-#define DEFAULT_BASEPATH "F:\\dh\\wks.dir"
-#define CONFIG_FILE      "server_config.ini"
-#define MAX_PATH_LEN     512
-#define BUFFER_SIZE      8192
-#define LOG_FILE         "server_log.txt"
+/* ============================================================
+ * Firma InterpretJob da Job32dll.dll
+ * ============================================================ */
+typedef int (__cdecl *InterpretJob_t)(const char *job_file);
 
-static int   g_port = DEFAULT_PORT;
-static char  g_basepath[MAX_PATH_LEN] = DEFAULT_BASEPATH;
-static HANDLE g_log_mutex;
+static InterpretJob_t g_interpretJob = NULL;
+static HMODULE        g_hJob         = NULL;
 
-/* ── Log ────────────────────────────────────────────────────────────────── */
-
-void log_msg(const char *msg)
-{
-    SYSTEMTIME st;
-    GetLocalTime(&st);
-
-    WaitForSingleObject(g_log_mutex, INFINITE);
-
-    /* Stampa su console */
-    printf("[%02d:%02d:%02d] %s\n", st.wHour, st.wMinute, st.wSecond, msg);
-    fflush(stdout);
-
-    /* Scrivi su file */
-    FILE *f = fopen(LOG_FILE, "a");
-    if (f) {
-        fprintf(f, "[%04d-%02d-%02d %02d:%02d:%02d] %s\n",
-                st.wYear, st.wMonth, st.wDay,
-                st.wHour, st.wMinute, st.wSecond, msg);
-        fclose(f);
-    }
-
-    ReleaseMutex(g_log_mutex);
+/* ============================================================
+ * Helpers configurazione
+ * ============================================================ */
+static int get_port(void) {
+    return (int)GetPrivateProfileIntA("server", "port", DEFAULT_PORT, CFG_FILE);
 }
 
-/* ── Config INI ─────────────────────────────────────────────────────────── */
-
-void load_config(void)
-{
-    FILE *f = fopen(CONFIG_FILE, "r");
-    if (!f) {
-        /* Crea config di default */
-        f = fopen(CONFIG_FILE, "w");
-        if (f) {
-            fprintf(f, "[server]\n");
-            fprintf(f, "port=%d\n", DEFAULT_PORT);
-            fprintf(f, "base_path=%s\n", DEFAULT_BASEPATH);
-            fclose(f);
-        }
-        return;
-    }
-
-    char line[MAX_PATH_LEN];
-    while (fgets(line, sizeof(line), f)) {
-        /* Rimuovi newline */
-        int len = strlen(line);
-        while (len > 0 && (line[len-1] == '\n' || line[len-1] == '\r'))
-            line[--len] = '\0';
-
-        if (strncmp(line, "port=", 5) == 0)
-            g_port = atoi(line + 5);
-        else if (strncmp(line, "base_path=", 10) == 0)
-            strncpy(g_basepath, line + 10, MAX_PATH_LEN - 1);
-    }
-    fclose(f);
+static void get_base_path(char *out, int n) {
+    GetPrivateProfileStringA("server", "base_path", DEFAULT_BASE, out, n, CFG_FILE);
 }
 
-/* ── Helpers JSON minimale ──────────────────────────────────────────────── */
+static void get_temp_dir(char *out, int n) {
+    char buf[MAX_PATH_LEN];
+    DWORD r = GetPrivateProfileStringA("DIRECTORIES", "TempDir", DEFAULT_TMPDIR,
+                                       buf, sizeof(buf), INI_MMC);
+    if (r == 0)
+        GetPrivateProfileStringA("DIRECTORIES", "TempDir", DEFAULT_TMPDIR,
+                                 buf, sizeof(buf), INI_MMC);
+    strncpy(out, buf, n);
+    out[n-1] = '\0';
+}
 
-/* Estrae il valore di una chiave stringa: "key":"value" -> value */
-int json_get_string(const char *json, const char *key, char *out, int out_size)
-{
-    char search[256];
-    sprintf(search, "\"%s\"", key);
-    const char *p = strstr(json, search);
-    if (!p) return 0;
-
-    p += strlen(search);
-    while (*p == ' ' || *p == ':' || *p == ' ') p++;
-    if (*p != '"') return 0;
-    p++; /* salta " iniziale */
-
-    int i = 0;
-    while (*p && *p != '"' && i < out_size - 1) {
-        if (*p == '\\') p++; /* skip escape */
-        out[i++] = *p++;
+/* ============================================================
+ * Carica Job32dll.dll
+ * ============================================================ */
+static int load_job32dll(void) {
+    g_hJob = LoadLibraryA("F:\\hmi_adv\\Job32dll.dll");
+    if (!g_hJob)
+        g_hJob = LoadLibraryA("Job32dll.dll");
+    if (!g_hJob) {
+        printf("[WARN] Job32dll.dll non trovata - registrazione NCK disabilitata\n");
+        return 0;
     }
-    out[i] = '\0';
+    g_interpretJob = (InterpretJob_t)GetProcAddress(g_hJob, "InterpretJob");
+    if (!g_interpretJob) {
+        printf("[WARN] InterpretJob non trovata in Job32dll.dll\n");
+        FreeLibrary(g_hJob);
+        g_hJob = NULL;
+        return 0;
+    }
+    printf("[OK] Job32dll.dll caricata - registrazione NCK attiva\n");
     return 1;
 }
 
-/* Estrae valore intero: "key":1234 -> 1234 */
-int json_get_int(const char *json, const char *key)
-{
-    char search[256];
-    sprintf(search, "\"%s\"", key);
+/* ============================================================
+ * Registra un programma nella NCK via InterpretJob
+ * wpd_folder = "F:\dh\wks.dir\PROGETTO.WPD"
+ * prog_name  = "NOMEFILE" (senza estensione, maiuscolo)
+ * ============================================================ */
+static void register_nck(const char *wpd_folder, const char *prog_name) {
+    if (!g_interpretJob) {
+        printf("[WARN] InterpretJob non disponibile - file inviato ma non registrato in NCK\n");
+        return;
+    }
+
+    char tmp_dir[MAX_PATH_LEN];
+    get_temp_dir(tmp_dir, sizeof(tmp_dir));
+
+    /* Crea TempDir se non esiste */
+    if (!PathIsDirectoryA(tmp_dir))
+        CreateDirectoryA(tmp_dir, NULL);
+
+    char job_path[MAX_PATH_LEN];
+    snprintf(job_path, sizeof(job_path), "%s\\%s", tmp_dir, JOB_FILENAME);
+
+    FILE *jf = fopen(job_path, "w");
+    if (!jf) {
+        printf("[WARN] Impossibile scrivere %s\n", job_path);
+        return;
+    }
+    fprintf(jf, "LOAD %s\\%s\n", wpd_folder, prog_name);
+    fclose(jf);
+
+    printf("[NCK] Chiamata InterpretJob: LOAD %s\\%s\n", wpd_folder, prog_name);
+    int ret = g_interpretJob(job_path);
+    if (ret == 0)
+        printf("[NCK] OK - programma registrato nella NCK\n");
+    else
+        printf("[NCK] WARN - InterpretJob ritornato %d\n", ret);
+}
+
+/* ============================================================
+ * Parsing JSON minimo (estrae valore stringa/numero per chiave)
+ * ============================================================ */
+static int json_get_str(const char *json, const char *key, char *out, int n) {
+    char search[64];
+    snprintf(search, sizeof(search), "\"%s\"", key);
     const char *p = strstr(json, search);
     if (!p) return 0;
-
     p += strlen(search);
     while (*p == ' ' || *p == ':') p++;
-    return atoi(p);
-}
-
-/* Conta quanti file ci sono nell'array "files":["a","b",...] */
-int json_count_files(const char *json)
-{
-    const char *p = strstr(json, "\"files\"");
-    if (!p) return 0;
-    p = strchr(p, '[');
-    if (!p) return 0;
-
-    int count = 0;
-    while (*p && *p != ']') {
-        if (*p == '"') count++;
+    if (*p == '"') {
         p++;
-        /* Salta stringa */
-        while (*p && *p != '"' && *p != ']') p++;
-        if (*p == '"') p++; /* fine stringa */
+        int i = 0;
+        while (*p && *p != '"' && i < n-1) out[i++] = *p++;
+        out[i] = '\0';
+        return 1;
     }
-    return count / 2; /* ogni file ha " iniziale e " finale */
-}
-
-/* Estrae i nomi file dall'array "files":["a","b",...] */
-int json_get_files(const char *json, char files[][MAX_PATH_LEN], int max_files)
-{
-    const char *p = strstr(json, "\"files\"");
-    if (!p) return 0;
-    p = strchr(p, '[');
-    if (!p) return 0;
-    p++;
-
-    int count = 0;
-    while (*p && *p != ']' && count < max_files) {
-        while (*p == ' ' || *p == ',') p++;
-        if (*p == '"') {
-            p++;
-            int i = 0;
-            while (*p && *p != '"' && i < MAX_PATH_LEN - 1) {
-                if (*p == '\\') p++;
-                files[count][i++] = *p++;
-            }
-            files[count][i] = '\0';
-            if (*p == '"') p++;
-            count++;
-        } else {
-            p++;
-        }
-    }
-    return count;
-}
-
-/* ── Crea directory ricorsivamente ──────────────────────────────────────── */
-
-void create_dir_recursive(const char *path)
-{
-    char tmp[MAX_PATH_LEN];
-    strncpy(tmp, path, MAX_PATH_LEN - 1);
-    int len = strlen(tmp);
-
-    for (int i = 1; i < len; i++) {
-        if (tmp[i] == '\\' || tmp[i] == '/') {
-            tmp[i] = '\0';
-            CreateDirectoryA(tmp, NULL);
-            tmp[i] = '\\';
-        }
-    }
-    CreateDirectoryA(tmp, NULL);
-}
-
-/* ── Ricevi esattamente N bytes ─────────────────────────────────────────── */
-
-int recv_all(SOCKET s, char *buf, int size)
-{
-    int received = 0;
-    while (received < size) {
-        int r = recv(s, buf + received, size - received, 0);
-        if (r <= 0) return received;
-        received += r;
-    }
-    return received;
-}
-
-/* ── Invia stringa ──────────────────────────────────────────────────────── */
-
-void send_str(SOCKET s, const char *msg)
-{
-    send(s, msg, strlen(msg), 0);
-}
-
-
-/* ── Generazione _dhinf.000 ─────────────────────────────────────────────── */
-
-#define DHINF_RECORD_SIZE  71
-#define DHINF_FILENAME     "_dhinf.000"
-
-static void make_siemens_name(const char *original, int index, char *out)
-{
-    static const char counter_chars[] = "_0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-";
-    int len = (int)strlen(original);
-    int i;
-    if (len <= 8) {
-        strncpy(out, original, 8); out[len] = '\0'; return;
-    }
-    if (index == 0) {
-        strncpy(out, original, 8); out[8] = '\0';
-    } else {
-        int ci = (index < (int)(sizeof(counter_chars)-1)) ? index : (int)(sizeof(counter_chars)-2);
-        out[0] = original[0]; out[1] = counter_chars[ci];
-        for (i = 2; i < 8; i++) out[i] = original[i];
-        out[8] = '\0';
-    }
-}
-
-static void dhinf_update(const char *destdir, const char *filename)
-{
-    char dhinf_path[MAX_PATH_LEN * 2];
-    unsigned char record[DHINF_RECORD_SIZE];
-    unsigned char existing[DHINF_RECORD_SIZE];
-    FILE *f;
-    int found = 0, nrecords = 0, i, snlen, onlen;
-    char siemens_name[16];
-    char logbuf[1024];
-
-    sprintf(dhinf_path, "%s\\%s", destdir, DHINF_FILENAME);
-
-    f = fopen(dhinf_path, "rb");
-    if (f) {
-        while (fread(existing, 1, DHINF_RECORD_SIZE, f) == DHINF_RECORD_SIZE) {
-            char orig_in_file[32] = {0};
-            strncpy(orig_in_file, (char*)existing + 13, 24);
-            if (strcmp(orig_in_file, filename) == 0) { found = 1; break; }
-            nrecords++;
-        }
-        fclose(f);
-        if (found) return;
-    }
-
-    make_siemens_name(filename, nrecords, siemens_name);
-
-    memset(record, 0, DHINF_RECORD_SIZE);
-    record[0]='M'; record[1]='P'; record[2]='F'; record[3]=0;
-    snlen = (int)strlen(siemens_name);
-    for (i = 0; i < snlen && i < 8; i++) record[4+i] = (unsigned char)siemens_name[i];
-    record[4+snlen] = 0;
-    onlen = (int)strlen(filename);
-    for (i = 0; i < onlen && i < 24; i++) record[13+i] = (unsigned char)filename[i];
-    record[13+onlen] = 0;
-    record[39] = 0x2a;
-    record[65]='6'; record[66]='5'; record[67]='7';
-    record[68]='7'; record[69]='5'; record[70]=0;
-
-    f = fopen(dhinf_path, "ab");
-    if (f) {
-        fwrite(record, 1, DHINF_RECORD_SIZE, f);
-        fclose(f);
-        sprintf(logbuf, "dhinf: aggiunto %s -> %s", filename, siemens_name);
-        log_msg(logbuf);
-    } else {
-        sprintf(logbuf, "WARN: impossibile aggiornare %s", dhinf_path);
-        log_msg(logbuf);
-    }
-}
-
-/* ── Gestione connessione client (thread) ───────────────────────────────── */
-
-DWORD WINAPI handle_client(LPVOID param)
-{
-    SOCKET client = (SOCKET)param;
-    char header_buf[4096] = {0};
-    int  header_len = 0;
-    char logbuf[1024];
-
-    /* Leggi header JSON fino a \n */
-    char c;
-    while (header_len < (int)sizeof(header_buf) - 1) {
-        int r = recv(client, &c, 1, 0);
-        if (r <= 0) goto cleanup;
-        if (c == '\n') break;
-        header_buf[header_len++] = c;
-    }
-    header_buf[header_len] = '\0';
-
-    /* Estrai comando */
-    char comando[64] = {0};
-    char progetto[MAX_PATH_LEN] = {0};
-    json_get_string(header_buf, "comando",  comando,  sizeof(comando));
-    json_get_string(header_buf, "progetto", progetto, sizeof(progetto));
-
-    /* Cartella destinazione - aggiunge .WPD se progetto specificato */
-    char destdir[MAX_PATH_LEN * 2];
-    if (strlen(progetto) > 0)
-        sprintf(destdir, "%s\\%s.WPD", g_basepath, progetto);
-    else
-        strncpy(destdir, g_basepath, sizeof(destdir) - 1);
-
-    /* ── CHECK ────────────────────────────────────────────────────────── */
-    if (strcmp(comando, "CHECK") == 0) {
-        char files[256][MAX_PATH_LEN];
-        int  nfiles = json_get_files(header_buf, files, 256);
-
-        /* Trova file esistenti */
-        char esistenti[256][MAX_PATH_LEN];
-        int  n_esistenti = 0;
-
-        for (int i = 0; i < nfiles; i++) {
-            char fullpath[MAX_PATH_LEN * 2];
-            sprintf(fullpath, "%s\\%s", destdir, files[i]);
-            if (GetFileAttributesA(fullpath) != INVALID_FILE_ATTRIBUTES)
-                strncpy(esistenti[n_esistenti++], files[i], MAX_PATH_LEN - 1);
-        }
-
-        /* Costruisci risposta JSON */
-        char resp[8192] = {0};
-        strcat(resp, "{\"esistenti\":[");
-        for (int i = 0; i < n_esistenti; i++) {
-            if (i > 0) strcat(resp, ",");
-            strcat(resp, "\"");
-            strcat(resp, esistenti[i]);
-            strcat(resp, "\"");
-        }
-        strcat(resp, "],\"dest_dir\":\"");
-        /* Escape backslash per JSON */
-        for (const char *p = destdir; *p; p++) {
-            if (*p == '\\') strcat(resp, "\\\\");
-            else { char tmp[2] = {*p, 0}; strcat(resp, tmp); }
-        }
-        strcat(resp, "\"}");
-        send_str(client, resp);
-
-        sprintf(logbuf, "CHECK [%s]: %d file, %d esistenti", progetto, nfiles, n_esistenti);
-        log_msg(logbuf);
-    }
-
-    /* ── INVIA ────────────────────────────────────────────────────────── */
-    else if (strcmp(comando, "INVIA") == 0) {
-        char filename[MAX_PATH_LEN] = {0};
-        int  filesize = 0;
-
-        json_get_string(header_buf, "filename", filename, sizeof(filename));
-        filesize = json_get_int(header_buf, "filesize");
-
-        /* Verifica cartella - deve essere creata dall'HMI Sinumerik */
-        if (GetFileAttributesA(destdir) == INVALID_FILE_ATTRIBUTES) {
-            sprintf(logbuf, "ERRORE: cartella non trovata: %s", destdir);
-            log_msg(logbuf);
-            send_str(client, "ERRORE: cartella progetto non esiste. Crearla prima dall'HMI Sinumerik.");
-            goto cleanup;
-        }
-
-        /* Ricevi file */
-        char *filebuf = (char*)malloc(filesize + 1);
-        if (!filebuf) {
-            send_str(client, "ERRORE: memoria insufficiente");
-            goto cleanup;
-        }
-
-        int received = recv_all(client, filebuf, filesize);
-
-        if (received != filesize) {
-            sprintf(logbuf, "ERRORE: ricevuti %d/%d bytes per %s", received, filesize, filename);
-            log_msg(logbuf);
-            free(filebuf);
-            send_str(client, "ERRORE: trasferimento incompleto");
-            goto cleanup;
-        }
-
-        /* Scrivi file */
-        char destpath[MAX_PATH_LEN * 2];
-        sprintf(destpath, "%s\\%s", destdir, filename);
-
-        FILE *f = fopen(destpath, "wb");
-        if (!f) {
-            sprintf(logbuf, "ERRORE: impossibile scrivere %s", destpath);
-            log_msg(logbuf);
-            free(filebuf);
-            send_str(client, "ERRORE: impossibile scrivere il file");
-            goto cleanup;
-        }
-
-        fwrite(filebuf, 1, filesize, f);
-        fclose(f);
-        free(filebuf);
-
-        /* Aggiorna _dhinf.000 per far riconoscere il file come MPF */
-        dhinf_update(destdir, filename);
-
-        sprintf(logbuf, "OK  %s  (%d bytes) -> %s", filename, filesize, destdir);
-        log_msg(logbuf);
-        send_str(client, "OK");
-    }
-
-    else {
-        send_str(client, "ERRORE: comando sconosciuto");
-    }
-
-cleanup:
-    closesocket(client);
     return 0;
 }
 
-/* ── Main ───────────────────────────────────────────────────────────────── */
+static long json_get_long(const char *json, const char *key) {
+    char buf[32];
+    char search[64];
+    snprintf(search, sizeof(search), "\"%s\"", key);
+    const char *p = strstr(json, search);
+    if (!p) return -1;
+    p += strlen(search);
+    while (*p == ' ' || *p == ':') p++;
+    int i = 0;
+    while ((*p >= '0' && *p <= '9') && i < 30) buf[i++] = *p++;
+    buf[i] = '\0';
+    return i > 0 ? atol(buf) : -1;
+}
 
-int main(void)
-{
-    /* Inizializza mutex log */
-    g_log_mutex = CreateMutex(NULL, FALSE, NULL);
+/* ============================================================
+ * Normalizza nome file per Sinumerik:
+ * - Maiuscolo
+ * - Rimuove estensione .MPF o .mpf
+ * ============================================================ */
+static void normalize_name(const char *src, char *dst, int n) {
+    strncpy(dst, src, n);
+    dst[n-1] = '\0';
+    /* Maiuscolo */
+    for (int i = 0; dst[i]; i++)
+        if (dst[i] >= 'a' && dst[i] <= 'z')
+            dst[i] -= 32;
+    /* Rimuovi .MPF */
+    int len = strlen(dst);
+    if (len > 4 && strcmp(dst + len - 4, ".MPF") == 0)
+        dst[len - 4] = '\0';
+}
 
-    /* Carica config */
-    load_config();
+/* ============================================================
+ * Gestione connessione client
+ * ============================================================ */
+static void handle_client(SOCKET client, const char *base_path) {
+    char hdr_buf[1024] = {0};
+    int  hdr_len = 0;
 
-    char logbuf[1024];
-    sprintf(logbuf, "MachineServer avviato - porta %d - cartella: %s", g_port, g_basepath);
-    log_msg(logbuf);
-    log_msg("In attesa di connessioni... (Ctrl+C per uscire)");
+    /* Leggi header JSON fino a '\n' */
+    while (hdr_len < (int)sizeof(hdr_buf) - 1) {
+        char c;
+        int r = recv(client, &c, 1, 0);
+        if (r <= 0) break;
+        if (c == '\n') break;
+        hdr_buf[hdr_len++] = c;
+    }
+    hdr_buf[hdr_len] = '\0';
+    printf("[REQ] %s\n", hdr_buf);
 
-    /* Inizializza Winsock */
+    char cmd[32] = {0};
+    json_get_str(hdr_buf, "cmd", cmd, sizeof(cmd));
+
+    /* ---- CHECK: elenca file esistenti ---- */
+    if (strcmp(cmd, "CHECK") == 0) {
+        char progetto[128] = {0};
+        json_get_str(hdr_buf, "progetto", progetto, sizeof(progetto));
+
+        char wpd_folder[MAX_PATH_LEN];
+        snprintf(wpd_folder, sizeof(wpd_folder), "%s\\%s.WPD", base_path, progetto);
+
+        char resp[4096];
+        if (!PathIsDirectoryA(wpd_folder)) {
+            snprintf(resp, sizeof(resp),
+                     "{\"stato\":\"ok\",\"files\":[]}\n");
+        } else {
+            char pattern[MAX_PATH_LEN];
+            snprintf(pattern, sizeof(pattern), "%s\\*", wpd_folder);
+            WIN32_FIND_DATAA fd;
+            HANDLE hf = FindFirstFileA(pattern, &fd);
+            char files_json[2048] = {0};
+            int first = 1;
+            if (hf != INVALID_HANDLE_VALUE) {
+                do {
+                    if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
+                    if (fd.cFileName[0] == '_') continue; /* salta _dhinf.000 */
+                    if (!first) strncat(files_json, ",", sizeof(files_json)-strlen(files_json)-1);
+                    char entry[256];
+                    snprintf(entry, sizeof(entry), "\"%s\"", fd.cFileName);
+                    strncat(files_json, entry, sizeof(files_json)-strlen(files_json)-1);
+                    first = 0;
+                } while (FindNextFileA(hf, &fd));
+                FindClose(hf);
+            }
+            snprintf(resp, sizeof(resp),
+                     "{\"stato\":\"ok\",\"files\":[%s]}\n", files_json);
+        }
+        printf("[CHECK] %s → %s", progetto, resp);
+        send(client, resp, strlen(resp), 0);
+        return;
+    }
+
+    /* ---- INVIA: ricevi e salva file ---- */
+    if (strcmp(cmd, "INVIA") == 0) {
+        char progetto[128] = {0}, filename[256] = {0}, norm_name[256] = {0};
+        long filesize = 0;
+
+        json_get_str(hdr_buf, "progetto", progetto, sizeof(progetto));
+        json_get_str(hdr_buf, "filename", filename, sizeof(filename));
+        filesize = json_get_long(hdr_buf, "filesize");
+        normalize_name(filename, norm_name, sizeof(norm_name));
+
+        /* Cartella destinazione */
+        char wpd_folder[MAX_PATH_LEN], dest_path[MAX_PATH_LEN];
+        snprintf(wpd_folder, sizeof(wpd_folder), "%s\\%s.WPD", base_path, progetto);
+        snprintf(dest_path,  sizeof(dest_path),  "%s\\%s", wpd_folder, norm_name);
+
+        if (!PathIsDirectoryA(wpd_folder)) {
+            const char *err = "{\"stato\":\"errore\","
+                "\"msg\":\"Cartella progetto non esiste. Crearla prima dall'HMI Sinumerik.\"}\n";
+            send(client, err, strlen(err), 0);
+            printf("[ERRORE] Cartella non trovata: %s\n", wpd_folder);
+            return;
+        }
+
+        /* Ricevi bytes e scrivi file */
+        FILE *out = fopen(dest_path, "wb");
+        if (!out) {
+            const char *err = "{\"stato\":\"errore\",\"msg\":\"Impossibile scrivere il file\"}\n";
+            send(client, err, strlen(err), 0);
+            printf("[ERRORE] fopen fallito: %s\n", dest_path);
+            return;
+        }
+
+        char *buf = (char *)malloc(BUF_SIZE);
+        if (!buf) { fclose(out); return; }
+
+        long received = 0;
+        while (received < filesize) {
+            int to_read = (int)(filesize - received);
+            if (to_read > BUF_SIZE) to_read = BUF_SIZE;
+            int r = recv(client, buf, to_read, 0);
+            if (r <= 0) break;
+            fwrite(buf, 1, r, out);
+            received += r;
+        }
+        free(buf);
+        fclose(out);
+
+        if (received != filesize) {
+            char err[256];
+            snprintf(err, sizeof(err),
+                "{\"stato\":\"errore\",\"msg\":\"Trasferimento incompleto: %ld/%ld bytes\"}\n",
+                received, filesize);
+            send(client, err, strlen(err), 0);
+            printf("[ERRORE] Incompleto: %ld/%ld\n", received, filesize);
+            return;
+        }
+
+        printf("[OK] %s (%ld bytes) → %s\n", norm_name, filesize, dest_path);
+
+        /* ---- REGISTRA NELLA NCK ---- */
+        register_nck(wpd_folder, norm_name);
+
+        char resp[512];
+        snprintf(resp, sizeof(resp),
+                 "{\"stato\":\"ok\",\"msg\":\"OK  %s  (%ld bytes) -> %s\"}\n",
+                 norm_name, filesize, wpd_folder);
+        send(client, resp, strlen(resp), 0);
+        return;
+    }
+
+    /* Comando sconosciuto */
+    const char *unk = "{\"stato\":\"errore\",\"msg\":\"Comando sconosciuto\"}\n";
+    send(client, unk, strlen(unk), 0);
+}
+
+/* ============================================================
+ * Main
+ * ============================================================ */
+int main(void) {
     WSADATA wsa;
     if (WSAStartup(MAKEWORD(2,2), &wsa) != 0) {
-        log_msg("ERRORE: WSAStartup fallito");
+        fprintf(stderr, "ERRORE: WSAStartup fallito\n");
         return 1;
     }
 
-    /* Crea socket */
+    int   port      = get_port();
+    char  base_path[MAX_PATH_LEN];
+    get_base_path(base_path, sizeof(base_path));
+
+    /* Carica Job32dll.dll per registrazione NCK */
+    load_job32dll();
+
     SOCKET srv = socket(AF_INET, SOCK_STREAM, 0);
     if (srv == INVALID_SOCKET) {
-        log_msg("ERRORE: impossibile creare socket");
-        WSACleanup();
+        fprintf(stderr, "ERRORE: impossibile creare socket\n");
         return 1;
     }
 
-    /* Permetti riuso porta */
     int opt = 1;
-    setsockopt(srv, SOL_SOCKET, SO_REUSEADDR, (char*)&opt, sizeof(opt));
+    setsockopt(srv, SOL_SOCKET, SO_REUSEADDR, (char *)&opt, sizeof(opt));
 
-    /* Bind */
-    struct sockaddr_in addr;
-    memset(&addr, 0, sizeof(addr));
+    struct sockaddr_in addr = {0};
     addr.sin_family      = AF_INET;
     addr.sin_addr.s_addr = INADDR_ANY;
-    addr.sin_port        = htons(g_port);
+    addr.sin_port        = htons((u_short)port);
 
-    if (bind(srv, (struct sockaddr*)&addr, sizeof(addr)) == SOCKET_ERROR) {
-        sprintf(logbuf, "ERRORE: bind fallito sulla porta %d (porta gia' in uso?)", g_port);
-        log_msg(logbuf);
+    if (bind(srv, (struct sockaddr *)&addr, sizeof(addr)) == SOCKET_ERROR) {
+        fprintf(stderr, "ERRORE: bind fallito sulla porta %d (porta gia' in uso?)\n", port);
         closesocket(srv);
         WSACleanup();
         return 1;
     }
 
-    listen(srv, 10);
+    listen(srv, 5);
+    printf("MachineServer avviato - porta %d - cartella: %s\n", port, base_path);
+    printf("Registrazione NCK: %s\n", g_interpretJob ? "ATTIVA (Job32dll)" : "DISATTIVA");
 
-    sprintf(logbuf, "Server in ascolto su porta %d", g_port);
-    log_msg(logbuf);
-
-    /* Loop principale */
     while (1) {
         struct sockaddr_in client_addr;
         int client_len = sizeof(client_addr);
-        SOCKET client = accept(srv, (struct sockaddr*)&client_addr, &client_len);
-
+        SOCKET client = accept(srv, (struct sockaddr *)&client_addr, &client_len);
         if (client == INVALID_SOCKET) continue;
 
-        sprintf(logbuf, "Connessione da %s", inet_ntoa(client_addr.sin_addr));
-        log_msg(logbuf);
-
-        /* Thread per ogni client */
-        HANDLE t = CreateThread(NULL, 0, handle_client, (LPVOID)client, 0, NULL);
-        if (t) CloseHandle(t);
-        else closesocket(client);
+        printf("[CONN] Client connesso\n");
+        handle_client(client, base_path);
+        closesocket(client);
+        printf("[CONN] Client disconnesso\n");
     }
 
+    if (g_hJob) FreeLibrary(g_hJob);
     closesocket(srv);
     WSACleanup();
     return 0;

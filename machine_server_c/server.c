@@ -315,14 +315,17 @@ static void handle_client(SOCKET client, const char *base_path) {
 
         printf("[OK] %s (%ld bytes) → %s\n", norm_name, filesize, dest_path);
 
-        /* ---- REGISTRA NELLA NCK ---- */
-        call_transfer_dnc();
-
+        /* Rispondi OK prima di chiamare il VBS che blocca */
         char resp[512];
         snprintf(resp, sizeof(resp),
                  "{\"stato\":\"ok\",\"msg\":\"OK  %s  (%ld bytes) -> %s\"}\n",
                  norm_name, filesize, wpd_folder);
         send(client, resp, strlen(resp), 0);
+        closesocket(client);
+        client = INVALID_SOCKET;
+
+        /* ---- REGISTRA NELLA NCK (dopo aver risposto) ---- */
+        call_transfer_dnc();
         return;
     }
 

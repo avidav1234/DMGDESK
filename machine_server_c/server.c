@@ -26,6 +26,8 @@
  * Configurazione
  * ============================================================ */
 #define CFG_FILE        "server_config.ini"
+#define DEFAULT_VBS_PATH "F:\\ADD_ON\\DNC\\transfer_dnc.vbs"
+#define DEFAULT_DNC_TMP  "F:\\ADD_ON\\DNC\\TMP"
 #define INI_MMC         "F:\\hmi_adv\\MMC.INI"
 #define DEFAULT_PORT    9999
 #define DEFAULT_BASE    "F:\\dh\\wks.dir"
@@ -176,6 +178,25 @@ static void normalize_name(const char *src, char *dst, int n) {
 }
 
 /* ============================================================
+ * Chiama transfer_dnc.vbs per registrare il file nella NCU
+ * ============================================================ */
+static void call_transfer_dnc(void) {
+    char vbs_path[MAX_PATH_LEN];
+    char cmd[MAX_PATH_LEN * 2];
+
+    GetPrivateProfileStringA("server", "vbs_path", DEFAULT_VBS_PATH,
+                             vbs_path, sizeof(vbs_path), CFG_FILE);
+
+    snprintf(cmd, sizeof(cmd), "cscript //Nologo \"%s\" > NUL 2>&1", vbs_path);
+    printf("[DNC] Chiamata: %s\n", cmd);
+    int ret = system(cmd);
+    if (ret == 0)
+        printf("[DNC] TransferAutom OK - file registrato nella NCU come MPF\n");
+    else
+        printf("[DNC] TransferAutom WARN (ret=%d) - verificare HMI\n", ret);
+}
+
+/* ============================================================
  * Gestione connessione client
  * ============================================================ */
 static void handle_client(SOCKET client, const char *base_path) {
@@ -295,7 +316,7 @@ static void handle_client(SOCKET client, const char *base_path) {
         printf("[OK] %s (%ld bytes) → %s\n", norm_name, filesize, dest_path);
 
         /* ---- REGISTRA NELLA NCK ---- */
-        register_nck(wpd_folder, norm_name);
+        call_transfer_dnc();
 
         char resp[512];
         snprintf(resp, sizeof(resp),
@@ -313,6 +334,7 @@ static void handle_client(SOCKET client, const char *base_path) {
 /* ============================================================
  * Main
  * ============================================================ */
+
 int main(void) {
     WSADATA wsa;
     if (WSAStartup(MAKEWORD(2,2), &wsa) != 0) {

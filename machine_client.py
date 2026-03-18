@@ -83,8 +83,15 @@ class MachineClient:
                 risposta += chunk
             s.close()
 
-            ok = risposta.strip() == b"OK"
-            msg = "OK" if ok else risposta.decode("utf-8", errors="replace")
+            risposta_str = risposta.strip().decode("utf-8", errors="replace")
+            # Accetta sia "OK" semplice che JSON {"stato":"ok",...}
+            try:
+                risposta_json = json.loads(risposta_str)
+                ok = risposta_json.get("stato") == "ok"
+                msg = risposta_json.get("msg", "OK") if ok else risposta_json.get("msg", risposta_str)
+            except Exception:
+                ok = risposta_str == "OK"
+                msg = "OK" if ok else risposta_str
             if progress_callback:
                 progress_callback(filename, ok, msg)
             return ok, msg

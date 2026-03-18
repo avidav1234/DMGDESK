@@ -221,7 +221,8 @@ static void handle_client(SOCKET client, const char *base_path) {
 
         /* Scrivi in DNC TMP */
         char dest_path[MAX_PATH_LEN];
-        snprintf(dest_path, sizeof(dest_path), "%s\\%s", dnc_tmp, norm);
+        /* Scrivi in TMP con estensione .MPF — TransferAutom filtra per estensione */
+        snprintf(dest_path, sizeof(dest_path), "%s\\%s.MPF", dnc_tmp, norm);
         FILE *f = fopen(dest_path, "wb");
         if (!f) {
             free(outbuf);

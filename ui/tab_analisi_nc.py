@@ -54,7 +54,7 @@ class TabAnalisiNC:
                      command=self._pulisci_lista,
                      **get_button_style("neutral", "medium")).pack(side="left", padx=5)
 
-        # Pulsante INVIA ALLA MACCHINA (abilitato solo dopo GENERA MAIN)
+        # Pulsante INVIA ALLA MACCHINA
         self.btn_invia = ctk.CTkButton(
             toolbar,
             text="📤 INVIA ALLA MACCHINA",
@@ -156,6 +156,13 @@ class TabAnalisiNC:
         self.list_files.delete("1.0", "end")
         for i, fp in enumerate(self.file_paths, 1):
             self.list_files.insert("end", f"{i}. {os.path.basename(fp)}\n")
+        # Abilita INVIA se ci sono file caricati
+        if self.file_paths:
+            self.btn_invia.configure(state="normal")
+            self._files_da_inviare = list(self.file_paths)
+        else:
+            self.btn_invia.configure(state="disabled")
+            self._files_da_inviare = []
     
     def _confronta(self, show_message=False):
         """Confronta utensili richiesti con database."""

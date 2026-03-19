@@ -246,35 +246,20 @@ static void handle_client(SOCKET client, const char *base_path) {
         memcpy(outbuf + hlen2 + body_len, footer, footer_len);
         free(body_crlf);
 
-        /* Scrivi in DNC TMP (D:\tmp\autoimport) — monitored by AUTO_IMPORT */
+        /* Scrivi in D:\tmp\autoimport — unico path che funziona con USE_INTERN_PATH */
         char dest_path[MAX_PATH_LEN];
         snprintf(dest_path, sizeof(dest_path), "%s\\%s.MPF", dnc_tmp, norm);
         FILE *f = fopen(dest_path, "wb");
         if (!f) {
             free(outbuf);
-            send(client, "{\"stato\":\"errore\",\"msg\":\"Impossibile scrivere file in autoimport\"}\n", 65, 0);
+            send(client, "{\"stato\":\"errore\",\"msg\":\"Impossibile scrivere file\"}\n", 52, 0);
             return;
         }
         fwrite(outbuf, 1, total2, f);
         fclose(f);
-        printf("[OK] autoimport: %s (%ld bytes CRLF)\n", dest_path, total2);
-
-        /* Scrivi anche in F:\ADD_ON\DNC\TMP per trigger immediato DNCMachine
-           Se la cartella non esiste, salta senza errore */
-        char tmp_path[MAX_PATH_LEN];
-        snprintf(tmp_path, sizeof(tmp_path), "F:\\ADD_ON\\DNC\\TMP\\%s.MPF", norm);
-        FILE *f2 = fopen(tmp_path, "wb");
-        if (f2) {
-            fwrite(outbuf, 1, total2, f2);
-            fclose(f2);
-            printf("[OK] DNC\\TMP:    %s\n", tmp_path);
-        } else {
-            printf("[WARN] DNC\\TMP non scrivibile, solo autoimport\n");
-        }
-
         free(outbuf);
 
-        printf("[OK] %s (%ld -> %ld bytes CRLF)\n", norm, filesize, total2);
+        printf("[OK] %s (%ld -> %ld bytes CRLF) -> %s\n", norm, filesize, total2, dest_path);
 
         /* Rispondi OK PRIMA di chiamare il VBS
            ATTENZIONE: i backslash di wpd vanno escapati come \\ in JSON */
@@ -293,9 +278,8 @@ static void handle_client(SOCKET client, const char *base_path) {
         closesocket(client);
         client = INVALID_SOCKET;
 
-        /* Chiama VBS con path file in F:\ADD_ON\DNC\TMP per trasferimento immediato.
-           Se fallisce, autoimport garantisce il trasferimento entro 1 minuto. */
-        call_transfer_dnc(tmp_path);
+        /* Chiama VBS - tenta trasferimento immediato, autoimport garantisce il fallback */
+        call_transfer_dnc(dest_path);
         return;
     }
 

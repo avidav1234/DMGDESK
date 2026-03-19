@@ -158,12 +158,6 @@ static void handle_client(SOCKET client, const char *base_path) {
         filesize = json_get_long(hdr, "filesize");
         normalize_name(filename, norm, sizeof(norm));
 
-        if (!PathIsDirectoryA(wpd)) {
-            const char *err = "{\"stato\":\"errore\",\"msg\":\"Cartella WPD non esiste. Crearla dall HMI.\"}\n";
-            send(client, err, strlen(err), 0);
-            printf("[ERR] WPD non trovata: %s\n", wpd);
-            return;
-        }
         if (filesize <= 0) {
             const char *err = "{\"stato\":\"errore\",\"msg\":\"filesize non valido\"}\n";
             send(client, err, strlen(err), 0);

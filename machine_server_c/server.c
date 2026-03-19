@@ -13,13 +13,28 @@
 #pragma comment(lib, "ws2_32.lib")
 #pragma comment(lib, "shlwapi.lib")
 
-#define CFG_FILE         "server_config.ini"
 #define DEFAULT_PORT     9999
 #define DEFAULT_BASE     "F:\\dh\\wks.dir"
-#define DEFAULT_DNC_TMP  "F:\\ADD_ON\\DNC\\TMP"
+#define DEFAULT_DNC_TMP  "D:\\tmp\\autoimport"
 #define DEFAULT_VBS_PATH "F:\\ADD_ON\\DNC\\transfer_dnc.vbs"
 #define BUF_SIZE         65536
 #define MAX_PATH_LEN     512
+
+/* Path assoluto del config — costruito a runtime nella stessa cartella dell'exe */
+static char CFG_FILE[MAX_PATH_LEN];
+
+static void init_cfg_path(void) {
+    char exe_path[MAX_PATH_LEN];
+    GetModuleFileNameA(NULL, exe_path, sizeof(exe_path));
+    char *last_slash = strrchr(exe_path, '\\');
+    if (last_slash) {
+        *(last_slash + 1) = '\0';
+        snprintf(CFG_FILE, sizeof(CFG_FILE), "%sserver_config.ini", exe_path);
+    } else {
+        strncpy(CFG_FILE, "server_config.ini", sizeof(CFG_FILE));
+    }
+    printf("[CFG] Config: %s\n", CFG_FILE);
+}
 
 /* ── Config ─────────────────────────────────────────────────────────────── */
 
@@ -289,6 +304,8 @@ static void handle_client(SOCKET client, const char *base_path) {
 /* ── Main ────────────────────────────────────────────────────────────────── */
 
 int main(void) {
+    init_cfg_path();   /* PRIMA di tutto: trova il config nella cartella dell'exe */
+
     WSADATA wsa;
     if (WSAStartup(MAKEWORD(2,2), &wsa) != 0) {
         fprintf(stderr, "ERRORE WSAStartup\n"); return 1;

@@ -6,23 +6,9 @@ Usato da dialog_invia_macchina nel tab analisi NC.
 import socket
 import os
 import json
-import datetime
 
 SERVER_PORT = 9999
 TIMEOUT_SEC = 10
-
-# Log su file per diagnosi (nella stessa cartella dell'exe)
-_LOG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "machine_client_debug.log")
-
-def _dbg(msg):
-    ts = datetime.datetime.now().strftime("%H:%M:%S.%f")[:-3]
-    line = f"[{ts}] {msg}"
-    print(line)
-    try:
-        with open(_LOG_PATH, "a", encoding="utf-8") as f:
-            f.write(line + "\n")
-    except Exception:
-        pass
 
 
 class MachineClient:
@@ -88,36 +74,28 @@ class MachineClient:
 
             s = self._connect()
             s.sendall(header.encode("utf-8") + content)
-            _dbg(f"INVIA sent: header={len(header.encode())}B + file={filesize}B  filename={filename_siemens}  progetto={progetto}")
 
             # Leggi fino a newline: il server termina la risposta con \n
             risposta = b""
             while True:
                 chunk = s.recv(1024)
-                _dbg(f"  recv chunk: {len(chunk)}B  raw={chunk!r}")
                 if not chunk:
-                    _dbg("  → socket chiuso dal server")
                     break
                 risposta += chunk
-                # Termina non appena abbiamo una riga completa (JSON termina con \n)
                 if b"\n" in risposta:
-                    _dbg(f"  → trovato \\n, stop recv")
                     break
             s.close()
 
             risposta_str = risposta.strip().decode("utf-8", errors="replace")
-            _dbg(f"risposta_str={risposta_str!r}")
             # Accetta sia "OK" semplice che JSON {"stato":"ok",...}
             try:
                 risposta_json = json.loads(risposta_str)
                 ok = risposta_json.get("stato") == "ok"
                 msg = risposta_json.get("msg", "OK") if ok else risposta_json.get("msg", risposta_str)
-                _dbg(f"JSON ok → stato={risposta_json.get('stato')!r}  ok={ok}  msg={msg!r}")
-            except Exception as ex_json:
+            except Exception:
                 # Fallback: risposta testuale semplice
                 ok = risposta_str.strip().upper() in ("OK", "OK\n")
                 msg = "OK" if ok else risposta_str
-                _dbg(f"json.loads FALLITO ({ex_json}) → fallback ok={ok}")
 
             # Nota: il callback riceve il filename originale (con estensione)
             # così il dialog può trovarlo nella tabella

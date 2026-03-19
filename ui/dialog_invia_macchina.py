@@ -264,7 +264,14 @@ class DialogInviaMacchina(tk.Toplevel):
         def on_progress(filename, ok, msg):
             nonlocal inviati
             inviati += 1
-            stato = "✅ inviato" if ok else f"❌ {msg}"
+            # Messaggio più informativo in base all'esito
+            if ok:
+                if "coda autoimport" in msg:
+                    stato = "⏳ In coda (max 1 min)"
+                else:
+                    stato = "✅ Trasferito in NCU"
+            else:
+                stato = f"❌ {msg}"
             def _upd():
                 # Il callback può ricevere filename con o senza .MPF:
                 # confronta normalizzando (senza estensione, maiuscolo)
@@ -279,7 +286,7 @@ class DialogInviaMacchina(tk.Toplevel):
                         break
                 self.progress["value"] = inviati
                 self.lbl_stato.config(
-                    text=f"⏳ Invio... {inviati}/{len(self.file_paths)}")
+                    text=f"⏳ Attendo conferma macchina... {inviati}/{len(self.file_paths)}")
             self.after(0, _upd)
 
         n_ok, n_err, errori = client.invia_lista(

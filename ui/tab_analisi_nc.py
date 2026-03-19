@@ -54,10 +54,10 @@ class TabAnalisiNC:
                      command=self._pulisci_lista,
                      **get_button_style("neutral", "medium")).pack(side="left", padx=5)
 
-        # Pulsante INVIA ALLA MACCHINA
+        # Pulsante INVIA ALLA MACCHINA (tutti i file)
         self.btn_invia = ctk.CTkButton(
             toolbar,
-            text="📤 INVIA ALLA MACCHINA",
+            text="📤 INVIA TUTTO",
             command=self._invia_alla_macchina,
             fg_color="#4CAF50",
             hover_color="#388E3C",
@@ -65,7 +65,34 @@ class TabAnalisiNC:
             height=40,
             state="disabled"
         )
-        self.btn_invia.pack(side="left", padx=10)
+        self.btn_invia.pack(side="left", padx=5)
+
+        # Pulsante INVIA SOLO MAIN
+        self.btn_invia_main = ctk.CTkButton(
+            toolbar,
+            text="📤 Solo MAIN",
+            command=self._invia_solo_main,
+            fg_color="#1565C0",
+            hover_color="#0D47A1",
+            font=get_font("medium", bold=True),
+            height=40,
+            state="disabled"
+        )
+        self.btn_invia_main.pack(side="left", padx=5)
+
+        # Indicatore stato macchina
+        self.lbl_macchina = ctk.CTkLabel(
+            toolbar, text="⚪ Macchina",
+            font=get_font("small"), text_color="#9E9E9E"
+        )
+        self.lbl_macchina.pack(side="left", padx=10)
+        ctk.CTkButton(
+            toolbar, text="🔌",
+            width=32, height=32,
+            fg_color="#607D8B", hover_color="#455A64",
+            font=("Segoe UI", 14),
+            command=self._check_macchina
+        ).pack(side="left", padx=2)
         
         # Nome cartella + GENERA MAIN + Impostazioni
         ctk.CTkLabel(toolbar, text="📁", font=get_font("normal")).pack(side="right", padx=2)
@@ -426,9 +453,11 @@ class TabAnalisiNC:
             
             # Memorizza lista esatta: file analizzati + MAIN generato
             self._files_da_inviare = list(self.file_paths) + [save_path]
+            self._main_generato_path = save_path
             
-            # Abilita pulsante INVIA ALLA MACCHINA
+            # Abilita pulsanti INVIA
             self.btn_invia.configure(state="normal")
+            self.btn_invia_main.configure(state="normal")
             
             mode_desc = calibra_logic.get_mode_description()
             messagebox.showinfo("Successo", 
@@ -458,6 +487,52 @@ class TabAnalisiNC:
         
         from ui.dialog_invia_macchina import apri_dialog_invia
         apri_dialog_invia(self.parent, files_da_inviare, nome_progetto)
+
+    def _invia_solo_main(self):
+        """Invia solo il file MAIN generato, senza i file analizzati."""
+        nome_progetto = self.entry_nome_cartella.get().strip()
+        if not nome_progetto:
+            return messagebox.showwarning("Attenzione", "Nome progetto mancante")
+
+        main_path = getattr(self, "_main_generato_path", None)
+        if not main_path or not os.path.exists(main_path):
+            return messagebox.showwarning(
+                "Attenzione",
+                "Nessun MAIN generato.\nGenera prima il MAIN con il pulsante 📄 GENERA MAIN."
+            )
+
+        from ui.dialog_invia_macchina import apri_dialog_invia
+        apri_dialog_invia(self.parent, [main_path], nome_progetto)
+
+    def _check_macchina(self):
+        """Verifica connessione alla macchina e aggiorna indicatore."""
+        import threading
+        from machine_client import MachineClient
+        import configparser
+
+        self.lbl_macchina.configure(text="⏳ Verifica...", text_color="#FF9800")
+
+        def _ping():
+            try:
+                cfg_path = os.path.join(
+                    os.path.dirname(os.path.abspath(__file__)), "..", "client_config.ini")
+                cfg = configparser.ConfigParser()
+                cfg.read(cfg_path)
+                ip   = cfg.get("macchina", "ip",   fallback="10.95.20.29")
+                port = cfg.getint("macchina", "port", fallback=9999)
+                client = MachineClient(ip, port)
+                _, _, err = client.check_esistenti([], "PING")
+                if err:
+                    self.lbl_macchina.after(0, lambda: self.lbl_macchina.configure(
+                        text=f"🔴 Non raggiungibile", text_color="#F44336"))
+                else:
+                    self.lbl_macchina.after(0, lambda: self.lbl_macchina.configure(
+                        text=f"🟢 Macchina OK", text_color="#4CAF50"))
+            except Exception:
+                self.lbl_macchina.after(0, lambda: self.lbl_macchina.configure(
+                    text="🔴 Non raggiungibile", text_color="#F44336"))
+
+        threading.Thread(target=_ping, daemon=True).start()
 
     def _apri_impostazioni_calibra(self):
         """Apre dialog impostazioni CALIBRA ONLY."""

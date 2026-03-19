@@ -8,7 +8,7 @@ import os
 import json
 
 SERVER_PORT = 9999
-TIMEOUT_SEC = 10
+TIMEOUT_SEC = 120  # Il server attende fino a 90s che DNCMachine trasferisca il file
 
 
 class MachineClient:

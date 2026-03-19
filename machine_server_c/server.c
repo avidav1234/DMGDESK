@@ -276,8 +276,37 @@ static void handle_client(SOCKET client, const char *base_path) {
 
         printf("[OK] %s (%ld -> %ld bytes CRLF) -> %s\n", norm, filesize, total2, dest_path);
 
-        /* Rispondi OK PRIMA di chiamare il VBS
-           ATTENZIONE: i backslash di wpd vanno escapati come \\ in JSON */
+        /* Chiama VBS subito per trigger immediato */
+        call_transfer_dnc(dest_path);
+
+        /* Aspetta che il file sparisca da autoimport (= DNCMachine lo ha preso)
+           Timeout 90 secondi, check ogni 2 secondi.
+           Se sparisce → OK. Se rimane → errore (es. file .ERR creato da DNCMachine). */
+        char err_path[MAX_PATH_LEN];
+        snprintf(err_path, sizeof(err_path), "%s.ERR", dest_path);
+
+        int transferred = 0;
+        int had_error   = 0;
+        int elapsed     = 0;
+        while (elapsed < 90) {
+            Sleep(2000);
+            elapsed += 2;
+            int file_exists = (GetFileAttributesA(dest_path) != INVALID_FILE_ATTRIBUTES);
+            int err_exists  = (GetFileAttributesA(err_path)  != INVALID_FILE_ATTRIBUTES);
+            if (err_exists) {
+                had_error = 1;
+                /* Cancella il file .ERR per non bloccare i prossimi cicli */
+                DeleteFileA(err_path);
+                break;
+            }
+            if (!file_exists) {
+                transferred = 1;
+                break;
+            }
+            printf("[WAIT] %s... %ds\n", norm, elapsed);
+        }
+
+        /* Costruisci risposta JSON con escape backslash */
         char wpd_escaped[MAX_PATH_LEN * 2];
         int si = 0, di = 0;
         while (wpd[si] && di < (int)sizeof(wpd_escaped) - 2) {
@@ -287,14 +316,24 @@ static void handle_client(SOCKET client, const char *base_path) {
         wpd_escaped[di] = '\0';
 
         char resp[512];
-        snprintf(resp, sizeof(resp),
-                 "{\"stato\":\"ok\",\"msg\":\"OK %s -> %s\"}\n", norm, wpd_escaped);
+        if (transferred) {
+            snprintf(resp, sizeof(resp),
+                     "{\"stato\":\"ok\",\"msg\":\"OK %s -> %s\"}\n", norm, wpd_escaped);
+            printf("[OK] %s trasferito in NCU\n", norm);
+        } else if (had_error) {
+            snprintf(resp, sizeof(resp),
+                     "{\"stato\":\"errore\",\"msg\":\"DNCMachine ha rifiutato %s (file .ERR). Verificare header NCK o WPD.\"}\n", norm);
+            printf("[ERR] %s rifiutato da DNCMachine (.ERR)\n", norm);
+        } else {
+            /* Timeout — il file è ancora lì ma potrebbe ancora arrivare via autoimport */
+            snprintf(resp, sizeof(resp),
+                     "{\"stato\":\"ok\",\"msg\":\"OK %s -> in coda autoimport (timeout attesa)\"}\n", norm);
+            printf("[WARN] %s timeout attesa — ancora in autoimport\n", norm);
+        }
+
         send(client, resp, strlen(resp), 0);
         closesocket(client);
         client = INVALID_SOCKET;
-
-        /* Chiama VBS - tenta trasferimento immediato, autoimport garantisce il fallback */
-        call_transfer_dnc(dest_path);
         return;
     }
 

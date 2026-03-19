@@ -204,20 +204,50 @@ static void handle_client(SOCKET client, const char *base_path) {
                  norm, progetto);
         int hlen2 = strlen(header_nck);
 
-        /* Calcola dimensione totale con header */
-        long total = hlen2 + filesize + 3; /* +3 per \r\n% finale */
-        char *outbuf = (char*)malloc(total + 1);
-        if (!outbuf) {
+        /* Normalizza LF→CRLF nel corpo del file.
+           Sinumerik 840D PowerLine richiede CRLF su tutto il file.
+           Alloca worst-case: ogni \n diventa \r\n → al massimo 2x */
+        char *body_crlf = (char*)malloc(filesize * 2 + 1);
+        if (!body_crlf) {
             free(filebuf);
-            send(client, "{\"stato\":\"errore\",\"msg\":\"Errore allocazione header\"}\n", 52, 0);
+            send(client, "{\"stato\":\"errore\",\"msg\":\"Errore allocazione CRLF\"}\n", 51, 0);
             return;
         }
-
-        /* Componi: header + contenuto + footer */
-        memcpy(outbuf, header_nck, hlen2);
-        memcpy(outbuf + hlen2, filebuf, filesize);
-        memcpy(outbuf + hlen2 + filesize, "\r\n%", 3);
+        long body_len = 0;
+        for (long ci = 0; ci < filesize; ci++) {
+            unsigned char ch = (unsigned char)filebuf[ci];
+            if (ch == '\n') {
+                /* Aggiungi \r solo se non già preceduto da \r */
+                if (body_len == 0 || body_crlf[body_len-1] != '\r')
+                    body_crlf[body_len++] = '\r';
+            }
+            body_crlf[body_len++] = (char)ch;
+        }
         free(filebuf);
+        filebuf = NULL;
+
+        /* Footer Sinumerik: \r\n% — se il corpo già finisce con \r\n non aggiungere altro \r\n */
+        const char *footer = "\r\n%";
+        int footer_len = 3;
+        if (body_len >= 2 &&
+            body_crlf[body_len-2] == '\r' && body_crlf[body_len-1] == '\n') {
+            /* corpo finisce già con \r\n → footer è solo % */
+            footer     = "%";
+            footer_len = 1;
+        }
+
+        /* Componi: header + corpo CRLF + footer */
+        long total2 = hlen2 + body_len + footer_len;
+        char *outbuf = (char*)malloc(total2 + 1);
+        if (!outbuf) {
+            free(body_crlf);
+            send(client, "{\"stato\":\"errore\",\"msg\":\"Errore allocazione output\"}\n", 52, 0);
+            return;
+        }
+        memcpy(outbuf,           header_nck, hlen2);
+        memcpy(outbuf + hlen2,   body_crlf,  body_len);
+        memcpy(outbuf + hlen2 + body_len, footer, footer_len);
+        free(body_crlf);
 
         /* Scrivi in DNC TMP */
         char dest_path[MAX_PATH_LEN];
@@ -229,11 +259,11 @@ static void handle_client(SOCKET client, const char *base_path) {
             send(client, "{\"stato\":\"errore\",\"msg\":\"Impossibile scrivere file\"}\n", 52, 0);
             return;
         }
-        fwrite(outbuf, 1, hlen2 + filesize + 3, f);
+        fwrite(outbuf, 1, total2, f);
         fclose(f);
         free(outbuf);
 
-        printf("[OK] %s (%ld -> %ld bytes) -> %s\n", norm, filesize, (long)(hlen2+filesize+3), dest_path);
+        printf("[OK] %s (%ld -> %ld bytes CRLF) -> %s\n", norm, filesize, total2, dest_path);
 
         /* Rispondi OK PRIMA di chiamare il VBS
            ATTENZIONE: i backslash di wpd vanno escapati come \\ in JSON */

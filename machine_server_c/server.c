@@ -235,10 +235,19 @@ static void handle_client(SOCKET client, const char *base_path) {
 
         printf("[OK] %s (%ld -> %ld bytes) -> %s\n", norm, filesize, (long)(hlen2+filesize+3), dest_path);
 
-        /* Rispondi OK PRIMA di chiamare il VBS */
+        /* Rispondi OK PRIMA di chiamare il VBS
+           ATTENZIONE: i backslash di wpd vanno escapati come \\ in JSON */
+        char wpd_escaped[MAX_PATH_LEN * 2];
+        int si = 0, di = 0;
+        while (wpd[si] && di < (int)sizeof(wpd_escaped) - 2) {
+            if (wpd[si] == '\\') wpd_escaped[di++] = '\\';
+            wpd_escaped[di++] = wpd[si++];
+        }
+        wpd_escaped[di] = '\0';
+
         char resp[512];
         snprintf(resp, sizeof(resp),
-                 "{\"stato\":\"ok\",\"msg\":\"OK %s -> %s\"}\n", norm, wpd);
+                 "{\"stato\":\"ok\",\"msg\":\"OK %s -> %s\"}\n", norm, wpd_escaped);
         send(client, resp, strlen(resp), 0);
         closesocket(client);
         client = INVALID_SOCKET;

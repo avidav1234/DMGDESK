@@ -14,7 +14,9 @@ namespace MachineServer
             Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "server_config.ini");
 
         public int    Port     = 9999;
-        public string BasePath = @"C:\Users\i.dodon\Documents\test_gestionale";
+        public string BasePath = @"F:\dh\wks.dir";
+        public string DncPath  = @"D:\tmp\autoimport";
+        public string VbsPath  = @"F:\ADD_ON\DNC\transfer_dnc.vbs";
 
         public static ServerConfig Load()
         {
@@ -47,6 +49,14 @@ namespace MachineServer
                     {
                         cfg.BasePath = v;
                     }
+                    else if (k == "dnc_path")
+                    {
+                        cfg.DncPath = v;
+                    }
+                    else if (k == "vbs_path")
+                    {
+                        cfg.VbsPath = v;
+                    }
                 }
             }
             catch { /* usa i default */ }
@@ -62,7 +72,9 @@ namespace MachineServer
                 {
                     "[server]",
                     "port=" + Port,
-                    "base_path=" + BasePath
+                    "base_path=" + BasePath,
+                    "dnc_path="  + DncPath,
+                    "vbs_path="  + VbsPath
                 };
                 File.WriteAllLines(ConfigPath, lines, Encoding.UTF8);
             }

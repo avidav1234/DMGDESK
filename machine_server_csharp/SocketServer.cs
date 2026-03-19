@@ -133,7 +133,7 @@ namespace MachineServer
                     string[] files    = header.GetStringArray("files");
                     string[] esistenti = FindExisting(destDir, files);
 
-                    string resp = BuildCheckResponse(esistenti, destDir);
+                    string resp = BuildCheckResponse(esistenti, destDir) + "\n";
                     byte[] respBytes = Encoding.UTF8.GetBytes(resp);
                     stream.Write(respBytes, 0, respBytes.Length);
 
@@ -144,17 +144,17 @@ namespace MachineServer
                 // ── INVIA ─────────────────────────────────────────────────────
                 else if (comando == "INVIA")
                 {
-                    string filename = header.GetString("filename");
+                    string filename = header.GetString("filename").ToUpper().Trim();
                     int    filesize = header.GetInt("filesize");
 
-                    // Crea cartella se non esiste
-                    if (!Directory.Exists(destDir))
-                    {
-                        Directory.CreateDirectory(destDir);
-                        Log("📂 Cartella creata: " + destDir);
-                    }
+                    // Normalizza: rimuovi .MPF se già presente (il client può mandarlo con o senza)
+                    string baseName = filename.EndsWith(".MPF")
+                        ? filename.Substring(0, filename.Length - 4)
+                        : filename;
 
-                    // Ricevi bytes del file
+                    string progettoUp = progetto.ToUpper().Trim();
+
+                    // Ricevi bytes del file originale
                     byte[] fileData = new byte[filesize];
                     int    received = 0;
                     while (received < filesize)
@@ -164,14 +164,70 @@ namespace MachineServer
                         received += chunk;
                     }
 
-                    string destPath = Path.Combine(destDir, filename);
-                    File.WriteAllBytes(destPath, fileData);
+                    // ── Inietta header NCK ────────────────────────────────────
+                    // %_N_NOMEFILE_MPF
+                    // ;$PATH=/_N_WKS_DIR/_N_PROGETTO_WPD
+                    string nckHeader =
+                        "%_N_" + baseName + "_MPF\r\n" +
+                        ";$PATH=/_N_WKS_DIR/_N_" + progettoUp + "_WPD\r\n";
 
-                    Log("[" + DateTime.Now.ToString("HH:mm:ss") + "] ✅ " +
-                        filename + "  (" + filesize + " B)");
+                    byte[] headerBytes  = Encoding.UTF8.GetBytes(nckHeader);
+                    byte[] footerBytes  = Encoding.UTF8.GetBytes("\r\n%");
 
-                    byte[] ok = Encoding.UTF8.GetBytes("OK");
-                    stream.Write(ok, 0, ok.Length);
+                    // Contenuto finale = header + contenuto originale + footer %
+                    byte[] finalData = new byte[headerBytes.Length + fileData.Length + footerBytes.Length];
+                    Array.Copy(headerBytes, 0, finalData, 0,                             headerBytes.Length);
+                    Array.Copy(fileData,    0, finalData, headerBytes.Length,             fileData.Length);
+                    Array.Copy(footerBytes, 0, finalData, headerBytes.Length + fileData.Length, footerBytes.Length);
+
+                    // ── Scrivi in DncPath (D:\tmp\autoimport) ─────────────────
+                    if (!Directory.Exists(_config.DncPath))
+                        Directory.CreateDirectory(_config.DncPath);
+
+                    string dncFile = Path.Combine(_config.DncPath, baseName + ".MPF");
+                    File.WriteAllBytes(dncFile, finalData);
+
+                    Log("[" + DateTime.Now.ToString("HH:mm:ss") + "] 📥 " +
+                        baseName + ".MPF  (" + filesize + " B) → " + dncFile);
+
+                    // ── Chiama transfer_dnc.vbs ───────────────────────────────
+                    string vbsResult = "non chiamato";
+                    try
+                    {
+                        System.Diagnostics.ProcessStartInfo psi =
+                            new System.Diagnostics.ProcessStartInfo();
+                        psi.FileName               = "cscript.exe";
+                        psi.Arguments              = "//Nologo \"" + _config.VbsPath + "\"";
+                        psi.UseShellExecute        = false;
+                        psi.RedirectStandardOutput = true;
+                        psi.RedirectStandardError  = true;
+                        psi.CreateNoWindow         = true;
+
+                        System.Diagnostics.Process proc =
+                            System.Diagnostics.Process.Start(psi);
+                        proc.WaitForExit(10000);
+                        vbsResult = proc.StandardOutput.ReadToEnd().Trim();
+                        if (string.IsNullOrEmpty(vbsResult))
+                            vbsResult = proc.StandardError.ReadToEnd().Trim();
+                        if (string.IsNullOrEmpty(vbsResult))
+                            vbsResult = "exit " + proc.ExitCode;
+                    }
+                    catch (Exception exVbs)
+                    {
+                        vbsResult = "ERRORE VBS: " + exVbs.Message;
+                        Log("⚠️ VBS: " + vbsResult);
+                    }
+
+                    // ── Risposta JSON ─────────────────────────────────────────
+                    string destWpd = Path.Combine(_config.BasePath, progettoUp + ".WPD");
+                    string respMsg = "OK " + baseName + " -> " + destWpd;
+                    string respJson = "{\"stato\":\"ok\",\"msg\":\"" +
+                        EscapeJson(respMsg) + "\"}\n";
+
+                    Log("✅ " + baseName + " → " + destWpd + "  VBS: " + vbsResult);
+
+                    byte[] respBytes2 = Encoding.UTF8.GetBytes(respJson);
+                    stream.Write(respBytes2, 0, respBytes2.Length);
                 }
                 else
                 {

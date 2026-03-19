@@ -16,7 +16,7 @@
 #define CFG_FILE         "server_config.ini"
 #define DEFAULT_PORT     9999
 #define DEFAULT_BASE     "F:\\dh\\wks.dir"
-#define DEFAULT_DNC_TMP  "F:\\ADD_ON\\DNC\\TMP"
+#define DEFAULT_DNC_TMP  "D:\\tmp\\autoimport"
 #define DEFAULT_VBS_PATH "F:\\ADD_ON\\DNC\\transfer_dnc.vbs"
 #define BUF_SIZE         65536
 #define MAX_PATH_LEN     512

@@ -36,19 +36,22 @@ static void get_vbs_path(char *out, int n) {
     GetPrivateProfileStringA("server", "vbs_path", DEFAULT_VBS_PATH, out, n, CFG_FILE);
 }
 
-/* ── VBS asincrono ───────────────────────────────────────────────────────── */
+/* ── VBS con path file specifico ─────────────────────────────────────────── */
 
-static void call_transfer_dnc(void) {
+static void call_transfer_dnc(const char *filepath) {
     char vbs[MAX_PATH_LEN];
-    char cmd[MAX_PATH_LEN * 2];
+    char cmd[MAX_PATH_LEN * 3];
     get_vbs_path(vbs, sizeof(vbs));
-    snprintf(cmd, sizeof(cmd), "cscript //Nologo \"%s\" > NUL 2>&1", vbs);
+    if (filepath && filepath[0])
+        snprintf(cmd, sizeof(cmd), "cscript //Nologo \"%s\" \"%s\" > NUL 2>&1", vbs, filepath);
+    else
+        snprintf(cmd, sizeof(cmd), "cscript //Nologo \"%s\" > NUL 2>&1", vbs);
     printf("[DNC] %s\n", cmd);
     int ret = system(cmd);
     if (ret == 0)
-        printf("[DNC] TransferAutom OK\n");
+        printf("[DNC] OK\n");
     else
-        printf("[DNC] TransferAutom ret=%d\n", ret);
+        printf("[DNC] ret=%d\n", ret);
 }
 
 /* ── JSON helpers ────────────────────────────────────────────────────────── */
@@ -276,8 +279,8 @@ static void handle_client(SOCKET client, const char *base_path) {
         closesocket(client);
         client = INVALID_SOCKET;
 
-        /* Chiama VBS in background */
-        call_transfer_dnc();
+        /* Chiama VBS con path file specifico */
+        call_transfer_dnc(dest_path);
         return;
     }
 

@@ -75,12 +75,16 @@ class MachineClient:
             s = self._connect()
             s.sendall(header.encode("utf-8") + content)
 
+            # Leggi fino a newline: il server termina la risposta con \n
             risposta = b""
             while True:
                 chunk = s.recv(1024)
                 if not chunk:
                     break
                 risposta += chunk
+                # Termina non appena abbiamo una riga completa (JSON termina con \n)
+                if b"\n" in risposta:
+                    break
             s.close()
 
             risposta_str = risposta.strip().decode("utf-8", errors="replace")
@@ -90,8 +94,12 @@ class MachineClient:
                 ok = risposta_json.get("stato") == "ok"
                 msg = risposta_json.get("msg", "OK") if ok else risposta_json.get("msg", risposta_str)
             except Exception:
-                ok = risposta_str == "OK"
+                # Fallback: risposta testuale semplice
+                ok = risposta_str.strip().upper() in ("OK", "OK\n")
                 msg = "OK" if ok else risposta_str
+
+            # Nota: il callback riceve il filename originale (con estensione)
+            # così il dialog può trovarlo nella tabella
             if progress_callback:
                 progress_callback(filename, ok, msg)
             return ok, msg

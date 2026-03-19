@@ -266,8 +266,12 @@ class DialogInviaMacchina(tk.Toplevel):
             inviati += 1
             stato = "✅ inviato" if ok else f"❌ {msg}"
             def _upd():
+                # Il callback può ricevere filename con o senza .MPF:
+                # confronta normalizzando (senza estensione, maiuscolo)
+                fn_base = filename.upper().removesuffix(".MPF")
                 for item in self.tree.get_children():
-                    if self.tree.item(item)["values"][1] == filename:
+                    tree_val = str(self.tree.item(item)["values"][1]).upper().removesuffix(".MPF")
+                    if tree_val == fn_base:
                         vals      = list(self.tree.item(item)["values"])
                         vals[3]   = stato
                         tag       = "nuovo" if ok else "errore"

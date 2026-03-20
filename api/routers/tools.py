@@ -121,6 +121,8 @@ class ToolSummary(BaseModel):
     life_percent: Optional[float]
     is_enabled: bool
     is_worn: bool
+    magazine: Optional[int]   # numero magazine (1=Regal_120, 2=buffer, None=non mappato)
+    position: Optional[int]   # posizione nel magazine
 
 
 class SyncStatus(BaseModel):
@@ -143,9 +145,19 @@ class CheckResult(BaseModel):
 # Helpers DB locale (JSON)
 # ---------------------------------------------------------------------------
 
-def _save_tools_db(tools: dict[int, MachineTool], sync_time: str) -> None:
-    """Salva il DB utensili in JSON locale."""
+def _save_tools_db(tools: dict[int, MachineTool], sync_time: str, positions=None) -> None:
+    """Salva il DB utensili in JSON locale, incluse posizioni magazzino."""
     db_path = _get_tools_db_path()
+
+    # Mappa tool_id → posizione magazzino dal TMA
+    pos_map: dict[int, dict] = {}
+    if positions:
+        for pos in positions:
+            pos_map[pos.tool_id] = {
+                "magazine": pos.magazine,
+                "position": pos.position,
+            }
+
     data = {
         "sync_time": sync_time,
         "tools": {
@@ -160,9 +172,11 @@ def _save_tools_db(tools: dict[int, MachineTool], sync_time: str) -> None:
                 "life_percent": t.life_percent,
                 "is_enabled": t.is_enabled,
                 "is_worn": t.is_worn,
+                "magazine": pos_map.get(tid, {}).get("magazine"),
+                "position": pos_map.get(tid, {}).get("position"),
             }
             for tid, t in tools.items()
-            if t.name  # salta T-number 0 o senza nome
+            if t.name
         }
     }
     with open(db_path, "w", encoding="utf-8") as f:
@@ -223,7 +237,7 @@ async def sync_tools():
             log.warning(f"Errore lettura TMA (non bloccante): {e}")
 
     sync_time = datetime.now().isoformat()
-    _save_tools_db(tools, sync_time)
+    _save_tools_db(tools, sync_time, positions)
 
     return {
         "ok": True,
@@ -281,9 +295,17 @@ async def list_tools(only_enabled: bool = False):
             life_percent=t.get("life_percent"),
             is_enabled=t.get("is_enabled", True),
             is_worn=t.get("is_worn", False),
+            magazine=t.get("magazine"),
+            position=t.get("position"),
         ))
 
-    return sorted(result, key=lambda x: x.name)
+    # Ordina per posizione magazzino (come in macchina), poi per nome
+    return sorted(result, key=lambda x: (
+        x.magazine if x.magazine is not None else 9999,
+        x.position if x.position is not None else 9999,
+        x.name,
+        x.duplo,
+    ))
 
 
 @router.post(

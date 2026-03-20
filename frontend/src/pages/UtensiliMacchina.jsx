@@ -359,7 +359,7 @@ export default function UtensiliMacchina() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                {['Nome utensile', 'Duplo', 'Tipo', 'L (mm)', 'R (mm)', 'Vita', 'Stato'].map(h => (
+                {['Pos', 'Nome utensile', 'Duplo', 'L (mm)', 'R (mm)', 'Vita %', 'Stato'].map(h => (
                   <th key={h} style={{
                     padding: '10px 14px', textAlign: 'left', fontSize: 11,
                     fontFamily: 'var(--font-mono)', color: 'var(--text-dim)',
@@ -387,20 +387,23 @@ export default function UtensiliMacchina() {
                     onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
                     onMouseLeave={e => e.currentTarget.style.background = rowColor}
                     >
+                      {/* Posizione magazzino */}
+                      <td style={{ padding: '9px 14px', fontFamily: 'var(--font-mono)', fontSize: 11,
+                        color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>
+                        {t.magazine != null && t.position != null
+                          ? <span style={{ color: 'var(--cyan)', opacity: 0.8 }}>M{t.magazine}·{String(t.position).padStart(3,'0')}</span>
+                          : '—'}
+                      </td>
                       {/* Nome */}
                       <td style={{ padding: '9px 14px', fontFamily: 'var(--font-mono)', fontSize: 13,
                         color: isDisabled ? 'var(--text-dim)' : 'var(--text-primary)', fontWeight: 600 }}>
-                        {i === 0 ? name : ''}
+                        {name}
+                        {group.length > 1 && <span style={{ fontSize: 10, color: 'var(--text-dim)', marginLeft: 6 }}>#{t.duplo}</span>}
                       </td>
                       {/* Duplo */}
                       <td style={{ padding: '9px 14px', fontFamily: 'var(--font-mono)', fontSize: 12,
                         color: 'var(--text-dim)' }}>
                         #{t.duplo}
-                      </td>
-                      {/* Tipo (tool_type da edge 1) */}
-                      <td style={{ padding: '9px 14px', fontFamily: 'var(--font-mono)', fontSize: 11,
-                        color: 'var(--text-dim)' }}>
-                        {t.status}
                       </td>
                       {/* Lunghezza */}
                       <td style={{ padding: '9px 14px', fontFamily: 'var(--font-mono)', fontSize: 12,
@@ -412,7 +415,7 @@ export default function UtensiliMacchina() {
                         color: 'var(--text-secondary)' }}>
                         {t.radius?.toFixed(3)}
                       </td>
-                      {/* Vita */}
+                      {/* Vita — MOP2/MOP11*100 */}
                       <td style={{ padding: '9px 14px' }}>
                         <LifeBar pct={t.life_percent} />
                       </td>

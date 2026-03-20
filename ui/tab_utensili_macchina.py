@@ -46,8 +46,13 @@ def _get_sync_paths():
     return base / "TOOL_SYNC.TOA", base / "TOOL_SYNC.TMA"
 
 
-def _save_tools_db(tools, sync_time):
+def _save_tools_db(tools, sync_time, positions=None):
     db_path = _get_tools_db_path()
+    # Mappa tool_id → posizione magazzino
+    pos_map = {}
+    if positions:
+        for pos in positions:
+            pos_map[pos.tool_id] = {"magazine": pos.magazine, "position": pos.position}
     data = {
         "sync_time": sync_time,
         "tools": {
@@ -62,6 +67,8 @@ def _save_tools_db(tools, sync_time):
                 "life_percent": t.life_percent,
                 "is_enabled": t.is_enabled,
                 "is_worn": t.is_worn,
+                "magazine": pos_map.get(tid, {}).get("magazine"),
+                "position": pos_map.get(tid, {}).get("position"),
             }
             for tid, t in tools.items()
             if t.name
@@ -176,16 +183,17 @@ class TabUtensiliMacchina:
                                   corner_radius=8)
         tbl_frame.pack(fill="both", expand=True, padx=20, pady=10)
 
-        cols = ("name", "duplo", "length", "radius", "life", "status")
+        cols = ("pos", "name", "duplo", "length", "radius", "life", "status")
         self.tree = ttk.Treeview(tbl_frame, columns=cols, show="headings", height=18)
 
         headers = {
-            "name":   ("Nome utensile",  220),
-            "duplo":  ("Duplo",           55),
-            "length": ("L (mm)",          90),
-            "radius": ("R (mm)",          80),
-            "life":   ("Vita %",          80),
-            "status": ("Stato",           90),
+            "pos":    ("Pos",             65),
+            "name":   ("Nome utensile",  200),
+            "duplo":  ("Duplo",           50),
+            "length": ("L (mm)",          88),
+            "radius": ("R (mm)",          78),
+            "life":   ("Vita %",          75),
+            "status": ("Stato",           88),
         }
         for col, (label, w) in headers.items():
             self.tree.heading(col, text=label, anchor="w")
@@ -253,7 +261,7 @@ class TabUtensiliMacchina:
                     except Exception:
                         pass
                 sync_time = datetime.now().isoformat()
-                _save_tools_db(tools, sync_time)
+                _save_tools_db(tools, sync_time, positions)
                 n_tools = sum(1 for t in tools.values() if t.name)
                 self.parent.after(0, lambda: self._after_sync(n_tools, len(positions), sync_time))
             except Exception as e:
@@ -298,8 +306,13 @@ class TabUtensiliMacchina:
             t for t in self._tools_data.values()
             if not search or search in t["name"].lower()
         ]
-        # Ordina per nome poi duplo
-        filtered.sort(key=lambda t: (t["name"], t["duplo"]))
+        # Ordina per posizione magazzino (come in macchina), poi nome
+        filtered.sort(key=lambda t: (
+            t.get("magazine") or 9999,
+            t.get("position") or 9999,
+            t["name"],
+            t["duplo"],
+        ))
 
         for t in filtered:
             life = t.get("life_percent")
@@ -315,7 +328,12 @@ class TabUtensiliMacchina:
             else:
                 tag, stato = "ok",       "OK"
 
+            mag = t.get("magazine")
+            pos = t.get("position")
+            pos_str = f"M{mag}·{pos:03d}" if mag is not None and pos is not None else "—"
+
             self.tree.insert("", "end", values=(
+                pos_str,
                 t["name"],
                 f"#{t['duplo']}",
                 f"{t.get('length', 0):.3f}",

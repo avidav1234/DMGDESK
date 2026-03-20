@@ -411,7 +411,7 @@ def parse_tma(path: str | Path) -> tuple[dict[int, MagazineInfo], list[MagazineP
     - dict {magazine_num: MagazineInfo}
     - lista di MagazinePosition (solo posizioni occupate, tool_id > 0)
     
-    $TC_MPP66[mag, pos] = T-number interno (nota: doppio 6, non $TC_MPP6)
+    $TC_MPP6[mag, pos] = T-number interno (posizione utensile nel magazzino)
     $TC_MAP2[mag] = nome magazine
     """
     path = Path(path)
@@ -419,7 +419,7 @@ def parse_tma(path: str | Path) -> tuple[dict[int, MagazineInfo], list[MagazineP
     positions: list[MagazinePosition] = []
 
     _RE_MAP = re.compile(r'^\$TC_MAP(\d+)\[(\d+)\]\s*=\s*(.+)$')
-    _RE_MPP66 = re.compile(r'^\$TC_MPP66\[(\d+),(\d+)\]\s*=\s*(\d+)$')
+    _RE_MPP6  = re.compile(r'^\$TC_MPP6\[(\d+),(\d+)\]\s*=\s*(\d+)$')
     _RE_MPP4 = re.compile(r'^\$TC_MPP4\[(\d+),(\d+)\]\s*=\s*(\d+)$')
 
     # Prima passata: raccoglie stati posizione
@@ -453,8 +453,8 @@ def parse_tma(path: str | Path) -> tuple[dict[int, MagazineInfo], list[MagazineP
                 states[(mag, pos)] = state
                 continue
 
-            # $TC_MPP66 — T-number in posizione (NOTA: doppio 6)
-            m = _RE_MPP66.match(line)
+            # $TC_MPP6 — T-number in posizione nel magazzino
+            m = _RE_MPP6.match(line)
             if m:
                 mag = int(m.group(1))
                 pos = int(m.group(2))

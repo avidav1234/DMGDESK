@@ -373,83 +373,96 @@ class TabMacchina:
     # -------------------------------------------------------------------------
 
     def _build_sync_view(self, parent):
+        import tkinter as tk
+
+        # ── Toolbar sync ──────────────────────────────────────────────────────
         toolbar = ctk.CTkFrame(parent, fg_color="transparent")
         toolbar.pack(fill="x", padx=4, pady=(10, 4))
-        self.btn_sync = ctk.CTkButton(toolbar, text="\u27b3  Sync da Macchina",
+
+        self.btn_sync = ctk.CTkButton(toolbar, text="Sync da Macchina",
                                        command=self._do_sync,
                                        **get_button_style("primary", "medium"))
         self.btn_sync.pack(side="left", padx=4)
-        ctk.CTkButton(toolbar, text="\U0001f4c1  Scegli TOA manuale",
+
+        ctk.CTkButton(toolbar, text="Scegli TOA manuale",
                       command=self._scegli_toa_manuale,
                       **get_button_style("neutral", "medium")).pack(side="left", padx=4)
-        ctk.CTkButton(toolbar, text="\U0001f50d  Verifica MPF",
+
+        ctk.CTkButton(toolbar, text="Verifica MPF singolo",
                       command=self._scegli_mpf_check,
                       **get_button_style("neutral", "medium")).pack(side="left", padx=4)
+
         self.lbl_sync_status = ctk.CTkLabel(toolbar, text="Nessun sync",
                                              font=get_font("small"),
                                              text_color=COLOR_TEXT_SECONDARY)
         self.lbl_sync_status.pack(side="right", padx=10)
 
+        # ── Istruzioni primo sync ─────────────────────────────────────────────
         self.frame_istruzioni = ctk.CTkFrame(parent, fg_color="#E3F2FD", corner_radius=8)
-        self.frame_istruzioni.pack(fill="x", padx=4, pady=(0, 6))
+        self.frame_istruzioni.pack(fill="x", padx=4, pady=(0, 4))
         ctk.CTkLabel(self.frame_istruzioni,
                      text=("Come sincronizzare:\n"
-                           "1.  HMI \u2192 Servizi \u2192 Salva Attrezzaggio\n"
+                           "1.  HMI -> Servizi -> Salva Attrezzaggio\n"
                            "2.  Salvare in  Z:\\DMG_DMC_160U\\  con nome  TOOL_SYNC\n"
                            "3.  Premere  Sync da Macchina  oppure  Scegli TOA manuale"),
                      font=get_font("body"), text_color=COLOR_PRIMARY, justify="left",
                      ).pack(padx=14, pady=8, anchor="w")
 
-        # ---- Confronto multi-programma MPF ----------------------------------------
-        sep_frame = ctk.CTkFrame(parent, fg_color=COLOR_BORDER, height=1)
-        sep_frame.pack(fill="x", padx=4, pady=(4, 0))
+        # ── PanedWindow: confronto (alto) | tabella utensili (basso) ─────────
+        paned = tk.PanedWindow(parent, orient=tk.VERTICAL,
+                                sashwidth=6, sashrelief="raised",
+                                background=COLOR_BORDER)
+        paned.pack(fill="both", expand=True, padx=4, pady=(2, 4))
+        # Imposta posizione iniziale sash: ~200px per pannello confronto
+        paned.after(100, lambda: paned.sash_place(0, 0, 220))
 
-        confronto_header = ctk.CTkFrame(parent, fg_color="transparent")
-        confronto_header.pack(fill="x", padx=4, pady=(6, 4))
+        # ─ Pannello superiore: confronto multi-MPF ─
+        top_frame = ctk.CTkFrame(paned, fg_color="transparent")
+        paned.add(top_frame, minsize=120)
 
-        ctk.CTkLabel(confronto_header,
-                     text="Confronto programmi MPF vs TOA",
+        confronto_toolbar = ctk.CTkFrame(top_frame, fg_color="transparent")
+        confronto_toolbar.pack(fill="x", pady=(4, 2))
+
+        ctk.CTkLabel(confronto_toolbar,
+                     text="Confronto MPF vs TOA",
                      font=get_font("body", bold=True),
-                     text_color=COLOR_TEXT_PRIMARY).pack(side="left")
+                     text_color=COLOR_TEXT_PRIMARY).pack(side="left", padx=4)
 
-        self.lbl_file_count = ctk.CTkLabel(confronto_header, text="",
+        self.lbl_file_count = ctk.CTkLabel(confronto_toolbar, text="",
                                             font=get_font("small"),
                                             text_color=COLOR_TEXT_SECONDARY)
-        self.lbl_file_count.pack(side="left", padx=10)
+        self.lbl_file_count.pack(side="left", padx=6)
 
-        ctk.CTkButton(confronto_header,
-                      text="+ Aggiungi MPF",
+        ctk.CTkButton(confronto_toolbar, text="+ Aggiungi MPF",
                       command=self._aggiungi_mpf,
-                      **get_button_style("primary", "small")).pack(side="left", padx=4)
+                      **get_button_style("primary", "small")).pack(side="left", padx=3)
 
-        ctk.CTkButton(confronto_header,
-                      text="Confronta",
+        ctk.CTkButton(confronto_toolbar, text="Confronta",
                       command=self._confronta_mpf,
-                      **get_button_style("success", "small")).pack(side="left", padx=4)
+                      **get_button_style("success", "small")).pack(side="left", padx=3)
 
-        ctk.CTkButton(confronto_header,
-                      text="Reset",
+        ctk.CTkButton(confronto_toolbar, text="Reset",
                       command=self._reset_mpf,
-                      **get_button_style("neutral", "small")).pack(side="left", padx=4)
+                      **get_button_style("neutral", "small")).pack(side="left", padx=3)
 
-        # Lista file caricati
-        self.list_mpf = ctk.CTkTextbox(parent, height=55, font=get_font("small"),
-                                        fg_color=COLOR_SURFACE, text_color=COLOR_TEXT_SECONDARY)
-        self.list_mpf.pack(fill="x", padx=4, pady=(0, 2))
-        self.list_mpf.insert("end", "Nessun file caricato — aggiungi uno o piu file .MPF")
+        # Lista file caricati (1 riga di altezza)
+        self.list_mpf = ctk.CTkTextbox(top_frame, height=36, font=get_font("small"),
+                                        fg_color=COLOR_SURFACE,
+                                        text_color=COLOR_TEXT_SECONDARY)
+        self.list_mpf.pack(fill="x", pady=(2, 2))
+        self.list_mpf.insert("end", "Nessun file caricato — clicca + Aggiungi MPF")
         self.list_mpf.configure(state="disabled")
 
-        # Tabella risultati confronto
-        confronto_tbl_frame = ctk.CTkFrame(parent, fg_color=COLOR_SURFACE, corner_radius=6)
-        confronto_tbl_frame.pack(fill="x", padx=4, pady=(0, 6))
+        # Tabella risultati confronto — expand=True per prendere il pannello
+        confronto_tbl = ctk.CTkFrame(top_frame, fg_color=COLOR_SURFACE, corner_radius=6)
+        confronto_tbl.pack(fill="both", expand=True)
 
         self.tree_confronto = ttk.Treeview(
-            confronto_tbl_frame,
+            confronto_tbl,
             columns=("stato", "alias", "file", "riga"),
             show="headings",
-            height=6,
         )
-        sb_c = ttk.Scrollbar(confronto_tbl_frame, orient="vertical",
+        sb_c = ttk.Scrollbar(confronto_tbl, orient="vertical",
                               command=self.tree_confronto.yview)
         self.tree_confronto.configure(yscrollcommand=sb_c.set)
 
@@ -457,52 +470,60 @@ class TabMacchina:
         self.tree_confronto.heading("alias", text="ALIAS UTENSILE")
         self.tree_confronto.heading("file",  text="FILE")
         self.tree_confronto.heading("riga",  text="RIGA")
-        self.tree_confronto.column("stato", width=80,  anchor="center")
-        self.tree_confronto.column("alias", width=240, anchor="w")
-        self.tree_confronto.column("file",  width=200, anchor="w")
+        self.tree_confronto.column("stato", width=90,  anchor="center")
+        self.tree_confronto.column("alias", width=260, anchor="w")
+        self.tree_confronto.column("file",  width=210, anchor="w")
         self.tree_confronto.column("riga",  width=60,  anchor="center")
 
-        self.tree_confronto.tag_configure("ok",      background="#F1F8E9")
+        self.tree_confronto.tag_configure("ok",       background="#F1F8E9")
         self.tree_confronto.tag_configure("mancante", background="#FFEBEE")
         self.tree_confronto.tag_configure("disab",    background="#FFF8E1")
         self.tree_confronto.tag_configure("worn",     background="#EDE7F6")
 
-        self.tree_confronto.pack(side="left", fill="both", expand=True, padx=(6, 0), pady=6)
-        sb_c.pack(side="right", fill="y", pady=6, padx=(0, 4))
+        self.tree_confronto.pack(side="left", fill="both", expand=True, padx=(6, 0), pady=4)
+        sb_c.pack(side="right", fill="y", pady=4, padx=(0, 2))
 
-        # ---- Ricerca tabella utensili -----------------------------------------
-        ctrl = ctk.CTkFrame(parent, fg_color="transparent")
-        ctrl.pack(fill="x", padx=4, pady=(0, 4))
+        # ─ Pannello inferiore: tabella utensili TOA ─
+        bot_frame = ctk.CTkFrame(paned, fg_color="transparent")
+        paned.add(bot_frame, minsize=200)
+
+        ctrl = ctk.CTkFrame(bot_frame, fg_color="transparent")
+        ctrl.pack(fill="x", pady=(4, 2))
         self.entry_search = ctk.CTkEntry(ctrl, placeholder_text="Cerca utensile...",
                                           font=get_font("body"), width=260)
-        self.entry_search.pack(side="left")
+        self.entry_search.pack(side="left", padx=4)
         self.entry_search.bind("<KeyRelease>", lambda e: self._refresh_sync_table())
         self.lbl_count = ctk.CTkLabel(ctrl, text="",
-                                       font=get_font("small"), text_color=COLOR_TEXT_SECONDARY)
+                                       font=get_font("small"),
+                                       text_color=COLOR_TEXT_SECONDARY)
         self.lbl_count.pack(side="right", padx=8)
 
-        tbl_frame = ctk.CTkFrame(parent, fg_color=COLOR_SURFACE, corner_radius=8)
-        tbl_frame.pack(fill="both", expand=True, padx=4, pady=4)
+        tbl_frame = ctk.CTkFrame(bot_frame, fg_color=COLOR_SURFACE, corner_radius=8)
+        tbl_frame.pack(fill="both", expand=True)
+
         cols = ("pos", "name", "duplo", "length", "radius", "life", "status")
-        self.tree_sync = ttk.Treeview(tbl_frame, columns=cols, show="headings", height=20)
+        self.tree_sync = ttk.Treeview(tbl_frame, columns=cols, show="headings")
         for col, label, w in [
             ("pos",    "Pos",           68),
-            ("name",   "Nome utensile", 200),
-            ("duplo",  "Duplo",         50),
-            ("length", "L (mm)",        88),
-            ("radius", "R (mm)",        78),
+            ("name",   "Nome utensile", 220),
+            ("duplo",  "Duplo",         55),
+            ("length", "L (mm)",        90),
+            ("radius", "R (mm)",        80),
             ("life",   "Vita %",        75),
-            ("status", "Stato",         88),
+            ("status", "Stato",         90),
         ]:
             self.tree_sync.heading(col, text=label, anchor="w")
             self.tree_sync.column(col, width=w, minwidth=40, anchor="w")
+
         self.tree_sync.tag_configure("ok",       background="#F1F8E9")
         self.tree_sync.tag_configure("worn",     background="#EDE7F6")
         self.tree_sync.tag_configure("disabled", background="#FFEBEE")
+
         sb2 = ttk.Scrollbar(tbl_frame, orient="vertical", command=self.tree_sync.yview)
         self.tree_sync.configure(yscrollcommand=sb2.set)
-        self.tree_sync.pack(side="left", fill="both", expand=True, padx=(8, 0), pady=8)
-        sb2.pack(side="right", fill="y", pady=8, padx=(0, 4))
+        self.tree_sync.pack(side="left", fill="both", expand=True, padx=(8, 0), pady=6)
+        sb2.pack(side="right", fill="y", pady=6, padx=(0, 4))
+
 
     # ---- Sync ---------------------------------------------------------------
 

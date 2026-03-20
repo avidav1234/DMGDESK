@@ -17,6 +17,7 @@ from .tab_smontati import TabSmontati
 from .tab_holder_bussole import TabHolderBussole
 from .tab_analisi_nc import TabAnalisiNC
 from .tab_generatore import TabGeneratore
+from .tab_utensili_macchina import TabUtensiliMacchina
 
 
 class MainWindow(ctk.CTk):
@@ -119,6 +120,7 @@ class MainWindow(ctk.CTk):
         # Crea tabs - ANALISI NC PRIMO!
         self.tabview.add("📄 Analisi NC")
         self.tabview.add("📝 Generatore")
+        self.tabview.add("🗂 Utensili Macchina")
         self.tabview.add("🔧 In Macchina")
         self.tabview.add("🏠 Scaffale")
         self.tabview.add("📦 Smontati")
@@ -134,7 +136,12 @@ class MainWindow(ctk.CTk):
             self.tabview.tab("📝 Generatore"),
             self
         )
-        
+
+        self.tab_utensili_macchina = TabUtensiliMacchina(
+            self.tabview.tab("🗂 Utensili Macchina"),
+            self
+        )
+
         self.tab_macchina = TabMacchina(
             self.tabview.tab("🔧 In Macchina"),
             self

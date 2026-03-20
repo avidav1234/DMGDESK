@@ -33,7 +33,15 @@ def _get_tools_db_path() -> Path:
 
 def _get_sync_paths():
     config = carica_configurazione()
+    # 1. chiave dedicata
     radice = config.get("radice", "")
+    # 2. risali da percorso_nc_base (es. P:\DMG_DMC_160U\4297 → P:\DMG_DMC_160U)
+    if not radice:
+        percorso_nc = config.get("percorso_nc_base", "")
+        if percorso_nc:
+            parts = Path(percorso_nc).parts
+            if len(parts) >= 2:
+                radice = str(Path(parts[0]) / parts[1])
     if not radice:
         return None, None
     base = Path(radice)

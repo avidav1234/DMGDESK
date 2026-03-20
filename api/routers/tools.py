@@ -33,11 +33,35 @@ router = APIRouter()
 # ---------------------------------------------------------------------------
 
 def _get_sync_paths() -> tuple[Path, Path]:
-    """Restituisce i path di TOOL_SYNC.TOA e TOOL_SYNC.TMA dalla configurazione."""
+    """
+    Restituisce i path di TOOL_SYNC.TOA e TOOL_SYNC.TMA.
+    Cerca la share in questo ordine:
+    1. config["radice"]           — chiave dedicata se presente
+    2. config["percorso_nc_base"] — risale al primo livello (P:\DMG_DMC_160U\4297 → P:\DMG_DMC_160U)
+    """
     config = carica_configurazione()
+
+    # 1. chiave dedicata
     radice = config.get("radice", "")
+
+    # 2. risali da percorso_nc_base
     if not radice:
-        raise HTTPException(status_code=500, detail="Radice share non configurata in config.json")
+        percorso_nc = config.get("percorso_nc_base", "")
+        if percorso_nc:
+            parts = Path(percorso_nc).parts
+            if len(parts) >= 2:
+                radice = str(Path(parts[0]) / parts[1])
+
+    if not radice:
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "Percorso share non configurato. "
+                "Impostare il percorso NC base dalla pagina Analisi NC "
+                "(es. P:\\\\DMG_DMC_160U\\\\4297)."
+            )
+        )
+
     base = Path(radice)
     return base / "TOOL_SYNC.TOA", base / "TOOL_SYNC.TMA"
 
@@ -142,8 +166,11 @@ async def sync_tools():
     if not toa_path.exists():
         raise HTTPException(
             status_code=404,
-            detail=f"File TOA non trovato: {toa_path}. "
-                   "Generare da HMI → Servizi → Salva Attrezzaggio → Z:\\DMG_DMC_160U\\TOOL_SYNC"
+            detail=(
+                f"File TOA non trovato: {toa_path}. "
+                "Sulla macchina: HMI → Servizi → Salva Attrezzaggio, "
+                "salvare in Z:\\\\DMG_DMC_160U\\\\ con nome TOOL_SYNC"
+            )
         )
 
     try:

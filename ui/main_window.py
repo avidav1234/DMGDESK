@@ -1,5 +1,5 @@
 """
-Main Window - Tool Manager V14
+Main Window - Tool Manager V16
 Finestra principale con TabView
 """
 
@@ -67,8 +67,6 @@ class MainWindow(ctk.CTk):
         
         # Bottoni header con stile chiaro su blu
         for text, cmd in [
-            ("📁 DATABASE", self._seleziona_database),
-            ("📊 ANALIZZA NC", self._analizza_nc),
             ("🔄 RICARICA", self._load_all_data)
         ]:
             ctk.CTkButton(
@@ -116,22 +114,17 @@ class MainWindow(ctk.CTk):
             height=TAB_HEIGHT                                 # 70px
         )
         
-        # Crea tabs - ANALISI NC PRIMO!
+        # Crea tabs V16 — Generatore per ultimo
         self.tabview.add("📄 Analisi NC")
-        self.tabview.add("📝 Generatore")
         self.tabview.add("🔧 In Macchina")
         self.tabview.add("🏠 Scaffale")
         self.tabview.add("📦 Smontati")
         self.tabview.add("🔩 Holder & Bussole")
+        self.tabview.add("📝 Generatore")
         
         # Inizializza tabs
         self.tab_analisi_nc = TabAnalisiNC(
             self.tabview.tab("📄 Analisi NC"),
-            self
-        )
-        
-        self.tab_generatore = TabGeneratore(
-            self.tabview.tab("📝 Generatore"),
             self
         )
 
@@ -154,7 +147,12 @@ class MainWindow(ctk.CTk):
             self.tabview.tab("🔩 Holder & Bussole"),
             self
         )
-        
+
+        self.tab_generatore = TabGeneratore(
+            self.tabview.tab("📝 Generatore"),
+            self
+        )
+
         # Imposta tab Analisi NC come default
         self.tabview.set("📄 Analisi NC")
     

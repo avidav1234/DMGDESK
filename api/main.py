@@ -1,5 +1,5 @@
 """
-Tool Manager V14 — Backend FastAPI
+Tool Manager V16 — Backend FastAPI
 ====================================
 Avvio:  uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
 
@@ -17,7 +17,7 @@ log = get_logger(__name__)
 app = FastAPI(
     title="Tool Manager API",
     description="Backend REST per gestione utensili CNC — DMG 160U",
-    version="14.0.0",
+    version="16.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
 )
@@ -53,7 +53,7 @@ async def startup():
 async def root():
     return {
         "app": "Tool Manager API",
-        "version": "14.0.0",
+        "version": "16.0.0",
         "status": "running",
         "docs": "/docs",
     }

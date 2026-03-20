@@ -13,19 +13,13 @@ import pandas as pd
 
 from config.theme import *
 from config.constants import *
-from database.db_handler import (
-    carica_configurazione, salva_database, salva_configurazione
-)
-from database.db_handler import smonta_utensile_completo
-from logic.main_generator import genera_programma_main
+from database.db_handler import carica_configurazione
 from logic.nc_analyzer import estrai_tutti_utensili_da_file, confronta_utensili_logica
 
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from api.toa_parser import parse_toa, parse_tma
 
-from ui.calibra_only_settings_dialog import show_calibra_settings
-from logic.calibra_only_logic import get_calibra_logic
 
 
 # ---------------------------------------------------------------------------
@@ -104,7 +98,7 @@ class TabMacchina:
         self.main   = main_window
         self._tools_data  = {}
         self._sync_time   = None
-        self._mpf_paths   = []   # file MPF per confronto multi-programma
+        self._mpf_paths   = []
         self._create_ui()
         self._load_existing_db()
 
@@ -116,33 +110,12 @@ class TabMacchina:
         header = ctk.CTkFrame(self.parent, fg_color=COLOR_PRIMARY, height=80)
         header.pack(fill="x")
         header.pack_propagate(False)
-        ctk.CTkLabel(header, text="\U0001f527 IN MACCHINA",
+        ctk.CTkLabel(header, text="IN MACCHINA  V16",
                      font=get_font("title", bold=True), text_color="white").pack(pady=(12, 2))
-        ctk.CTkLabel(header, text="Gestione utensili  \u2022  Sync TOA/TMA  \u2022  Verifica MPF",
+        ctk.CTkLabel(header, text="Sync TOA/TMA  |  Confronto MPF  |  Tabella utensili",
                      font=get_font("body"), text_color="#E8F5E9").pack(pady=(0, 8))
-
-        self.vista_var = ctk.StringVar(value="DB Manuale")
-        ctk.CTkSegmentedButton(
-            self.parent,
-            values=["DB Manuale", "Sync Macchina"],
-            variable=self.vista_var,
-            command=self._on_vista_change,
-            font=get_font("body", bold=True),
-        ).pack(fill="x", padx=20, pady=(10, 0))
-
-        self.frame_db   = ctk.CTkFrame(self.parent, fg_color="transparent")
-        self.frame_sync = ctk.CTkFrame(self.parent, fg_color="transparent")
-        self._build_db_view(self.frame_db)
-        self._build_sync_view(self.frame_sync)
-        self.frame_db.pack(fill="both", expand=True)
-
-    def _on_vista_change(self, value):
-        if value == "DB Manuale":
-            self.frame_sync.pack_forget()
-            self.frame_db.pack(fill="both", expand=True)
-        else:
-            self.frame_db.pack_forget()
-            self.frame_sync.pack(fill="both", expand=True)
+        # Monta direttamente la vista sync (nessun DB manuale)
+        self._build_sync_view(self.parent)
 
     # -------------------------------------------------------------------------
     # VISTA DB MANUALE
@@ -375,23 +348,37 @@ class TabMacchina:
     def _build_sync_view(self, parent):
         import tkinter as tk
 
-        # ── Toolbar sync ──────────────────────────────────────────────────────
+        # ── Toolbar sync: Aggiungi MPF (grandi, sinistra) + Sync/TOA (piccoli, destra)
         toolbar = ctk.CTkFrame(parent, fg_color="transparent")
         toolbar.pack(fill="x", padx=4, pady=(10, 4))
 
-        self.btn_sync = ctk.CTkButton(toolbar, text="Sync da Macchina",
-                                       command=self._do_sync,
-                                       **get_button_style("primary", "medium"))
-        self.btn_sync.pack(side="left", padx=4)
+        # SINISTRA — azioni principali
+        ctk.CTkButton(toolbar, text="+ Aggiungi MPF",
+                      command=self._aggiungi_mpf,
+                      **get_button_style("primary", "large")).pack(side="left", padx=4)
 
-        ctk.CTkButton(toolbar, text="Scegli TOA manuale",
-                      command=self._scegli_toa_manuale,
+        ctk.CTkButton(toolbar, text="Reset",
+                      command=self._reset_mpf,
                       **get_button_style("neutral", "medium")).pack(side="left", padx=4)
 
+        # DESTRA — sync secondario
         self.lbl_sync_status = ctk.CTkLabel(toolbar, text="Nessun sync",
                                              font=get_font("small"),
                                              text_color=COLOR_TEXT_SECONDARY)
-        self.lbl_sync_status.pack(side="right", padx=10)
+        self.lbl_sync_status.pack(side="right", padx=8)
+
+        ctk.CTkButton(toolbar, text="TOA manuale",
+                      command=self._scegli_toa_manuale,
+                      width=110, height=30,
+                      fg_color=COLOR_NEUTRAL, hover_color=COLOR_NEUTRAL_DARK,
+                      font=get_font("small"), corner_radius=6).pack(side="right", padx=3)
+
+        self.btn_sync = ctk.CTkButton(toolbar, text="Sync macchina",
+                                       command=self._do_sync,
+                                       width=110, height=30,
+                                       fg_color=COLOR_NEUTRAL, hover_color=COLOR_NEUTRAL_DARK,
+                                       font=get_font("small"), corner_radius=6)
+        self.btn_sync.pack(side="right", padx=3)
 
         # ── Istruzioni primo sync ─────────────────────────────────────────────
         self.frame_istruzioni = ctk.CTkFrame(parent, fg_color="#E3F2FD", corner_radius=8)
@@ -429,17 +416,8 @@ class TabMacchina:
                                             text_color=COLOR_TEXT_SECONDARY)
         self.lbl_file_count.pack(side="left", padx=6)
 
-        ctk.CTkButton(confronto_toolbar, text="+ Aggiungi MPF",
-                      command=self._aggiungi_mpf,
-                      **get_button_style("primary", "small")).pack(side="left", padx=3)
-
-        ctk.CTkButton(confronto_toolbar, text="Confronta",
-                      command=self._confronta_mpf,
-                      **get_button_style("success", "small")).pack(side="left", padx=3)
-
-        ctk.CTkButton(confronto_toolbar, text="Reset",
-                      command=self._reset_mpf,
-                      **get_button_style("neutral", "small")).pack(side="left", padx=3)
+        # Bottoni confronto rimossi dalla sezione (ora nella toolbar principale)
+        pass
 
         # Lista file caricati (1 riga di altezza)
         self.list_mpf = ctk.CTkTextbox(top_frame, height=36, font=get_font("small"),

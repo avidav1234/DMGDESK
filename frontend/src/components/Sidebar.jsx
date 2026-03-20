@@ -2,12 +2,12 @@
 import { NavLink } from 'react-router-dom'
 
 const NAV = [
-  { to: '/analisi-nc',        icon: '📄', label: 'Analisi NC',        sub: 'File MPF' },
-  { to: '/macchina',        icon: '⚙',  label: 'In Macchina',     sub: 'DB + Sync TOA/TMA' },
-  { to: '/scaffale',        icon: '📦', label: 'Scaffale',         sub: 'Assemblati' },
-  { to: '/smontati',        icon: '🔧', label: 'Smontati',         sub: 'Archivio' },
-  { to: '/holder-bussole',  icon: '🔩', label: 'Holder & Bussole', sub: 'Inventario' },
-  { to: '/generatore',      icon: '⌨',  label: 'Generatore',       sub: 'Codici CNC' },
+  { to: '/analisi-nc',        icon: '📄', label: 'Analisi NC',        sub: 'MPF + TOA' },
+  { to: '/macchina',        icon: '⚙',  label: 'In Macchina',      sub: 'Sync TOA/TMA' },
+  { to: '/scaffale',        icon: '📦', label: 'Scaffale',          sub: 'Assemblati' },
+  { to: '/smontati',        icon: '🔧', label: 'Smontati',          sub: 'Archivio' },
+  { to: '/holder-bussole',  icon: '🔩', label: 'Holder & Bussole',  sub: 'Inventario' },
+  { to: '/generatore',      icon: '⌨',  label: 'Generatore',        sub: 'Codici CNC' },
 ]
 
 export default function Sidebar() {
@@ -47,7 +47,7 @@ export default function Sidebar() {
           letterSpacing: '0.05em',
         }}>
           <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--cyan)', display: 'inline-block', animation: 'pulse 2s ease infinite' }} />
-          v14.0 LIVE
+          v16.0 LIVE
         </div>
       </div>
 

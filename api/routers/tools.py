@@ -11,6 +11,7 @@ GET  /api/tools/sync-status   → data/ora ultimo sync
 
 import os
 import json
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -18,15 +19,48 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, UploadFile, File
 from pydantic import BaseModel
 
-from api.toa_parser import (
-    parse_toa, parse_tma, check_tools_availability,
-    extract_tools_from_mpf, MachineTool, MagazinePosition,
-)
+from api.toa_parser import parse_toa, parse_tma
 from database.db_handler import carica_configurazione, salva_configurazione
 from utils.logger import get_logger
 
 log = get_logger(__name__)
 router = APIRouter()
+
+# ---------------------------------------------------------------------------
+# Estrazione utensili da MPF — logica identica a logic/nc_analyzer.py
+# usa pattern T="ALIAS" seguito da M6 nelle 5 righe successive
+# ---------------------------------------------------------------------------
+
+def _estrai_utensili_da_testo(testo: str) -> list[tuple[str, int, str]]:
+    """
+    Estrae alias utensili da testo MPF.
+    Restituisce lista di (alias, riga_num, riga_testo).
+    Identica a estrai_tutti_utensili_da_file in logic/nc_analyzer.py.
+    """
+    import re
+    pattern = re.compile(r'T\\s*=\\s*[\\\"\\'']?([A-Z0-9.\\-_\\s]+)[\\\"\\'']?', re.IGNORECASE)
+    righe = testo.splitlines()
+    risultati = []
+    last_alias = None
+    last_idx = -1
+    last_testo = ""
+
+    for i, riga in enumerate(righe):
+        riga_up = riga.strip().upper()
+        m = pattern.search(riga_up)
+        if m:
+            alias = m.group(1).strip()
+            if alias:
+                last_alias = alias
+                last_idx = i
+                last_testo = riga.strip()
+        if last_alias and (i - last_idx) < 5:
+            if "M6" in riga_up.replace("M06", "M6"):
+                risultati.append((last_alias.upper(), last_idx + 1, last_testo))
+                last_alias = None
+    return risultati
+
+
 
 # ---------------------------------------------------------------------------
 # Percorsi file TOA/TMA sulla share
@@ -281,36 +315,41 @@ async def check_tools(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Errore lettura file: {e}")
 
-    # Estrai utensili richiesti dal programma
-    required = extract_tools_from_mpf(mpf_text)
-    if not required:
+    # Estrai utensili richiesti (T="alias" + M6) — logica identica a nc_analyzer
+    utensili_file = _estrai_utensili_da_testo(mpf_text)
+    if not utensili_file:
         return CheckResult(
             ok=[], missing=[], disabled=[], worn=[],
             total_required=0, can_run=True
         )
 
-    # Ricostruisci MachineTool dal DB semplificato per il check
-    # (il DB JSON ha già i campi che servono)
-    from api.toa_parser import MachineTool as MT
+    alias_richiesti = {alias for alias, _, _ in utensili_file}
 
-    machine_tools = {}
-    for tid_str, t in tools_db.items():
-        mt = MT(tool_id=t["tool_id"])
-        mt.name = t["name"]
-        mt.duplo = t["duplo"]
-        mt.status = t["status"]
-        mt.monitoring = t.get("monitoring", 0)
-        machine_tools[t["tool_id"]] = mt
+    alias_in_macchina = {
+        t["name"].upper() for t in tools_db.values() if t.get("name")
+    }
+    alias_abilitati = {
+        t["name"].upper() for t in tools_db.values()
+        if t.get("name") and t.get("is_enabled", True) and not t.get("is_worn", False)
+    }
+    alias_vita_bassa = {
+        t["name"].upper() for t in tools_db.values()
+        if t.get("name") and t.get("life_percent") is not None
+        and t["life_percent"] < 10 and t.get("is_enabled", True)
+    }
 
-    result = check_tools_availability(required, machine_tools)
+    missing  = sorted(alias_richiesti - alias_in_macchina)
+    disabled = sorted(alias_richiesti & (alias_in_macchina - alias_abilitati))
+    worn     = sorted((alias_richiesti & alias_vita_bassa) - set(disabled))
+    ok       = sorted(alias_richiesti - set(missing) - set(disabled) - set(worn))
 
     return CheckResult(
-        ok=result["ok"],
-        missing=result["missing"],
-        disabled=result["disabled"],
-        worn=result["worn"],
-        total_required=len(required),
-        can_run=len(result["missing"]) == 0 and len(result["disabled"]) == 0,
+        ok=ok,
+        missing=missing,
+        disabled=disabled,
+        worn=worn,
+        total_required=len(alias_richiesti),
+        can_run=not missing and not disabled,
     )
 
 
@@ -332,31 +371,34 @@ async def check_tools_text(body: dict):
         )
 
     mpf_text = body.get("mpf_content", "")
-    required = extract_tools_from_mpf(mpf_text)
-
-    if not required:
+    utensili_file = _estrai_utensili_da_testo(mpf_text)
+    if not utensili_file:
         return CheckResult(
             ok=[], missing=[], disabled=[], worn=[],
             total_required=0, can_run=True
         )
 
-    from api.toa_parser import MachineTool as MT
-    machine_tools = {}
-    for tid_str, t in tools_db.items():
-        mt = MT(tool_id=t["tool_id"])
-        mt.name = t["name"]
-        mt.duplo = t["duplo"]
-        mt.status = t["status"]
-        mt.monitoring = t.get("monitoring", 0)
-        machine_tools[t["tool_id"]] = mt
+    alias_richiesti = {alias for alias, _, _ in utensili_file}
+    alias_in_macchina = {
+        t["name"].upper() for t in tools_db.values() if t.get("name")
+    }
+    alias_abilitati = {
+        t["name"].upper() for t in tools_db.values()
+        if t.get("name") and t.get("is_enabled", True) and not t.get("is_worn", False)
+    }
+    alias_vita_bassa = {
+        t["name"].upper() for t in tools_db.values()
+        if t.get("name") and t.get("life_percent") is not None
+        and t["life_percent"] < 10 and t.get("is_enabled", True)
+    }
 
-    result = check_tools_availability(required, machine_tools)
+    missing  = sorted(alias_richiesti - alias_in_macchina)
+    disabled = sorted(alias_richiesti & (alias_in_macchina - alias_abilitati))
+    worn     = sorted((alias_richiesti & alias_vita_bassa) - set(disabled))
+    ok       = sorted(alias_richiesti - set(missing) - set(disabled) - set(worn))
 
     return CheckResult(
-        ok=result["ok"],
-        missing=result["missing"],
-        disabled=result["disabled"],
-        worn=result["worn"],
-        total_required=len(required),
-        can_run=len(result["missing"]) == 0 and len(result["disabled"]) == 0,
+        ok=ok, missing=missing, disabled=disabled, worn=worn,
+        total_required=len(alias_richiesti),
+        can_run=not missing and not disabled,
     )

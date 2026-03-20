@@ -19,10 +19,8 @@ from database.db_handler import carica_configurazione
 # Import parser TOA/TMA
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from api.toa_parser import (
-    parse_toa, parse_tma,
-    check_tools_availability, extract_tools_from_mpf,
-)
+from api.toa_parser import parse_toa, parse_tma
+from logic.nc_analyzer import estrai_tutti_utensili_da_file
 
 
 def _get_tools_db_path() -> Path:
@@ -348,44 +346,72 @@ class TabUtensiliMacchina:
         self._esegui_check(Path(path))
 
     def _esegui_check(self, mpf_path):
-        try:
-            with open(mpf_path, encoding="utf-8", errors="replace") as f:
-                content = f.read()
-        except Exception as e:
-            messagebox.showerror("Errore lettura MPF", str(e))
-            return
-
-        required = extract_tools_from_mpf(content)
-        if not required:
+        """
+        Stessa logica di TabAnalisiNC._confronta:
+        usa estrai_tutti_utensili_da_file per estrarre gli alias T="..." + M6
+        e confronta con il DB sync TOA (nomi utensili).
+        """
+        # Estrai utensili richiesti dal file MPF (alias + riga)
+        utensili_file = estrai_tutti_utensili_da_file(str(mpf_path))
+        if not utensili_file:
             messagebox.showinfo(
                 "Nessun utensile trovato",
-                f"Il file {mpf_path.name} non contiene chiamate utensile T=\"...\"."
+                f"Il file {mpf_path.name} non contiene chiamate T=\"...\" seguite da M6."
             )
             return
 
-        # Ricostruisce MachineTool leggero dal DB JSON
-        from api.toa_parser import MachineTool as MT
-        machine_tools = {}
-        for tid_str, t in self._tools_data.items():
-            mt = MT(tool_id=t["tool_id"])
-            mt.name       = t["name"]
-            mt.duplo      = t["duplo"]
-            mt.status     = t["status"]
-            mt.monitoring = t.get("monitoring", 0)
-            machine_tools[t["tool_id"]] = mt
+        # Set alias richiesti (uppercase)
+        alias_richiesti = {alias.upper() for alias, _, _ in utensili_file}
 
-        result = check_tools_availability(required, machine_tools)
+        # Set alias presenti nel DB sync (nome utensile)
+        alias_in_macchina = {
+            t["name"].upper()
+            for t in self._tools_data.values()
+            if t.get("name")
+        }
 
-        self._mostra_risultato_check(mpf_path.name, result, len(required))
+        # Utensili abilitati (non disabilitati e non esauriti)
+        alias_abilitati = {
+            t["name"].upper()
+            for t in self._tools_data.values()
+            if t.get("name") and t.get("is_enabled", True) and not t.get("is_worn", False)
+        }
 
-    def _mostra_risultato_check(self, filename, result, total):
-        """Mostra dialog con risultato check."""
+        # Vita bassa (< 10%) ma ancora abilitati
+        alias_vita_bassa = {
+            t["name"].upper()
+            for t in self._tools_data.values()
+            if t.get("name")
+            and t.get("life_percent") is not None
+            and t["life_percent"] < 10
+            and t.get("is_enabled", True)
+        }
+
+        mancanti  = sorted(alias_richiesti - alias_in_macchina)
+        disabilitati = sorted(alias_richiesti & (alias_in_macchina - alias_abilitati))
+        vita_bassa   = sorted(alias_richiesti & alias_vita_bassa - set(disabilitati))
+        ok = sorted(alias_richiesti - set(mancanti) - set(disabilitati) - set(vita_bassa))
+
+        # Dettaglio righe per utensili mancanti (come in _confronta)
+        dettaglio = {}
+        for alias, riga_num, riga_testo in utensili_file:
+            if alias.upper() in set(mancanti):
+                dettaglio[alias.upper()] = (mpf_path.name, riga_num, riga_testo)
+
+        self._mostra_risultato_check(
+            mpf_path.name,
+            mancanti, disabilitati, vita_bassa, ok,
+            len(alias_richiesti), dettaglio
+        )
+
+    def _mostra_risultato_check(self, filename, mancanti, disabilitati, vita_bassa, ok, total, dettaglio):
+        """Mostra dialog con risultato check — stesso stile di TabAnalisiNC."""
         win = ctk.CTkToplevel(self.parent)
         win.title(f"Verifica MPF — {filename}")
-        win.geometry("520x480")
+        win.geometry("560x520")
         win.grab_set()
 
-        can_run = not result["missing"] and not result["disabled"]
+        can_run = not mancanti and not disabilitati
         banner_color = COLOR_SUCCESS if can_run else COLOR_ERROR
         banner_text  = "✅  Programma eseguibile" if can_run else "❌  Utensili mancanti o non disponibili"
 
@@ -401,16 +427,15 @@ class TabUtensiliMacchina:
                      font=get_font("small"),
                      text_color=COLOR_TEXT_SECONDARY).pack(pady=6)
 
-        # Sezioni risultato
-        sections = [
-            ("❌  Mancanti in macchina",    result["missing"],  "#FFEBEE", COLOR_ERROR),
-            ("⚠️  Disabilitati / Esauriti",  result["disabled"], "#FFF8E1", "#F57C00"),
-            ("🟣  Vita residua < 10%",       result["worn"],     "#EDE7F6", "#7B1FA2"),
-            ("✅  Disponibili",              result["ok"],       "#F1F8E9", COLOR_SUCCESS),
-        ]
-
         scroll = ctk.CTkScrollableFrame(win, fg_color="transparent")
         scroll.pack(fill="both", expand=True, padx=16, pady=8)
+
+        sections = [
+            ("❌  Mancanti in macchina",   mancanti,    "#FFEBEE", COLOR_ERROR),
+            ("⚠️  Disabilitati / Esauriti", disabilitati,"#FFF8E1", "#F57C00"),
+            ("🟣  Vita residua < 10%",      vita_bassa,  "#EDE7F6", "#7B1FA2"),
+            ("✅  Disponibili",             ok,          "#F1F8E9", COLOR_SUCCESS),
+        ]
 
         for title, items, bg, color in sections:
             if not items:
@@ -420,12 +445,24 @@ class TabUtensiliMacchina:
                          text_color=color).pack(anchor="w", pady=(10, 3))
             frame = ctk.CTkFrame(scroll, fg_color=bg, corner_radius=6)
             frame.pack(fill="x", pady=(0, 4))
-            ctk.CTkLabel(frame,
-                         text="   ".join(items),
-                         font=get_font("small"),
-                         text_color=COLOR_TEXT_PRIMARY,
-                         wraplength=450,
-                         justify="left").pack(padx=10, pady=8, anchor="w")
+
+            # Per i mancanti mostra anche numero riga come in _confronta
+            if items is mancanti and dettaglio:
+                for alias in items:
+                    info = dettaglio.get(alias)
+                    riga_str = f"  riga {info[1]}" if info else ""
+                    ctk.CTkLabel(frame,
+                                 text=f"  ❌  {alias}{riga_str}",
+                                 font=get_font("small"),
+                                 text_color=COLOR_TEXT_PRIMARY,
+                                 anchor="w").pack(fill="x", padx=10, pady=2)
+            else:
+                ctk.CTkLabel(frame,
+                             text="   ".join(items),
+                             font=get_font("small"),
+                             text_color=COLOR_TEXT_PRIMARY,
+                             wraplength=480,
+                             justify="left").pack(padx=10, pady=8, anchor="w")
 
         ctk.CTkButton(win, text="Chiudi",
                       command=win.destroy,

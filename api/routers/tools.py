@@ -227,14 +227,25 @@ async def sync_tools():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Errore lettura TOA: {e}")
 
-    # TMA opzionale — se presente aggiunge info posizioni
+    # TMA opzionale — cerca con varie estensioni
     magazines, positions = {}, []
-    if tma_path.exists():
+    tma_found = None
+    for suffix in (".TMA", ".tma", ".Tma"):
+        candidate = toa_path.with_suffix(suffix)
+        if candidate.exists():
+            tma_found = candidate
+            break
+
+    if tma_found:
         try:
-            magazines, positions = parse_tma(tma_path)
-            log.info(f"TMA letto: {len(magazines)} magazine, {len(positions)} posizioni occupate")
+            magazines, positions = parse_tma(tma_found)
+            log.info(f"TMA letto: {tma_found.name} — {len(magazines)} magazine, {len(positions)} posizioni occupate")
+            if not positions:
+                log.warning("TMA letto ma nessuna posizione occupata — magazzino vuoto al momento del salvataggio")
         except Exception as e:
             log.warning(f"Errore lettura TMA (non bloccante): {e}")
+    else:
+        log.warning(f"File TMA non trovato accanto a {toa_path.name} — posizioni magazzino non disponibili")
 
     sync_time = datetime.now().isoformat()
     _save_tools_db(tools, sync_time, positions)

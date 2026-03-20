@@ -255,28 +255,48 @@ class TabUtensiliMacchina:
                 from datetime import datetime
                 tools = parse_toa(toa_path)
                 magazines, positions = {}, []
-                if tma_path:
+                tma_warning = None
+
+                if tma_path is None:
+                    # Prova a trovare il TMA nella stessa cartella con ogni variante
+                    for suffix in (".TMA", ".tma", ".Tma"):
+                        candidate = Path(str(toa_path)).with_suffix(suffix)
+                        if candidate.exists():
+                            tma_path_found = candidate
+                            break
+                    else:
+                        tma_path_found = None
+                        tma_warning = f"File TMA non trovato accanto a {toa_path.name} — posizioni magazzino non disponibili"
+                else:
+                    tma_path_found = tma_path
+
+                if tma_path_found:
                     try:
-                        magazines, positions = parse_tma(tma_path)
-                    except Exception:
-                        pass
+                        magazines, positions = parse_tma(tma_path_found)
+                        if not positions:
+                            tma_warning = f"TMA letto ({tma_path_found.name}) ma nessuna posizione occupata trovata — magazzino vuoto al momento del salvataggio?"
+                    except Exception as e:
+                        tma_warning = f"Errore lettura TMA: {e}"
+
                 sync_time = datetime.now().isoformat()
                 _save_tools_db(tools, sync_time, positions)
                 n_tools = sum(1 for t in tools.values() if t.name)
-                self.parent.after(0, lambda: self._after_sync(n_tools, len(positions), sync_time))
+                self.parent.after(0, lambda: self._after_sync(n_tools, len(positions), sync_time, tma_warning))
             except Exception as e:
                 self.parent.after(0, lambda: self._sync_error(str(e)))
 
         threading.Thread(target=_worker, daemon=True).start()
 
-    def _after_sync(self, n_tools, n_pos, sync_time):
+    def _after_sync(self, n_tools, n_pos, sync_time, tma_warning=None):
         self.btn_sync.configure(state="normal", text="⟳  Sync da Macchina")
         self._load_existing_db()
-        messagebox.showinfo(
-            "Sync completato",
-            f"✓ {n_tools} utensili sincronizzati\n"
-            f"✓ {n_pos} posizioni magazzino mappate"
-        )
+        msg = f"✓ {n_tools} utensili sincronizzati
+✓ {n_pos} posizioni magazzino mappate"
+        if tma_warning:
+            msg += f"
+
+⚠️ {tma_warning}"
+        messagebox.showinfo("Sync completato", msg)
 
     def _sync_error(self, msg):
         self.btn_sync.configure(state="normal", text="⟳  Sync da Macchina")

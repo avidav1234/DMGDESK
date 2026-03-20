@@ -104,9 +104,9 @@ class MachineTool:
 
     @property
     def life_percent(self) -> Optional[float]:
-        """Percentuale vita residua del primo tagliente, None se non monitorato."""
-        if self.monitoring == 0:
-            return None
+        """Percentuale vita residua del primo tagliente (MOP2/MOP11*100).
+        Restituisce None solo se mop11=0 (nessun riferimento impostato).
+        """
         e = self.edges.get(1)
         if e and e.mop11 > 0:
             return round((e.mop2 / e.mop11) * 100, 1)

@@ -1,34 +1,36 @@
 ; ================================================================
-; SYNC_TEST.MPF — Test sync 1 utensile da posizione 1 magazzino
-; Versione minima e diretta
+; SYNC_TEST.MPF — Legge dati utensile da posizione 1 magazzino
+; Usa T-number come chiave per leggere tutti i parametri
+; Nessun movimento, nessun cambio utensile
 ; ================================================================
 DEF INT _T
 
 ; Leggi T-number in posizione 1 del Regal_120
 _T = $TC_MPP6[1,1]
 
-; Posizione vuota = ignora
+; Posizione vuota = stop
 IF _T == 0
-  MSG("Pos 1 vuota")
+  MSG("Posizione 1 vuota")
   M30
 ENDIF
 
-; Porta l'utensile nel mandrino tramite T-number
-; Su 840D si può chiamare con numero diretto: T=_T M6
-; Se non funziona con variabile, usare: SETM(_T)
-T=_T M6
-G4 F2
+; Con _T (es. 2802) leggiamo tutto direttamente
+; $TC_TP2[_T] = nome utensile
+; $TC_TP8[_T] = stato (enabled/disabled)
+; $TC_DP3[_T,1] = lunghezza Z
+; $TC_DP6[_T,1] = raggio
+; $TC_MOP2[_T,1] = vita residua
+; $TC_MOP11[_T,1] = vita riferimento
 
-; Ora _TNUM e _TNAME sono aggiornati dai GUD
-; Scrivi TOA (WRITE modo 0 = crea/sovrascrive)
 WRITE(0,"//NC/WKS.DIR/_TOOLSYNC.WPD/TOOL_SYNC.TOA","METRIC")
-WRITE(1,"//NC/WKS.DIR/_TOOLSYNC.WPD/TOOL_SYNC.TOA","$TC_TP1[" <<_TNUM<< "]=1")
-WRITE(1,"//NC/WKS.DIR/_TOOLSYNC.WPD/TOOL_SYNC.TOA","$TC_TP2[" <<_TNUM<< "]=" <<CHR(34) <<_TNAME <<CHR(34))
-WRITE(1,"//NC/WKS.DIR/_TOOLSYNC.WPD/TOOL_SYNC.TOA","$TC_DP3[" <<_TNUM<< ",1]=" <<$TC_DP3[_TNUM,1])
-WRITE(1,"//NC/WKS.DIR/_TOOLSYNC.WPD/TOOL_SYNC.TOA","$TC_DP6[" <<_TNUM<< ",1]=" <<$TC_DP6[_TNUM,1])
-WRITE(1,"//NC/WKS.DIR/_TOOLSYNC.WPD/TOOL_SYNC.TOA","$TC_MOP2[" <<_TNUM<< ",1]=" <<$TC_MOP2[_TNUM,1])
-WRITE(1,"//NC/WKS.DIR/_TOOLSYNC.WPD/TOOL_SYNC.TOA","$TC_MOP11[" <<_TNUM<< ",1]=" <<$TC_MOP11[_TNUM,1])
+WRITE(1,"//NC/WKS.DIR/_TOOLSYNC.WPD/TOOL_SYNC.TOA","$TC_TP1[" <<_T<< "]=1")
+WRITE(1,"//NC/WKS.DIR/_TOOLSYNC.WPD/TOOL_SYNC.TOA","$TC_TP2[" <<_T<< "]=" <<$TC_TP2[_T])
+WRITE(1,"//NC/WKS.DIR/_TOOLSYNC.WPD/TOOL_SYNC.TOA","$TC_TP8[" <<_T<< "]=" <<$TC_TP8[_T])
+WRITE(1,"//NC/WKS.DIR/_TOOLSYNC.WPD/TOOL_SYNC.TOA","$TC_DP3[" <<_T<< ",1]=" <<$TC_DP3[_T,1])
+WRITE(1,"//NC/WKS.DIR/_TOOLSYNC.WPD/TOOL_SYNC.TOA","$TC_DP6[" <<_T<< ",1]=" <<$TC_DP6[_T,1])
+WRITE(1,"//NC/WKS.DIR/_TOOLSYNC.WPD/TOOL_SYNC.TOA","$TC_MOP2[" <<_T<< ",1]=" <<$TC_MOP2[_T,1])
+WRITE(1,"//NC/WKS.DIR/_TOOLSYNC.WPD/TOOL_SYNC.TOA","$TC_MOP11[" <<_T<< ",1]=" <<$TC_MOP11[_T,1])
 
-MSG("Scritto: T=" <<_TNUM<< "  " <<_TNAME)
+MSG("OK pos 1: T=" <<_T<< "  nome=" <<$TC_TP2[_T])
 M0
 M30

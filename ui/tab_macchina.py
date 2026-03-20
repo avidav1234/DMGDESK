@@ -388,10 +388,6 @@ class TabMacchina:
                       command=self._scegli_toa_manuale,
                       **get_button_style("neutral", "medium")).pack(side="left", padx=4)
 
-        ctk.CTkButton(toolbar, text="Verifica MPF singolo",
-                      command=self._scegli_mpf_check,
-                      **get_button_style("neutral", "medium")).pack(side="left", padx=4)
-
         self.lbl_sync_status = ctk.CTkLabel(toolbar, text="Nessun sync",
                                              font=get_font("small"),
                                              text_color=COLOR_TEXT_SECONDARY)

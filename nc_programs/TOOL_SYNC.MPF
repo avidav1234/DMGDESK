@@ -1,31 +1,33 @@
 ; ================================================================
-; TOOL_SYNC.MPF — Sincronizzazione automatica tabella utensili
+; TOOL_SYNC.MPF — Sincronizzazione automatica tabella utensili V2
 ; 
-; UTILIZZO — scegliere uno dei tre metodi:
-; 
-; 1) Fine programma pezzo (aggiorna dopo ogni ciclo):
-;    Aggiungere come ultima riga del programma NC:
-;      CALL "//NC/SPF.DIR/TOOL_SYNC.SPF"
-; 
-; 2) Fine pallet (aggiorna dopo ogni pallet):
-;    Aggiungere nel programma pallet dopo M99:
-;      CALL "//NC/SPF.DIR/TOOL_SYNC.SPF"
-; 
-; 3) Chiamata manuale da MDI:
-;      CALL "TOOL_SYNC.MPF"
-; 
+; UTILIZZO:
+; Aggiungere PRIMA di M30 in ogni programma pezzo o pallet:
+;
+;   CALL "SAVE_TOA_V2.SPF"   ; salva utensili con vita aggiornata
+;   CALL "SAVE_TMA.SPF"      ; salva posizioni magazzino
+;   M30
+;
+; Oppure da MDI: CALL "TOOL_SYNC.MPF"
+;
+; COME AGGIORNARE LA LISTA UTENSILI:
+; Quando aggiungi/rimuovi un utensile dal magazzino:
+; 1. Vai su Tool Manager > In Macchina > Sync Macchina
+; 2. Premi "Aggiorna SPF" — rigenera SAVE_TOA_V2.SPF con
+;    la lista aggiornata di T="nome" M6
+; 3. Carica il nuovo SPF sulla NCU (via WinSCP o DNC)
+;
 ; PREREQUISITI:
-;   - Cartella _TOOLSYNC.WPD creata nella NC (da HMI, non da Windows)
-;   - Drive //ACTTRANSFER configurato verso la share di rete
-;     (o adattare il path COPYFILE alla propria configurazione)
+; - Cartella //NC/WKS.DIR/_TOOLSYNC.WPD/ creata dall'HMI
+; - Drive //ACTTRANSFER configurato verso la share di rete
 ; ================================================================
 
-G0 G90 G40 G17  ; Stato sicuro
+G0 G90 G40 G17
 
-; 1. Genera e copia TOA (utensili con vita residua aggiornata)
-CALL "SAVE_TOA.SPF"
+; 1. Cicla tutti gli utensili (T=nome M6) e scrive TOA live
+CALL "SAVE_TOA_V2.SPF"
 
-; 2. Genera e copia TMA (posizioni magazzino aggiornate)
+; 2. Scrive posizioni magazzino live
 CALL "SAVE_TMA.SPF"
 
 M30

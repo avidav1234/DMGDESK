@@ -288,15 +288,17 @@ class TabUtensiliMacchina:
         threading.Thread(target=_worker, daemon=True).start()
 
     def _after_sync(self, n_tools, n_pos, sync_time, tma_warning=None):
-        self.btn_sync.configure(state="normal", text="⟳  Sync da Macchina")
+        self.btn_sync.configure(state="normal", text="➳  Sync da Macchina")
         self._load_existing_db()
-        msg = f"✓ {n_tools} utensili sincronizzati
-✓ {n_pos} posizioni magazzino mappate"
+        lines = [
+            "✓ " + str(n_tools) + " utensili sincronizzati",
+            "✓ " + str(n_pos) + " posizioni magazzino mappate",
+        ]
         if tma_warning:
-            msg += f"
-
-⚠️ {tma_warning}"
-        messagebox.showinfo("Sync completato", msg)
+            lines.append("")
+            lines.append("⚠ " + tma_warning)
+        sep = chr(10)
+        messagebox.showinfo("Sync completato", sep.join(lines))
 
     def _sync_error(self, msg):
         self.btn_sync.configure(state="normal", text="⟳  Sync da Macchina")

@@ -7,7 +7,6 @@ import Smontati     from './pages/Smontati'
 import HolderBussole from './pages/HolderBussole'
 import Generatore   from './pages/Generatore'
 import AnalisiNC    from './pages/AnalisiNC'
-import UtensiliMacchina from './pages/UtensiliMacchina'
 
 export default function App() {
   return (
@@ -28,7 +27,6 @@ export default function App() {
             <Route path="/holder-bussole" element={<HolderBussole />} />
             <Route path="/generatore"     element={<Generatore />} />
             <Route path="/analisi-nc"     element={<AnalisiNC />} />
-            <Route path="/utensili-macchina" element={<UtensiliMacchina />} />
           </Routes>
         </main>
       </div>

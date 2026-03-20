@@ -3,8 +3,7 @@ import { NavLink } from 'react-router-dom'
 
 const NAV = [
   { to: '/analisi-nc',        icon: '📄', label: 'Analisi NC',        sub: 'File MPF' },
-  { to: '/utensili-macchina', icon: '🗂', label: 'Utensili Macchina', sub: 'Sync TOA/TMA' },
-  { to: '/macchina',        icon: '⚙',  label: 'In Macchina',     sub: 'Carosello CNC' },
+  { to: '/macchina',        icon: '⚙',  label: 'In Macchina',     sub: 'DB + Sync TOA/TMA' },
   { to: '/scaffale',        icon: '📦', label: 'Scaffale',         sub: 'Assemblati' },
   { to: '/smontati',        icon: '🔧', label: 'Smontati',         sub: 'Archivio' },
   { to: '/holder-bussole',  icon: '🔩', label: 'Holder & Bussole', sub: 'Inventario' },

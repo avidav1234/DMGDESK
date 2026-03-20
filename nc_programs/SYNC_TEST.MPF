@@ -1,36 +1,27 @@
 ; ================================================================
-; SYNC_TEST.MPF — Legge dati utensile da posizione 1 magazzino
-; Usa T-number come chiave per leggere tutti i parametri
-; Nessun movimento, nessun cambio utensile
+; SYNC_TEST.MPF — Test scrittura con path formato NCK interno
 ; ================================================================
 DEF INT _T
 
-; Leggi T-number in posizione 1 del Regal_120
 _T = $TC_MPP6[1,1]
 
-; Posizione vuota = stop
 IF _T == 0
   MSG("Posizione 1 vuota")
   M30
 ENDIF
 
-; Con _T (es. 2802) leggiamo tutto direttamente
-; $TC_TP2[_T] = nome utensile
-; $TC_TP8[_T] = stato (enabled/disabled)
-; $TC_DP3[_T,1] = lunghezza Z
-; $TC_DP6[_T,1] = raggio
-; $TC_MOP2[_T,1] = vita residua
-; $TC_MOP11[_T,1] = vita riferimento
+; Path formato NCK interno — stesso stile del MAIN che funziona
+; _TOOLSYNC.WPD -> _N__TOOLSYNC_WPD
+; TOOL_SYNC.TOA -> _N_TOOL_SYNC_TOA
+WRITE(0,"/_N_WKS_DIR/_N__TOOLSYNC_WPD/_N_TOOL_SYNC_TOA","METRIC")
+WRITE(1,"/_N_WKS_DIR/_N__TOOLSYNC_WPD/_N_TOOL_SYNC_TOA","$TC_TP1[" <<_T<< "]=1")
+WRITE(1,"/_N_WKS_DIR/_N__TOOLSYNC_WPD/_N_TOOL_SYNC_TOA","$TC_TP2[" <<_T<< "]=" <<$TC_TP2[_T])
+WRITE(1,"/_N_WKS_DIR/_N__TOOLSYNC_WPD/_N_TOOL_SYNC_TOA","$TC_TP8[" <<_T<< "]=" <<$TC_TP8[_T])
+WRITE(1,"/_N_WKS_DIR/_N__TOOLSYNC_WPD/_N_TOOL_SYNC_TOA","$TC_DP3[" <<_T<< ",1]=" <<$TC_DP3[_T,1])
+WRITE(1,"/_N_WKS_DIR/_N__TOOLSYNC_WPD/_N_TOOL_SYNC_TOA","$TC_DP6[" <<_T<< ",1]=" <<$TC_DP6[_T,1])
+WRITE(1,"/_N_WKS_DIR/_N__TOOLSYNC_WPD/_N_TOOL_SYNC_TOA","$TC_MOP2[" <<_T<< ",1]=" <<$TC_MOP2[_T,1])
+WRITE(1,"/_N_WKS_DIR/_N__TOOLSYNC_WPD/_N_TOOL_SYNC_TOA","$TC_MOP11[" <<_T<< ",1]=" <<$TC_MOP11[_T,1])
 
-WRITE(0,"//NC/WKS.DIR/_TOOLSYNC.WPD/TOOL_SYNC.TOA","METRIC")
-WRITE(1,"//NC/WKS.DIR/_TOOLSYNC.WPD/TOOL_SYNC.TOA","$TC_TP1[" <<_T<< "]=1")
-WRITE(1,"//NC/WKS.DIR/_TOOLSYNC.WPD/TOOL_SYNC.TOA","$TC_TP2[" <<_T<< "]=" <<$TC_TP2[_T])
-WRITE(1,"//NC/WKS.DIR/_TOOLSYNC.WPD/TOOL_SYNC.TOA","$TC_TP8[" <<_T<< "]=" <<$TC_TP8[_T])
-WRITE(1,"//NC/WKS.DIR/_TOOLSYNC.WPD/TOOL_SYNC.TOA","$TC_DP3[" <<_T<< ",1]=" <<$TC_DP3[_T,1])
-WRITE(1,"//NC/WKS.DIR/_TOOLSYNC.WPD/TOOL_SYNC.TOA","$TC_DP6[" <<_T<< ",1]=" <<$TC_DP6[_T,1])
-WRITE(1,"//NC/WKS.DIR/_TOOLSYNC.WPD/TOOL_SYNC.TOA","$TC_MOP2[" <<_T<< ",1]=" <<$TC_MOP2[_T,1])
-WRITE(1,"//NC/WKS.DIR/_TOOLSYNC.WPD/TOOL_SYNC.TOA","$TC_MOP11[" <<_T<< ",1]=" <<$TC_MOP11[_T,1])
-
-MSG("OK pos 1: T=" <<_T<< "  nome=" <<$TC_TP2[_T])
+MSG("Scritto T=" <<_T<< " nome=" <<$TC_TP2[_T])
 M0
 M30

@@ -1,0 +1,31 @@
+; ================================================================
+; TOOL_SYNC.MPF — Sincronizzazione automatica tabella utensili
+; 
+; UTILIZZO — scegliere uno dei tre metodi:
+; 
+; 1) Fine programma pezzo (aggiorna dopo ogni ciclo):
+;    Aggiungere come ultima riga del programma NC:
+;      CALL "//NC/SPF.DIR/TOOL_SYNC.SPF"
+; 
+; 2) Fine pallet (aggiorna dopo ogni pallet):
+;    Aggiungere nel programma pallet dopo M99:
+;      CALL "//NC/SPF.DIR/TOOL_SYNC.SPF"
+; 
+; 3) Chiamata manuale da MDI:
+;      CALL "TOOL_SYNC.MPF"
+; 
+; PREREQUISITI:
+;   - Cartella _TOOLSYNC.WPD creata nella NC (da HMI, non da Windows)
+;   - Drive //ACTTRANSFER configurato verso la share di rete
+;     (o adattare il path COPYFILE alla propria configurazione)
+; ================================================================
+
+G0 G90 G40 G17  ; Stato sicuro
+
+; 1. Genera e copia TOA (utensili con vita residua aggiornata)
+CALL "SAVE_TOA.SPF"
+
+; 2. Genera e copia TMA (posizioni magazzino aggiornate)
+CALL "SAVE_TMA.SPF"
+
+M30

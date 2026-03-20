@@ -1,4 +1,4 @@
-"""Constants - Tool Manager V14"""
+"""Constants - Tool Manager V16"""
 
 # STATI
 STATO_IN_MACCHINA = "IN_MACCHINA"
@@ -87,6 +87,6 @@ PATTERN_HOLDER_VETIMEC = r'([A-M])(\d{1,2})$'
 PATTERN_T_COMMAND = r'T(\d+)'
 
 # APP INFO
-APP_VERSION = "14.0"
+APP_VERSION = "16.0"
 APP_TITLE = f"🔧 Gestore Utensili CNC v{APP_VERSION}"
 APP_SUBTITLE = "Modulare - Tab Separati"

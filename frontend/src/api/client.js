@@ -95,6 +95,13 @@ export const api = {
   getPercorsoNc:        ()          => request('GET',    '/config/percorso-nc'),
   setPercorsoNc:        (percorso)  => request('PUT',    '/config/percorso-nc', { percorso_nc_base: percorso }),
 
+  // ── Utensili Macchina ─────────────────────────────────
+  syncTools:            ()          => request('POST',   '/tools/sync'),
+  getToolsSyncStatus:   ()          => request('GET',    '/tools/sync-status'),
+  getTools:             (onlyOk)    => request('GET',    `/tools${onlyOk ? '?only_enabled=true' : ''}`),
+  checkToolsMpf:        (file)      => { const fd = new FormData(); fd.append('file', file); return request('POST', '/tools/check', fd) },
+  checkToolsText:       (mpf)       => request('POST',   '/tools/check-text', { mpf_content: mpf }),
+
   // ── Health ────────────────────────────────────────────
   health:               ()          => fetch('/health').then(r => r.json()),
 }

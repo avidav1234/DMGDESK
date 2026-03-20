@@ -19,7 +19,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, UploadFile, File
 from pydantic import BaseModel
 
-from api.toa_parser import parse_toa, parse_tma
+from api.toa_parser import parse_toa, parse_tma, MachineTool, MagazinePosition
 from database.db_handler import carica_configurazione, salva_configurazione
 from utils.logger import get_logger
 

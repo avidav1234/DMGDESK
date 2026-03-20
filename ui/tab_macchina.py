@@ -18,7 +18,7 @@ from database.db_handler import (
 )
 from database.db_handler import smonta_utensile_completo
 from logic.main_generator import genera_programma_main
-from logic.nc_analyzer import estrai_tutti_utensili_da_file
+from logic.nc_analyzer import estrai_tutti_utensili_da_file, confronta_utensili_logica
 
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -102,8 +102,9 @@ class TabMacchina:
     def __init__(self, parent, main_window):
         self.parent = parent
         self.main   = main_window
-        self._tools_data = {}
-        self._sync_time  = None
+        self._tools_data  = {}
+        self._sync_time   = None
+        self._mpf_paths   = []   # file MPF per confronto multi-programma
         self._create_ui()
         self._load_existing_db()
 
@@ -399,6 +400,77 @@ class TabMacchina:
                      font=get_font("body"), text_color=COLOR_PRIMARY, justify="left",
                      ).pack(padx=14, pady=8, anchor="w")
 
+        # ---- Confronto multi-programma MPF ----------------------------------------
+        sep_frame = ctk.CTkFrame(parent, fg_color=COLOR_BORDER, height=1)
+        sep_frame.pack(fill="x", padx=4, pady=(4, 0))
+
+        confronto_header = ctk.CTkFrame(parent, fg_color="transparent")
+        confronto_header.pack(fill="x", padx=4, pady=(6, 4))
+
+        ctk.CTkLabel(confronto_header,
+                     text="Confronto programmi MPF vs TOA",
+                     font=get_font("body", bold=True),
+                     text_color=COLOR_TEXT_PRIMARY).pack(side="left")
+
+        self.lbl_file_count = ctk.CTkLabel(confronto_header, text="",
+                                            font=get_font("small"),
+                                            text_color=COLOR_TEXT_SECONDARY)
+        self.lbl_file_count.pack(side="left", padx=10)
+
+        ctk.CTkButton(confronto_header,
+                      text="+ Aggiungi MPF",
+                      command=self._aggiungi_mpf,
+                      **get_button_style("primary", "small")).pack(side="left", padx=4)
+
+        ctk.CTkButton(confronto_header,
+                      text="Confronta",
+                      command=self._confronta_mpf,
+                      **get_button_style("success", "small")).pack(side="left", padx=4)
+
+        ctk.CTkButton(confronto_header,
+                      text="Reset",
+                      command=self._reset_mpf,
+                      **get_button_style("neutral", "small")).pack(side="left", padx=4)
+
+        # Lista file caricati
+        self.list_mpf = ctk.CTkTextbox(parent, height=55, font=get_font("small"),
+                                        fg_color=COLOR_SURFACE, text_color=COLOR_TEXT_SECONDARY)
+        self.list_mpf.pack(fill="x", padx=4, pady=(0, 2))
+        self.list_mpf.insert("end", "Nessun file caricato — aggiungi uno o piu file .MPF")
+        self.list_mpf.configure(state="disabled")
+
+        # Tabella risultati confronto
+        confronto_tbl_frame = ctk.CTkFrame(parent, fg_color=COLOR_SURFACE, corner_radius=6)
+        confronto_tbl_frame.pack(fill="x", padx=4, pady=(0, 6))
+
+        self.tree_confronto = ttk.Treeview(
+            confronto_tbl_frame,
+            columns=("stato", "alias", "file", "riga"),
+            show="headings",
+            height=6,
+        )
+        sb_c = ttk.Scrollbar(confronto_tbl_frame, orient="vertical",
+                              command=self.tree_confronto.yview)
+        self.tree_confronto.configure(yscrollcommand=sb_c.set)
+
+        self.tree_confronto.heading("stato", text="STATO")
+        self.tree_confronto.heading("alias", text="ALIAS UTENSILE")
+        self.tree_confronto.heading("file",  text="FILE")
+        self.tree_confronto.heading("riga",  text="RIGA")
+        self.tree_confronto.column("stato", width=80,  anchor="center")
+        self.tree_confronto.column("alias", width=240, anchor="w")
+        self.tree_confronto.column("file",  width=200, anchor="w")
+        self.tree_confronto.column("riga",  width=60,  anchor="center")
+
+        self.tree_confronto.tag_configure("ok",      background="#F1F8E9")
+        self.tree_confronto.tag_configure("mancante", background="#FFEBEE")
+        self.tree_confronto.tag_configure("disab",    background="#FFF8E1")
+        self.tree_confronto.tag_configure("worn",     background="#EDE7F6")
+
+        self.tree_confronto.pack(side="left", fill="both", expand=True, padx=(6, 0), pady=6)
+        sb_c.pack(side="right", fill="y", pady=6, padx=(0, 4))
+
+        # ---- Ricerca tabella utensili -----------------------------------------
         ctrl = ctk.CTkFrame(parent, fg_color="transparent")
         ctrl.pack(fill="x", padx=4, pady=(0, 4))
         self.entry_search = ctk.CTkEntry(ctrl, placeholder_text="Cerca utensile...",
@@ -575,6 +647,137 @@ class TabMacchina:
                         for a, r, t in utensili_file if a.upper() in set(mancanti)}
         self._mostra_risultato_check(mpf_path.name, mancanti, disabilitati,
                                       vita_bassa, ok, len(alias_req), dettaglio)
+
+    # ---- Confronto multi-MPF vs TOA -----------------------------------------
+
+    def _aggiungi_mpf(self):
+        """Aggiunge uno o piu file MPF alla lista di confronto."""
+        files = filedialog.askopenfilenames(
+            title="Seleziona programmi MPF",
+            filetypes=[("Programmi MPF", "*.mpf *.MPF *.nc *.spf"), ("Tutti", "*.*")]
+        )
+        if not files:
+            return
+        for f in files:
+            if f not in self._mpf_paths:
+                self._mpf_paths.append(f)
+        self._aggiorna_lista_mpf()
+        # Confronto automatico come in analisi NC
+        self._confronta_mpf()
+
+    def _reset_mpf(self):
+        """Pulisce lista file e risultati confronto."""
+        self._mpf_paths = []
+        self._aggiorna_lista_mpf()
+        self.tree_confronto.delete(*self.tree_confronto.get_children())
+
+    def _aggiorna_lista_mpf(self):
+        """Aggiorna textbox con lista file caricati."""
+        self.list_mpf.configure(state="normal")
+        self.list_mpf.delete("1.0", "end")
+        if self._mpf_paths:
+            for i, fp in enumerate(self._mpf_paths, 1):
+                self.list_mpf.insert("end", str(i) + ". " + os.path.basename(fp) + chr(10))
+            self.lbl_file_count.configure(
+                text=str(len(self._mpf_paths)) + " file caricati",
+                text_color=COLOR_SUCCESS)
+        else:
+            self.list_mpf.insert("end", "Nessun file caricato — aggiungi uno o piu file .MPF")
+            self.lbl_file_count.configure(text="", text_color=COLOR_TEXT_SECONDARY)
+        self.list_mpf.configure(state="disabled")
+
+    def _confronta_mpf(self):
+        """
+        Confronta utensili nei file MPF vs DB TOA (stessa logica di TabAnalisiNC._confronta).
+        Usa confronta_utensili_logica ma con il DB TOA come sorgente invece del CSV.
+        Mostra: mancanti in TOA, disabilitati, vita bassa, OK.
+        """
+        if not self._mpf_paths:
+            messagebox.showwarning("Attenzione", "Aggiungi almeno un file MPF prima di confrontare.")
+            return
+        if not self._tools_data:
+            messagebox.showwarning("Nessun sync",
+                                    "Eseguire prima un sync dalla macchina (TOA/TMA).")
+            return
+
+        # Set alias dal DB TOA per ogni categoria
+        alias_in_toa   = {t["name"].upper() for t in self._tools_data.values() if t.get("name")}
+        alias_abilitati = {t["name"].upper() for t in self._tools_data.values()
+                           if t.get("name") and t.get("is_enabled", True) and not t.get("is_worn", False)}
+        alias_vita_bassa = {t["name"].upper() for t in self._tools_data.values()
+                            if t.get("name") and t.get("life_percent") is not None
+                            and t["life_percent"] < 10 and t.get("is_enabled", True)}
+
+        # Estrai utensili richiesti da tutti i file MPF
+        # {alias: [(file_name, riga_num, riga_testo), ...]}
+        richiesti_dettaglio = {}
+        for fp in self._mpf_paths:
+            file_name = os.path.basename(fp)
+            for alias, riga_num, riga_testo in estrai_tutti_utensili_da_file(fp):
+                alias_up = alias.upper()
+                if alias_up not in richiesti_dettaglio:
+                    richiesti_dettaglio[alias_up] = []
+                richiesti_dettaglio[alias_up].append((file_name, riga_num, riga_testo))
+
+        if not richiesti_dettaglio:
+            messagebox.showinfo("Nessun utensile trovato",
+                                 "I file MPF non contengono chiamate T=ALIAS seguite da M6.")
+            return
+
+        alias_req = set(richiesti_dettaglio.keys())
+        mancanti     = sorted(alias_req - alias_in_toa)
+        disabilitati = sorted(alias_req & (alias_in_toa - alias_abilitati))
+        vita_bassa   = sorted((alias_req & alias_vita_bassa) - set(disabilitati))
+        ok_set       = alias_req - set(mancanti) - set(disabilitati) - set(vita_bassa)
+
+        # Popola tabella — stessa struttura di TabAnalisiNC
+        self.tree_confronto.delete(*self.tree_confronto.get_children())
+
+        # Prima i mancanti (più importanti)
+        for alias in mancanti:
+            file_n, riga_n, _ = richiesti_dettaglio[alias][0]
+            self.tree_confronto.insert("", "end",
+                values=("MANCA", alias, file_n, riga_n),
+                tags=("mancante",))
+
+        for alias in disabilitati:
+            file_n, riga_n, _ = richiesti_dettaglio[alias][0]
+            self.tree_confronto.insert("", "end",
+                values=("DISAB.", alias, file_n, riga_n),
+                tags=("disab",))
+
+        for alias in vita_bassa:
+            file_n, riga_n, _ = richiesti_dettaglio[alias][0]
+            self.tree_confronto.insert("", "end",
+                values=("VITA <10%", alias, file_n, riga_n),
+                tags=("worn",))
+
+        for alias in sorted(ok_set):
+            # Per gli OK mostra tutti i file che lo richiedono
+            file_n, riga_n, _ = richiesti_dettaglio[alias][0]
+            extra = " (+" + str(len(richiesti_dettaglio[alias]) - 1) + ")" if len(richiesti_dettaglio[alias]) > 1 else ""
+            self.tree_confronto.insert("", "end",
+                values=("OK", alias, file_n + extra, riga_n),
+                tags=("ok",))
+
+        # Nessun problema
+        if not mancanti and not disabilitati:
+            # Aggiungi riga riepilogo verde se tutto ok
+            pass
+
+        # Messaggio riepilogo
+        if mancanti or disabilitati:
+            messagebox.showwarning(
+                "Problemi rilevati",
+                str(len(mancanti)) + " utensili MANCANTI in TOA" + chr(10) +
+                str(len(disabilitati)) + " utensili DISABILITATI" + chr(10) +
+                str(len(vita_bassa)) + " utensili con vita < 10%" + chr(10) +
+                chr(10) + "Vedi tabella per dettagli.")
+        else:
+            messagebox.showinfo(
+                "OK",
+                "Tutti i " + str(len(alias_req)) + " utensili richiesti " +
+                "sono presenti e disponibili in TOA.")
 
     def _mostra_risultato_check(self, filename, mancanti, disabilitati,
                                  vita_bassa, ok, total, dettaglio):

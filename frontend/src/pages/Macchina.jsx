@@ -1,9 +1,7 @@
-// pages/Macchina.jsx — In Macchina unificato: DB manuale + Sync TOA/TMA + Verifica MPF
+// pages/Macchina.jsx — V16: solo Sync TOA/TMA + Confronto MPF
 import { useState, useEffect, useRef } from 'react'
 import { api } from '../api/client'
-import { Loader, EmptyState, ErrorBanner, SuccessBanner, StatCard, SectionHeader } from '../components/UI'
-
-// ── Componenti interni Sync ──────────────────────────────────────────────────
+import { Loader, SectionHeader } from '../components/UI'
 
 function LifeBar({ pct }) {
   if (pct === null || pct === undefined)
@@ -27,452 +25,259 @@ const COL = {
   worn:     { bg: 'rgba(168,85,247,0.10)', border: 'rgba(168,85,247,0.30)', text: 'var(--purple)' },
 }
 
-function CheckBadge({ label, color, count }) {
-  if (!count) return null
-  return (
-    <span style={{
-      display: 'inline-flex', alignItems: 'center', gap: 5,
-      padding: '3px 10px', borderRadius: 4,
-      background: COL[color].bg, border: `1px solid ${COL[color].border}`,
-      fontSize: 12, fontFamily: 'var(--font-mono)', color: COL[color].text,
-    }}>
-      <b>{count}</b> {label}
-    </span>
-  )
-}
-
-// ── Pagina principale ────────────────────────────────────────────────────────
-
 export default function Macchina() {
-  const [vista, setVista] = useState('db') // 'db' | 'sync'
-
-  // ── stato DB manuale ──
-  const [utensili, setUtensili]     = useState([])
-  const [loadingDb, setLoadingDb]   = useState(true)
-  const [errorDb, setErrorDb]       = useState(null)
-  const [success, setSuccess]       = useState(null)
-  const [smontaPos, setSmontaPos]   = useState(null)
-  const [noteSmonta, setNoteSmonta] = useState('')
-  const [busy, setBusy]             = useState(false)
-  const [searchDb, setSearchDb]     = useState('')
-
-  // ── stato sync ──
-  const [tools, setTools]           = useState([])
-  const [syncStatus, setSyncStatus] = useState(null)
-  const [loadingSync, setLoadingSync] = useState(false)
-  const [syncing, setSyncing]       = useState(false)
-  const [errorSync, setErrorSync]   = useState(null)
-  const [syncMsg, setSyncMsg]       = useState(null)
-  const [searchSync, setSearchSync] = useState('')
-
-  // ── stato check MPF ──
-  const [checkResult, setCheckResult] = useState(null)
+  const [tools, setTools]             = useState([])
+  const [syncStatus, setSyncStatus]   = useState(null)
+  const [loading, setLoading]         = useState(false)
+  const [syncing, setSyncing]         = useState(false)
+  const [syncMsg, setSyncMsg]         = useState(null)
+  const [errorSync, setErrorSync]     = useState(null)
+  const [searchSync, setSearchSync]   = useState('')
+  const [checkFiles, setCheckFiles]   = useState([])
   const [checking, setChecking]       = useState(false)
+  const [checkResult, setCheckResult] = useState(null)
   const [checkError, setCheckError]   = useState(null)
-  const [checkFile, setCheckFile]     = useState(null)
   const fileInputRef = useRef()
 
-  // ── caricamento iniziale ──
-  useEffect(() => { loadDb() }, [])
-  useEffect(() => { if (vista === 'sync') loadSync() }, [vista])
-
-  async function loadDb() {
-    try { setLoadingDb(true); setErrorDb(null); setUtensili(await api.getMacchina()) }
-    catch (e) { setErrorDb(e.message) }
-    finally { setLoadingDb(false) }
-  }
+  useEffect(() => { loadSync() }, [])
 
   async function loadSync() {
-    setLoadingSync(true)
+    setLoading(true)
     try {
       const [t, s] = await Promise.all([api.getTools(), api.getToolsSyncStatus()])
       setTools(t); setSyncStatus(s)
     } catch (e) { setErrorSync(e.message) }
-    finally { setLoadingSync(false) }
+    finally { setLoading(false) }
   }
 
-  // ── smonta DB ──
-  async function handleSmonta() {
-    try {
-      setBusy(true); setErrorDb(null)
-      await api.smontaUtensile(smontaPos, noteSmonta)
-      setSuccess(`Utensile smontato dalla posizione ${smontaPos}`)
-      setSmontaPos(null); setNoteSmonta(''); loadDb()
-    } catch (e) { setErrorDb(e.message) }
-    finally { setBusy(false) }
-  }
-
-  // ── sync TOA/TMA ──
   async function handleSync() {
     setSyncing(true); setSyncMsg(null); setErrorSync(null)
     try {
       const r = await api.syncTools()
-      setSyncMsg(`Sync completato — ${r.tool_count} utensili, ${r.positions_mapped} posizioni`)
+      setSyncMsg(`${r.tool_count} utensili, ${r.positions_mapped} posizioni`)
       await loadSync()
     } catch (e) { setErrorSync(e.message) }
     finally { setSyncing(false) }
   }
 
-  // ── check MPF ──
-  async function handleCheckFile(file) {
-    if (!file) return
-    setCheckFile(file); setChecking(true); setCheckResult(null); setCheckError(null)
-    try { setCheckResult(await api.checkToolsMpf(file)) }
-    catch (e) { setCheckError(e.message) }
+  async function handleCheckFiles(newFiles) {
+    if (!newFiles.length) return
+    const all = [...checkFiles, ...Array.from(newFiles).filter(f => !checkFiles.find(x => x.name === f.name))]
+    setCheckFiles(all)
+    setChecking(true); setCheckResult(null); setCheckError(null)
+    try {
+      // Controlla il primo file (API supporta uno alla volta — aggrega lato client)
+      const results = await Promise.all(all.map(f => api.checkToolsMpf(f)))
+      // Aggrega risultati
+      const agg = { ok: [], missing: [], disabled: [], worn: [], can_run: true, total_required: 0 }
+      results.forEach(r => {
+        r.missing.forEach(n => { if (!agg.missing.includes(n)) agg.missing.push(n) })
+        r.disabled.forEach(n => { if (!agg.disabled.includes(n)) agg.disabled.push(n) })
+        r.worn.forEach(n => { if (!agg.worn.includes(n)) agg.worn.push(n) })
+        r.ok.forEach(n => { if (!agg.ok.includes(n)) agg.ok.push(n) })
+        agg.total_required += r.total_required
+        if (!r.can_run) agg.can_run = false
+      })
+      setCheckResult(agg)
+    } catch (e) { setCheckError(e.message) }
     finally { setChecking(false) }
   }
 
-  // ── filtri ──
-  const filteredDb   = utensili.filter(u =>
-    u.alias.toLowerCase().includes(searchDb.toLowerCase()) ||
-    String(u.posizione).includes(searchDb))
+  function resetFiles() {
+    setCheckFiles([]); setCheckResult(null); setCheckError(null)
+  }
 
-  const filteredSync = tools.filter(t =>
-    !searchSync || t.name.toLowerCase().includes(searchSync.toLowerCase()))
+  const filtered = tools.filter(t => !searchSync || t.name.toLowerCase().includes(searchSync.toLowerCase()))
 
-  // ── render ───────────────────────────────────────────────────────────────
+  const btn_small = {
+    padding: '6px 14px', borderRadius: 5, fontSize: 12, cursor: 'pointer',
+    background: 'var(--bg-hover)', border: '1px solid var(--border)',
+    color: 'var(--text-secondary)', fontWeight: 500,
+  }
+
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <SectionHeader title="In Macchina — V16"
+        subtitle="Sync TOA/TMA  •  Confronto MPF  •  Tabella utensili" />
 
-      {/* Header */}
-      <SectionHeader
-        title="In Macchina"
-        subtitle="Carosello CNC — DB manuale  •  Sync TOA/TMA  •  Verifica MPF"
-      />
+      {/* Toolbar: MPF a sinistra (grande), sync a destra (piccolo) */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        {/* PRIMARI */}
+        <button onClick={() => fileInputRef.current?.click()} style={{
+          padding: '10px 22px', borderRadius: 7, cursor: 'pointer',
+          background: '#1976D2', border: 'none',
+          color: 'white', fontSize: 14, fontWeight: 700,
+        }}>+ Aggiungi MPF</button>
+        <input ref={fileInputRef} type="file" accept=".mpf,.nc,.spf" multiple
+          style={{ display: 'none' }}
+          onChange={e => handleCheckFiles(e.target.files)} />
+        <button onClick={resetFiles} style={btn_small}>Reset</button>
 
-      {/* Selettore vista */}
-      <div style={{ display: 'flex', gap: 0, borderRadius: 6, overflow: 'hidden',
-                    border: '1px solid var(--border)', alignSelf: 'flex-start' }}>
-        {[['db', '⚙ DB Manuale'], ['sync', '🗂 Sync Macchina']].map(([key, label]) => (
-          <button key={key} onClick={() => setVista(key)} style={{
-            padding: '8px 20px', fontSize: 13, fontWeight: 600, cursor: 'pointer',
-            border: 'none', borderRight: key === 'db' ? '1px solid var(--border)' : 'none',
-            background: vista === key ? 'var(--cyan-glow)' : 'var(--bg-card)',
-            color: vista === key ? 'var(--cyan)' : 'var(--text-secondary)',
-            transition: 'all var(--t-fast)',
-          }}>{label}</button>
-        ))}
+        {checkFiles.length > 0 && (
+          <span style={{ fontSize: 12, color: 'var(--cyan)', fontFamily: 'var(--font-mono)' }}>
+            {checkFiles.length} file caricati
+          </span>
+        )}
+
+        {/* SECONDARI a destra */}
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
+            {syncStatus?.last_sync
+              ? `Sync: ${new Date(syncStatus.last_sync).toLocaleString('it-IT')} — ${syncStatus.tool_count} ut.`
+              : 'Nessun sync'}
+          </span>
+          <button onClick={handleSync} disabled={syncing} style={{
+            ...btn_small,
+            animation: syncing ? 'spin 1s linear infinite' : 'none',
+          }}>
+            {syncing ? '↻ Sync...' : '↻ Sync macchina'}
+          </button>
+        </div>
       </div>
 
-      {/* ════════════════════════════════════════════════════
-          VISTA DB MANUALE
-      ════════════════════════════════════════════════════ */}
-      {vista === 'db' && (
-        <>
-          {/* Stats */}
-          <div style={{ display: 'flex', gap: 12 }}>
-            <StatCard label="In Carosello"    value={utensili.length} color="var(--cyan)" />
-            <StatCard label="Frese Finitura"  value={utensili.filter(u => u.alias.startsWith('FF')).length} color="var(--green)" />
-            <StatCard label="Posizioni Libere" value={120 - utensili.length} color="var(--text-secondary)" unit="/ 120" />
+      {/* Messaggi */}
+      {syncMsg && <div style={{ padding: '8px 12px', borderRadius: 6, fontSize: 12,
+        background: 'rgba(0,255,136,0.07)', border: '1px solid rgba(0,255,136,0.2)',
+        color: 'var(--green)' }}>✓ Sync: {syncMsg}</div>}
+      {errorSync && <div style={{ padding: '8px 12px', borderRadius: 6, fontSize: 12,
+        background: 'rgba(255,68,85,0.08)', border: '1px solid rgba(255,68,85,0.25)',
+        color: 'var(--red)' }}>✕ {errorSync}</div>}
+
+      {/* Istruzioni primo sync */}
+      {!syncStatus?.last_sync && (
+        <div style={{ padding: '10px 14px', borderRadius: 8, fontSize: 12,
+          background: 'var(--bg-card)', border: '1px solid var(--border)',
+          color: 'var(--text-secondary)' }}>
+          Prima sync: <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--cyan)' }}>
+          HMI → Servizi → Salva Attrezzaggio → Z:\DMG_DMC_160U\TOOL_SYNC</span>, poi ↻ Sync macchina
+        </div>
+      )}
+
+      {/* Lista file caricati */}
+      {checkFiles.length > 0 && (
+        <div style={{ padding: '8px 12px', borderRadius: 6,
+          background: 'var(--bg-card)', border: '1px solid var(--border)',
+          fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>
+          {checkFiles.map((f, i) => <span key={f.name} style={{ marginRight: 16 }}>{i+1}. {f.name}</span>)}
+        </div>
+      )}
+
+      {/* Risultati confronto */}
+      {checking && <div style={{ fontSize: 13, color: 'var(--text-dim)' }}>Analisi in corso…</div>}
+      {checkError && <div style={{ padding: '8px 12px', borderRadius: 6, fontSize: 12,
+        background: 'rgba(255,68,85,0.08)', color: 'var(--red)' }}>✕ {checkError}</div>}
+      {checkResult && (
+        <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)',
+                      borderRadius: 10, padding: '12px 14px' }}>
+          {/* Banner */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10,
+            padding: '8px 12px', borderRadius: 6,
+            background: checkResult.can_run ? 'rgba(0,255,136,0.07)' : 'rgba(255,68,85,0.08)',
+            border: `1px solid ${checkResult.can_run ? 'rgba(0,255,136,0.2)' : 'rgba(255,68,85,0.25)'}` }}>
+            <span style={{ fontSize: 16 }}>{checkResult.can_run ? '✅' : '❌'}</span>
+            <span style={{ fontWeight: 700, fontSize: 13,
+              color: checkResult.can_run ? 'var(--green)' : 'var(--red)' }}>
+              {checkResult.can_run ? 'Tutti gli utensili disponibili' : 'Utensili mancanti o non disponibili'}
+            </span>
+            <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', marginLeft: 8 }}>
+              {checkResult.total_required} utensili richiesti
+            </span>
           </div>
-
-          <ErrorBanner   message={errorDb} onClose={() => setErrorDb(null)} />
-          <SuccessBanner message={success}  onClose={() => setSuccess(null)} />
-
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-            <input className="input" placeholder="Cerca per alias o posizione..."
-              value={searchDb} onChange={e => setSearchDb(e.target.value)}
-              style={{ maxWidth: 320 }} />
-            <button className="btn btn-ghost" onClick={loadDb} style={{ fontSize: 12 }}>↻ Aggiorna</button>
-          </div>
-
-          <div className="card" style={{ flex: 1, overflow: 'auto' }}>
-            {loadingDb ? <Loader /> : filteredDb.length === 0 ? (
-              <EmptyState icon="⚙" title="Nessun utensile trovato"
-                subtitle="Il carosello è vuoto o la ricerca non ha risultati" />
-            ) : (
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>Pos.</th><th>Alias Utensile</th><th>Tipo</th><th>Stato</th>
-                    <th style={{ textAlign: 'right' }}>Azioni</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredDb.map(u => (
-                    <tr key={u.posizione}>
-                      <td>
-                        <span className="mono" style={{ color: 'var(--cyan)', fontWeight: 700, fontSize: 14 }}>
-                          {String(u.posizione).padStart(3, '0')}
-                        </span>
-                      </td>
-                      <td><span className="mono" style={{ fontSize: 13 }}>{u.alias}</span></td>
-                      <td>
-                        <span className={`badge ${
-                          u.alias.startsWith('FF') ? 'badge-green' :
-                          u.alias.startsWith('FS') ? 'badge-amber' : 'badge-cyan'}`}>
-                          {u.alias.startsWith('FF') ? 'Finitura' :
-                           u.alias.startsWith('FS') ? 'Sgrossatura' :
-                           u.alias.startsWith('P')  ? 'Punta' : '—'}
-                        </span>
-                      </td>
-                      <td><span className="badge badge-green">IN MACCHINA</span></td>
-                      <td style={{ textAlign: 'right' }}>
-                        <button className="btn btn-danger"
-                          style={{ fontSize: 11, padding: '4px 10px' }}
-                          onClick={() => setSmontaPos(u.posizione)}>
-                          Smonta
-                        </button>
-                      </td>
-                    </tr>
+          {[
+            { key: 'missing',  label: '❌ Mancanti',        color: 'missing'  },
+            { key: 'disabled', label: '⚠️ Disabilitati',    color: 'disabled' },
+            { key: 'worn',     label: '🟣 Vita < 10%',      color: 'worn'     },
+            { key: 'ok',       label: '✅ Disponibili',     color: 'ok'       },
+          ].map(({ key, label, color }) => {
+            const list = checkResult[key]
+            if (!list?.length) return null
+            return (
+              <div key={key} style={{ marginBottom: 8 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: COL[color].text,
+                  fontFamily: 'var(--font-mono)', marginBottom: 4,
+                  textTransform: 'uppercase', letterSpacing: '0.08em' }}>{label}</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                  {list.map(name => (
+                    <span key={name} style={{ padding: '2px 8px', borderRadius: 3, fontSize: 12,
+                      fontFamily: 'var(--font-mono)',
+                      background: COL[color].bg, border: `1px solid ${COL[color].border}`,
+                      color: COL[color].text }}>{name}</span>
                   ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-
-          {/* Modal smonta */}
-          {smontaPos && (
-            <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-              <div className="card fade-in" style={{ padding: 24, width: 380, display: 'flex', flexDirection: 'column', gap: 16 }}>
-                <h3 style={{ fontSize: 16, fontWeight: 700 }}>Smonta Utensile — Pos. {smontaPos}</h3>
-                <p style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
-                  {utensili.find(u => u.posizione === smontaPos)?.alias}
-                </p>
-                <div>
-                  <label style={{ fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', display: 'block', marginBottom: 6 }}>
-                    NOTE (opzionale)
-                  </label>
-                  <input className="input" placeholder="es. usura, cambio programma..."
-                    value={noteSmonta} onChange={e => setNoteSmonta(e.target.value)} />
-                </div>
-                <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                  <button className="btn btn-ghost" onClick={() => { setSmontaPos(null); setNoteSmonta('') }}>Annulla</button>
-                  <button className="btn btn-danger" onClick={handleSmonta} disabled={busy}>
-                    {busy ? 'Smontaggio...' : 'Conferma Smontaggio'}
-                  </button>
                 </div>
               </div>
-            </div>
-          )}
-        </>
+            )
+          })}
+        </div>
       )}
 
-      {/* ════════════════════════════════════════════════════
-          VISTA SYNC MACCHINA
-      ════════════════════════════════════════════════════ */}
-      {vista === 'sync' && (
-        <>
-          {/* Header sync */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
-            <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
-              {syncStatus?.last_sync
-                ? `Ultimo sync: ${new Date(syncStatus.last_sync).toLocaleString('it-IT')} — ${syncStatus.tool_count} utensili`
-                : 'Nessun sync effettuato'}
-            </div>
-            <button onClick={handleSync} disabled={syncing} style={{
-              display: 'flex', alignItems: 'center', gap: 8,
-              padding: '9px 18px', borderRadius: 6, cursor: syncing ? 'not-allowed' : 'pointer',
-              background: 'var(--cyan-glow)', border: '1px solid rgba(0,212,255,0.35)',
-              color: syncing ? 'var(--text-dim)' : 'var(--cyan)',
-              fontSize: 13, fontWeight: 600, transition: 'all var(--t-fast)',
-            }}>
-              <span style={{ animation: syncing ? 'spin 1s linear infinite' : 'none' }}>⟳</span>
-              {syncing ? 'Sincronizzazione…' : 'Sync da Macchina'}
-            </button>
-          </div>
+      {/* Ricerca + contatore */}
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+        <input value={searchSync} onChange={e => setSearchSync(e.target.value)}
+          placeholder="Cerca utensile…"
+          style={{ flex: 1, maxWidth: 280, padding: '7px 12px', borderRadius: 6,
+            background: 'var(--bg-card)', border: '1px solid var(--border)',
+            color: 'var(--text-primary)', fontSize: 13, outline: 'none',
+            fontFamily: 'var(--font-mono)' }} />
+        <span style={{ fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+          {filtered.length} / {tools.length}
+        </span>
+      </div>
 
-          {/* Messaggi */}
-          {syncMsg && (
-            <div style={{ padding: '10px 14px', borderRadius: 6, fontSize: 13,
-                          background: 'rgba(0,255,136,0.07)', border: '1px solid rgba(0,255,136,0.2)',
-                          color: 'var(--green)' }}>
-              ✓ {syncMsg}
-            </div>
-          )}
-          {errorSync && (
-            <div style={{ padding: '10px 14px', borderRadius: 6, fontSize: 13,
-                          background: 'rgba(255,68,85,0.08)', border: '1px solid rgba(255,68,85,0.25)',
-                          color: 'var(--red)' }}>
-              ✕ {errorSync}
-            </div>
-          )}
-
-          {/* Istruzioni primo sync */}
-          {!syncStatus?.last_sync && (
-            <div style={{ padding: '14px 16px', borderRadius: 8, fontSize: 13,
-                          background: 'var(--bg-card)', border: '1px solid var(--border)',
-                          color: 'var(--text-secondary)', lineHeight: 1.7 }}>
-              <div style={{ fontWeight: 700, color: 'var(--text-primary)', marginBottom: 6 }}>Come sincronizzare</div>
-              <ol style={{ paddingLeft: 20 }}>
-                <li>Sulla macchina: <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--cyan)' }}>HMI → Servizi → Salva Attrezzaggio</span></li>
-                <li>Navigare in <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--cyan)' }}>Z:\DMG_DMC_160U\</span> e salvare con nome <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--cyan)' }}>TOOL_SYNC</span></li>
-                <li>Premere <strong>Sync da Macchina</strong> qui sopra</li>
-              </ol>
-            </div>
-          )}
-
-          {/* Check MPF */}
-          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)',
-                        borderRadius: 10, padding: '14px 16px' }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 10 }}>
-              🔍 Verifica Programma MPF
-            </div>
-            <div
-              onClick={() => fileInputRef.current?.click()}
-              onDragOver={e => { e.preventDefault(); e.currentTarget.style.borderColor = 'var(--cyan)' }}
-              onDragLeave={e => { e.currentTarget.style.borderColor = 'var(--border-bright)' }}
-              onDrop={e => { e.preventDefault(); e.currentTarget.style.borderColor = 'var(--border-bright)'; handleCheckFile(e.dataTransfer.files[0]) }}
-              style={{ border: '2px dashed var(--border-bright)', borderRadius: 8, padding: '16px',
-                       textAlign: 'center', cursor: 'pointer', transition: 'border-color var(--t-fast)' }}>
-              <input ref={fileInputRef} type="file" accept=".mpf,.nc,.spf"
-                style={{ display: 'none' }}
-                onChange={e => handleCheckFile(e.target.files[0])} />
-              <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-                {checkFile
-                  ? <><span style={{ color: 'var(--cyan)', fontFamily: 'var(--font-mono)' }}>{checkFile.name}</span> — clicca per cambiare</>
-                  : <>Trascina un file MPF o <span style={{ color: 'var(--cyan)' }}>clicca per scegliere</span></>}
-              </div>
-            </div>
-
-            {checking && <div style={{ marginTop: 10, fontSize: 13, color: 'var(--text-dim)' }}>Analisi in corso…</div>}
-            {checkError && (
-              <div style={{ marginTop: 10, padding: '8px 12px', borderRadius: 6, fontSize: 13,
-                            background: 'rgba(255,68,85,0.08)', border: '1px solid rgba(255,68,85,0.2)',
-                            color: 'var(--red)' }}>✕ {checkError}</div>
-            )}
-            {checkResult && (
-              <div style={{ marginTop: 12 }}>
-                {/* Banner */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10,
-                              padding: '10px 14px', borderRadius: 6,
-                              background: checkResult.can_run ? 'rgba(0,255,136,0.07)' : 'rgba(255,68,85,0.08)',
-                              border: `1px solid ${checkResult.can_run ? 'rgba(0,255,136,0.2)' : 'rgba(255,68,85,0.25)'}` }}>
-                  <span style={{ fontSize: 18 }}>{checkResult.can_run ? '✅' : '❌'}</span>
-                  <div>
-                    <div style={{ fontWeight: 700, fontSize: 13,
-                                  color: checkResult.can_run ? 'var(--green)' : 'var(--red)' }}>
-                      {checkResult.can_run ? 'Programma eseguibile' : 'Utensili mancanti o non disponibili'}
-                    </div>
-                    <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', marginTop: 2 }}>
-                      {checkResult.total_required} utensili richiesti
-                    </div>
-                  </div>
-                </div>
-                {/* Badge */}
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
-                  <CheckBadge label="OK"          color="ok"       count={checkResult.ok.length} />
-                  <CheckBadge label="Mancanti"    color="missing"  count={checkResult.missing.length} />
-                  <CheckBadge label="Disabilitati" color="disabled" count={checkResult.disabled.length} />
-                  <CheckBadge label="Vita bassa"  color="worn"     count={checkResult.worn.length} />
-                </div>
-                {/* Liste */}
-                {[
-                  { key: 'missing',  label: '❌ Mancanti in macchina',    color: 'missing'  },
-                  { key: 'disabled', label: '⚠️ Disabilitati / Esauriti', color: 'disabled' },
-                  { key: 'worn',     label: '🟣 Vita residua < 10%',       color: 'worn'     },
-                  { key: 'ok',       label: '✅ Disponibili',              color: 'ok'       },
-                ].map(({ key, label, color }) => {
-                  const list = checkResult[key]
-                  if (!list?.length) return null
-                  return (
-                    <div key={key} style={{ marginBottom: 8 }}>
-                      <div style={{ fontSize: 11, fontWeight: 600, color: COL[color].text,
-                                    fontFamily: 'var(--font-mono)', marginBottom: 4,
-                                    textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                        {label}
-                      </div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                        {list.map(name => (
-                          <span key={name} style={{ padding: '3px 9px', borderRadius: 3, fontSize: 12,
-                                                    fontFamily: 'var(--font-mono)',
-                                                    background: COL[color].bg,
-                                                    border: `1px solid ${COL[color].border}`,
-                                                    color: COL[color].text }}>
-                            {name}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* Barra ricerca e contatore */}
-          {tools.length > 0 && (
-            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-              <input value={searchSync} onChange={e => setSearchSync(e.target.value)}
-                placeholder="Cerca utensile…"
-                style={{ flex: 1, maxWidth: 280, padding: '8px 12px', borderRadius: 6,
-                         background: 'var(--bg-card)', border: '1px solid var(--border)',
-                         color: 'var(--text-primary)', fontSize: 13, outline: 'none',
-                         fontFamily: 'var(--font-mono)' }} />
-              <span style={{ fontSize: 12, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
-                {filteredSync.length} / {tools.length}
-              </span>
-            </div>
-          )}
-
-          {/* Tabella sync */}
-          {loadingSync ? <Loader /> : tools.length === 0 ? null : (
-            <div style={{ flex: 1, overflow: 'auto', background: 'var(--bg-card)',
-                          borderRadius: 10, border: '1px solid var(--border)' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                    {['Pos', 'Nome utensile', 'Duplo', 'L (mm)', 'R (mm)', 'Vita %', 'Stato'].map(h => (
-                      <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontSize: 11,
-                                           fontFamily: 'var(--font-mono)', color: 'var(--text-dim)',
-                                           fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em',
-                                           position: 'sticky', top: 0, background: 'var(--bg-card)' }}>
-                        {h}
-                      </th>
-                    ))}
+      {/* Tabella utensili */}
+      {loading ? <Loader /> : tools.length === 0 ? null : (
+        <div style={{ flex: 1, overflow: 'auto', background: 'var(--bg-card)',
+          borderRadius: 10, border: '1px solid var(--border)' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                {['Pos', 'Nome utensile', 'Duplo', 'L (mm)', 'R (mm)', 'Vita %', 'Stato'].map(h => (
+                  <th key={h} style={{ padding: '9px 14px', textAlign: 'left', fontSize: 11,
+                    fontFamily: 'var(--font-mono)', color: 'var(--text-dim)',
+                    fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em',
+                    position: 'sticky', top: 0, background: 'var(--bg-card)' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(t => {
+                const isDis  = !t.is_enabled || t.is_worn
+                const isWorn = t.life_percent !== null && t.life_percent < 10
+                const rowBg  = isDis ? 'rgba(255,68,85,0.04)' : isWorn ? 'rgba(168,85,247,0.04)' : 'transparent'
+                const posFmt = t.magazine != null && t.position != null
+                  ? `M${t.magazine}·${String(t.position).padStart(3,'0')}` : '—'
+                return (
+                  <tr key={t.tool_id}
+                    style={{ borderBottom: '1px solid var(--border)', background: rowBg }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+                    onMouseLeave={e => e.currentTarget.style.background = rowBg}>
+                    <td style={{ padding: '8px 14px', fontFamily: 'var(--font-mono)', fontSize: 11,
+                      color: 'var(--cyan)', opacity: 0.8 }}>{posFmt}</td>
+                    <td style={{ padding: '8px 14px', fontFamily: 'var(--font-mono)', fontSize: 13,
+                      color: isDis ? 'var(--text-dim)' : 'var(--text-primary)', fontWeight: 600 }}>{t.name}</td>
+                    <td style={{ padding: '8px 14px', fontFamily: 'var(--font-mono)', fontSize: 12,
+                      color: 'var(--text-dim)' }}>#{t.duplo}</td>
+                    <td style={{ padding: '8px 14px', fontFamily: 'var(--font-mono)', fontSize: 12,
+                      color: 'var(--text-secondary)' }}>{t.length?.toFixed(3)}</td>
+                    <td style={{ padding: '8px 14px', fontFamily: 'var(--font-mono)', fontSize: 12,
+                      color: 'var(--text-secondary)' }}>{t.radius?.toFixed(3)}</td>
+                    <td style={{ padding: '8px 14px' }}><LifeBar pct={t.life_percent} /></td>
+                    <td style={{ padding: '8px 14px' }}>
+                      {isDis
+                        ? <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--red)',
+                            background: 'rgba(255,68,85,0.1)', padding: '2px 7px', borderRadius: 3 }}>DISAB.</span>
+                        : isWorn
+                        ? <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--purple)',
+                            background: 'rgba(168,85,247,0.1)', padding: '2px 7px', borderRadius: 3 }}>VITA BASSA</span>
+                        : <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--green)',
+                            background: 'rgba(0,255,136,0.08)', padding: '2px 7px', borderRadius: 3 }}>OK</span>}
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {filteredSync.map(t => {
-                    const isDisabled = !t.is_enabled || t.is_worn
-                    const isWorn     = t.life_percent !== null && t.life_percent < 10
-                    const rowBg      = isDisabled ? 'rgba(255,68,85,0.04)' :
-                                       isWorn     ? 'rgba(168,85,247,0.04)' : 'transparent'
-                    const posFmt = t.magazine != null && t.position != null
-                      ? `M${t.magazine}·${String(t.position).padStart(3, '0')}`
-                      : '—'
-                    return (
-                      <tr key={t.tool_id}
-                        style={{ borderBottom: '1px solid var(--border)', background: rowBg }}
-                        onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
-                        onMouseLeave={e => e.currentTarget.style.background = rowBg}>
-                        <td style={{ padding: '8px 14px', fontFamily: 'var(--font-mono)', fontSize: 11,
-                                     color: 'var(--cyan)', opacity: 0.8, whiteSpace: 'nowrap' }}>
-                          {posFmt}
-                        </td>
-                        <td style={{ padding: '8px 14px', fontFamily: 'var(--font-mono)', fontSize: 13,
-                                     color: isDisabled ? 'var(--text-dim)' : 'var(--text-primary)', fontWeight: 600 }}>
-                          {t.name}
-                        </td>
-                        <td style={{ padding: '8px 14px', fontFamily: 'var(--font-mono)', fontSize: 12,
-                                     color: 'var(--text-dim)' }}>#{t.duplo}</td>
-                        <td style={{ padding: '8px 14px', fontFamily: 'var(--font-mono)', fontSize: 12,
-                                     color: 'var(--text-secondary)' }}>{t.length?.toFixed(3)}</td>
-                        <td style={{ padding: '8px 14px', fontFamily: 'var(--font-mono)', fontSize: 12,
-                                     color: 'var(--text-secondary)' }}>{t.radius?.toFixed(3)}</td>
-                        <td style={{ padding: '8px 14px' }}><LifeBar pct={t.life_percent} /></td>
-                        <td style={{ padding: '8px 14px' }}>
-                          {isDisabled
-                            ? <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--red)',
-                                             background: 'rgba(255,68,85,0.1)', padding: '2px 7px', borderRadius: 3 }}>DISAB.</span>
-                            : isWorn
-                            ? <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--purple)',
-                                             background: 'rgba(168,85,247,0.1)', padding: '2px 7px', borderRadius: 3 }}>VITA BASSA</span>
-                            : <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--green)',
-                                             background: 'rgba(0,255,136,0.08)', padding: '2px 7px', borderRadius: 3 }}>OK</span>
-                          }
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
       )}
-
       <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
     </div>
   )

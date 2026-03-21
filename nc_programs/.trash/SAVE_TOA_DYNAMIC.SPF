@@ -1,0 +1,69 @@
+; ================================================================
+; SAVE_TOA_DYNAMIC.SPF — Versione DINAMICA per 840D PowerLine
+; 
+; PREREQUISITO: verificare con TEST_LOOP.MPF che $TC_TP1[_T]
+; funzioni con indice variabile sulla tua macchina specifica.
+;
+; FUNZIONAMENTO:
+; - Scorre T-number 2800..3900 (range macchina attuale)
+; - Per ogni T esistente ($TC_TP1[_T]==1):
+;   * Legge live: stato, lunghezza, raggio, vita MOP2, vita rif MOP11
+;   * NOTA: $TC_TP2 (nome) NON leggibile con variabile su PowerLine
+;     → il nome viene omesso; Tool Manager usa il T-number come chiave
+;     → al reimport sull'HMI il nome non viene perso perché il TOA
+;        viene letto dall'app, non reiniettato sulla macchina
+;
+; PROBLEMA NOME: vedi approccio 2 (GUD) per soluzione completa
+; ================================================================
+DEF INT _T
+DEF INT _RET
+
+_RET = DELETEFILE("//NC/WKS.DIR/_TOOLSYNC.WPD/TOOL_SYNC.TOA")
+WRITE(0,"//NC/WKS.DIR/_TOOLSYNC.WPD/TOOL_SYNC.TOA","METRIC")
+
+; Range T-number macchina — adattare se necessario
+_T = 2800
+WHILE _T <= 3900
+  IF $TC_TP1[_T] == 1
+    
+    ; Parametri tool (TP8=stato leggibile live)
+    WRITE(1,"//NC/WKS.DIR/_TOOLSYNC.WPD/TOOL_SYNC.TOA",
+      "$TC_TP1[" <<_T<< "]=1")
+    WRITE(1,"//NC/WKS.DIR/_TOOLSYNC.WPD/TOOL_SYNC.TOA",
+      "$TC_TP8[" <<_T<< "]=" <<$TC_TP8[_T])
+    
+    ; Tagliente 1 — valori live chiave
+    WRITE(1,"//NC/WKS.DIR/_TOOLSYNC.WPD/TOOL_SYNC.TOA",
+      "$TC_DP1[" <<_T<< ",1]=" <<$TC_DP1[_T,1])
+    WRITE(1,"//NC/WKS.DIR/_TOOLSYNC.WPD/TOOL_SYNC.TOA",
+      "$TC_DP3[" <<_T<< ",1]=" <<$TC_DP3[_T,1])
+    WRITE(1,"//NC/WKS.DIR/_TOOLSYNC.WPD/TOOL_SYNC.TOA",
+      "$TC_DP6[" <<_T<< ",1]=" <<$TC_DP6[_T,1])
+    WRITE(1,"//NC/WKS.DIR/_TOOLSYNC.WPD/TOOL_SYNC.TOA",
+      "$TC_MOP1[" <<_T<< ",1]=" <<$TC_MOP1[_T,1])
+    WRITE(1,"//NC/WKS.DIR/_TOOLSYNC.WPD/TOOL_SYNC.TOA",
+      "$TC_MOP2[" <<_T<< ",1]=" <<$TC_MOP2[_T,1])
+    WRITE(1,"//NC/WKS.DIR/_TOOLSYNC.WPD/TOOL_SYNC.TOA",
+      "$TC_MOP11[" <<_T<< ",1]=" <<$TC_MOP11[_T,1])
+    
+    ; Tagliente 2 se esiste ($TC_DP1[T,2] != 0 indica tagliente presente)
+    IF $TC_DP1[_T,2] <> 0
+      WRITE(1,"//NC/WKS.DIR/_TOOLSYNC.WPD/TOOL_SYNC.TOA",
+        "$TC_DP1[" <<_T<< ",2]=" <<$TC_DP1[_T,2])
+      WRITE(1,"//NC/WKS.DIR/_TOOLSYNC.WPD/TOOL_SYNC.TOA",
+        "$TC_DP3[" <<_T<< ",2]=" <<$TC_DP3[_T,2])
+      WRITE(1,"//NC/WKS.DIR/_TOOLSYNC.WPD/TOOL_SYNC.TOA",
+        "$TC_DP6[" <<_T<< ",2]=" <<$TC_DP6[_T,2])
+      WRITE(1,"//NC/WKS.DIR/_TOOLSYNC.WPD/TOOL_SYNC.TOA",
+        "$TC_MOP2[" <<_T<< ",2]=" <<$TC_MOP2[_T,2])
+      WRITE(1,"//NC/WKS.DIR/_TOOLSYNC.WPD/TOOL_SYNC.TOA",
+        "$TC_MOP11[" <<_T<< ",2]=" <<$TC_MOP11[_T,2])
+    ENDIF
+    
+  ENDIF
+  _T = _T + 1
+ENDWHILE
+
+_RET = COPYFILE("//NC/WKS.DIR/_TOOLSYNC.WPD/TOOL_SYNC.TOA",
+               "//ACTTRANSFER/P_DRIVE/DMG_DMC_160U/TOOL_SYNC.TOA")
+M17

@@ -1,358 +1,387 @@
-"""Tab Analisi NC - V16
-Carica file MPF, confronto automatico vs TOA, genera MAIN, invia alla macchina.
-Nessun legame con il DB CSV manuale.
-"""
+"""Tab Analisi NC - Confronto programmi con database"""
 
 import customtkinter as ctk
 from tkinter import filedialog, messagebox
 import tkinter.ttk as ttk
-import os, re, json
-from pathlib import Path
+import os
+import re
 
 from config.theme import *
 from config.constants import *
-from logic.nc_analyzer import estrai_tutti_utensili_da_file
-from ui.calibra_only_settings_dialog import show_calibra_settings
-from logic.calibra_only_logic import get_calibra_logic
-
-import sys
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from api.toa_parser import parse_toa
-
-
-def _load_tools_db():
-    """Carica DB utensili dal JSON del sync TOA."""
-    from database.db_handler import carica_configurazione
-    config = carica_configurazione()
-    db_path = config.get("database_path", ".")
-    path = Path(db_path).parent / "tools_machine.json"
-    if not path.exists():
-        return {}, None
-    with open(path, encoding="utf-8") as f:
-        data = json.load(f)
-    return data.get("tools", {}), data.get("sync_time")
+from logic.nc_analyzer import estrai_tutti_utensili_da_file, confronta_utensili_logica
 
 
 class TabAnalisiNC:
-    """Tab analisi programmi NC multipli — V16."""
-
+    """Tab per analisi programmi NC multipli."""
+    
     def __init__(self, parent, main_window):
         self.parent = parent
-        self.main   = main_window
-        self.file_paths         = []
-        self._files_da_inviare  = []
-        self._main_generato_path = None
+        self.main = main_window
+        self.file_paths = []
+        
         self._create_ui()
-
+    
     def _create_ui(self):
-        # Header
-        header = ctk.CTkFrame(self.parent, fg_color=COLOR_PRIMARY, height=80)
+        """Crea interfaccia."""
+        # Header con descrizione
+        header = ctk.CTkFrame(self.parent, fg_color=COLOR_PRIMARY, height=int(80))
         header.pack(fill="x")
         header.pack_propagate(False)
-        ctk.CTkLabel(header, text="ANALISI PROGRAMMI NC  — V16",
-                     font=get_font("title", bold=True), text_color="white").pack(pady=(12, 2))
-        ctk.CTkLabel(header, text="Carica MPF  |  Confronto vs TOA  |  Genera MAIN  |  Invia",
-                     font=get_font("body"), text_color=COLOR_PRIMARY_LIGHT).pack(pady=(0, 8))
-
-        # Toolbar principale
+        
+        ctk.CTkLabel(header, text="📄 ANALISI PROGRAMMI NC",
+                    font=get_font("title", bold=True),
+                    text_color="white").pack(pady=(12, 2))
+        
+        ctk.CTkLabel(header, text="Confronta file NC con database • Genera programma MAIN",
+                    font=get_font("body"),
+                    text_color=COLOR_PRIMARY_LIGHT).pack(pady=(0, 8))
+        
+        # Toolbar
         toolbar = ctk.CTkFrame(self.parent, fg_color="transparent")
-        toolbar.pack(fill="x", padx=20, pady=8)
-
-        ctk.CTkButton(toolbar, text="+ Aggiungi MPF",
-                      command=self._seleziona_files,
-                      fg_color="#1976D2", hover_color="#0D47A1",
-                      font=get_font("medium", bold=True), height=44, width=160,
-                      corner_radius=8).pack(side="left", padx=4)
-
-        ctk.CTkButton(toolbar, text="Reset",
-                      command=self._pulisci_lista,
-                      **get_button_style("neutral", "medium")).pack(side="left", padx=4)
-
-        # Separatore
-        ctk.CTkFrame(toolbar, width=2, fg_color=COLOR_BORDER, height=35).pack(side="left", padx=10, fill="y")
-
-        self.btn_invia = ctk.CTkButton(
-            toolbar, text="INVIA TUTTO",
-            command=self._invia_alla_macchina,
-            fg_color="#4CAF50", hover_color="#388E3C",
-            font=get_font("medium", bold=True), height=44, width=140,
-            corner_radius=8, state="disabled")
-        self.btn_invia.pack(side="left", padx=4)
-
-        self.btn_invia_main = ctk.CTkButton(
-            toolbar, text="Solo MAIN",
-            command=self._invia_solo_main,
-            fg_color="#1565C0", hover_color="#0D47A1",
-            font=get_font("medium", bold=True), height=44, width=120,
-            corner_radius=8, state="disabled")
-        self.btn_invia_main.pack(side="left", padx=4)
-
-        # Stato macchina
-        self.lbl_macchina = ctk.CTkLabel(toolbar, text="Macchina ?",
-                                          font=get_font("small"), text_color="#9E9E9E")
-        self.lbl_macchina.pack(side="left", padx=8)
-        ctk.CTkButton(toolbar, text="Ping", width=50, height=32,
-                      fg_color="#607D8B", hover_color="#455A64",
-                      font=get_font("small"),
-                      command=self._check_macchina).pack(side="left", padx=2)
-
-        # Destra: nome cartella + GENERA MAIN + impostazioni
-        ctk.CTkButton(toolbar, text="⚙",
-                      width=40, height=40, fg_color="#9E9E9E", hover_color="#757575",
-                      font=("Segoe UI", 16), corner_radius=8,
-                      command=self._apri_impostazioni_calibra).pack(side="right", padx=2)
-
-        self.entry_nome_cartella = ctk.CTkEntry(toolbar, width=130, height=40,
-                                                 placeholder_text="Nome cartella")
-        self.entry_nome_cartella.pack(side="right", padx=6)
-
-        ctk.CTkButton(toolbar, text="GENERA MAIN",
-                      command=self._genera_main,
-                      **get_button_style("accent", "large")).pack(side="right", padx=4)
-
-        # Stato sync TOA
-        self.lbl_toa_status = ctk.CTkLabel(self.parent, text="",
-                                            font=get_font("small"),
-                                            text_color=COLOR_TEXT_SECONDARY, anchor="w")
-        self.lbl_toa_status.pack(fill="x", padx=20, pady=(0, 4))
-        self._aggiorna_stato_toa()
-
-        import tkinter as tk
-        # PanedWindow: lista file (alto) | risultati confronto (basso)
-        paned = tk.PanedWindow(self.parent, orient=tk.VERTICAL,
-                                sashwidth=6, sashrelief="raised",
-                                background=COLOR_BORDER)
-        paned.pack(fill="both", expand=True, padx=20, pady=(0, 10))
-
-        # --- Pannello superiore: lista file ---
-        top = ctk.CTkFrame(paned, fg_color=COLOR_SURFACE, corner_radius=10)
-        paned.add(top, minsize=80)
-        ctk.CTkLabel(top, text="File caricati:",
-                     font=get_font("medium", bold=True)).pack(anchor="w", padx=10, pady=(6, 2))
-        self.list_files = ctk.CTkTextbox(top, font=get_font("normal"))
-        self.list_files.pack(fill="both", expand=True, padx=10, pady=(0, 8))
-
-        # --- Pannello inferiore: risultati ---
-        bot = ctk.CTkFrame(paned, fg_color=COLOR_SURFACE, corner_radius=10)
-        paned.add(bot, minsize=180)
-        ctk.CTkLabel(bot, text="Risultati confronto vs TOA:",
-                     font=get_font("medium", bold=True)).pack(anchor="w", padx=10, pady=(6, 2))
-
-        tree_scroll = ttk.Scrollbar(bot)
+        toolbar.pack(fill="x", padx=20, pady=10)
+        
+        ctk.CTkButton(toolbar, text="📁 Seleziona File .MPF",
+                     command=self._seleziona_files,
+                     **get_button_style("primary", "medium")).pack(side="left", padx=5)
+        
+        ctk.CTkButton(toolbar, text="🔄 Reset",
+                     command=self._pulisci_lista,
+                     **get_button_style("neutral", "medium")).pack(side="left", padx=5)
+        
+        # Nome cartella + GENERA MAIN
+        ctk.CTkLabel(toolbar, text="📁", font=get_font("normal")).pack(side="right", padx=2)
+        self.entry_nome_cartella = ctk.CTkEntry(toolbar, width=int(120), height=int(35),
+                                                placeholder_text="Nome")
+        self.entry_nome_cartella.pack(side="right", padx=5)
+        
+        ctk.CTkButton(toolbar, text="📄 GENERA MAIN",
+                     command=self._genera_main,
+                     **get_button_style("accent", "large")).pack(side="right", padx=5)
+        
+        # Lista file selezionati
+        list_frame = ctk.CTkFrame(self.parent, fg_color=COLOR_SURFACE, corner_radius=int(10))
+        list_frame.pack(fill="both", expand=True, padx=20, pady=10)
+        
+        ctk.CTkLabel(list_frame, text="File selezionati:",
+                    font=get_font("medium", bold=True)).pack(anchor="w", padx=10, pady=5)
+        
+        self.list_files = ctk.CTkTextbox(list_frame, height=int(150), font=get_font("normal"))
+        self.list_files.pack(fill="both", expand=True, padx=10, pady=10)
+        
+        # Risultati
+        result_frame = ctk.CTkFrame(self.parent, fg_color=COLOR_SURFACE, corner_radius=int(10))
+        result_frame.pack(fill="both", expand=True, padx=20, pady=(0, 20))
+        
+        ctk.CTkLabel(result_frame, text="Risultati confronto:",
+                    font=get_font("medium", bold=True)).pack(anchor="w", padx=10, pady=5)
+        
+        tree_scroll = ttk.Scrollbar(result_frame)
         tree_scroll.pack(side="right", fill="y")
-        self.tree = ttk.Treeview(bot,
-                                  columns=("Stato", "Alias", "File", "Riga"),
-                                  show="headings",
-                                  yscrollcommand=tree_scroll.set)
+        
+        self.tree = ttk.Treeview(result_frame, columns=("Stato", "Alias", "File", "Riga"),
+                                show="headings", height=int(15), yscrollcommand=tree_scroll.set)
         tree_scroll.config(command=self.tree.yview)
+        
         self.tree.heading("Stato", text="STATO")
         self.tree.heading("Alias", text="ALIAS")
-        self.tree.heading("File",  text="FILE")
-        self.tree.heading("Riga",  text="N RIGA")
-        self.tree.column("Stato", width=90,  anchor="center")
-        self.tree.column("Alias", width=300, anchor="w")
-        self.tree.column("File",  width=260, anchor="w")
-        self.tree.column("Riga",  width=70,  anchor="center")
-        self.tree.tag_configure("ok",      background="#F1F8E9")
-        self.tree.tag_configure("mancante", background="#FFEBEE")
-        self.tree.tag_configure("disab",    background="#FFF8E1")
-        self.tree.tag_configure("worn",     background="#EDE7F6")
-        self.tree.pack(fill="both", expand=True, padx=10, pady=(0, 8))
-
-        paned.after(150, lambda: paned.sash_place(0, 0, 140))
-
-    # ── TOA status ───────────────────────────────────────────────────────────
-
-    def _aggiorna_stato_toa(self):
-        tools, sync_time = _load_tools_db()
-        if sync_time:
-            from datetime import datetime
-            dt = datetime.fromisoformat(sync_time)
-            self.lbl_toa_status.configure(
-                text="TOA: " + dt.strftime("%d/%m/%Y %H:%M") + "  —  " + str(len(tools)) + " utensili",
-                text_color=COLOR_SUCCESS)
-        else:
-            self.lbl_toa_status.configure(
-                text="TOA: nessun sync — vai nel tab In Macchina per sincronizzare",
-                text_color="#F57C00")
-
-    # ── Selezione file ────────────────────────────────────────────────────────
-
+        self.tree.heading("File", text="FILE")
+        self.tree.heading("Riga", text="N°RIGA")
+        
+        self.tree.column("Stato", width=int(80))
+        self.tree.column("Alias", width=int(300))
+        self.tree.column("File", width=int(250))
+        self.tree.column("Riga", width=int(80))
+        
+        self.tree.pack(fill="both", expand=True, padx=10, pady=10)
+        
+        # Binding doppio click per aggiungere utensile mancante
+        self.tree.bind("<Double-Button-1>", self._on_double_click)
+    
     def _seleziona_files(self):
+        """Selezione multipla file .MPF con confronto automatico."""
         files = filedialog.askopenfilenames(
             title="Seleziona programmi NC",
-            filetypes=[("Programmi MPF", "*.MPF *.mpf"), ("Tutti i file", "*.*")])
+            filetypes=[("Programmi MPF", "*.MPF"), ("Tutti i file", "*.*")]
+        )
+        
         if files:
-            for f in files:
-                if f not in self.file_paths:
-                    self.file_paths.append(f)
+            self.file_paths.extend(files)
             self._aggiorna_lista()
+            # CONFRONTO AUTOMATICO dopo selezione
             self._confronta()
-
+    
     def _pulisci_lista(self):
+        """Pulisce lista file."""
         self.file_paths = []
-        self._files_da_inviare = []
         self.list_files.delete("1.0", "end")
         self.tree.delete(*self.tree.get_children())
-        self.btn_invia.configure(state="disabled")
-        self.btn_invia_main.configure(state="disabled")
-
+    
     def _aggiorna_lista(self):
+        """Aggiorna visualizzazione lista file."""
         self.list_files.delete("1.0", "end")
         for i, fp in enumerate(self.file_paths, 1):
-            self.list_files.insert("end", str(i) + ". " + os.path.basename(fp) + chr(10))
-        if self.file_paths:
-            self._files_da_inviare = list(self.file_paths)
-        else:
-            self._files_da_inviare = []
-
-    # ── Confronto vs TOA ─────────────────────────────────────────────────────
-
-    def _confronta(self):
-        """Confronto automatico utensili MPF vs DB TOA."""
+            self.list_files.insert("end", f"{i}. {os.path.basename(fp)}\n")
+    
+    def _confronta(self, show_message=False):
+        """Confronta utensili richiesti con database."""
         if not self.file_paths:
+            if show_message:
+                return messagebox.showwarning("Attenzione", "Seleziona almeno un file")
             return
-
-        tools_db, sync_time = _load_tools_db()
+        
+        if self.main.df.empty:
+            if show_message:
+                return messagebox.showwarning("Attenzione", "Carica database prima")
+            return
+        
+        # Confronto
+        utensili_richiesti, utensili_mancanti_report = confronta_utensili_logica(
+            self.main.df, self.file_paths
+        )
+        
+        # Pulisci tree
         self.tree.delete(*self.tree.get_children())
-
-        if not tools_db:
-            self.tree.insert("", "end",
-                values=("! NO TOA", "Nessun sync TOA disponibile — vai in Macchina > Sync", "", ""),
-                tags=("disab",))
+        
+        # Aggiungi risultati
+        if not utensili_mancanti_report:
+            self.tree.insert("", "end", values=("✅ OK", "Tutti gli utensili presenti", "-", "-"))
+        else:
+            for alias, file_name, riga_esempio in utensili_mancanti_report:
+                # Estrai numero riga
+                match = re.search(r'(\d+)', str(riga_esempio))
+                riga_num = match.group(1) if match else "-"
+                
+                self.tree.insert("", "end", values=("❌ MANCA", alias, file_name, riga_num))
+        
+        # Mostra messaggio solo se richiesto (confronto manuale)
+        if show_message:
+            messagebox.showinfo("Confronto completato",
+                               f"Utensili richiesti: {len(utensili_richiesti)}\n"
+                               f"Mancanti: {len(utensili_mancanti_report)}")
+    
+    def _on_double_click(self, event):
+        """Doppio click su utensile mancante per aggiungerlo."""
+        sel = self.tree.selection()
+        if not sel:
             return
-
-        alias_in_toa    = {t["name"].upper() for t in tools_db.values() if t.get("name")}
-        alias_abilitati = {t["name"].upper() for t in tools_db.values()
-                           if t.get("name") and t.get("is_enabled", True) and not t.get("is_worn", False)}
-        alias_vita_bassa = {t["name"].upper() for t in tools_db.values()
-                            if t.get("name") and t.get("life_percent") is not None
-                            and t["life_percent"] < 10 and t.get("is_enabled", True)}
-
-        # Estrai da tutti i file
-        richiesti = {}
-        for fp in self.file_paths:
-            fname = os.path.basename(fp)
-            for alias, riga_num, _ in estrai_tutti_utensili_da_file(fp):
-                au = alias.upper()
-                if au not in richiesti:
-                    richiesti[au] = (fname, riga_num)
-
-        if not richiesti:
-            self.tree.insert("", "end",
-                values=("OK", "Nessun utensile trovato nei file MPF", "", ""),
-                tags=("ok",))
+        
+        item = self.tree.item(sel[0])
+        values = item['values']
+        
+        # Verifica che sia un utensile mancante
+        if values[0] != "❌ MANCA":
             return
-
-        alias_req    = set(richiesti.keys())
-        mancanti     = sorted(alias_req - alias_in_toa)
-        disabilitati = sorted(alias_req & (alias_in_toa - alias_abilitati))
-        vita_bassa   = sorted((alias_req & alias_vita_bassa) - set(disabilitati))
-        ok_list      = sorted(alias_req - set(mancanti) - set(disabilitati) - set(vita_bassa))
-
-        for alias in mancanti:
-            fn, rn = richiesti[alias]
-            self.tree.insert("", "end", values=("MANCA", alias, fn, rn), tags=("mancante",))
-        for alias in disabilitati:
-            fn, rn = richiesti[alias]
-            self.tree.insert("", "end", values=("DISAB.", alias, fn, rn), tags=("disab",))
-        for alias in vita_bassa:
-            fn, rn = richiesti[alias]
-            self.tree.insert("", "end", values=("VITA<10%", alias, fn, rn), tags=("worn",))
-        for alias in ok_list:
-            fn, rn = richiesti[alias]
-            self.tree.insert("", "end", values=("OK", alias, fn, rn), tags=("ok",))
-
-    # ── Genera MAIN ──────────────────────────────────────────────────────────
-
-    def _genera_main(self):
-        if not self.file_paths:
-            return messagebox.showwarning("Attenzione", "Seleziona almeno un file")
-        nome_progetto = self.entry_nome_cartella.get().strip()
-        if not nome_progetto:
-            return messagebox.showwarning("Attenzione", "Inserisci nome cartella")
-        try:
-            calibra_logic = get_calibra_logic()
+        
+        alias = values[1]
+        
+        # VERIFICA SE HA GIÀ HOLDER
+        from database.db_handler import ha_holder
+        
+        if ha_holder(alias):
+            # Ha già holder! Non serve aggiungerlo
+            messagebox.showinfo("Info", 
+                f"Utensile '{alias}' contiene già un holder.\n\n"
+                f"Verrà aggiunto direttamente senza selezione holder.")
+            
             try:
-                from logic.nc_analyzer_v14_update import genera_programma_main_gcode_v14
-                gcode_content, main_filename = genera_programma_main_gcode_v14(
-                    self.file_paths, nome_progetto, calibra_logic)
-            except ImportError:
-                from logic.nc_analyzer import genera_programma_main_gcode
-                gcode_content, main_filename = genera_programma_main_gcode(
-                    self.file_paths, nome_progetto)
-            sorgente_dir = os.path.dirname(self.file_paths[0]) if self.file_paths else ""
-            save_path = filedialog.asksaveasfilename(
-                title="Salva Programma MAIN",
-                initialdir=sorgente_dir,
-                initialfile=main_filename,
-                defaultextension=".MPF",
-                filetypes=[("MPF Program", "*.MPF"), ("All", "*.*")])
-            if not save_path:
-                return
-            with open(save_path, "w", encoding="utf-8") as f:
-                f.write(gcode_content)
-            self._files_da_inviare = list(self.file_paths) + [save_path]
-            self._main_generato_path = save_path
-            self.btn_invia.configure(state="normal")
-            self.btn_invia_main.configure(state="normal")
-            mode_desc = calibra_logic.get_mode_description()
-            messagebox.showinfo("MAIN generato",
-                "File: " + save_path + chr(10) + chr(10) +
-                "Modalita CALIBRA ONLY: " + mode_desc + chr(10) + chr(10) +
-                "Usa INVIA TUTTO o Solo MAIN per trasferire alla macchina.")
+                # Aggiungi direttamente senza dialog
+                import pandas as pd
+                from database.db_handler import salva_database
+                from config.constants import STATO_SCAFFALE
+                
+                new_row = pd.DataFrame([{
+                    'Posizione': '',
+                    'Alias': alias,  # Mantiene holder esistente
+                    'Stato_Utensile': STATO_SCAFFALE
+                }])
+                
+                self.main.df = pd.concat([self.main.df, new_row], ignore_index=True)
+                
+                success, err = salva_database(self.main.df, self.main.db_path)
+                
+                if success:
+                    self.main.refresh_all_tabs()
+                    self.main._update_status()
+                    self.tree.delete(sel[0])
+                    messagebox.showinfo("Successo", f"Utensile '{alias}' aggiunto a SCAFFALE")
+                else:
+                    messagebox.showerror("Errore", err)
+                    
+            except Exception as e:
+                import traceback
+                traceback.print_exc()
+                messagebox.showerror("Errore", f"Errore aggiunta utensile:\n{e}")
+            
+            return  # STOP - non continuare con dialog holder
+        
+        # Dialog conferma
+        if not messagebox.askyesno("Aggiungi Utensile", 
+                                   f"Aggiungere '{alias}' al database?\n\n"
+                                   f"Verrà aggiunto come SCAFFALE.\n"
+                                   f"DEVI selezionare un holder."):
+            return
+        
+        try:
+            # DIALOG SELEZIONE HOLDER (obbligatorio per invarianza!)
+            from ui.dialogs import SelezionaHolderDialog
+            
+            dialog = SelezionaHolderDialog(
+                self.parent,
+                alias,
+                self.main.df_holder_smontati,
+                self.main.df_bussole_idraulico
+            )
+            
+            if not dialog.success:
+                return  # Annullato
+            
+            # Ottieni alias finale con holder
+            alias_finale = dialog.alias_finale
+            holder_usato = dialog.holder_cod
+            bussola_usata = dialog.bussola_cod
+            
+            print(f"\n=== AGGIUNGI UTENSILE MANCANTE ===")
+            print(f"Alias originale: {alias}")
+            print(f"Alias finale: {alias_finale}")
+            print(f"Holder: {holder_usato}")
+            print(f"Bussola: {bussola_usata}")
+            
+            # DECREMENTA HOLDER da smontati
+            df_h = self.main.df_holder_smontati
+            if not df_h.empty:
+                df_h['Alias_Holder'] = df_h['Alias_Holder'].astype(str).str.strip()
+                holder_strip = str(holder_usato).strip()
+                
+                if holder_strip in df_h['Alias_Holder'].values:
+                    idx_h = df_h['Alias_Holder'] == holder_strip
+                    qty_prima = df_h.loc[idx_h, 'Quantita'].values[0]
+                    df_h.loc[idx_h, 'Quantita'] = df_h.loc[idx_h, 'Quantita'].astype(int) - 1
+                    qty_dopo = df_h.loc[idx_h, 'Quantita'].values[0]
+                    
+                    print(f"→ Holder {holder_strip} decrementato: {qty_prima} → {qty_dopo}")
+                    
+                    # Rimuovi se qty=0
+                    if qty_dopo <= 0:
+                        df_h = df_h[~idx_h].reset_index(drop=True)
+                        print(f"→ Holder {holder_strip} rimosso (qty=0)")
+                    
+                    # Salva
+                    self.main.df_holder_smontati = df_h
+                    from database.db_handler import salva_database_holder_smontati
+                    salva_database_holder_smontati(df_h, self.main.db_paths.get('holder_smontati', ''))
+                else:
+                    messagebox.showwarning("Attenzione", 
+                        f"Holder {holder_strip} non disponibile in smontati!\n"
+                        f"Verrà usato comunque ma TOTALE aumenterà.")
+            
+            # DECREMENTA BUSSOLA se usata
+            if bussola_usata:
+                df_b = self.main.df_bussole_idraulico
+                if not df_b.empty:
+                    df_b['Codice_Bussola'] = df_b['Codice_Bussola'].astype(str).str.strip()
+                    bussola_strip = str(bussola_usata).strip()
+                    
+                    if bussola_strip in df_b['Codice_Bussola'].values:
+                        idx_b = df_b['Codice_Bussola'] == bussola_strip
+                        qty_prima = df_b.loc[idx_b, 'Quantita'].values[0]
+                        df_b.loc[idx_b, 'Quantita'] = df_b.loc[idx_b, 'Quantita'].astype(int) - 1
+                        qty_dopo = df_b.loc[idx_b, 'Quantita'].values[0]
+                        
+                        print(f"→ Bussola {bussola_strip} decrementata: {qty_prima} → {qty_dopo}")
+                        
+                        if qty_dopo <= 0:
+                            df_b = df_b[~idx_b].reset_index(drop=True)
+                            print(f"→ Bussola {bussola_strip} rimossa (qty=0)")
+                        
+                        # Salva
+                        self.main.df_bussole_idraulico = df_b
+                        from database.db_handler import salva_database_bussole_idraulico
+                        salva_database_bussole_idraulico(df_b, self.main.db_paths.get('bussole_idraulico', ''))
+            
+            # Aggiungi al database come SCAFFALE con alias finale
+            import pandas as pd
+            from database.db_handler import salva_database
+            from config.constants import STATO_SCAFFALE
+            
+            new_row = pd.DataFrame([{
+                'Posizione': '',
+                'Alias': alias_finale,  # CON HOLDER!
+                'Stato_Utensile': STATO_SCAFFALE
+            }])
+            
+            self.main.df = pd.concat([self.main.df, new_row], ignore_index=True)
+            
+            success, err = salva_database(self.main.df, self.main.db_path)
+            
+            if success:
+                # Refresh UI
+                self.main.refresh_all_tabs()
+                self.main._update_status()
+                
+                # Aggiorna tree - rimuovi riga mancante
+                self.tree.delete(sel[0])
+                
+                print("=== UTENSILE AGGIUNTO CON SUCCESSO ===\n")
+                
+                msg_parts = [f"Utensile: {alias_finale}"]
+                if holder_usato:
+                    msg_parts.append(f"Holder {holder_usato} -1")
+                if bussola_usata:
+                    msg_parts.append(f"Bussola {bussola_usata} -1")
+                
+                messagebox.showinfo("Successo", 
+                    f"Aggiunto a SCAFFALE!\n\n" + "\n".join(msg_parts))
+            else:
+                messagebox.showerror("Errore", err)
+                
         except Exception as e:
             import traceback
-            messagebox.showerror("Errore", "Errore generazione:" + chr(10) + str(e) +
-                                  chr(10) + chr(10) + traceback.format_exc())
-
-    # ── Invia ────────────────────────────────────────────────────────────────
-
-    def _invia_alla_macchina(self):
+            traceback.print_exc()
+            messagebox.showerror("Errore", f"Errore aggiunta utensile:\n{e}")
+    
+    
+    def _genera_main(self):
+        """Genera programma MAIN dai file analizzati."""
+        if not self.file_paths:
+            return messagebox.showwarning("Attenzione", "Seleziona almeno un file")
+        
         nome_progetto = self.entry_nome_cartella.get().strip()
         if not nome_progetto:
-            return messagebox.showwarning("Attenzione", "Nome cartella mancante")
-        files = getattr(self, "_files_da_inviare", [])
-        if not files:
-            return messagebox.showwarning("Attenzione", "Genera prima il MAIN.")
-        from ui.dialog_invia_macchina import apri_dialog_invia
-        apri_dialog_invia(self.parent, files, nome_progetto)
-
-    def _invia_solo_main(self):
-        nome_progetto = self.entry_nome_cartella.get().strip()
-        if not nome_progetto:
-            return messagebox.showwarning("Attenzione", "Nome cartella mancante")
-        main_path = getattr(self, "_main_generato_path", None)
-        if not main_path or not os.path.exists(main_path):
-            return messagebox.showwarning("Attenzione", "Nessun MAIN generato.")
-        from ui.dialog_invia_macchina import apri_dialog_invia
-        apri_dialog_invia(self.parent, [main_path], nome_progetto)
-
-    # ── Macchina ─────────────────────────────────────────────────────────────
-
-    def _check_macchina(self):
-        import threading, configparser
-        from machine_client import MachineClient
-        self.lbl_macchina.configure(text="Verifica...", text_color="#FF9800")
-        def _ping():
-            try:
-                cfg_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "client_config.ini")
-                cfg = configparser.ConfigParser()
-                cfg.read(cfg_path)
-                ip   = cfg.get("macchina", "ip",   fallback="10.95.20.29")
-                port = cfg.getint("macchina", "port", fallback=9999)
-                client = MachineClient(ip, port)
-                _, _, err = client.check_esistenti([], "PING")
-                if err:
-                    self.lbl_macchina.after(0, lambda: self.lbl_macchina.configure(
-                        text="Macchina NON raggiungibile", text_color="#F44336"))
-                else:
-                    self.lbl_macchina.after(0, lambda: self.lbl_macchina.configure(
-                        text="Macchina OK", text_color="#4CAF50"))
-            except Exception:
-                self.lbl_macchina.after(0, lambda: self.lbl_macchina.configure(
-                    text="Macchina NON raggiungibile", text_color="#F44336"))
-        threading.Thread(target=_ping, daemon=True).start()
-
-    def _apri_impostazioni_calibra(self):
-        show_calibra_settings(self.parent)
+            return messagebox.showwarning("Attenzione", "Inserisci nome progetto")
+        
+        try:
+            # Importa funzione generazione V12
+            from logic.nc_analyzer import genera_programma_main_gcode
+            
+            # Genera MAIN con logica V12 completa
+            gcode_content, main_filename = genera_programma_main_gcode(
+                self.file_paths,
+                nome_progetto
+            )
+            
+            # Dialog salvataggio
+            from tkinter import filedialog
+            
+            save_path = filedialog.asksaveasfilename(
+                title="Salva Programma MAIN",
+                initialfile=main_filename,
+                defaultextension=".MPF",
+                filetypes=[("MPF Program", "*.MPF"), ("All", "*.*")]
+            )
+            
+            if not save_path:
+                return
+            
+            # Salva file
+            with open(save_path, 'w', encoding='utf-8') as f:
+                f.write(gcode_content)
+            
+            messagebox.showinfo("Successo", 
+                              f"MAIN generato:\n{save_path}\n\n"
+                              f"Usa logica calibrazione V12:\n"
+                              f"• CALIBRA_ONLY iniziale\n"
+                              f"• Finitura: sempre su cambio\n"
+                              f"• Standard: ogni 3 cambi")
+            
+        except Exception as e:
+            messagebox.showerror("Errore", f"Errore generazione: {e}")

@@ -1,0 +1,71 @@
+; ================================================================
+; TEST_VAR_INDEX.MPF — Test accesso parametri utensile
+;
+; Eseguire sulla macchina e annotare fino a quale TEST arriva
+; prima di dare allarme 17020 (o se passa tutto).
+;
+; Risultato atteso se TUTTO funziona:
+;   → possiamo scrivere SAVE_TOA con loop FOR senza M6
+;   → tempo sync: ~5-10 secondi invece di 57 minuti
+; ================================================================
+
+DEF INT _T
+DEF REAL _VAL
+_T = 2802
+
+; --- TEST 1: indice INT come array index ---
+MSG("TEST 1 - TC_DP3 con INT variabile")
+_VAL = $TC_DP3[_T,1]
+MSG("OK: " <<_VAL)
+M0
+
+; --- TEST 2: TC_TP1 (flag esistenza) con variabile ---
+MSG("TEST 2 - TC_TP1 con INT variabile")
+_VAL = $TC_TP1[_T]
+MSG("OK: " <<_VAL)
+M0
+
+; --- TEST 3: TC_TP8 (stato) con variabile ---
+MSG("TEST 3 - TC_TP8 con INT variabile")
+_VAL = $TC_TP8[_T]
+MSG("OK: " <<_VAL)
+M0
+
+; --- TEST 4: TC_MOP2 (vita) con variabile ---
+MSG("TEST 4 - TC_MOP2 con INT variabile")
+_VAL = $TC_MOP2[_T,1]
+MSG("OK: " <<_VAL)
+M0
+
+; --- TEST 5: TC_MOP11 (vita rif) con variabile ---
+MSG("TEST 5 - TC_MOP11 con INT variabile")
+_VAL = $TC_MOP11[_T,1]
+MSG("OK: " <<_VAL)
+M0
+
+; --- TEST 6: TC_DP6 (raggio) con variabile ---
+MSG("TEST 6 - TC_DP6 con INT variabile")
+_VAL = $TC_DP6[_T,1]
+MSG("OK: " <<_VAL)
+M0
+
+; --- TEST 7: WRITE con indice variabile nel testo ---
+MSG("TEST 7 - WRITE con variabile come indice")
+WRITE(1,"//NC/WKS.DIR/_TOOLSYNC.WPD/TEST.TXT",
+     "T=" <<_T<< " L=" <<$TC_DP3[_T,1]<< " R=" <<$TC_DP6[_T,1]<< " V=" <<$TC_MOP2[_T,1])
+MSG("OK: WRITE funziona con variabile")
+M0
+
+; --- TEST 8: loop FOR con lettura ---
+MSG("TEST 8 - FOR loop con TC_TP1")
+_T = 2800
+FOR _T = 2800 TO 2810
+  IF $TC_TP1[_T] == 1
+    MSG("Trovato T=" <<_T)
+  ENDIF
+ENDFOR
+MSG("OK: loop funziona")
+M0
+
+MSG("=== TUTTI I TEST OK === Loop dinamico possibile!")
+M30

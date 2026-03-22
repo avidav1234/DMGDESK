@@ -4588,6 +4588,10 @@ WRITE(1,"//NC/WKS.DIR/_TOOLSYNC.WPD/TOOL_SYNC.TOA",
      <<"$TC_MOP15[" <<_TNUM<< ",1]=0")
 
 ; Copia sulla share di rete
+; ADATTARE il path in base alla configurazione DNC della macchina:
+; Opzione A (ACTTRANSFER):  "//ACTTRANSFER/P_DRIVE/DMG_DMC_160U/TOOL_SYNC.TOA"
+; Opzione B (IP diretto):   "//192.168.214.29/DMG_DMC_160U/TOOL_SYNC.TOA"
+; Opzione C (nome PC):      "//OPERATORE-PC/DMG_DMC_160U/TOOL_SYNC.TOA"
 _TS_RET = COPYFILE("//NC/WKS.DIR/_TOOLSYNC.WPD/TOOL_SYNC.TOA",
                    "//ACTTRANSFER/P_DRIVE/DMG_DMC_160U/TOOL_SYNC.TOA")
 

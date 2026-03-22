@@ -37,15 +37,22 @@ class MachineClient:
         try:
             s = self._connect()
             s.sendall(header.encode("utf-8"))
+            # F2: leggi fino a \n — stesso meccanismo di invia_file
+            # evita di bloccare con risposte grandi (128KB con molti file)
             raw = b""
             while True:
                 chunk = s.recv(4096)
                 if not chunk:
                     break
                 raw += chunk
+                if b"\n" in raw:
+                    break
             s.close()
-            risposta = json.loads(raw.decode("utf-8"))
-            return risposta.get("esistenti", []), risposta.get("dest_dir", ""), None
+            risposta = json.loads(raw.strip().decode("utf-8"))
+            # server risponde "files", compatibile con "esistenti" per retrocompatibilità
+            esistenti = risposta.get("files", risposta.get("esistenti", []))
+            dest_dir  = risposta.get("dest_dir", "")
+            return esistenti, dest_dir, None
         except Exception as e:
             return [], "", str(e)
 

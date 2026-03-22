@@ -51,7 +51,13 @@ static void get_vbs_path(char *out, int n) {
     GetPrivateProfileStringA("server", "vbs_path", DEFAULT_VBS_PATH, out, n, CFG_FILE);
 }
 
-/* ── VBS con path file specifico ─────────────────────────────────────────── */
+/* ── Mutex globale — serializza chiamate VBS (F6) ────────────────────────── */
+static HANDLE g_vbs_mutex = NULL;
+static void   init_vbs_mutex(void) {
+    g_vbs_mutex = CreateMutexA(NULL, FALSE, NULL);
+}
+
+/* ── VBS serializzato con delay (F4) ────────────────────────────────────── */
 
 static void call_transfer_dnc(const char *filepath) {
     char vbs[MAX_PATH_LEN];
@@ -61,12 +67,15 @@ static void call_transfer_dnc(const char *filepath) {
         snprintf(cmd, sizeof(cmd), "cscript //Nologo \"%s\" \"%s\" > NUL 2>&1", vbs, filepath);
     else
         snprintf(cmd, sizeof(cmd), "cscript //Nologo \"%s\" > NUL 2>&1", vbs);
+
+    Sleep(500); /* F4: lascia alla NCU 500ms dopo la scrittura del file */
+
+    if (g_vbs_mutex) WaitForSingleObject(g_vbs_mutex, 15000); /* F6: una VBS alla volta */
     printf("[DNC] %s\n", cmd);
     int ret = system(cmd);
-    if (ret == 0)
-        printf("[DNC] OK\n");
-    else
-        printf("[DNC] ret=%d\n", ret);
+    if (ret == 0) printf("[DNC] OK\n");
+    else          printf("[DNC] ret=%d\n", ret);
+    if (g_vbs_mutex) ReleaseMutex(g_vbs_mutex);
 }
 
 /* ── JSON helpers ────────────────────────────────────────────────────────── */
@@ -272,39 +281,48 @@ static void handle_client(SOCKET client, const char *base_path) {
         }
         fwrite(outbuf, 1, total2, f);
         fclose(f);
-        free(outbuf);
+        /* NON free(outbuf) qui — serve nel loop per ri-scrivere dopo .ERR */
 
         printf("[OK] %s (%ld -> %ld bytes CRLF) -> %s\n", norm, filesize, total2, dest_path);
 
-        /* Chiama VBS subito per trigger immediato */
         call_transfer_dnc(dest_path);
 
-        /* Aspetta che il file sparisca da autoimport (= DNCMachine lo ha preso)
-           Timeout 90 secondi, check ogni 2 secondi.
-           Se sparisce → OK. Se rimane → errore (es. file .ERR creato da DNCMachine). */
+        /* ── Attesa trasferimento (F3+F5) ──────────────────────────────────
+           .ERR è TRANSITORIO: NCU occupata → DNCMachine riprova.
+           Se DNCMachine rimuove anche il .MPF → lo riscriviamo da outbuf.
+        ── */
         char err_path[MAX_PATH_LEN];
         snprintf(err_path, sizeof(err_path), "%s.ERR", dest_path);
 
         int transferred = 0;
-        int had_error   = 0;
+        int err_count   = 0;
         int elapsed     = 0;
+
         while (elapsed < 90) {
             Sleep(2000);
             elapsed += 2;
             int file_exists = (GetFileAttributesA(dest_path) != INVALID_FILE_ATTRIBUTES);
             int err_exists  = (GetFileAttributesA(err_path)  != INVALID_FILE_ATTRIBUTES);
+
+            if (!file_exists && !err_exists) { transferred = 1; break; }
+
             if (err_exists) {
-                had_error = 1;
-                /* Cancella il file .ERR per non bloccare i prossimi cicli */
+                err_count++;
                 DeleteFileA(err_path);
-                break;
-            }
-            if (!file_exists) {
-                transferred = 1;
-                break;
+                if (!file_exists) {
+                    /* DNCMachine ha rimosso il .MPF insieme al .ERR — riscrivilo */
+                    FILE *fw = fopen(dest_path, "wb");
+                    if (fw) { fwrite(outbuf, 1, total2, fw); fclose(fw); }
+                    printf("[RETRY] %s riscritto dopo .ERR n.%d\n", norm, err_count);
+                } else {
+                    printf("[RETRY] %s .ERR n.%d cancellato\n", norm, err_count);
+                }
+                continue;
             }
             printf("[WAIT] %s... %ds\n", norm, elapsed);
         }
+
+        free(outbuf); /* libera solo ora */
 
         /* Costruisci risposta JSON con escape backslash */
         char wpd_escaped[MAX_PATH_LEN * 2];
@@ -320,15 +338,16 @@ static void handle_client(SOCKET client, const char *base_path) {
             snprintf(resp, sizeof(resp),
                      "{\"stato\":\"ok\",\"msg\":\"OK %s -> %s\"}\n", norm, wpd_escaped);
             printf("[OK] %s trasferito in NCU\n", norm);
-        } else if (had_error) {
+        } else if (err_count > 0) {
+            /* Timeout ma ci sono stati .ERR — il file è in coda, arriverà via autoimport */
             snprintf(resp, sizeof(resp),
-                     "{\"stato\":\"errore\",\"msg\":\"DNCMachine ha rifiutato %s (file .ERR). Verificare header NCK o WPD.\"}\n", norm);
-            printf("[ERR] %s rifiutato da DNCMachine (.ERR)\n", norm);
+                     "{\"stato\":\"ok\",\"msg\":\"OK %s -> in coda autoimport (%d retry NCU)\"}\n",
+                     norm, err_count);
+            printf("[OK] %s in coda autoimport dopo %d .ERR\n", norm, err_count);
         } else {
-            /* Timeout — il file è ancora lì ma potrebbe ancora arrivare via autoimport */
             snprintf(resp, sizeof(resp),
-                     "{\"stato\":\"ok\",\"msg\":\"OK %s -> in coda autoimport (timeout attesa)\"}\n", norm);
-            printf("[WARN] %s timeout attesa — ancora in autoimport\n", norm);
+                     "{\"stato\":\"ok\",\"msg\":\"OK %s -> in coda autoimport\"}\n", norm);
+            printf("[OK] %s in coda autoimport\n", norm);
         }
 
         send(client, resp, strlen(resp), 0);
@@ -343,7 +362,8 @@ static void handle_client(SOCKET client, const char *base_path) {
 /* ── Main ────────────────────────────────────────────────────────────────── */
 
 int main(void) {
-    init_cfg_path();   /* PRIMA di tutto: trova il config nella cartella dell'exe */
+    init_cfg_path();
+    init_vbs_mutex(); /* F6: mutex per serializzare chiamate VBS */
 
     WSADATA wsa;
     if (WSAStartup(MAKEWORD(2,2), &wsa) != 0) {

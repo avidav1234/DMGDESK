@@ -4,6 +4,7 @@ import { NavLink } from 'react-router-dom'
 const NAV = [
   { to: '/analisi-nc',        icon: '📄', label: 'Analisi NC',        sub: 'MPF + TOA' },
   { to: '/macchina',        icon: '⚙',  label: 'In Macchina',      sub: 'Sync TOA/TMA' },
+  { to: '/invio-macchina',   icon: '📤', label: 'Invia Macchina',   sub: 'DNC Transfer' },
   { to: '/scaffale',        icon: '📦', label: 'Scaffale',          sub: 'Assemblati' },
   { to: '/smontati',        icon: '🔧', label: 'Smontati',          sub: 'Archivio' },
   { to: '/holder-bussole',  icon: '🔩', label: 'Holder & Bussole',  sub: 'Inventario' },

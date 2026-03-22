@@ -102,6 +102,22 @@ export const api = {
   checkToolsMpf:        (file)      => { const fd = new FormData(); fd.append('file', file); return request('POST', '/tools/check', fd) },
   checkToolsText:       (mpf)       => request('POST',   '/tools/check-text', { mpf_content: mpf }),
 
+  // ── Invio Macchina ───────────────────────────────────
+  getMachineConfig:     ()               => request('GET',  '/macchina-invio/config'),
+  setMachineConfig:     (body)           => request('PUT',  '/macchina-invio/config', body),
+  checkMacchina:        (progetto, files) => {
+    const fd = new FormData()
+    fd.append('progetto', progetto)
+    fd.append('filenames', JSON.stringify(files))
+    return request('POST', '/macchina-invio/check', fd)
+  },
+  inviaMacchina:        (progetto, files) => {
+    const fd = new FormData()
+    fd.append('progetto', progetto)
+    files.forEach(f => fd.append('files', f))
+    return request('POST', '/macchina-invio/invia', fd)
+  },
+
   // ── Health ────────────────────────────────────────────
   health:               ()          => fetch('/health').then(r => r.json()),
 }

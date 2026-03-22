@@ -9,7 +9,7 @@ Docs interattive:  http://localhost:8000/docs
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.routers import macchina, scaffale, smontati, holder_bussole, generatore, analisi_nc, config_router, tools
+from api.routers import macchina, scaffale, smontati, holder_bussole, generatore, analisi_nc, config_router, tools, macchina_invio
 from utils.logger import get_logger
 
 log = get_logger(__name__)
@@ -41,6 +41,7 @@ app.include_router(generatore.router,     prefix="/api/generatore",     tags=["G
 app.include_router(analisi_nc.router,     prefix="/api/analisi-nc",     tags=["Analisi NC"])
 app.include_router(config_router.router,  prefix="/api/config",         tags=["Configurazione"])
 app.include_router(tools.router,          prefix="/api/tools",          tags=["Utensili Macchina"])
+app.include_router(macchina_invio.router, prefix="/api/macchina-invio",   tags=["Invio Macchina"])
 
 
 @app.on_event("startup")

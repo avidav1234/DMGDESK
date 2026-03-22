@@ -1,119 +1,117 @@
-// Sidebar.jsx — DMG Desk, layout 2 (icone grandi)
+// components/Sidebar.jsx
 import { NavLink } from 'react-router-dom'
 
 const NAV = [
-  { to: '/coda',        icon: '⬡',  label: 'Coda',    title: 'Coda lavorazione' },
-  { to: '/stato',       icon: '⚡',  label: 'Stato',   title: 'Stato macchina' },
-  { to: '/analisi-nc',  icon: '📄',  label: 'NC',      title: 'Analisi NC' },
-  { to: '/macchina',    icon: '⚙',   label: 'Tool',    title: 'Utensili in macchina' },
-  { to: '/magazzino',   icon: '🗄',  label: 'Mag.',    title: 'Magazzino' },
-  { to: '/scaffale',    icon: '📦',  label: 'Scaff.',  title: 'Scaffale' },
-  { to: '/smontati',    icon: '🔧',  label: 'Smont.',  title: 'Smontati' },
-  { to: '/holder-bussole', icon: '🔩', label: 'Holder', title: 'Holder & Bussole' },
+  { to: '/analisi-nc',        icon: '📄', label: 'Analisi NC',        sub: 'MPF + TOA' },
+  { to: '/macchina',        icon: '⚙',  label: 'In Macchina',      sub: 'Sync TOA/TMA' },
+  { to: '/invio-macchina',   icon: '📤', label: 'Invia Macchina',   sub: 'DNC Transfer' },
+  { to: '/scaffale',        icon: '📦', label: 'Scaffale',          sub: 'Assemblati' },
+  { to: '/smontati',        icon: '🔧', label: 'Smontati',          sub: 'Archivio' },
+  { to: '/holder-bussole',  icon: '🔩', label: 'Holder & Bussole',  sub: 'Inventario' },
+  { to: '/generatore',      icon: '⌨',  label: 'Generatore',        sub: 'Codici CNC' },
 ]
 
 export default function Sidebar() {
   return (
     <nav style={{
-      width: 64,
+      width: 220,
       flexShrink: 0,
-      background: 'var(--navy-700)',
+      background: 'var(--bg-panel)',
+      borderRight: '1px solid var(--border)',
       display: 'flex',
       flexDirection: 'column',
-      alignItems: 'center',
-      paddingTop: 12,
-      paddingBottom: 12,
-      gap: 2,
-      overflowY: 'auto',
+      overflow: 'hidden',
     }}>
       {/* Logo */}
       <div style={{
-        marginBottom: 10,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        gap: 2,
+        padding: '20px 20px 16px',
+        borderBottom: '1px solid var(--border)',
       }}>
-        <div style={{
-          width: 36, height: 36,
-          background: 'rgba(255,255,255,0.15)',
-          borderRadius: 8,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 11, fontWeight: 700, color: '#fff',
-          letterSpacing: '-0.02em',
-        }}>
-          DMG
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-dim)', letterSpacing: '0.15em', textTransform: 'uppercase', marginBottom: 4 }}>
+          DMG 160U
+        </div>
+        <div style={{ fontSize: 17, fontWeight: 800, letterSpacing: '-0.03em', color: 'var(--text-primary)' }}>
+          Tool Manager
         </div>
         <div style={{
-          fontSize: 7, color: 'var(--navy-accent)',
-          letterSpacing: '0.08em', fontFamily: 'var(--font-mono)',
-          animation: 'pulse 2s ease infinite',
+          marginTop: 8,
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 5,
+          padding: '2px 8px',
+          background: 'var(--cyan-glow)',
+          border: '1px solid rgba(0,212,255,0.2)',
+          borderRadius: 3,
+          fontFamily: 'var(--font-mono)',
+          fontSize: 10,
+          color: 'var(--cyan)',
+          letterSpacing: '0.05em',
         }}>
-          LIVE
+          <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--cyan)', display: 'inline-block', animation: 'pulse 2s ease infinite' }} />
+          v16.0 LIVE
         </div>
       </div>
 
       {/* Nav items */}
-      {NAV.map(({ to, icon, label, title }) => (
-        <NavLink
-          key={to}
-          to={to}
-          title={title}
-          style={({ isActive }) => ({
-            width: 48,
-            height: 44,
-            borderRadius: 8,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 2,
-            textDecoration: 'none',
-            transition: 'all var(--t-fast)',
-            background: isActive ? 'rgba(255,255,255,0.18)' : 'transparent',
-            borderLeft: isActive ? '2px solid var(--navy-accent)' : '2px solid transparent',
-            cursor: 'pointer',
-          })}
-        >
-          {({ isActive }) => (
-            <>
-              <span style={{ fontSize: 18, opacity: isActive ? 1 : 0.45 }}>{icon}</span>
-              <span style={{
-                fontSize: 8,
-                fontFamily: 'var(--font-mono)',
-                fontWeight: 600,
-                color: isActive ? 'var(--navy-accent)' : 'rgba(255,255,255,0.4)',
-                letterSpacing: '0.04em',
-              }}>
-                {label}
-              </span>
-            </>
-          )}
-        </NavLink>
-      ))}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '12px 0' }}>
+        {NAV.map(({ to, icon, label, sub }) => (
+          <NavLink
+            key={to}
+            to={to}
+            style={({ isActive }) => ({
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              padding: '10px 16px',
+              textDecoration: 'none',
+              transition: 'all var(--t-fast)',
+              borderLeft: `2px solid ${isActive ? 'var(--cyan)' : 'transparent'}`,
+              background: isActive ? 'var(--cyan-glow)' : 'transparent',
+            })}
+          >
+            {({ isActive }) => (
+              <>
+                <span style={{ fontSize: 18, flexShrink: 0, opacity: isActive ? 1 : 0.7 }}>{icon}</span>
+                <div>
+                  <div style={{
+                    fontSize: 13,
+                    fontWeight: 600,
+                    color: isActive ? 'var(--cyan)' : 'var(--text-secondary)',
+                    transition: 'color var(--t-fast)',
+                    lineHeight: 1.2,
+                  }}>
+                    {label}
+                  </div>
+                  <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+                    {sub}
+                  </div>
+                </div>
+              </>
+            )}
+          </NavLink>
+        ))}
+      </div>
 
-      {/* Footer API docs */}
-      <div style={{ marginTop: 'auto' }}>
-        <a
-          href="/api/docs"
-          target="_blank"
-          rel="noreferrer"
-          title="API Docs"
-          style={{
-            width: 48, height: 32,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 14, color: 'rgba(255,255,255,0.25)',
-            textDecoration: 'none', borderRadius: 6,
-            transition: 'color var(--t-fast)',
-          }}
-          onMouseEnter={e => e.currentTarget.style.color = 'var(--navy-accent)'}
-          onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,0.25)'}
+      {/* Footer */}
+      <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border)' }}>
+        <a href="/api/docs" target="_blank" rel="noreferrer" style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          fontSize: 11, color: 'var(--text-dim)', textDecoration: 'none',
+          fontFamily: 'var(--font-mono)', transition: 'color var(--t-fast)',
+        }}
+        onMouseEnter={e => e.currentTarget.style.color = 'var(--cyan)'}
+        onMouseLeave={e => e.currentTarget.style.color = 'var(--text-dim)'}
         >
-          ⬡
+          <span>⬡</span> API Docs →
         </a>
       </div>
 
-      <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}`}</style>
+      <style>{`
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50%       { opacity: 0.3; }
+        }
+      `}</style>
     </nav>
   )
 }

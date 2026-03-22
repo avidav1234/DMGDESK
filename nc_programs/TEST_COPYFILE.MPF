@@ -1,0 +1,37 @@
+; ================================================================
+; TEST_COPYFILE.MPF — Trova il path corretto per COPYFILE
+; Eseguire da MDI o come programma dopo aver creato il file test
+; ================================================================
+DEF INT _RET
+DEF STRING[200] _PATH
+
+; Prima crea un file di test nella NCU
+WRITE(0,"//NC/WKS.DIR/_TOOLSYNC.WPD/TEST.TXT","TEST COPYFILE")
+
+; Prova Opzione A — ACTTRANSFER (comune su DMG con DNC Machine)
+_RET = COPYFILE("//NC/WKS.DIR/_TOOLSYNC.WPD/TEST.TXT",
+               "//ACTTRANSFER/P_DRIVE/DMG_DMC_160U/TEST.TXT")
+IF _RET == 0
+  MSG("OK: Opzione A funziona — usa ACTTRANSFER/P_DRIVE")
+  M0
+ENDIF
+
+; Prova Opzione B — IP diretto PC operatore
+_RET = COPYFILE("//NC/WKS.DIR/_TOOLSYNC.WPD/TEST.TXT",
+               "//10.95.20.29/DMG_DMC_160U/TEST.TXT")
+IF _RET == 0
+  MSG("OK: Opzione B funziona — usa IP 10.95.20.29")
+  M0
+ENDIF
+
+; Prova Opzione C — IP rete interna macchina
+_RET = COPYFILE("//NC/WKS.DIR/_TOOLSYNC.WPD/TEST.TXT",
+               "//192.168.214.241/DMG_DMC_160U/TEST.TXT")
+IF _RET == 0
+  MSG("OK: Opzione C funziona — usa IP 192.168.214.241")
+  M0
+ENDIF
+
+MSG("NESSUNA OPZIONE FUNZIONA - verificare configurazione DNC")
+M0
+M30

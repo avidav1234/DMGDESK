@@ -1,0 +1,77 @@
+; ================================================================
+; SAVE_TOA_LOOP.SPF — Versione loop dinamica (nessun M6!)
+; 
+; PREREQUISITO: eseguire TEST_VAR_INDEX.MPF e verificare che
+; tutti i TEST passino senza allarme 17020.
+; 
+; Se i test passano: questo SPF funziona, scrive TOA completo
+; in ~10-15 secondi senza alcun cambio utensile.
+; 
+; Range T-number: 2802 .. 3702  (98 utensili)
+; ================================================================
+DEF INT _T
+DEF INT _RET
+
+_RET = DELETEFILE("//NC/WKS.DIR/_TOOLSYNC.WPD/TOOL_SYNC.TOA")
+WRITE(0,"//NC/WKS.DIR/_TOOLSYNC.WPD/TOOL_SYNC.TOA","METRIC")
+
+; Scorre tutti i T-number del magazzino
+FOR _T = 2802 TO 3702
+
+  IF $TC_TP1[_T] == 1  ; utensile esiste
+
+    ; Parametri tool
+    WRITE(1,"//NC/WKS.DIR/_TOOLSYNC.WPD/TOOL_SYNC.TOA",
+         "$TC_TP1[" <<_T<< "]=1")
+    WRITE(1,"//NC/WKS.DIR/_TOOLSYNC.WPD/TOOL_SYNC.TOA",
+         "$TC_TP8[" <<_T<< "]=" <<$TC_TP8[_T])
+
+    ; Tagliente 1 — sempre presente
+    WRITE(1,"//NC/WKS.DIR/_TOOLSYNC.WPD/TOOL_SYNC.TOA",
+         "$TC_DP1[" <<_T<< ",1]=" <<$TC_DP1[_T,1])
+    WRITE(1,"//NC/WKS.DIR/_TOOLSYNC.WPD/TOOL_SYNC.TOA",
+         "$TC_DP3[" <<_T<< ",1]=" <<$TC_DP3[_T,1])
+    WRITE(1,"//NC/WKS.DIR/_TOOLSYNC.WPD/TOOL_SYNC.TOA",
+         "$TC_DP6[" <<_T<< ",1]=" <<$TC_DP6[_T,1])
+    WRITE(1,"//NC/WKS.DIR/_TOOLSYNC.WPD/TOOL_SYNC.TOA",
+         "$TC_MOP1[" <<_T<< ",1]=" <<$TC_MOP1[_T,1])
+    WRITE(1,"//NC/WKS.DIR/_TOOLSYNC.WPD/TOOL_SYNC.TOA",
+         "$TC_MOP2[" <<_T<< ",1]=" <<$TC_MOP2[_T,1])
+    WRITE(1,"//NC/WKS.DIR/_TOOLSYNC.WPD/TOOL_SYNC.TOA",
+         "$TC_MOP11[" <<_T<< ",1]=" <<$TC_MOP11[_T,1])
+
+    ; Tagliente 2 se esiste
+    IF $TC_DP1[_T,2] <> 0
+      WRITE(1,"//NC/WKS.DIR/_TOOLSYNC.WPD/TOOL_SYNC.TOA",
+           "$TC_DP1[" <<_T<< ",2]=" <<$TC_DP1[_T,2])
+      WRITE(1,"//NC/WKS.DIR/_TOOLSYNC.WPD/TOOL_SYNC.TOA",
+           "$TC_DP3[" <<_T<< ",2]=" <<$TC_DP3[_T,2])
+      WRITE(1,"//NC/WKS.DIR/_TOOLSYNC.WPD/TOOL_SYNC.TOA",
+           "$TC_DP6[" <<_T<< ",2]=" <<$TC_DP6[_T,2])
+      WRITE(1,"//NC/WKS.DIR/_TOOLSYNC.WPD/TOOL_SYNC.TOA",
+           "$TC_MOP2[" <<_T<< ",2]=" <<$TC_MOP2[_T,2])
+      WRITE(1,"//NC/WKS.DIR/_TOOLSYNC.WPD/TOOL_SYNC.TOA",
+           "$TC_MOP11[" <<_T<< ",2]=" <<$TC_MOP11[_T,2])
+    ENDIF
+
+    ; Tagliente 3 se esiste
+    IF $TC_DP1[_T,3] <> 0
+      WRITE(1,"//NC/WKS.DIR/_TOOLSYNC.WPD/TOOL_SYNC.TOA",
+           "$TC_DP1[" <<_T<< ",3]=" <<$TC_DP1[_T,3])
+      WRITE(1,"//NC/WKS.DIR/_TOOLSYNC.WPD/TOOL_SYNC.TOA",
+           "$TC_DP3[" <<_T<< ",3]=" <<$TC_DP3[_T,3])
+      WRITE(1,"//NC/WKS.DIR/_TOOLSYNC.WPD/TOOL_SYNC.TOA",
+           "$TC_DP6[" <<_T<< ",3]=" <<$TC_DP6[_T,3])
+      WRITE(1,"//NC/WKS.DIR/_TOOLSYNC.WPD/TOOL_SYNC.TOA",
+           "$TC_MOP2[" <<_T<< ",3]=" <<$TC_MOP2[_T,3])
+      WRITE(1,"//NC/WKS.DIR/_TOOLSYNC.WPD/TOOL_SYNC.TOA",
+           "$TC_MOP11[" <<_T<< ",3]=" <<$TC_MOP11[_T,3])
+    ENDIF
+
+  ENDIF  ; TC_TP1
+ENDFOR
+
+; Copia sulla share di rete
+_RET = COPYFILE("//NC/WKS.DIR/_TOOLSYNC.WPD/TOOL_SYNC.TOA",
+               "//ACTTRANSFER/P_DRIVE/DMG_DMC_160U/TOOL_SYNC.TOA")
+M17

@@ -9,7 +9,6 @@ const NAV = [
   { to: '/magazzino',   icon: '🗄',  label: 'Mag.',    title: 'Magazzino' },
   { to: '/scaffale',    icon: '📦',  label: 'Scaff.',  title: 'Scaffale' },
   { to: '/smontati',    icon: '🔧',  label: 'Smont.',  title: 'Smontati' },
-  { to: '/invia',         icon: '📤', label: 'Invia',  title: 'Invia in macchina' },
   { to: '/holder-bussole', icon: '🔩', label: 'Holder', title: 'Holder & Bussole' },
 ]
 

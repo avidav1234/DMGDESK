@@ -11,6 +11,7 @@ from config.theme import *
 from config.constants import *
 from database.db_handler import *
 
+from .tab_coda_lavorazione import TabCodaLavorazione
 from .tab_macchina import TabMacchina
 from .tab_scaffale import TabScaffale
 from .tab_smontati import TabSmontati
@@ -117,6 +118,7 @@ class MainWindow(ctk.CTk):
         )
         
         # Crea tabs - ANALISI NC PRIMO!
+        self.tabview.add("⬡ Coda")
         self.tabview.add("📄 Analisi NC")
         self.tabview.add("📝 Generatore")
         self.tabview.add("🔧 In Macchina")
@@ -135,6 +137,11 @@ class MainWindow(ctk.CTk):
             self
         )
         
+        self.tab_coda = TabCodaLavorazione(
+            self.tabview.tab("⬡ Coda"),
+            self
+        )
+
         self.tab_macchina = TabMacchina(
             self.tabview.tab("🔧 In Macchina"),
             self
@@ -156,7 +163,7 @@ class MainWindow(ctk.CTk):
         )
         
         # Imposta tab Analisi NC come default
-        self.tabview.set("📄 Analisi NC")
+        self.tabview.set("⬡ Coda")
     
     def _seleziona_database(self):
         """Apre dialog selezione database."""
@@ -221,6 +228,7 @@ class MainWindow(ctk.CTk):
     def refresh_all_tabs(self):
         """Aggiorna tutti i tab."""
         self.tab_generatore.refresh()
+        self.tab_coda.refresh()
         self.tab_macchina.refresh()
         self.tab_scaffale.refresh()
         self.tab_smontati.refresh()

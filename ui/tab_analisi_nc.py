@@ -5,10 +5,13 @@ from tkinter import filedialog, messagebox
 import tkinter.ttk as ttk
 import os
 import re
+import sys
 
 from config.theme import *
 from config.constants import *
 from logic.nc_analyzer import estrai_tutti_utensili_da_file, confronta_utensili_logica
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 class TabAnalisiNC:
@@ -18,6 +21,7 @@ class TabAnalisiNC:
         self.parent = parent
         self.main = main_window
         self.file_paths = []
+        self._main_generato_path = None   # path del MAIN generato (per Solo MAIN)
         
         self._create_ui()
     
@@ -57,6 +61,20 @@ class TabAnalisiNC:
         ctk.CTkButton(toolbar, text="📄 GENERA MAIN",
                      command=self._genera_main,
                      **get_button_style("accent", "large")).pack(side="right", padx=5)
+        
+        self.btn_invia_main = ctk.CTkButton(toolbar, text="📤 Solo MAIN",
+                     command=self._invia_solo_main,
+                     fg_color="#1565C0", hover_color="#0D47A1",
+                     font=get_font("medium"), height=35, width=110,
+                     state="disabled")
+        self.btn_invia_main.pack(side="right", padx=3)
+        
+        self.btn_invia_tutto = ctk.CTkButton(toolbar, text="📤 Invia tutto",
+                     command=self._invia_tutto,
+                     fg_color="#2E7D32", hover_color="#1B5E20",
+                     font=get_font("medium"), height=35, width=110,
+                     state="disabled")
+        self.btn_invia_tutto.pack(side="right", padx=3)
         
         # Lista file selezionati
         list_frame = ctk.CTkFrame(self.parent, fg_color=COLOR_SURFACE, corner_radius=int(10))
@@ -113,8 +131,11 @@ class TabAnalisiNC:
     def _pulisci_lista(self):
         """Pulisce lista file."""
         self.file_paths = []
+        self._main_generato_path = None
         self.list_files.delete("1.0", "end")
         self.tree.delete(*self.tree.get_children())
+        self.btn_invia_tutto.configure(state="disabled")
+        self.btn_invia_main.configure(state="disabled")
     
     def _aggiorna_lista(self):
         """Aggiorna visualizzazione lista file."""
@@ -152,6 +173,10 @@ class TabAnalisiNC:
                 riga_num = match.group(1) if match else "-"
                 
                 self.tree.insert("", "end", values=("❌ MANCA", alias, file_name, riga_num))
+        
+        # Abilita pulsante invio se ci sono file
+        if self.file_paths:
+            self.btn_invia_tutto.configure(state="normal")
         
         # Mostra messaggio solo se richiesto (confronto manuale)
         if show_message:
@@ -340,6 +365,49 @@ class TabAnalisiNC:
             messagebox.showerror("Errore", f"Errore aggiunta utensile:\n{e}")
     
     
+    def _invia_tutto(self):
+        """Invia tutti i file analizzati alla macchina."""
+        if not self.file_paths:
+            return messagebox.showwarning("Attenzione", "Seleziona almeno un file MPF")
+        try:
+            from ui.dialog_invia_macchina import DialogInviaMacchina
+            import os
+            # Usa il nome della cartella come progetto
+            progetto = self.entry_nome_cartella.get().strip()
+            if not progetto:
+                return messagebox.showwarning("Attenzione",
+                    "Inserisci il nome progetto/cartella prima di inviare")
+            # Includi MAIN se esiste
+            paths = list(self.file_paths)
+            if self._main_generato_path and os.path.exists(self._main_generato_path):
+                if self._main_generato_path not in paths:
+                    paths.insert(0, self._main_generato_path)
+            dlg = DialogInviaMacchina(self.parent, paths, progetto)
+            self.parent.wait_window(dlg)
+        except Exception as e:
+            messagebox.showerror("Errore", f"Errore apertura dialog invio:\n{e}")
+
+    def _invia_solo_main(self):
+        """Invia solo il file MAIN generato."""
+        if not self._main_generato_path:
+            return messagebox.showwarning("Attenzione",
+                "Genera prima il file MAIN con '📄 GENERA MAIN'")
+        import os
+        if not os.path.exists(self._main_generato_path):
+            return messagebox.showwarning("File non trovato",
+                f"Il file MAIN non esiste più:\n{self._main_generato_path}\n\n"
+                "Rigenera il MAIN prima di inviare.")
+        try:
+            from ui.dialog_invia_macchina import DialogInviaMacchina
+            progetto = self.entry_nome_cartella.get().strip()
+            if not progetto:
+                return messagebox.showwarning("Attenzione",
+                    "Inserisci il nome progetto/cartella prima di inviare")
+            dlg = DialogInviaMacchina(self.parent, [self._main_generato_path], progetto)
+            self.parent.wait_window(dlg)
+        except Exception as e:
+            messagebox.showerror("Errore", f"Errore apertura dialog invio:\n{e}")
+
     def _genera_main(self):
         """Genera programma MAIN dai file analizzati."""
         if not self.file_paths:
@@ -376,6 +444,8 @@ class TabAnalisiNC:
             with open(save_path, 'w', encoding='utf-8') as f:
                 f.write(gcode_content)
             
+            self._main_generato_path = save_path
+            self.btn_invia_main.configure(state="normal")
             messagebox.showinfo("Successo", 
                               f"MAIN generato:\n{save_path}\n\n"
                               f"Usa logica calibrazione V12:\n"

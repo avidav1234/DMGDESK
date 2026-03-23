@@ -24,7 +24,6 @@ export default function App() {
           <Routes>
             <Route path="/"              element={<Navigate to="/coda" replace />} />
             <Route path="/coda"          element={<CodaLavorazione />} />
-            <Route path="/stato"         element={<CodaLavorazione />} />
             <Route path="/macchina"      element={<Macchina />} />
             <Route path="/scaffale"      element={<Scaffale />} />
             <Route path="/smontati"      element={<Smontati />} />

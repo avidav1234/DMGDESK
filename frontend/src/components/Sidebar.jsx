@@ -3,7 +3,6 @@ import { NavLink } from 'react-router-dom'
 
 const NAV = [
   { to: '/coda',        icon: '⬡',  label: 'Coda',    title: 'Coda lavorazione' },
-  { to: '/stato',       icon: '⚡',  label: 'Stato',   title: 'Stato macchina' },
   { to: '/analisi-nc',  icon: '📄',  label: 'NC',      title: 'Analisi NC' },
   { to: '/macchina',    icon: '⚙',   label: 'Tool',    title: 'Utensili in macchina' },
   { to: '/magazzino',   icon: '🗄',  label: 'Mag.',    title: 'Magazzino' },

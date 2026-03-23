@@ -540,12 +540,31 @@ export default function AnalisiNC() {
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
             <button onClick={doCheck} disabled={checking || sending || !fileDaInviare.length}
               style={{ padding: '9px 18px', borderRadius: 6, cursor: checking ? 'not-allowed' : 'pointer', background: 'var(--bg-base)', border: '1px solid var(--border-bright)', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 600 }}>
-              {checking ? '⏳ Verifica...' : '🔍 Verifica connessione'}
+              {checking ? '⏳ Verifica...' : '🔍 Verifica'}
             </button>
             <button onClick={doSend} disabled={!checkResult?.reachable || sending || !fileDaInviare.length || !progetto.trim()}
               style={{ padding: '9px 22px', borderRadius: 6, fontSize: 13, fontWeight: 700, cursor: (!checkResult?.reachable || sending) ? 'not-allowed' : 'pointer', background: checkResult?.reachable && !sending ? 'rgba(0,255,136,0.12)' : 'var(--bg-hover)', border: `1px solid ${checkResult?.reachable && !sending ? 'rgba(0,255,136,0.3)' : 'var(--border)'}`, color: checkResult?.reachable && !sending ? 'var(--green)' : 'var(--text-dim)', transition: 'all var(--t-fast)' }}>
-              {sending ? '⏳ Invio in corso...' : `📤 Invia ${fileDaInviare.length} file`}
+              {sending ? '⏳ Invio...' : `📤 Invia tutto (${done.length} file${mainGeneratoFile ? ' + MAIN' : ''})`}
             </button>
+            {mainGeneratoFile && (
+              <button onClick={() => {
+                const soloMain = [mainGeneratoFile]
+                setSending(true); setInvioResults([]); setInvioStatus(null)
+                api.inviaMacchina(progetto, soloMain)
+                  .then(r => {
+                    setInvioResults(r.risultati)
+                    setInvioStatus(r.n_err === 0
+                      ? { type: 'ok',  msg: `✓ MAIN inviato: ${mainGeneratoFile.name}` }
+                      : { type: 'warn', msg: `Errore invio MAIN: ${r.risultati[0]?.msg}` })
+                  })
+                  .catch(e => setInvioStatus({ type: 'err', msg: e.message }))
+                  .finally(() => setSending(false))
+              }}
+              disabled={!checkResult?.reachable || sending || !progetto.trim()}
+              style={{ padding: '9px 22px', borderRadius: 6, fontSize: 13, fontWeight: 700, cursor: (!checkResult?.reachable || sending) ? 'not-allowed' : 'pointer', background: checkResult?.reachable && !sending ? 'rgba(0,212,255,0.10)' : 'var(--bg-hover)', border: `1px solid ${checkResult?.reachable && !sending ? 'rgba(0,212,255,0.3)' : 'var(--border)'}`, color: checkResult?.reachable && !sending ? 'var(--cyan)' : 'var(--text-dim)', transition: 'all var(--t-fast)' }}>
+                {sending ? '⏳ Invio...' : `📤 Solo MAIN`}
+              </button>
+            )}
           </div>
         </div>
       )}

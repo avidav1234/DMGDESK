@@ -54,7 +54,8 @@ export default function Macchina() {
     setSyncing(true); setSyncMsg(null); setErrorSync(null)
     try {
       const r = await api.syncTools()
-      setSyncMsg(`${r.tool_count} utensili, ${r.positions_mapped} posizioni`)
+      const fmtLabel = r.format_used ? ` · ${r.format_used.toUpperCase()}` : ''
+      setSyncMsg(`${r.tool_count} utensili, ${r.positions_mapped} posizioni${fmtLabel}`)
       await loadSync()
     } catch (e) { setErrorSync(e.message) }
     finally { setSyncing(false) }
@@ -123,7 +124,7 @@ export default function Macchina() {
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
             {syncStatus?.last_sync
-              ? `Sync: ${new Date(syncStatus.last_sync).toLocaleString('it-IT')} — ${syncStatus.tool_count} ut.`
+              ? `Sync: ${new Date(syncStatus.last_sync).toLocaleString('it-IT')} — ${syncStatus.tool_count} ut.${syncStatus.format_used ? ' · ' + syncStatus.format_used.toUpperCase() : ''}`
               : 'Nessun sync'}
           </span>
           <button onClick={handleSync} disabled={syncing} style={{

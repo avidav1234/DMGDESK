@@ -16,7 +16,7 @@ from config.constants import *
 from logic.nc_analyzer import estrai_tutti_utensili_da_file
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from api.toa_parser import parse_toa, parse_tma
+from api.toa_parser import sync_from_share, detect_format, parse_toa, parse_tma
 
 
 # ── Helpers config/TOA ────────────────────────────────────────────────────────
@@ -78,30 +78,31 @@ def _get_sync_paths():
     return base / "TOOL_SYNC.TOA", base / "TOOL_SYNC.TMA"
 
 
-def _save_tools_db(tools, sync_time, positions=None):
+def _save_tools_db(tools, sync_time, positions=None, format_used=""):
+    """tools = dict {t_num: MachineTool} da sync_from_share o parse_toa."""
     db_path = _get_tools_db_path()
     pos_map = {}
     if positions:
         for pos in positions:
-            pos_map[pos.tool_id] = {"magazine": pos.magazine, "position": pos.position}
+            pos_map[pos.t_number] = {"magazine": pos.magazine, "position": pos.position}
     data = {
-        "sync_time": sync_time,
+        "sync_time":   sync_time,
+        "format_used": format_used,
         "tools": {
-            str(tid): {
-                "tool_id":      t.tool_id,
+            str(t_num): {
+                "tool_id":      t.t_number,
                 "name":         t.name,
                 "duplo":        t.duplo,
                 "status":       t.status,
-                "monitoring":   t.monitoring,
-                "length":       t.main_length,
-                "radius":       t.main_radius,
+                "length":       t.length,
+                "radius":       t.radius,
                 "life_percent": t.life_percent,
                 "is_enabled":   t.is_enabled,
                 "is_worn":      t.is_worn,
-                "magazine":     pos_map.get(tid, {}).get("magazine"),
-                "position":     pos_map.get(tid, {}).get("position"),
+                "magazine":     t.magazine if t.magazine is not None else pos_map.get(t_num, {}).get("magazine"),
+                "position":     t.position if t.position is not None else pos_map.get(t_num, {}).get("position"),
             }
-            for tid, t in tools.items() if t.name
+            for t_num, t in tools.items() if t.name
         }
     }
     db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -272,7 +273,6 @@ class TabMacchina:
                      font=get_font("title", bold=True), text_color="white").pack(pady=(12, 2))
         ctk.CTkLabel(header, text="Sync TOA/TMA  |  Confronto MPF  |  Tabella utensili",
                      font=get_font("body"), text_color="#E8F5E9").pack(pady=(0, 8))
-
         # Toolbar principale
         toolbar = ctk.CTkFrame(self.parent, fg_color="transparent")
         toolbar.pack(fill="x", padx=8, pady=(8, 4))
@@ -303,7 +303,7 @@ class TabMacchina:
                       font=get_font("small"), height=36, width=120,
                       corner_radius=6).pack(side="right", padx=4)
 
-        ctk.CTkButton(toolbar, text="TOA manuale",
+        ctk.CTkButton(toolbar, text="File manuale",
                       command=self._scegli_toa_manuale,
                       fg_color="#607D8B", hover_color="#455A64",
                       font=get_font("small"), height=36, width=110,
@@ -517,61 +517,92 @@ class TabMacchina:
                 "Percorso share non configurato.\n"
                 "Usa ⚙ Impostazioni per configurare la cartella TOA.")
             return
-        if not toa_path.exists():
+        # Verifica che almeno uno dei formati esista
+        share = str(toa_path.parent)
+        info = detect_format(share)
+        if info["use"] == "none":
             messagebox.showerror("File non trovato",
-                "File TOA non trovato:\n" + str(toa_path) + "\n\n"
-                "Generare da HMI → Servizi → Salva Attrezzaggio")
+                "Nessun file TOA o MPF trovato nella cartella:\n" + share + "\n\n"
+                "TOA: HMI → Servizi → Salva Attrezzaggio\n"
+                "MPF: eseguire SYNC_ALL_V2 sulla macchina")
             return
-        self._esegui_sync(Path(toa_path))
+        # Mostra quale formato verrà usato
+        self.lbl_sync_status.configure(
+            text="Sync in corso (" + info["use"].upper() + ")...",
+            text_color="#1565C0")
+        self._esegui_sync()  # senza argomento = auto-detect
 
     def _scegli_toa_manuale(self):
         path = filedialog.askopenfilename(
-            title="Seleziona file TOA",
-            filetypes=[("Tool Offset Archive", "*.toa *.TOA"), ("Tutti", "*.*")])
+            title="Seleziona file TOA o MPF",
+            filetypes=[
+                ("File utensili", "*.toa *.TOA *.mpf *.MPF"),
+                ("TOA", "*.toa *.TOA"),
+                ("MPF", "*.mpf *.MPF"),
+                ("Tutti", "*.*")])
         if path:
             self._esegui_sync(Path(path))
 
-    def _esegui_sync(self, toa_path):
+    def _esegui_sync(self, toa_path=None):
+        """Sync auto-detect: usa share_path se disponibile, altrimenti file singolo."""
         self.btn_sync.configure(state="disabled", text="Sync...")
+        # Se chiamato da _do_sync, usa la share completa (auto-detect TOA/MPF)
+        # Se chiamato da _scegli_toa_manuale, usa il file singolo passato
+        share_path = None
+        single_file = None
+        if toa_path is not None:
+            single_file = toa_path
+        else:
+            toa_p, _ = _get_sync_paths()
+            if toa_p:
+                share_path = str(toa_p.parent)
+
         def _worker():
             try:
-                tools = parse_toa(toa_path)
-                magazines, positions, tma_warning = {}, [], None
-                for suffix in (".TMA", ".tma", ".Tma"):
-                    candidate = toa_path.with_suffix(suffix)
-                    if candidate.exists():
-                        try:
-                            result_tma = parse_tma(candidate)
-                            # parse_tma può restituire (magazines, positions) o solo [positions]
-                            if isinstance(result_tma, tuple):
-                                magazines, positions = result_tma
-                            else:
-                                magazines, positions = {}, result_tma
-                            if not positions:
-                                tma_warning = "TMA vuoto"
-                        except Exception as ex:
-                            tma_warning = "Errore TMA: " + str(ex)
-                        break
+                if share_path:
+                    # Auto-detect formato più recente
+                    result = sync_from_share(share_path)
+                    tools     = result["tools"]
+                    positions = result["positions"]
+                    fmt_used  = result["format_used"]
+                    reason    = result["reason"]
+                    tma_warning = None
                 else:
-                    tma_warning = "TMA non trovato"
+                    # File singolo (TOA o MPF manuale)
+                    tools = parse_toa(str(single_file))
+                    positions = []
+                    fmt_used = "toa"
+                    reason = f"File singolo: {single_file.name}"
+                    tma_warning = None
+                    for suffix in (".TMA", ".tma"):
+                        candidate = single_file.with_suffix(suffix)
+                        if candidate.exists():
+                            result_tma = parse_tma(candidate)
+                            positions = result_tma if isinstance(result_tma, list) else []
+                            break
+
                 sync_time = datetime.now().isoformat()
-                _save_tools_db(tools, sync_time, positions)
+                _save_tools_db(tools, sync_time, positions, fmt_used)
                 n = sum(1 for t in tools.values() if t.name)
-                self.parent.after(0, lambda: self._after_sync(n, len(positions), sync_time, tma_warning))
+                self.parent.after(0, lambda: self._after_sync(
+                    n, len(positions), sync_time, tma_warning, fmt_used, reason))
             except Exception as ex:
                 msg = str(ex)
                 self.parent.after(0, lambda: self._sync_error(msg))
         threading.Thread(target=_worker, daemon=True).start()
 
-    def _after_sync(self, n_tools, n_pos, sync_time, tma_warning=None):
+    def _after_sync(self, n_tools, n_pos, sync_time, tma_warning=None, fmt_used="", reason=""):
         self.btn_sync.configure(state="normal", text="↻ Sync macchina")
         self._load_existing_db()
-        # Riesegui confronto se ci sono file MPF caricati
         if self._mpf_files:
             self._esegui_confronto()
         lines = [f"{n_tools} utensili", f"{n_pos} posizioni mappate"]
+        if fmt_used:
+            lines.append(f"Formato: {fmt_used.upper()}")
+        if reason:
+            lines.append(reason)
         if tma_warning:
-            lines.append("Attenzione TMA: " + tma_warning)
+            lines.append("Attenzione: " + tma_warning)
         messagebox.showinfo("Sync completato", "\n".join(lines))
 
     def _sync_error(self, msg):

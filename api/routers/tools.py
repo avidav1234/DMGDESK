@@ -19,7 +19,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, UploadFile, File
 from pydantic import BaseModel
 
-from api.toa_parser import parse_toa, parse_tma, MachineTool, MagazinePosition
+from api.toa_parser import sync_from_share, detect_format, MachineTool, MagazinePosition
 from database.db_handler import carica_configurazione, salva_configurazione
 from utils.logger import get_logger
 
@@ -66,26 +66,16 @@ def _estrai_utensili_da_testo(testo: str) -> list[tuple[str, int, str]]:
 # Percorsi file TOA/TMA sulla share
 # ---------------------------------------------------------------------------
 
-def _get_sync_paths() -> tuple[Path, Path]:
-    """
-    Restituisce i path di TOOL_SYNC.TOA e TOOL_SYNC.TMA.
-    Cerca la share in questo ordine:
-    1. config["radice"]           — chiave dedicata se presente
-    2. config["percorso_nc_base"] — risale al primo livello (P:\DMG_DMC_160U\4297 → P:\DMG_DMC_160U)
-    """
+def _get_share_path() -> str:
+    """Restituisce il percorso della share (es. P:\\DMG_DMC_160U)."""
     config = carica_configurazione()
-
-    # 1. chiave dedicata
     radice = config.get("radice", "")
-
-    # 2. risali da percorso_nc_base
     if not radice:
         percorso_nc = config.get("percorso_nc_base", "")
         if percorso_nc:
             parts = Path(percorso_nc).parts
             if len(parts) >= 2:
                 radice = str(Path(parts[0]) / parts[1])
-
     if not radice:
         raise HTTPException(
             status_code=500,
@@ -95,9 +85,7 @@ def _get_sync_paths() -> tuple[Path, Path]:
                 "(es. P:\\\\DMG_DMC_160U\\\\4297)."
             )
         )
-
-    base = Path(radice)
-    return base / "TOOL_SYNC.TOA", base / "TOOL_SYNC.TMA"
+    return radice
 
 
 def _get_tools_db_path() -> Path:
@@ -128,8 +116,10 @@ class ToolSummary(BaseModel):
 class SyncStatus(BaseModel):
     last_sync: Optional[str]     # ISO datetime
     tool_count: int
+    format_used: Optional[str]   # "toa" | "mpf"
     toa_path: str
     tma_path: str
+    reason: Optional[str]        # spiegazione formato scelto
 
 
 class CheckResult(BaseModel):
@@ -145,52 +135,50 @@ class CheckResult(BaseModel):
 # Helpers DB locale (JSON)
 # ---------------------------------------------------------------------------
 
-def _save_tools_db(tools: dict[int, MachineTool], sync_time: str, positions=None) -> None:
-    """Salva il DB utensili in JSON locale, incluse posizioni magazzino."""
+def _save_tools_db(tools: dict, sync_time: str, positions=None, format_used: str = "") -> None:
+    """Salva il DB utensili in JSON locale. tools = dict {t_num: MachineTool}."""
     db_path = _get_tools_db_path()
 
-    # Mappa tool_id → posizione magazzino dal TMA
+    # Posizioni dal TMA (se non già nel tool)
     pos_map: dict[int, dict] = {}
     if positions:
         for pos in positions:
-            pos_map[pos.tool_id] = {
-                "magazine": pos.magazine,
-                "position": pos.position,
-            }
+            pos_map[pos.t_number] = {"magazine": pos.magazine, "position": pos.position}
 
     data = {
-        "sync_time": sync_time,
+        "sync_time":   sync_time,
+        "format_used": format_used,
         "tools": {
-            str(tid): {
-                "tool_id": t.tool_id,
-                "name": t.name,
-                "duplo": t.duplo,
-                "status": t.status,
-                "monitoring": t.monitoring,
-                "length": t.main_length,
-                "radius": t.main_radius,
+            str(t_num): {
+                "tool_id":      t.t_number,
+                "name":         t.name,
+                "duplo":        t.duplo,
+                "status":       t.status,
+                "length":       t.length,
+                "radius":       t.radius,
                 "life_percent": t.life_percent,
-                "is_enabled": t.is_enabled,
-                "is_worn": t.is_worn,
-                "magazine": pos_map.get(tid, {}).get("magazine"),
-                "position": pos_map.get(tid, {}).get("position"),
+                "is_enabled":   t.is_enabled,
+                "is_worn":      t.is_worn,
+                "magazine":     t.magazine if t.magazine is not None else pos_map.get(t_num, {}).get("magazine"),
+                "position":     t.position if t.position is not None else pos_map.get(t_num, {}).get("position"),
             }
-            for tid, t in tools.items()
+            for t_num, t in tools.items()
             if t.name
         }
     }
+    db_path.parent.mkdir(parents=True, exist_ok=True)
     with open(db_path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
 
-def _load_tools_db() -> tuple[dict, str | None]:
-    """Carica il DB utensili dal JSON locale. Restituisce (tools_dict, sync_time)."""
+def _load_tools_db() -> tuple[dict, str | None, str]:
+    """Carica il DB utensili dal JSON locale. Restituisce (tools_dict, sync_time, format_used)."""
     db_path = _get_tools_db_path()
     if not db_path.exists():
-        return {}, None
+        return {}, None, ""
     with open(db_path, encoding="utf-8") as f:
         data = json.load(f)
-    return data.get("tools", {}), data.get("sync_time")
+    return data.get("tools", {}), data.get("sync_time"), data.get("format_used", "")
 
 
 # ---------------------------------------------------------------------------
@@ -203,59 +191,36 @@ def _load_tools_db() -> tuple[dict, str | None]:
 )
 async def sync_tools():
     """
-    Legge TOOL_SYNC.TOA e TOOL_SYNC.TMA dalla share configurata
-    (radice in config.json) e aggiorna il DB locale utensili.
+    Auto-rileva il formato più aggiornato (TOA+TMA o MPF) e aggiorna il DB.
 
-    I file vanno generati dalla macchina con:
-      HMI → Servizi → Salva Attrezzaggio → Z:\\DMG_DMC_160U\\TOOL_SYNC
+    Formati supportati sulla share:
+      - TOOL_SYNC.TOA + TOOL_SYNC.TMA  (HMI → Servizi → Salva Attrezzaggio)
+      - TOOL_SYN1_TOA.MPF + TOOL_SYN2_TOA.MPF + TOOL_SYN3_TOA.MPF  (programma NC)
+    Il formato con timestamp più recente viene usato automaticamente.
     """
-    toa_path, tma_path = _get_sync_paths()
-
-    if not toa_path.exists():
-        raise HTTPException(
-            status_code=404,
-            detail=(
-                f"File TOA non trovato: {toa_path}. "
-                "Sulla macchina: HMI → Servizi → Salva Attrezzaggio, "
-                "salvare in Z:\\\\DMG_DMC_160U\\\\ con nome TOOL_SYNC"
-            )
-        )
-
+    share = _get_share_path()
     try:
-        tools = parse_toa(toa_path)
-        log.info(f"TOA letto: {len(tools)} utensili da {toa_path}")
+        result = sync_from_share(share)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Errore lettura TOA: {e}")
+        raise HTTPException(status_code=500, detail=f"Errore lettura share: {e}")
 
-    # TMA opzionale — cerca con varie estensioni
-    magazines, positions = {}, []
-    tma_found = None
-    for suffix in (".TMA", ".tma", ".Tma"):
-        candidate = toa_path.with_suffix(suffix)
-        if candidate.exists():
-            tma_found = candidate
-            break
-
-    if tma_found:
-        try:
-            magazines, positions = parse_tma(tma_found)
-            log.info(f"TMA letto: {tma_found.name} — {len(magazines)} magazine, {len(positions)} posizioni occupate")
-            if not positions:
-                log.warning("TMA letto ma nessuna posizione occupata — magazzino vuoto al momento del salvataggio")
-        except Exception as e:
-            log.warning(f"Errore lettura TMA (non bloccante): {e}")
-    else:
-        log.warning(f"File TMA non trovato accanto a {toa_path.name} — posizioni magazzino non disponibili")
-
+    tools     = result["tools"]
+    positions = result["positions"]
     sync_time = datetime.now().isoformat()
-    _save_tools_db(tools, sync_time, positions)
+
+    _save_tools_db(tools, sync_time, positions, format_used=result["format_used"])
+
+    log.info(f"Sync OK: {len(tools)} utensili via {result['format_used'].upper()} — {result['reason']}")
 
     return {
-        "ok": True,
-        "sync_time": sync_time,
-        "tool_count": sum(1 for t in tools.values() if t.name),
-        "magazine_count": len(magazines),
+        "ok":              True,
+        "sync_time":       sync_time,
+        "tool_count":      len(tools),
         "positions_mapped": len(positions),
+        "format_used":     result["format_used"],
+        "reason":          result["reason"],
     }
 
 
@@ -265,16 +230,24 @@ async def sync_tools():
     summary="Stato e data dell'ultimo sync",
 )
 async def sync_status():
-    """Restituisce quando è stato fatto l'ultimo sync e quanti utensili ci sono nel DB."""
-    toa_path, tma_path = _get_sync_paths()
-    _, sync_time = _load_tools_db()
-    tools_db, _ = _load_tools_db()
+    """Restituisce stato ultimo sync, formato usato e quanti utensili ci sono nel DB."""
+    try:
+        share = _get_share_path()
+        info  = detect_format(share)
+        toa_p = str(info["toa_files"][0]) if info["toa_files"] else share + "/TOOL_SYNC.TOA"
+        tma_p = str(Path(share) / "TOOL_SYNC.TMA")
+    except Exception:
+        toa_p = ""; tma_p = ""; info = {}
+
+    tools_db, sync_time, fmt_used = _load_tools_db()
 
     return SyncStatus(
         last_sync=sync_time,
         tool_count=len(tools_db),
-        toa_path=str(toa_path),
-        tma_path=str(tma_path),
+        format_used=fmt_used or None,
+        toa_path=toa_p,
+        tma_path=tma_p,
+        reason=info.get("reason"),
     )
 
 
@@ -288,7 +261,7 @@ async def list_tools(only_enabled: bool = False):
     Restituisce tutti gli utensili nell'ultimo sync.
     Parametro opzionale: only_enabled=true per filtrare solo gli abilitati.
     """
-    tools_db, sync_time = _load_tools_db()
+    tools_db, sync_time, format_used = _load_tools_db()
     if not tools_db:
         return []
 
@@ -335,7 +308,7 @@ async def check_tools(file: UploadFile = File(...)):
     - worn: utensili con vita residua < 10%
     - can_run: True se tutti gli utensili required sono ok
     """
-    tools_db, sync_time = _load_tools_db()
+    tools_db, sync_time, _ = _load_tools_db()
     if not tools_db:
         raise HTTPException(
             status_code=409,
@@ -396,7 +369,7 @@ async def check_tools_text(body: dict):
     Alternativa a /check che accetta il testo MPF come JSON.
     Body: {"mpf_content": "...testo programma..."}
     """
-    tools_db, _ = _load_tools_db()
+    tools_db, _, _ = _load_tools_db()
     if not tools_db:
         raise HTTPException(
             status_code=409,

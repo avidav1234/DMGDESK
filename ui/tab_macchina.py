@@ -541,7 +541,12 @@ class TabMacchina:
                     candidate = toa_path.with_suffix(suffix)
                     if candidate.exists():
                         try:
-                            magazines, positions = parse_tma(candidate)
+                            result_tma = parse_tma(candidate)
+                            # parse_tma può restituire (magazines, positions) o solo [positions]
+                            if isinstance(result_tma, tuple):
+                                magazines, positions = result_tma
+                            else:
+                                magazines, positions = {}, result_tma
                             if not positions:
                                 tma_warning = "TMA vuoto"
                         except Exception as ex:

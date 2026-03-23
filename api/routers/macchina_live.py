@@ -47,20 +47,17 @@ def _trova_log_path(config: dict) -> str | None:
     if explicit and Path(explicit).exists():
         return str(Path(explicit))
 
-    # Ricava radice share da radice o da percorso_nc_base
+    # Ricava radice share da radice, tools_toa_folder, o percorso_nc_base
     candidates_base = []
 
-    radice = (config.get("radice") or "").strip()
-    if radice:
-        candidates_base.append(Path(radice))
-
-    percorso_nc = (config.get("percorso_nc_base") or "").strip()
-    if percorso_nc:
-        p = Path(percorso_nc)
-        candidates_base.append(p)
-        parts = p.parts
-        if len(parts) >= 2:
-            candidates_base.append(Path(parts[0]) / parts[1])
+    for key in ["radice", "tools_toa_folder", "percorso_nc_base"]:
+        val = (config.get(key) or "").strip().replace("/", "\\")
+        if val:
+            p = Path(val)
+            candidates_base.append(p)
+            parts = p.parts
+            if len(parts) >= 2:
+                candidates_base.append(Path(parts[0]) / parts[1])
 
     for base in candidates_base:
         for suffix in [

@@ -56,21 +56,18 @@ def _opcua_log_path(config: dict) -> str | None:
         return explicit
 
     # Ricava la radice della share (es. P:\DMG_DMC_160U)
-    # da radice (chiave dedicata) o da percorso_nc_base (risale ai primi 2 livelli)
+    # da radice, tools_toa_folder, o percorso_nc_base
     candidates_base = []
 
-    radice = (config.get("radice") or "").strip()
-    if radice:
-        candidates_base.append(Path(radice))
-
-    percorso_nc = (config.get("percorso_nc_base") or "").strip()
-    if percorso_nc:
-        p = Path(percorso_nc)
-        # Aggiunge il percorso completo E la radice risalendo
-        candidates_base.append(p)
-        parts = p.parts
-        if len(parts) >= 2:
-            candidates_base.append(Path(parts[0]) / parts[1])
+    for key in ["radice", "tools_toa_folder", "percorso_nc_base"]:
+        val = (config.get(key) or "").strip().replace("/", "\\")
+        if val:
+            p = Path(val)
+            candidates_base.append(p)
+            # Risale anche ai primi 2 livelli (es. P:\DMG_DMC_160U da P:\DMG_DMC_160U\4348\0221)
+            parts = p.parts
+            if len(parts) >= 2:
+                candidates_base.append(Path(parts[0]) / parts[1])
 
     for base in candidates_base:
         for suffix in [

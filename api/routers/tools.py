@@ -204,13 +204,21 @@ async def sync_tools():
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Errore lettura share: {e}")
+        import traceback
+        detail = f"Errore lettura share: {e}\n{traceback.format_exc()}"
+        log.error(detail)
+        raise HTTPException(status_code=500, detail=str(e))
 
     tools     = result["tools"]
     positions = result["positions"]
     sync_time = datetime.now().isoformat()
 
-    _save_tools_db(tools, sync_time, positions, format_used=result["format_used"])
+    try:
+        _save_tools_db(tools, sync_time, positions, format_used=result["format_used"])
+    except Exception as e:
+        import traceback
+        log.error(f"Errore _save_tools_db: {e}\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Errore salvataggio DB: {e}")
 
     log.info(f"Sync OK: {len(tools)} utensili via {result['format_used'].upper()} — {result['reason']}")
 

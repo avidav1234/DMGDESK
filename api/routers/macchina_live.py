@@ -39,23 +39,38 @@ RE_LINE = re.compile(
 
 def _trova_log_path(config: dict) -> str | None:
     """
-    Cerca OpcUaLegacy.log nella share configurata.
-    Prova più path possibili.
+    Cerca OpcUaLegacy.log nella share.
+    Prova percorso esplicito, radice share, e percorso_nc_base completo.
     """
-    share = config.get("percorso_nc_base", "")
-    if not share:
-        return None
-    base = Path(share)
-    candidates = [
-        base / "OpcUaLegacy.log",
-        base / "logs" / "OpcUaLegacy.log",
-        base / "stato" / "OpcUaLegacy.log",
-        # Path diretto configurabile
-        Path(config.get("opcua_log_path", "")) if config.get("opcua_log_path") else None,
-    ]
-    for p in candidates:
-        if p and p.exists():
-            return str(p)
+    # Path esplicito in config (priorità massima)
+    explicit = config.get("opcua_log_path") or ""
+    if explicit and Path(explicit).exists():
+        return str(Path(explicit))
+
+    # Ricava radice share da radice o da percorso_nc_base
+    candidates_base = []
+
+    radice = (config.get("radice") or "").strip()
+    if radice:
+        candidates_base.append(Path(radice))
+
+    percorso_nc = (config.get("percorso_nc_base") or "").strip()
+    if percorso_nc:
+        p = Path(percorso_nc)
+        candidates_base.append(p)
+        parts = p.parts
+        if len(parts) >= 2:
+            candidates_base.append(Path(parts[0]) / parts[1])
+
+    for base in candidates_base:
+        for suffix in [
+            "OpcUaLegacy.log",
+            "logs/OpcUaLegacy.log",
+            "stato/OpcUaLegacy.log",
+        ]:
+            full = base / suffix
+            if full.exists():
+                return str(full)
     return None
 
 

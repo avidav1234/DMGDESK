@@ -47,23 +47,40 @@ def _pallet_path(config: dict) -> Path:
 
 
 def _opcua_log_path(config: dict) -> str | None:
-    """Cerca OpcUaLegacy.log nella share."""
-    # Path esplicito in config
-    explicit = config.get("opcua_log_path", "")
+    """Cerca OpcUaLegacy.log nella share.
+    Prova: percorso esplicito, radice share, percorso_nc_base completo.
+    """
+    # Path esplicito in config (priorità massima)
+    explicit = (config.get("opcua_log_path") or "")
     if explicit and Path(explicit).exists():
         return explicit
-    # Cerca vicino a percorso_nc_base
-    share = config.get("percorso_nc_base", "")
-    if not share:
-        return None
-    base = Path(share)
-    for p in [
-        base / "OpcUaLegacy.log",
-        base / "logs" / "OpcUaLegacy.log",
-        base / "stato" / "OpcUaLegacy.log",
-    ]:
-        if p.exists():
-            return str(p)
+
+    # Ricava la radice della share (es. P:\DMG_DMC_160U)
+    # da radice (chiave dedicata) o da percorso_nc_base (risale ai primi 2 livelli)
+    candidates_base = []
+
+    radice = (config.get("radice") or "").strip()
+    if radice:
+        candidates_base.append(Path(radice))
+
+    percorso_nc = (config.get("percorso_nc_base") or "").strip()
+    if percorso_nc:
+        p = Path(percorso_nc)
+        # Aggiunge il percorso completo E la radice risalendo
+        candidates_base.append(p)
+        parts = p.parts
+        if len(parts) >= 2:
+            candidates_base.append(Path(parts[0]) / parts[1])
+
+    for base in candidates_base:
+        for suffix in [
+            "OpcUaLegacy.log",
+            "logs/OpcUaLegacy.log",
+            "stato/OpcUaLegacy.log",
+        ]:
+            full = base / suffix
+            if full.exists():
+                return str(full)
     return None
 
 

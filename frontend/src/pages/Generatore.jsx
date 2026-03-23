@@ -157,7 +157,7 @@ export default function Generatore() {
                 <div key={key} className="card" style={{ padding: 20 }}>
                   <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 10 }}>{label}</div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <div className="mono" style={{ fontSize: 22, fontWeight: 700, color: key === 'nome' ? 'var(--cyan)' : 'var(--green)', flex: 1, wordBreak: 'break-all' }}>
+                    <div className="mono" style={{ fontSize: 22, fontWeight: 700, color: key === 'nome' ? 'var(--navy-700)' : 'var(--green)', flex: 1, wordBreak: 'break-all' }}>
                       {value}
                     </div>
                     <button className="btn btn-ghost" style={{ fontSize: 12, flexShrink: 0 }} onClick={() => copia(value, key)}>

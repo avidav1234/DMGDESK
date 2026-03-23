@@ -38,7 +38,7 @@ export default function HolderBussole() {
         action={<button className="btn btn-ghost" onClick={load} style={{ fontSize: 12 }}>↻ Aggiorna</button>} />
 
       <div style={{ display: 'flex', gap: 12 }}>
-        <StatCard label="Holder Smontati" value={holder.length} color="var(--cyan)" />
+        <StatCard label="Holder Smontati" value={holder.length} color="var(--navy-accent)" />
         <StatCard label="Tipi Bussole" value={bussole.length} color="var(--amber)" />
         <StatCard label="Tot. Bussole" value={bussole.reduce((s, b) => s + b.quantita, 0)} color="var(--green)" />
       </div>
@@ -52,8 +52,8 @@ export default function HolderBussole() {
           <button key={t} onClick={() => setTab(t)} style={{
             padding: '8px 20px', border: 'none', background: 'none', cursor: 'pointer',
             fontFamily: 'var(--font-display)', fontSize: 13, fontWeight: 600,
-            color: tab === t ? 'var(--cyan)' : 'var(--text-secondary)',
-            borderBottom: `2px solid ${tab === t ? 'var(--cyan)' : 'transparent'}`,
+            color: tab === t ? 'var(--navy-700)' : 'var(--text-secondary)',
+            borderBottom: `2px solid ${tab === t ? 'var(--navy-700)' : 'transparent'}`,
             transition: 'all var(--t-fast)', textTransform: 'capitalize',
           }}>
             {t === 'holder' ? `Holder (${holder.length})` : `Bussole (${bussole.length})`}

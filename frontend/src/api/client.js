@@ -1,23 +1,17 @@
 /**
- * api/client.js — Client HTTP centralizzato
- * Tutti i componenti importano da qui — mai fetch() diretti.
+ * api/client.js — DMG Desk API client
  */
 
 const BASE = import.meta.env.VITE_API_URL || '/api'
 
 async function request(method, path, body = null) {
-  const opts = {
-    method,
-    headers: { 'Content-Type': 'application/json' },
-  }
+  const opts = { method, headers: { 'Content-Type': 'application/json' } }
   if (body && !(body instanceof FormData)) {
     opts.body = JSON.stringify(body)
-    opts.headers['Content-Type'] = 'application/json'
   } else if (body instanceof FormData) {
     opts.body = body
-    delete opts.headers['Content-Type']  // browser setta multipart automaticamente
+    delete opts.headers['Content-Type']
   }
-
   const res = await fetch(`${BASE}${path}`, opts)
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }))
@@ -26,12 +20,8 @@ async function request(method, path, body = null) {
   return res.json()
 }
 
-// Download binario — restituisce { blob, filename }
 async function download(method, path, body = null) {
-  const opts = {
-    method,
-    headers: { 'Content-Type': 'application/json' },
-  }
+  const opts = { method, headers: { 'Content-Type': 'application/json' } }
   if (body) opts.body = JSON.stringify(body)
   const res = await fetch(`${BASE}${path}`, opts)
   if (!res.ok) {
@@ -54,7 +44,7 @@ export const api = {
 
   // ── Scaffale ──────────────────────────────────────────
   getScaffale:          ()          => request('GET',    '/scaffale/'),
-  spostaInMacchina:     (body)      => request('POST',   '/scaffale/sposta-in-macchina', body),   // body: { alias, nuova_posizione_macchina }
+  spostaInMacchina:     (body)      => request('POST',   '/scaffale/sposta-in-macchina', body),
   rimuoviDaScaffale:    (alias)     => request('DELETE', `/scaffale/${encodeURIComponent(alias)}`),
 
   // ── Smontati ──────────────────────────────────────────
@@ -69,7 +59,6 @@ export const api = {
   aggiungiHolder:       (body)      => request('POST',   '/holder-bussole/holder/', body),
   modificaHolder:       (alias, b)  => request('PATCH',  `/holder-bussole/holder/${encodeURIComponent(alias)}`, b),
   eliminaHolder:        (alias)     => request('DELETE', `/holder-bussole/holder/${encodeURIComponent(alias)}`),
-
   getBussole:           ()          => request('GET',    '/holder-bussole/bussole/'),
   aggiungiBussola:      (body)      => request('POST',   '/holder-bussole/bussole/', body),
   eliminaBussola:       (codice)    => request('DELETE', `/holder-bussole/bussole/${encodeURIComponent(codice)}`),
@@ -91,32 +80,26 @@ export const api = {
   cartelleSfoglia:      ()          => request('GET',    '/analisi-nc/sfoglia-cartella'),
   cartelleRecenti:      ()          => request('GET',    '/analisi-nc/cartelle-recenti'),
 
-  // Configurazione percorso NC base (salvato in config.json sul server — una volta sola)
+  // ── Config ────────────────────────────────────────────
   getPercorsoNc:        ()          => request('GET',    '/config/percorso-nc'),
-  setPercorsoNc:        (percorso)  => request('PUT',    '/config/percorso-nc', { percorso_nc_base: percorso }),
+  setPercorsoNc:        (p)         => request('PUT',    '/config/percorso-nc', { percorso_nc_base: p }),
 
-  // ── Utensili Macchina ─────────────────────────────────
+  // ── TOA Sync ──────────────────────────────────────────
   syncTools:            ()          => request('POST',   '/tools/sync'),
   getToolsSyncStatus:   ()          => request('GET',    '/tools/sync-status'),
   getTools:             (onlyOk)    => request('GET',    `/tools${onlyOk ? '?only_enabled=true' : ''}`),
   checkToolsMpf:        (file)      => { const fd = new FormData(); fd.append('file', file); return request('POST', '/tools/check', fd) },
   checkToolsText:       (mpf)       => request('POST',   '/tools/check-text', { mpf_content: mpf }),
 
-  // ── Invio Macchina ───────────────────────────────────
-  getMachineConfig:     ()               => request('GET',  '/macchina-invio/config'),
-  setMachineConfig:     (body)           => request('PUT',  '/macchina-invio/config', body),
-  checkMacchina:        (progetto, files) => {
-    const fd = new FormData()
-    fd.append('progetto', progetto)
-    fd.append('filenames', JSON.stringify(files))
-    return request('POST', '/macchina-invio/check', fd)
-  },
-  inviaMacchina:        (progetto, files) => {
-    const fd = new FormData()
-    fd.append('progetto', progetto)
-    files.forEach(f => fd.append('files', f))
-    return request('POST', '/macchina-invio/invia', fd)
-  },
+  // ── Stato Macchina Live ────────────────────────────────
+  getStatoMacchina:     ()          => request('GET',    '/macchina-live/stato'),
+  getLogConfig:         ()          => request('GET',    '/macchina-live/config-log'),
+
+  // ── Pallet ────────────────────────────────────────────
+  getPallet:            ()          => request('GET',    '/pallet/'),
+  setStatoPallet:       (n, body)   => request('PATCH',  `/pallet/${n}`, body),
+  syncLavorazione:      (body)      => request('POST',   '/pallet/sync-lavorazione', body),
+  inviaProgramma:       (n, body)   => request('POST',   `/pallet/invia-programma/${n}`, body),
 
   // ── Health ────────────────────────────────────────────
   health:               ()          => fetch('/health').then(r => r.json()),

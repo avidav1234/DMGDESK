@@ -10,7 +10,7 @@ function LifeBar({ pct }) {
   const color = c < 10 ? 'var(--red)' : c < 30 ? 'var(--amber)' : 'var(--green)'
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-      <div style={{ width: 44, height: 4, background: 'var(--bg-base)', borderRadius: 2, overflow: 'hidden' }}>
+      <div style={{ width: 44, height: 4, background: 'var(--border)', borderRadius: 2, overflow: 'hidden' }}>
         <div style={{ width: `${c}%`, height: '100%', background: color, borderRadius: 2 }} />
       </div>
       <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color }}>{Math.round(c)}%</span>
@@ -19,10 +19,10 @@ function LifeBar({ pct }) {
 }
 
 const COL = {
-  ok:       { bg: 'rgba(0,255,136,0.08)',  border: 'rgba(0,255,136,0.25)',  text: 'var(--green)'  },
+  ok:       { bg: 'rgba(22,163,74,0.08)',  border: 'rgba(22,163,74,0.25)',  text: 'var(--green)'  },
   missing:  { bg: 'rgba(255,68,85,0.10)',  border: 'rgba(255,68,85,0.30)',  text: 'var(--red)'    },
   disabled: { bg: 'rgba(255,179,0,0.10)',  border: 'rgba(255,179,0,0.30)',  text: 'var(--amber)'  },
-  worn:     { bg: 'rgba(168,85,247,0.10)', border: 'rgba(168,85,247,0.30)', text: 'var(--purple)' },
+  worn:     { bg: 'rgba(109,40,217,0.10)', border: 'rgba(109,40,217,0.30)', text: '#6d28d9' },
 }
 
 export default function Macchina() {
@@ -105,7 +105,7 @@ export default function Macchina() {
         {/* PRIMARI */}
         <button onClick={() => fileInputRef.current?.click()} style={{
           padding: '10px 22px', borderRadius: 7, cursor: 'pointer',
-          background: '#1976D2', border: 'none',
+          background: 'var(--navy-700)', border: 'none',
           color: 'white', fontSize: 14, fontWeight: 700,
         }}>+ Aggiungi MPF</button>
         <input ref={fileInputRef} type="file" accept=".mpf,.nc,.spf" multiple
@@ -114,7 +114,7 @@ export default function Macchina() {
         <button onClick={resetFiles} style={btn_small}>Reset</button>
 
         {checkFiles.length > 0 && (
-          <span style={{ fontSize: 12, color: 'var(--cyan)', fontFamily: 'var(--font-mono)' }}>
+          <span style={{ fontSize: 12, color: 'var(--navy-accent)', fontFamily: 'var(--font-mono)' }}>
             {checkFiles.length} file caricati
           </span>
         )}
@@ -137,7 +137,7 @@ export default function Macchina() {
 
       {/* Messaggi */}
       {syncMsg && <div style={{ padding: '8px 12px', borderRadius: 6, fontSize: 12,
-        background: 'rgba(0,255,136,0.07)', border: '1px solid rgba(0,255,136,0.2)',
+        background: 'rgba(22,163,74,0.07)', border: '1px solid rgba(22,163,74,0.2)',
         color: 'var(--green)' }}>✓ Sync: {syncMsg}</div>}
       {errorSync && <div style={{ padding: '8px 12px', borderRadius: 6, fontSize: 12,
         background: 'rgba(255,68,85,0.08)', border: '1px solid rgba(255,68,85,0.25)',
@@ -146,9 +146,9 @@ export default function Macchina() {
       {/* Istruzioni primo sync */}
       {!syncStatus?.last_sync && (
         <div style={{ padding: '10px 14px', borderRadius: 8, fontSize: 12,
-          background: 'var(--bg-card)', border: '1px solid var(--border)',
+          background: 'var(--bg-surface)', border: '1px solid var(--border)',
           color: 'var(--text-secondary)' }}>
-          Prima sync: <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--cyan)' }}>
+          Prima sync: <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--navy-accent)' }}>
           HMI → Servizi → Salva Attrezzaggio → Z:\DMG_DMC_160U\TOOL_SYNC</span>, poi ↻ Sync macchina
         </div>
       )}
@@ -156,7 +156,7 @@ export default function Macchina() {
       {/* Lista file caricati */}
       {checkFiles.length > 0 && (
         <div style={{ padding: '8px 12px', borderRadius: 6,
-          background: 'var(--bg-card)', border: '1px solid var(--border)',
+          background: 'var(--bg-surface)', border: '1px solid var(--border)',
           fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>
           {checkFiles.map((f, i) => <span key={f.name} style={{ marginRight: 16 }}>{i+1}. {f.name}</span>)}
         </div>
@@ -167,13 +167,13 @@ export default function Macchina() {
       {checkError && <div style={{ padding: '8px 12px', borderRadius: 6, fontSize: 12,
         background: 'rgba(255,68,85,0.08)', color: 'var(--red)' }}>✕ {checkError}</div>}
       {checkResult && (
-        <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)',
+        <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)',
                       borderRadius: 10, padding: '12px 14px' }}>
           {/* Banner */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10,
             padding: '8px 12px', borderRadius: 6,
-            background: checkResult.can_run ? 'rgba(0,255,136,0.07)' : 'rgba(255,68,85,0.08)',
-            border: `1px solid ${checkResult.can_run ? 'rgba(0,255,136,0.2)' : 'rgba(255,68,85,0.25)'}` }}>
+            background: checkResult.can_run ? 'rgba(22,163,74,0.07)' : 'rgba(255,68,85,0.08)',
+            border: `1px solid ${checkResult.can_run ? 'rgba(22,163,74,0.2)' : 'rgba(255,68,85,0.25)'}` }}>
             <span style={{ fontSize: 16 }}>{checkResult.can_run ? '✅' : '❌'}</span>
             <span style={{ fontWeight: 700, fontSize: 13,
               color: checkResult.can_run ? 'var(--green)' : 'var(--red)' }}>
@@ -215,7 +215,7 @@ export default function Macchina() {
         <input value={searchSync} onChange={e => setSearchSync(e.target.value)}
           placeholder="Cerca utensile…"
           style={{ flex: 1, maxWidth: 280, padding: '7px 12px', borderRadius: 6,
-            background: 'var(--bg-card)', border: '1px solid var(--border)',
+            background: 'var(--bg-surface)', border: '1px solid var(--border)',
             color: 'var(--text-primary)', fontSize: 13, outline: 'none',
             fontFamily: 'var(--font-mono)' }} />
         <span style={{ fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
@@ -225,7 +225,7 @@ export default function Macchina() {
 
       {/* Tabella utensili */}
       {loading ? <Loader /> : tools.length === 0 ? null : (
-        <div style={{ flex: 1, overflow: 'auto', background: 'var(--bg-card)',
+        <div style={{ flex: 1, overflow: 'auto', background: 'var(--bg-surface)',
           borderRadius: 10, border: '1px solid var(--border)' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
@@ -234,7 +234,7 @@ export default function Macchina() {
                   <th key={h} style={{ padding: '9px 14px', textAlign: 'left', fontSize: 11,
                     fontFamily: 'var(--font-mono)', color: 'var(--text-dim)',
                     fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em',
-                    position: 'sticky', top: 0, background: 'var(--bg-card)' }}>{h}</th>
+                    position: 'sticky', top: 0, background: 'var(--bg-surface)' }}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -242,7 +242,7 @@ export default function Macchina() {
               {filtered.map(t => {
                 const isDis  = !t.is_enabled || t.is_worn
                 const isWorn = t.life_percent !== null && t.life_percent < 10
-                const rowBg  = isDis ? 'rgba(255,68,85,0.04)' : isWorn ? 'rgba(168,85,247,0.04)' : 'transparent'
+                const rowBg  = isDis ? 'rgba(255,68,85,0.04)' : isWorn ? 'rgba(109,40,217,0.04)' : 'transparent'
                 const posFmt = t.magazine != null && t.position != null
                   ? `M${t.magazine}·${String(t.position).padStart(3,'0')}` : '—'
                 return (
@@ -251,7 +251,7 @@ export default function Macchina() {
                     onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
                     onMouseLeave={e => e.currentTarget.style.background = rowBg}>
                     <td style={{ padding: '8px 14px', fontFamily: 'var(--font-mono)', fontSize: 11,
-                      color: 'var(--cyan)', opacity: 0.8 }}>{posFmt}</td>
+                      color: 'var(--navy-accent)', opacity: 0.8 }}>{posFmt}</td>
                     <td style={{ padding: '8px 14px', fontFamily: 'var(--font-mono)', fontSize: 13,
                       color: isDis ? 'var(--text-dim)' : 'var(--text-primary)', fontWeight: 600 }}>{t.name}</td>
                     <td style={{ padding: '8px 14px', fontFamily: 'var(--font-mono)', fontSize: 12,
@@ -266,10 +266,10 @@ export default function Macchina() {
                         ? <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--red)',
                             background: 'rgba(255,68,85,0.1)', padding: '2px 7px', borderRadius: 3 }}>DISAB.</span>
                         : isWorn
-                        ? <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--purple)',
-                            background: 'rgba(168,85,247,0.1)', padding: '2px 7px', borderRadius: 3 }}>VITA BASSA</span>
+                        ? <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: '#6d28d9',
+                            background: 'rgba(109,40,217,0.1)', padding: '2px 7px', borderRadius: 3 }}>VITA BASSA</span>
                         : <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--green)',
-                            background: 'rgba(0,255,136,0.08)', padding: '2px 7px', borderRadius: 3 }}>OK</span>}
+                            background: 'rgba(22,163,74,0.08)', padding: '2px 7px', borderRadius: 3 }}>OK</span>}
                     </td>
                   </tr>
                 )

@@ -53,7 +53,7 @@ export default function Scaffale() {
       <div style={{ display: 'flex', gap: 12 }}>
         <StatCard label="A Scaffale"   value={utensili.length}  color="var(--amber)" />
         <StatCard label="Frese Fin."   value={utensili.filter(u => u.alias.startsWith('FF')).length} color="var(--green)" />
-        <StatCard label="Frese Sgr."   value={utensili.filter(u => u.alias.startsWith('FS')).length} color="var(--cyan)" />
+        <StatCard label="Frese Sgr."   value={utensili.filter(u => u.alias.startsWith('FS')).length} color="var(--navy-accent)" />
       </div>
 
       <ErrorBanner   message={error}   onClose={() => setError(null)} />
@@ -131,7 +131,7 @@ export default function Scaffale() {
         }}>
           <div className="card fade-in" style={{ padding: 24, width: 380, display: 'flex', flexDirection: 'column', gap: 16 }}>
             <h3 style={{ fontSize: 16, fontWeight: 700 }}>Sposta in Macchina</h3>
-            <p className="mono" style={{ color: 'var(--cyan)', fontSize: 13 }}>{spostaItem.alias}</p>
+            <p className="mono" style={{ color: 'var(--navy-accent)', fontSize: 13 }}>{spostaItem.alias}</p>
             <div>
               <label style={{ fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', display: 'block', marginBottom: 6 }}>
                 POSIZIONE DESTINAZIONE (1-120)

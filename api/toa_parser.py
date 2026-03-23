@@ -1,526 +1,253 @@
 """
-toa_parser.py — Tool Manager
-Legge un file .TOA generato dalla macchina Sinumerik 840D
-e restituisce una lista strutturata di utensili.
+api/toa_parser.py
+Parser TOA generato da SYNC_ALL_V2.MPF
+Legge TOOL_SYN1.TOA, TOOL_SYN2.TOA, TOOL_SYN3.TOA dalla share
+e li unisce in una lista utensili.
 
-Il formato TOA è testo puro con assegnazioni $TC_* come:
-    $TC_TP1[3470]=1
-    $TC_TP2[3470]="FS25R2L85"
-    $TC_DP3[3470,1]=110.93
-    ...
+Formato file (generato dalla NC, senza virgolette):
+    METRIC
+    ; FILE=1
+    $TC_TP2[2802]=RENISHAW
+    $TC_DP3[2802,1]=231.7696953
+    $TC_DP6[2802,1]=2.83916183
+    $TC_MOP2[2802,1]=0
+    $TC_MOP11[2802,1]=11
+    $TC_TP8[2802]=195
+    $TC_MPP6[1,1]=2802
+    ; ---
 """
 
-from __future__ import annotations
 import re
-from dataclasses import dataclass, field
-from typing import Optional
+import os
 from pathlib import Path
 
 
-# ---------------------------------------------------------------------------
-# Strutture dati (specchio del DB Tool Manager)
-# ---------------------------------------------------------------------------
-
-@dataclass
-class CuttingEdge:
-    edge_num: int
-    tool_type: int = 0          # $TC_DP1
-    edge_pos: float = 0.0       # $TC_DP2
-    length1: float = 0.0        # $TC_DP3  (Z)
-    length2: float = 0.0        # $TC_DP4  (Y)
-    length3: float = 0.0        # $TC_DP5  (X)
-    radius: float = 0.0         # $TC_DP6
-    corner_radius: float = 0.0  # $TC_DP7
-    length4: float = 0.0        # $TC_DP8
-    length5: float = 0.0        # $TC_DP9
-    angle1: float = 0.0         # $TC_DP10
-    angle2: float = 0.0         # $TC_DP11
-    wear_l1: float = 0.0        # $TC_DP12
-    wear_l2: float = 0.0        # $TC_DP13
-    wear_l3: float = 0.0        # $TC_DP14
-    wear_r: float = 0.0         # $TC_DP15
-    wear_corner: float = 0.0    # $TC_DP16
-    adapter_l1: float = 0.0     # $TC_DP21
-    adapter_l2: float = 0.0     # $TC_DP22
-    adapter_l3: float = 0.0     # $TC_DP23
-    clearance_angle: float = 0.0 # $TC_DP24
-    dpc1: float = 0.0
-    dpc2: float = 0.0
-    dpc3: float = 0.0
-    dpc4: float = 0.0
-    dpc5: float = 0.0
-    dpc6: float = 0.0
-    dpc7: float = 0.0
-    dpc8: float = 0.0
-    dpc9: float = 0.0
-    dpc10: float = 0.0
-    mop1: float = 0.0           # preavviso vita [min]
-    mop2: float = 0.0           # vita residua [min]
-    mop3: float = 0.0
-    mop4: float = 0.0
-    mop5: float = 0.0
-    mop6: float = 0.0
-    mop11: float = 0.0          # vita nominale [min]
-    mop13: float = 0.0
-    mop15: float = 0.0
-
-
-@dataclass
-class MachineTool:
-    """Utensile come presente in macchina — record della tabella magazzino."""
-    tool_id: int                # posizione magazzino
-    name: str = ""              # $TC_TP2
-    duplo: int = 1              # $TC_TP1 (numero duplicato)
-    status: int = 0             # $TC_TP8 (bitmask stato)
-    monitoring: int = 0         # $TC_TP9
-    magazine_type: int = 1      # $TC_TP7
-    size_left: int = 1          # $TC_TP3
-    size_right: int = 1         # $TC_TP4
-    size_above: int = 1         # $TC_TP5
-    size_below: int = 1         # $TC_TP6
-    tp10: int = 0
-    tp11: int = 0
-    tpc1: int = 0
-    tpc2: int = 0               # S-Max rpm
-    tpc3: int = 0
-    tpc4: int = 0
-    tpc5: int = 0
-    tpc6: int = 0
-    tpc7: int = 0
-    tpc8: int = 0
-    tpc9: int = 0
-    tpc10: int = 0
-    edges: dict[int, CuttingEdge] = field(default_factory=dict)
-
-    @property
-    def is_enabled(self) -> bool:
-        """Utensile abilitato (bit 1 di $TC_TP8)."""
-        return bool(self.status & 0x02)
-
-    @property
-    def is_worn(self) -> bool:
-        """Vita esaurita (bit 4 di $TC_TP8)."""
-        return bool(self.status & 0x10)
-
-    @property
-    def life_percent(self) -> Optional[float]:
-        """Percentuale vita residua del primo tagliente (MOP2/MOP11*100).
-        Restituisce None solo se mop11=0 (nessun riferimento impostato).
-        """
-        e = self.edges.get(1)
-        if e and e.mop11 > 0:
-            return round((e.mop2 / e.mop11) * 100, 1)
-        return None
-
-    @property
-    def main_length(self) -> float:
-        """Lunghezza Z del primo tagliente."""
-        return self.edges.get(1, CuttingEdge(1)).length1
-
-    @property
-    def main_radius(self) -> float:
-        """Raggio del primo tagliente."""
-        return self.edges.get(1, CuttingEdge(1)).radius
-
-
-# ---------------------------------------------------------------------------
-# Parser
-# ---------------------------------------------------------------------------
-
-# Pattern regex per le varie assegnazioni
-_RE_TP_SCALAR = re.compile(
-    r'^\$TC_TP(\d+)\[(\d+)\]\s*=\s*(.+)$'
-)
-_RE_TPC_SCALAR = re.compile(
-    r'^\$TC_TPC(\d+)\[(\d+)\]\s*=\s*(.+)$'
-)
-_RE_DP = re.compile(
-    r'^\$TC_DP(\d+)\[(\d+),(\d+)\]\s*=\s*(.+)$'
-)
-_RE_DPC = re.compile(
-    r'^\$TC_DPC(\d+)\[(\d+),(\d+)\]\s*=\s*(.+)$'
-)
-_RE_MOP = re.compile(
-    r'^\$TC_MOP(\d+)\[(\d+),(\d+)\]\s*=\s*(.+)$'
-)
-
-
-def _parse_value(raw: str) -> str | float | int:
-    """Converte il valore raw in tipo Python appropriato."""
-    raw = raw.strip()
-    if raw.startswith('"') and raw.endswith('"'):
-        return raw[1:-1]
+def _parse_toa_file(path: str) -> dict:
+    """Legge un singolo file TOA e restituisce dict {T: {dati}}."""
+    tools = {}
     try:
-        if '.' in raw:
-            return float(raw)
-        return int(raw)
-    except ValueError:
-        return raw
+        with open(path, 'rb') as f:
+            raw = f.read()
+        text = raw.decode('latin-1')
+        lines = text.split('\n')
 
-
-def parse_toa(path: str | Path) -> dict[int, MachineTool]:
-    """
-    Legge un file .TOA e restituisce un dizionario
-    {tool_id: MachineTool} con tutti gli utensili presenti.
-    """
-    tools: dict[int, MachineTool] = {}
-    path = Path(path)
-
-    with open(path, encoding="utf-8", errors="replace") as f:
-        for raw_line in f:
-            line = raw_line.strip()
-
-            # Salta commenti, righe vuote, header, comandi NC
-            if not line or line.startswith(';') or line.startswith('%'):
-                continue
-            if not line.startswith('$TC_'):
+        current_t = None
+        for line in lines:
+            line = line.strip()
+            if not line or line.startswith(';'):
                 continue
 
-            # --- $TC_TP (dati generali utensile) ---
-            m = _RE_TP_SCALAR.match(line)
+            # Nome utensile
+            m = re.match(r'^\$TC_TP2\[(\d+)\]=(.+)', line)
             if m:
-                param_num = int(m.group(1))
-                tid = int(m.group(2))
-                val = _parse_value(m.group(3))
-                t = tools.setdefault(tid, MachineTool(tool_id=tid))
-                _apply_tp(t, param_num, val)
+                current_t = int(m.group(1))
+                if current_t not in tools:
+                    tools[current_t] = {'t_number': current_t}
+                tools[current_t]['name'] = m.group(2).strip().strip('"')
                 continue
 
-            # --- $TC_TPC (parametri estesi DMG) ---
-            m = _RE_TPC_SCALAR.match(line)
-            if m:
-                param_num = int(m.group(1))
-                tid = int(m.group(2))
-                val = _parse_value(m.group(3))
-                t = tools.setdefault(tid, MachineTool(tool_id=tid))
-                _apply_tpc(t, param_num, val)
+            if current_t is None:
                 continue
 
-            # --- $TC_DP (dati tagliente geometria/usura) ---
-            m = _RE_DP.match(line)
-            if m:
-                param_num = int(m.group(1))
-                tid = int(m.group(2))
-                eid = int(m.group(3))
-                val = _parse_value(m.group(4))
-                t = tools.setdefault(tid, MachineTool(tool_id=tid))
-                e = t.edges.setdefault(eid, CuttingEdge(edge_num=eid))
-                _apply_dp(e, param_num, val)
+            # Lunghezza Z
+            m = re.match(r'^\$TC_DP3\[(\d+),1\]=(.+)', line)
+            if m and int(m.group(1)) == current_t:
+                try:
+                    tools[current_t]['length'] = float(m.group(2))
+                except ValueError:
+                    pass
                 continue
 
-            # --- $TC_DPC (parametri controllo tagliente) ---
-            m = _RE_DPC.match(line)
-            if m:
-                param_num = int(m.group(1))
-                tid = int(m.group(2))
-                eid = int(m.group(3))
-                val = _parse_value(m.group(4))
-                t = tools.setdefault(tid, MachineTool(tool_id=tid))
-                e = t.edges.setdefault(eid, CuttingEdge(edge_num=eid))
-                _apply_dpc(e, param_num, val)
+            # Raggio
+            m = re.match(r'^\$TC_DP6\[(\d+),1\]=(.+)', line)
+            if m and int(m.group(1)) == current_t:
+                try:
+                    tools[current_t]['radius'] = float(m.group(2))
+                except ValueError:
+                    pass
                 continue
 
-            # --- $TC_MOP (monitoraggio vita) ---
-            m = _RE_MOP.match(line)
-            if m:
-                param_num = int(m.group(1))
-                tid = int(m.group(2))
-                eid = int(m.group(3))
-                val = _parse_value(m.group(4))
-                t = tools.setdefault(tid, MachineTool(tool_id=tid))
-                e = t.edges.setdefault(eid, CuttingEdge(edge_num=eid))
-                _apply_mop(e, param_num, val)
+            # Vita residua (minuti)
+            m = re.match(r'^\$TC_MOP2\[(\d+),1\]=(.+)', line)
+            if m and int(m.group(1)) == current_t:
+                try:
+                    tools[current_t]['life_remaining'] = float(m.group(2))
+                except ValueError:
+                    pass
                 continue
+
+            # Vita totale (minuti)
+            m = re.match(r'^\$TC_MOP11\[(\d+),1\]=(.+)', line)
+            if m and int(m.group(1)) == current_t:
+                try:
+                    tools[current_t]['life_total'] = float(m.group(2))
+                except ValueError:
+                    pass
+                continue
+
+            # Status utensile
+            m = re.match(r'^\$TC_TP8\[(\d+)\]=(.+)', line)
+            if m and int(m.group(1)) == current_t:
+                try:
+                    tools[current_t]['status'] = int(m.group(2))
+                    # Bit 0x0004 = disabilitato, Bit 0x0001 = attivo
+                    status = tools[current_t]['status']
+                    tools[current_t]['is_enabled'] = not bool(status & 0x0004)
+                except ValueError:
+                    pass
+                continue
+
+            # Posizione magazzino
+            m = re.match(r'^\$TC_MPP6\[1,(\d+)\]=(\d+)', line)
+            if m and int(m.group(2)) == current_t:
+                pos = int(m.group(1))
+                tools[current_t]['magazine'] = 1
+                tools[current_t]['position'] = pos
+                tools[current_t]['pos_label'] = f"M1.{pos:03d}"
+                continue
+
+    except Exception as e:
+        pass
 
     return tools
 
 
-def _apply_tp(t: MachineTool, n: int, v):
-    mapping = {
-        1: 'duplo', 2: 'name', 3: 'size_left', 4: 'size_right',
-        5: 'size_above', 6: 'size_below', 7: 'magazine_type',
-        8: 'status', 9: 'monitoring', 10: 'tp10', 11: 'tp11',
-    }
-    if n in mapping:
-        setattr(t, mapping[n], v)
-
-
-def _apply_tpc(t: MachineTool, n: int, v):
-    mapping = {
-        1: 'tpc1', 2: 'tpc2', 3: 'tpc3', 4: 'tpc4', 5: 'tpc5',
-        6: 'tpc6', 7: 'tpc7', 8: 'tpc8', 9: 'tpc9', 10: 'tpc10',
-    }
-    if n in mapping:
-        setattr(t, mapping[n], v)
-
-
-def _apply_dp(e: CuttingEdge, n: int, v):
-    mapping = {
-        1: 'tool_type', 2: 'edge_pos', 3: 'length1', 4: 'length2',
-        5: 'length3', 6: 'radius', 7: 'corner_radius', 8: 'length4',
-        9: 'length5', 10: 'angle1', 11: 'angle2',
-        12: 'wear_l1', 13: 'wear_l2', 14: 'wear_l3',
-        15: 'wear_r', 16: 'wear_corner',
-        21: 'adapter_l1', 22: 'adapter_l2', 23: 'adapter_l3',
-        24: 'clearance_angle',
-    }
-    if n in mapping:
-        setattr(e, mapping[n], float(v) if isinstance(v, (int, float)) else v)
-
-
-def _apply_dpc(e: CuttingEdge, n: int, v):
-    attr = f'dpc{n}'
-    if hasattr(e, attr):
-        setattr(e, attr, float(v) if isinstance(v, (int, float)) else v)
-
-
-def _apply_mop(e: CuttingEdge, n: int, v):
-    mapping = {
-        1: 'mop1', 2: 'mop2', 3: 'mop3', 4: 'mop4',
-        5: 'mop5', 6: 'mop6', 11: 'mop11', 13: 'mop13', 15: 'mop15',
-    }
-    if n in mapping:
-        setattr(e, mapping[n], float(v) if isinstance(v, (int, float)) else v)
-
-
-# ---------------------------------------------------------------------------
-# Utility di confronto
-# ---------------------------------------------------------------------------
-
-def extract_tools_from_mpf(mpf_content: str) -> set[str]:
+def parse_toa_files(share_path: str) -> list:
     """
-    Estrae i nomi utensile da un programma MPF/SPF.
-    Cerca i pattern:
-      T="NOME_UTENSILE"   (chiamata per nome)
-      T=1234              (chiamata per numero posizione)
-    Restituisce un set di nomi (stringhe).
+    Legge TOOL_SYN1.TOA, TOOL_SYN2.TOA, TOOL_SYN3.TOA dalla share
+    e restituisce lista utensili unificata.
     """
-    names: set[str] = set()
+    base = Path(share_path)
+    all_tools = {}
 
-    # T="NOME" — chiamata per nome
-    for m in re.finditer(r'T="([^"]+)"', mpf_content, re.IGNORECASE):
-        names.add(m.group(1).upper())
+    for n in [1, 2, 3]:
+        fname = base / f"TOOL_SYN{n}.TOA"
+        if fname.exists():
+            tools = _parse_toa_file(str(fname))
+            all_tools.update(tools)
 
-    # T=NUMERO — chiamata per numero posizione (meno comune ma presente)
-    # Non lo espandiamo qui senza sapere la mappatura posizione→nome
-    # TODO: gestire T=numero se necessario
-
-    return names
-
-
-def check_tools_availability(
-    required: set[str],
-    machine_tools: dict[int, MachineTool],
-) -> dict:
-    """
-    Confronta gli utensili richiesti dal programma con quelli in macchina.
-
-    Restituisce:
-    {
-        "ok": [lista nomi presenti e abilitati],
-        "missing": [lista nomi non trovati in macchina],
-        "disabled": [lista nomi presenti ma disabilitati/esauriti],
-        "worn": [lista nomi con vita quasi esaurita (<10%)],
-    }
-    """
-    # Indice nome → lista utensili (possono esserci duplicati/sister tools)
-    by_name: dict[str, list[MachineTool]] = {}
-    for t in machine_tools.values():
-        key = t.name.upper()
-        by_name.setdefault(key, []).append(t)
-
-    result = {
-        "ok": [],
-        "missing": [],
-        "disabled": [],
-        "worn": [],
-    }
-
-    for name in sorted(required):
-        candidates = by_name.get(name, [])
-        if not candidates:
-            result["missing"].append(name)
-            continue
-
-        # Controlla se almeno uno è abilitato e non esaurito
-        enabled = [c for c in candidates if c.is_enabled and not c.is_worn]
-        if not enabled:
-            result["disabled"].append(name)
-            continue
-
-        # Controlla vita residua
-        low_life = all(
-            (c.life_percent is not None and c.life_percent < 10)
-            for c in enabled
-        )
-        if low_life:
-            result["worn"].append(name)
+    # Calcola percentuale vita residua
+    result = []
+    for t_num, tool in sorted(all_tools.items(), key=lambda x: x[1].get('position', 999)):
+        total = tool.get('life_total', 0)
+        remaining = tool.get('life_remaining', 0)
+        if total and total > 0:
+            pct = (remaining / total) * 100
+            tool['life_percent'] = round(pct, 1)
+            tool['is_worn'] = pct < 10
         else:
-            result["ok"].append(name)
+            tool['life_percent'] = None
+            tool['is_worn'] = False
+
+        # duplo — per ora sempre 1 (un T per posizione)
+        tool['duplo'] = 1
+        tool['tool_id'] = t_num
+
+        result.append(tool)
 
     return result
 
 
-# ---------------------------------------------------------------------------
-# Test rapido
-# ---------------------------------------------------------------------------
+def get_sync_info(share_path: str) -> dict:
+    """Info su quali file TOA sono presenti sulla share."""
+    base = Path(share_path)
+    info = {'files': {}, 'total_tools': 0}
+    all_tools = {}
 
-if __name__ == "__main__":
-    import sys
-    if len(sys.argv) < 2:
-        print("Uso: python toa_parser.py <percorso_file.TOA>")
-        sys.exit(1)
+    for n in [1, 2, 3]:
+        fname = base / f"TOOL_SYN{n}.TOA"
+        if fname.exists():
+            tools = _parse_toa_file(str(fname))
+            mtime = os.path.getmtime(str(fname))
+            info['files'][f'TOOL_SYN{n}.TOA'] = {
+                'present': True,
+                'tools': len(tools),
+                'mtime': mtime,
+            }
+            all_tools.update(tools)
+        else:
+            info['files'][f'TOOL_SYN{n}.TOA'] = {'present': False, 'tools': 0}
 
-    tools = parse_toa(sys.argv[1])
-    print(f"\nUtensili trovati: {len(tools)}\n")
-    for tid, t in sorted(tools.items()):
-        life = t.life_percent
-        life_str = f"  vita: {life}%" if life is not None else ""
-        print(
-            f"  [{tid:4d}]  {t.name:<20s}  "
-            f"L={t.main_length:8.3f}  R={t.main_radius:7.3f}  "
-            f"status={t.status:3d}{life_str}"
-        )
+    info['total_tools'] = len(all_tools)
+    return info
 
 
-# ---------------------------------------------------------------------------
-# Parser TMA — mappa magazzino
-# ---------------------------------------------------------------------------
+# ── Retrocompatibilità con tools.py ─────────────────────────────
+# tools.py importa: parse_toa, parse_tma, MachineTool, MagazinePosition
+
+from dataclasses import dataclass
+
+@dataclass
+class MachineTool:
+    t_number:       int
+    name:           str
+    length:         float = 0.0
+    radius:         float = 0.0
+    life_remaining: float = 0.0
+    life_total:     float = 0.0
+    life_percent:   float = None
+    is_worn:        bool  = False
+    is_enabled:     bool  = True
+    status:         int   = 0
+    duplo:          int   = 1
+    magazine:       int   = 1
+    position:       int   = 0
+    pos_label:      str   = ""
 
 @dataclass
 class MagazinePosition:
-    """Una posizione fisica nel magazzino."""
-    magazine: int       # numero magazine (1=Regal_120, 2=BeladeMagazin, 9998=buffer, 9999=carico)
-    position: int       # numero posizione nel magazine
-    tool_id: int        # T-number interno dell'utensile (0 = vuota)
-    state: int = 0      # $TC_MPP4 stato posizione
+    magazine:  int
+    position:  int
+    t_number:  int
+    pos_label: str = ""
 
 
-@dataclass 
-class MagazineInfo:
-    """Dati descrittivi di un magazine."""
-    number: int
-    name: str           # $TC_MAP2
-    mag_type: int = 0   # $TC_MAP1
-    num_places: int = 0 # $TC_MAP3
-
-
-def parse_tma(path: str | Path) -> tuple[dict[int, MagazineInfo], list[MagazinePosition]]:
-    """
-    Legge un file .TMA e restituisce:
-    - dict {magazine_num: MagazineInfo}
-    - lista di MagazinePosition (solo posizioni occupate, tool_id > 0)
-    
-    $TC_MPP6[mag, pos] = T-number interno (posizione utensile nel magazzino)
-    $TC_MAP2[mag] = nome magazine
-    """
-    path = Path(path)
-    magazines: dict[int, MagazineInfo] = {}
-    positions: list[MagazinePosition] = []
-
-    _RE_MAP = re.compile(r'^\$TC_MAP(\d+)\[(\d+)\]\s*=\s*(.+)$')
-    _RE_MPP6  = re.compile(r'^\$TC_MPP6\[(\d+),(\d+)\]\s*=\s*(\d+)$')
-    _RE_MPP4 = re.compile(r'^\$TC_MPP4\[(\d+),(\d+)\]\s*=\s*(\d+)$')
-
-    # Prima passata: raccoglie stati posizione
-    states: dict[tuple[int,int], int] = {}
-
-    with open(path, encoding="utf-8", errors="replace") as f:
-        for raw_line in f:
-            line = raw_line.strip()
-            if not line or line.startswith(';'):
-                continue
-
-            # $TC_MAP* — dati magazine
-            m = _RE_MAP.match(line)
-            if m:
-                param = int(m.group(1))
-                mag = int(m.group(2))
-                val = _parse_value(m.group(3))
-                info = magazines.setdefault(mag, MagazineInfo(number=mag, name=""))
-                if param == 1:
-                    info.mag_type = int(val) if isinstance(val, (int, float)) else 0
-                elif param == 2:
-                    info.name = str(val)
-                elif param == 3:
-                    info.num_places = int(val) if isinstance(val, (int, float)) else 0
-                continue
-
-            # $TC_MPP4 — stato posizione
-            m = _RE_MPP4.match(line)
-            if m:
-                mag, pos, state = int(m.group(1)), int(m.group(2)), int(m.group(3))
-                states[(mag, pos)] = state
-                continue
-
-            # $TC_MPP6 — T-number in posizione nel magazzino
-            m = _RE_MPP6.match(line)
-            if m:
-                mag = int(m.group(1))
-                pos = int(m.group(2))
-                tid = int(m.group(3))
-                if tid > 0:  # 0 = posizione vuota
-                    positions.append(MagazinePosition(
-                        magazine=mag,
-                        position=pos,
-                        tool_id=tid,
-                        state=states.get((mag, pos), 0)
-                    ))
-                continue
-
-    return magazines, positions
-
-
-def build_position_map(
-    positions: list[MagazinePosition],
-    tools: dict[int, MachineTool]
-) -> dict[str, list[dict]]:
-    """
-    Costruisce la mappa nome_utensile → lista posizioni in magazzino.
-    Utile per sapere dove fisicamente si trova ogni utensile.
-    
-    Restituisce:
-    {
-        "FS25R2L85": [
-            {"magazine": 1, "position": 3, "tool_id": 3470, "duplo": 1},
-            {"magazine": 1, "position": 5, "tool_id": 3471, "duplo": 2},
-        ],
-        ...
-    }
-    """
-    result: dict[str, list[dict]] = {}
-    for pos in positions:
-        tool = tools.get(pos.tool_id)
-        if tool:
-            name = tool.name.upper()
-            result.setdefault(name, []).append({
-                "magazine": pos.magazine,
-                "position": pos.position,
-                "tool_id": pos.tool_id,
-                "duplo": tool.duplo,
-                "status": tool.status,
-                "life_percent": tool.life_percent,
-            })
+def parse_toa(toa_path: str) -> list[MachineTool]:
+    """Retrocompatibilità — legge un singolo file TOA."""
+    import re
+    raw = _parse_toa_file(toa_path)
+    result = []
+    for t_num, tool in sorted(raw.items()):
+        result.append(MachineTool(
+            t_number       = t_num,
+            name           = tool.get("name", ""),
+            length         = tool.get("length", 0.0),
+            radius         = tool.get("radius", 0.0),
+            life_remaining = tool.get("life_remaining", 0.0),
+            life_total     = tool.get("life_total", 0.0),
+            life_percent   = tool.get("life_percent"),
+            is_worn        = tool.get("is_worn", False),
+            is_enabled     = tool.get("is_enabled", True),
+            status         = tool.get("status", 0),
+            duplo          = tool.get("duplo", 1),
+            magazine       = tool.get("magazine", 1),
+            position       = tool.get("position", 0),
+            pos_label      = tool.get("pos_label", ""),
+        ))
     return result
 
 
-# ---------------------------------------------------------------------------
-# Test TMA
-# ---------------------------------------------------------------------------
-
-if __name__ == "__main__":
-    import sys
-    if len(sys.argv) >= 3:
-        tma_path = sys.argv[2]
-        tools = parse_toa(sys.argv[1])
-        magazines, positions = parse_tma(tma_path)
-
-        print(f"\nMagazine trovati: {len(magazines)}")
-        for mag in sorted(magazines.values(), key=lambda m: m.number):
-            print(f"  [{mag.number:4d}] {mag.name:<25s} tipo={mag.mag_type} posti={mag.num_places}")
-
-        print(f"\nPosizioni occupate: {len(positions)}")
-        pos_map = build_position_map(positions, tools)
-        for name, locs in sorted(pos_map.items()):
-            for loc in locs:
-                print(f"  {name:<25s} mag={loc['magazine']} pos={loc['position']:3d} T={loc['tool_id']} duplo={loc['duplo']}")
+def parse_tma(tma_path: str) -> list[MagazinePosition]:
+    """Retrocompatibilità — legge un singolo file TMA."""
+    import re
+    result = []
+    try:
+        with open(tma_path, "rb") as f:
+            raw = f.read()
+        text  = raw.decode("latin-1")
+        lines = text.split("\n")
+        for line in lines:
+            m = re.match(r"^\$TC_MPP6\[1,(\d+)\]=(\d+)", line.strip())
+            if m:
+                pos = int(m.group(1))
+                t   = int(m.group(2))
+                if t > 0:
+                    result.append(MagazinePosition(
+                        magazine  = 1,
+                        position  = pos,
+                        t_number  = t,
+                        pos_label = f"M1.{pos:03d}",
+                    ))
+    except Exception:
+        pass
+    return result

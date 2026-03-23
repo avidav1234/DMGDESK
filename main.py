@@ -30,10 +30,19 @@ def main():
         app.mainloop()
         log.info("Applicazione chiusa normalmente")
     except Exception as e:
+        import traceback
+        tb = traceback.format_exc()
         log.critical("Errore critico all'avvio", exc_info=True)
+        try:
+            import os, sys
+            log_dir = os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else '.'
+            with open(os.path.join(log_dir, 'crash_log.txt'), 'w') as cf:
+                cf.write(tb)
+        except Exception:
+            pass
         messagebox.showerror(
             "Errore Critico",
-            f"Errore avvio applicazione:\n{e}"
+            f"Errore avvio applicazione:\n{e}\n\n{tb[-800:]}"
         )
         if 'app' in locals() and app:
             app.destroy()

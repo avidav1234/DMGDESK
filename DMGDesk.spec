@@ -24,6 +24,7 @@ a = Analysis(
         # Icona (per splash/icona nella finestra)
         ('app_icon.ico',    '.'),
     ],
+    collect_all=['tkinter', 'customtkinter'],
     hiddenimports=[
         # CustomTkinter
         'customtkinter',

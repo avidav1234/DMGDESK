@@ -53,9 +53,9 @@ def _salva_config(cfg: dict):
 
 def _get_tools_db_path() -> Path:
     config = _carica_config()
-    folder = config.get("tools_toa_folder", "").strip()
+    folder = (config.get("tools_toa_folder") or "").strip()
     if not folder:
-        db_path = config.get("database_path", "").strip()
+        db_path = (config.get("database_path") or "").strip()
         if db_path:
             folder = str(Path(db_path).parent)
     if not folder:
@@ -65,9 +65,9 @@ def _get_tools_db_path() -> Path:
 
 def _get_sync_paths():
     config = _carica_config()
-    folder = config.get("tools_toa_folder", "").strip()
+    folder = (config.get("tools_toa_folder") or "").strip()
     if not folder:
-        percorso_nc = config.get("percorso_nc_base", "")
+        percorso_nc = (config.get("percorso_nc_base") or "")
         if percorso_nc:
             parts = Path(percorso_nc).parts
             if len(parts) >= 2:
@@ -185,9 +185,9 @@ class _DialogImpostazioni(ctk.CTkToplevel):
         self._on_saved = on_saved
 
         config = _carica_config()
-        folder = config.get("tools_toa_folder", "").strip()
+        folder = (config.get("tools_toa_folder") or "").strip()
         if not folder:
-            db_path = config.get("database_path", "").strip()
+            db_path = (config.get("database_path") or "").strip()
             if db_path:
                 folder = str(Path(db_path).parent)
 

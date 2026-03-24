@@ -103,8 +103,8 @@ def estrai_alias_da_progetti(config: dict) -> dict:
                 for pgm in task.get("programs", []):
                     if pgm.get("tipoGruppo") == "ipm":
                         continue
-                    # SOLO programmi in_macchina — da_fare e completati ignorati
-                    if pgm.get("stato") != "in_macchina":
+                    # Includi da_fare e in_macchina — escludi solo completati
+                    if pgm.get("stato") == "completato":
                         continue
                     filename = pgm.get("filename", "")
                     alias = (pgm.get("utensile") or "").upper().strip()

@@ -31,6 +31,14 @@ export default function CodaLavorazione() {
   const [lastUpdate, setLastUpdate] = useState(null);
   const [error, setError]           = useState(null);
   const [palletMenu, setPalletMenu]  = useState(null);
+  const [liveCtx, setLiveCtx]        = useState(null);
+
+  const fetchLiveContext = async () => {
+    try {
+      const r = await fetch('/api/macchina-live/live-context')
+      if (r.ok) setLiveCtx(await r.json())
+    } catch {}
+  }
 
   const fetchAll = useCallback(async () => {
     try {

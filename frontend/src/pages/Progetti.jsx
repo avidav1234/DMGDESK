@@ -305,8 +305,8 @@ function FresaturaPanel({task,onUpdateTask,toolsDB}){
           {total>0&&(
             <div style={{display:'flex',background:T.surface2,borderBottom:`1px solid ${T.border}`,fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:'0.07em'}}>
               <div style={{width:110,padding:'5px 10px',borderRight:`1px solid ${T.border}`}}>STATO</div>
-              <div style={{width:52,textAlign:'center',padding:'5px 0',borderRight:`1px solid ${T.border}`}}>PGM</div>
-              <div style={{width:140,padding:'5px 10px',borderRight:`1px solid ${T.border}`}}>UTENSILE</div>
+              <div style={{width:160,padding:'5px 10px',borderRight:`1px solid ${T.border}`}}>PROGRAMMA</div>
+              <div style={{width:130,padding:'5px 10px',borderRight:`1px solid ${T.border}`}}>UTENSILE</div>
               <div style={{flex:1,padding:'5px 10px'}}>OPERAZIONE</div>
             </div>
           )}
@@ -757,13 +757,17 @@ function LancioNCModal({project, toolsDB, onLancia, onClose}){
           {sel&&<span style={{color:'#fff',fontSize:12,fontWeight:800}}>✓</span>}
         </div>
         <span style={{fontSize:12,fontFamily:'monospace',fontWeight:700,
-          color:'#1A1814',minWidth:140}}>{pgm.utensile||'—'}</span>
-        <span style={{fontSize:11,color:'#5A5750',flex:1,
-          overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
-          {(pgm.tipoOp||'').replace(/[-–]\s*NESSUN TESTO\s*/gi,'').trim()||pgm.filename}
+          color:'#1D5FAD',minWidth:150,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+          {pgm.filename?.replace(/\.MPF$/i,'')||`#${pgm.numPgm}`}
         </span>
-        <span style={{fontSize:10,color:'#9A978E',fontFamily:'monospace',
-          minWidth:40,textAlign:'right'}}>#{pgm.numPgm}</span>
+        <span style={{fontSize:11,fontFamily:'monospace',color:'#5A5750',
+          minWidth:130,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+          {pgm.utensile||'—'}
+        </span>
+        <span style={{fontSize:11,color:'#9A978E',flex:1,
+          overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+          {(pgm.tipoOp||'').replace(/[-–]\s*NESSUN TESTO\s*/gi,'').trim()||''}
+        </span>
         <ToolBadge alias={pgm.utensile}/>
       </div>
     )

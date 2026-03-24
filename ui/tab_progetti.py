@@ -1960,7 +1960,7 @@ class TabProgetti:
         btn_lancia = ctk.CTkButton(footer, text="📄 Lancia in NC →",
                                     command=lambda: self._esegui_lancio(
                                         project,
-                                        [p for p in all_pgm if selected.get(p.get("filename",""), tk.BooleanVar()).get()],
+                                        [p for p in all_pgm if selected.get(p.get("filename","")) and selected[p.get("filename","")].get()],
                                         win),
                                     fg_color=TC["border"], state="disabled",
                                     font=("DM Sans",11,"bold"), height=34, corner_radius=6)

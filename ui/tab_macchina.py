@@ -312,13 +312,13 @@ class TabMacchina:
 
         self.btn_setup = ctk.CTkButton(
             toolbar,
-            text="🔧 Analisi Setup",
+            text="🔧 Setup",
             command=self._analisi_setup,
-            fg_color="transparent",
-            hover_color="#F5F5F5",
-            text_color="#546E7A",
-            border_width=1, border_color="#E0E0E0",
-            font=get_font("small"), height=30, width=130, corner_radius=6
+            fg_color="#1D5FAD",
+            hover_color="#1552A0",
+            text_color="#FFFFFF",
+            border_width=0,
+            font=("DM Sans", 11, "bold"), height=34, width=110, corner_radius=6
         )
         self.btn_setup.pack(side="right", padx=3)
 
@@ -625,9 +625,87 @@ class TabMacchina:
             lines.append("Attenzione: " + tma_warning)
         messagebox.showinfo("Sync completato", "\n".join(lines))
         # Avvia analisi setup in background
-        self.parent.after(200, self._analisi_setup)
+        self.parent.after(200, self._analisi_setup_auto)
+
+    def _analisi_setup_auto(self):
+        """Chiamato automaticamente dopo sync — aggiorna il contatore sul bottone."""
+        def _after_result(nu, dm, fv):
+            tot = len(dm) + len(fv)
+            if tot > 0:
+                self.btn_setup.configure(
+                    text=f"🔧 Setup ({tot})",
+                    fg_color="#D97706",
+                    hover_color="#B45309"
+                )
+                self._mostra_setup_popup(nu, dm, fv)
+            else:
+                self.btn_setup.configure(
+                    text="🔧 Setup ✓",
+                    fg_color="#1A7A4A",
+                    hover_color="#166534"
+                )
+
+        import threading
+        def _worker():
+            try:
+                from database.db_handler import auto_find_db_paths, carica_database, carica_database_utensili_smontati
+                from pathlib import Path as _P
+                import json
+                cfg = _carica_config()
+                tools_folder = (cfg.get("tools_toa_folder") or "").strip()
+                tools_db = {}
+                if tools_folder:
+                    tm = _P(tools_folder) / "tools_machine.json"
+                    if tm.exists():
+                        raw = json.loads(tm.read_text(encoding="utf-8"))
+                        tools_db = raw.get("tools", {})
+                in_macchina = {(t.get("name") or "").upper().strip(): t
+                               for t in tools_db.values() if t.get("name")}
+                db_paths = auto_find_db_paths(cfg)
+                scaffale_alias, smontati_alias = set(), set()
+                try:
+                    df, _ = carica_database(db_paths["principale"])
+                    scaffale_alias = set(df["Alias"].str.upper().str.strip())
+                except Exception: pass
+                try:
+                    df_s, _ = carica_database_utensili_smontati(db_paths["utensili_smontati"])
+                    if "Alias_Utensile" in df_s.columns:
+                        smontati_alias = set(df_s["Alias_Utensile"].str.upper().str.strip())
+                except Exception: pass
+                try:
+                    from api.routers.progetti_utensili import estrai_alias_da_progetti as _eap
+                    alias_map = _eap(cfg)
+                    alias_attivi = set(alias_map.keys())
+                except Exception:
+                    alias_map = {}
+                    alias_attivi = set()
+                non_utilizzati = [
+                    {"alias": n, "position": t.get("position"), "life_percent": t.get("life_percent")}
+                    for n, t in in_macchina.items() if n not in alias_attivi
+                ]
+                da_montare = []
+                for a in sorted(alias_attivi - set(in_macchina.keys())):
+                    prov = ("scaffale" if a in scaffale_alias else "smontato" if a in smontati_alias else "mancante")
+                    refs = alias_map.get(a, [])
+                    da_montare.append({"alias": a, "provenienza": prov,
+                                       "progetti": [{"progetto": r[0], "file": r[1]} for r in refs[:3]]})
+                fin_vita = [
+                    {"alias": n, "position": t.get("position"),
+                     "life_percent": t.get("life_percent"),
+                     "progetti": [{"progetto": r[0], "file": r[1]}
+                                  for r in alias_map.get(n, [])[:2]]}
+                    for n, t in in_macchina.items()
+                    if t.get("life_percent") is not None and t["life_percent"] < 15
+                ]
+                self.parent.after(0, lambda: _after_result(non_utilizzati, da_montare, fin_vita))
+            except Exception as e:
+                err = str(e)
+                self.parent.after(0, lambda: print(f"Setup auto errore: {err}"))
+
+        threading.Thread(target=_worker, daemon=True).start()
 
     def _analisi_setup(self):
+
         """Mostra popup con utensili non utilizzati, da montare e fine vita."""
         import threading
         def _worker():

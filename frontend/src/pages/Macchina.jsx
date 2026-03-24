@@ -254,12 +254,24 @@ export default function Macchina() {
           <button
             onClick={()=>{ if(!setupData) loadSetupAnalisi(); else setSetupPopup(v=>!v) }}
             style={{
-              padding:'8px 14px', borderRadius:8, fontSize:13, cursor:'pointer',
-              background: setupPopup ? 'var(--navy-700)' : 'transparent',
-              color: setupPopup ? 'white' : 'var(--text-secondary)',
-              border:'1px solid var(--border)', fontWeight:600,
+              padding:'9px 18px', borderRadius:8, fontSize:13, cursor:'pointer',
+              background: setupPopup
+                ? '#B45309'
+                : setupData && ((setupData.da_montare||[]).length + (setupData.fin_vita||[]).length) > 0
+                  ? '#D97706'
+                  : '#1D5FAD',
+              color: 'white',
+              border: 'none',
+              fontWeight: 700,
+              boxShadow: setupData && ((setupData.da_montare||[]).length + (setupData.fin_vita||[]).length) > 0
+                ? '0 0 0 3px rgba(217,119,6,0.3)' : 'none',
+              transition: 'all 0.15s',
             }}>
-            {setupLoading ? '⏳ Analisi...' : `🔧 Setup${setupData ? ` (${(setupData.da_montare||[]).length + (setupData.fin_vita||[]).length})` : ''}`}
+            {setupLoading
+              ? '⏳ Analisi...'
+              : setupData
+                ? `🔧 Setup (${(setupData.da_montare||[]).length + (setupData.fin_vita||[]).length})`
+                : '🔧 Analisi Setup'}
           </button>
           <button onClick={handleSync} disabled={syncing} style={{
             ...btn_small,

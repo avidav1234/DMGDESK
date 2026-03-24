@@ -107,16 +107,7 @@ class TabAnalisiNC:
             font=get_font("body"), corner_radius=6)
         self.entry_nome.pack(side="left", padx=(0, 6))
 
-        # 3. Fase opzionale
-        ctk.CTkLabel(left, text="Fase:", font=get_font("small"),
-                     text_color="#90A4AE").pack(side="left", padx=(0, 3))
-        self.entry_fase = ctk.CTkEntry(
-            left, width=70, height=BTN_H,
-            placeholder_text="opz.",
-            font=get_font("body"), corner_radius=6)
-        self.entry_fase.pack(side="left", padx=(0, 6))
-
-        # 4. Genera MAIN
+        # 3. Genera MAIN
         self.btn_genera = ctk.CTkButton(
             left, text="📄 Genera MAIN",
             command=self._genera_main,
@@ -329,8 +320,6 @@ class TabAnalisiNC:
         self.btn_invia.configure(state="disabled")
         self.btn_solo_main.configure(state="disabled")
         self.entry_nome.delete(0, "end")
-        if hasattr(self, 'entry_fase'):
-            self.entry_fase.delete(0, "end")
         self._show_placeholder()
 
     def _aggiorna_lista(self):
@@ -551,8 +540,8 @@ class TabAnalisiNC:
         nome = self.entry_nome.get().strip()
         if not nome:
             return messagebox.showwarning("Attenzione", "Inserisci il nome cartella")
-        fase = self.entry_fase.get().strip() if hasattr(self, 'entry_fase') else ""
-        nome_completo = f"{nome}_{fase}" if fase else nome
+        # fase non incide sul nome MAIN né sugli EXTCALL
+        nome_completo = nome
         try:
             from logic.nc_analyzer import genera_programma_main_gcode
             gcode, filename = genera_programma_main_gcode(self.file_paths, nome_completo)

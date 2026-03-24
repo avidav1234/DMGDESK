@@ -46,12 +46,14 @@ export default function AnalisiNC() {
   const [posizione, setPosizione]   = useState('')
   const [cartelleRecenti, setCartelleRecenti] = useState([])
 
-  const nomeCompleto = nomeCartella.trim() && fase.trim()
-    ? `${nomeCartella.trim()}_${fase.trim()}`
-    : nomeCartella.trim()
+  // nomeCompleto = solo nome cartella — la fase NON entra nel nome MAIN
+  // né negli EXTCALL del NC. Serve solo per il percorso Windows.
+  const nomeCompleto = nomeCartella.trim()
 
+  // Percorso Windows: radice\commessa\posizione[\fase]
   const percorso = radiceNcInput.trim() && commessa.trim() && posizione.trim()
-    ? [radiceNcInput.trim().replace(/[\\/]+$/, ''), commessa.trim(), posizione.trim()].join('\\')
+    ? [radiceNcInput.trim().replace(/[\\/]+$/, ''), commessa.trim(), posizione.trim(),
+       ...(fase.trim() ? [fase.trim()] : [])].join('\\')
     : ''
 
   // ── MAIN ──────────────────────────────────────────────────────────────────

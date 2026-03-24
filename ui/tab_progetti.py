@@ -499,7 +499,11 @@ class TabProgetti:
     # ══════════════════════════════════════════════════════════════════════════
 
     def _get_tools_db(self) -> dict:
-        """Carica tools_machine.json e ritorna dict alias_upper→tool."""
+        """
+        Carica tools_machine.json.
+        Ritorna dict {t_num_str: tool_dict} — conserva tutti i gemelli.
+        _classify_tool scansiona per nome e trova tutti i gemelli.
+        """
         try:
             from pathlib import Path as _P
             cfg = _carica_config()
@@ -511,14 +515,11 @@ class TabProgetti:
                 return {}
             import json as _j
             raw = _j.loads(tm.read_text(encoding="utf-8"))
-            result = {}
-            for t in raw.get("tools", {}).values():
-                n = (t.get("name") or "").upper().strip()
-                if n:
-                    result[n] = t
-            return result
+            # Indicizza per t_num (chiave unica) così i gemelli sono tutti presenti
+            return {str(k): t for k, t in raw.get("tools", {}).items() if t.get("name")}
         except Exception:
             return {}
+
 
     def _classify_tool(self, alias: str, tools_db: dict) -> str | None:
         """Ritorna: ok | fin_vita | disabilitato | mancante | None (no alias/db)."""

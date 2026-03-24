@@ -96,25 +96,22 @@ def get_db_paths(db_principale):
 def auto_find_db_paths(config: dict = None) -> dict:
     """
     Trova automaticamente i percorsi DB nella stessa cartella di tools_toa_folder.
-    Nomi standard: DMGDesk_principale.csv, DMGDesk_smontati.csv, ecc.
-    Se non esistono li crea vuoti.
-    
-    Priorità:
-    1. database_path già configurato (compatibilità)
-    2. tools_toa_folder (stessa cartella di TOA/MPF)
-    3. percorso_nc_base (risale di 2 livelli)
+
+    Nomi riconosciuti (in ordine di priorità):
+      1. database_path già in config (compatibilità)
+      2. Database_DMG160U_*.csv  (nomi vecchi)
+      3. DMGDesk_*.csv           (nomi nuovi standard)
+    Se non esistono li crea vuoti con i nomi nuovi.
     """
     if config is None:
         config = carica_configurazione()
-
-    BASE_NAME = "DMGDesk"
 
     # 1. database_path già configurato e valido
     db_path = (config.get("database_path") or "").strip()
     if db_path and os.path.exists(db_path):
         return get_db_paths(db_path)
 
-    # 2. Trova cartella da tools_toa_folder o percorso_nc_base
+    # 2. Trova cartella
     folder = (config.get("tools_toa_folder") or "").strip()
     if not folder:
         percorso_nc = (config.get("percorso_nc_base") or "").strip()
@@ -123,17 +120,40 @@ def auto_find_db_paths(config: dict = None) -> dict:
             parts = _P(percorso_nc).parts
             if len(parts) >= 2:
                 folder = str(_P(parts[0]) / parts[1])
-
     if not folder:
         return get_db_paths(None)
 
-    # Costruisci percorsi standard
-    principale    = os.path.join(folder, f"{BASE_NAME}_principale.csv")
-    smontati      = os.path.join(folder, f"{BASE_NAME}_smontati.csv")
-    holder        = os.path.join(folder, f"{BASE_NAME}_holder.csv")
-    bussole       = os.path.join(folder, f"{BASE_NAME}_bussole.csv")
+    # 3. Cerca prima i vecchi nomi, poi i nuovi
+    def _find(candidates):
+        for c in candidates:
+            p = os.path.join(folder, c)
+            if os.path.exists(p):
+                return p
+        return None
 
-    # Crea i file vuoti se non esistono (primo avvio)
+    principale = (
+        _find(["Database_DMG160U_utensili_in_macchina.csv",
+               "Database_DMG160U.csv",
+               "DMGDesk_principale.csv"])
+        or os.path.join(folder, "DMGDesk_principale.csv")
+    )
+    smontati = (
+        _find(["Database_DMG160U_utensili_smontati.csv",
+               "DMGDesk_smontati.csv"])
+        or os.path.join(folder, "DMGDesk_smontati.csv")
+    )
+    holder = (
+        _find(["Database_DMG160U_holder_smontati.csv",
+               "DMGDesk_holder.csv"])
+        or os.path.join(folder, "DMGDesk_holder.csv")
+    )
+    bussole = (
+        _find(["Database_DMG160U_bussole_idraulico.csv",
+               "DMGDesk_bussole.csv"])
+        or os.path.join(folder, "DMGDesk_bussole.csv")
+    )
+
+    # Crea i file vuoti se non esistono
     _ensure_csv(principale, COLONNE_V2)
     _ensure_csv(smontati,   COLONNE_UTENSILI_SMONTATI)
     _ensure_csv(holder,     COLONNE_HOLDER_SMONTATI)
@@ -147,9 +167,9 @@ def auto_find_db_paths(config: dict = None) -> dict:
         pass
 
     return {
-        "principale":       principale,
+        "principale":        principale,
         "utensili_smontati": smontati,
-        "holder_smontati":  holder,
+        "holder_smontati":   holder,
         "bussole_idraulico": bussole,
     }
 

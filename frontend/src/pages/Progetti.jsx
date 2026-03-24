@@ -127,7 +127,7 @@ function ProgramRow({pgm,gruppo,onStato,onOperatore,onTempo,onRemove,toolStatus}
         </div>
         <div style={{flexShrink:0,width:52,textAlign:'center',borderRight:`1px solid ${T.border}`,alignSelf:'stretch',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:2}}>
           <span style={{fontSize:13,fontWeight:800,color:gruppo.color,fontFamily:'monospace'}}>{pgm.numPgm}</span>
-          {toolStatus&&toolStatus!=='ok'&&(()=>{const b=({fin_vita:{dot:'⚠',c:'#B45309'},disabilitato:{dot:'⊘',c:'#9333EA'},mancante:{dot:'✗',c:'#C0392B'}})[toolStatus];return b?<span style={{fontSize:9,fontWeight:800,color:b.c}}>{b.dot}</span>:null})()}
+          {toolStatus&&toolStatus!=='ok'&&toolStatus!=='loading'&&(()=>{const b=({fin_vita:{dot:'⚠',c:'#B45309'},disabilitato:{dot:'⊘',c:'#9333EA'},mancante:{dot:'✗',c:'#C0392B'}})[toolStatus];return b?<span style={{fontSize:9,fontWeight:800,color:b.c}}>{b.dot}</span>:null})()}
         </div>
         <div style={{flexShrink:0,width:140,borderRight:`1px solid ${T.border}`,padding:'0 10px',alignSelf:'stretch',display:'flex',flexDirection:'column',justifyContent:'center'}}>
           <span style={{fontSize:12,fontWeight:700,color:T.text,fontFamily:'monospace',lineHeight:1.2}}>{pgm.utensile||'—'}</span>
@@ -189,11 +189,11 @@ function FresaturaPanel({task,onUpdateTask}){
   const programs=Array.isArray(task.programs)?task.programs:[]
   const[expanded,setExpanded]=useState(false)
   const[collapsedGroups,setCollapsedGroups]=useState({ipm:true,fresatura:true})
-  const[toolsDB,setToolsDB]=useState(null)  // tools_machine cache
+  const[toolsDB,setToolsDB]=useState(undefined)  // undefined=non caricato, {}=caricato
 
   // Carica tools_machine una volta sola quando si espande
   useEffect(()=>{
-    if(!expanded||toolsDB)return
+    if(!expanded||toolsDB!==undefined)return
     fetch('/api/tools/')
       .then(r=>r.ok?r.json():[])
       .then(arr=>{
@@ -205,13 +205,14 @@ function FresaturaPanel({task,onUpdateTask}){
 
   // Classifica utensile: ok|fin_vita|disabilitato|scaffale|smontato|mancante|sconosciuto
   function classifyTool(alias){
-    if(!alias||!toolsDB)return null
+    if(!alias)return null
+    if(toolsDB===undefined)return 'loading'  // ancora in caricamento
     const a=alias.toUpperCase().trim()
     const t=toolsDB[a]
-    if(!t)return'mancante'
-    if(!t.is_enabled||t.is_worn)return'disabilitato'
-    if(t.life_percent!=null&&t.life_percent<15)return'fin_vita'
-    return'ok'
+    if(!t)return 'mancante'
+    if(!t.is_enabled||t.is_worn)return 'disabilitato'
+    if(t.life_percent!=null&&t.life_percent<15)return 'fin_vita'
+    return 'ok'
   }
 
   const TOOL_BADGE={
@@ -267,8 +268,8 @@ function FresaturaPanel({task,onUpdateTask}){
       <div onClick={()=>setExpanded(v=>!v)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',cursor:'pointer',background:'#E8F0FA',userSelect:'none'}}>
         <span style={{fontSize:15}}>⚙️</span>
         <span style={{fontSize:13,fontWeight:800,color:'#1D5FAD',flex:1}}>PROGRAMMI FRESATURA</span>
-        {toolsDB&&(()=>{
-          const issues=programs.filter(p=>p.utensile&&['mancante','fin_vita','disabilitato'].includes(classifyTool(p.utensile)))
+        {toolsDB!==undefined&&(()=>{
+          const issues=programs.filter(p=>p.utensile&&p.tipoGruppo!=='ipm'&&['mancante','fin_vita','disabilitato'].includes(classifyTool(p.utensile)))
           return issues.length>0?(
             <span style={{fontSize:11,fontWeight:700,color:'#C0392B',background:'#FDECEA',padding:'2px 8px',borderRadius:20,border:'1px solid #C0392B44'}}>
               ⚠ {issues.length} utensil{issues.length===1?'e':'i'} problematic{issues.length===1?'o':'i'}

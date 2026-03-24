@@ -100,7 +100,15 @@ export default function AnalisiNC() {
           sessionStorage.removeItem('dmgdesk_lancio_nc')  // consuma subito
           const lancio = JSON.parse(raw)
           setLancioProgetto(lancio)
-          if (lancio.nomeCartella) setNomeCartella(lancio.nomeCartella)
+          if (lancio.nomeCartella) {
+            setNomeCartella(lancio.nomeCartella)
+            // Auto-split: 4297_0005 → commessa=4297, posizione=0005
+            const parts = lancio.nomeCartella.split('_')
+            if (parts.length >= 2 && /^\d+$/.test(parts[0])) {
+              setCommessa(parts[0])
+              setPosizione(parts[1])
+            }
+          }
 
           // Carica e analizza i file dal disco tramite API
           if (lancio.mpfFiles?.length) {
@@ -331,7 +339,17 @@ export default function AnalisiNC() {
         </div>
 
         {/* 2. Nome cartella */}
-        <input value={nomeCartella} onChange={e => { setNomeCartella(e.target.value); setMainError(null) }}
+        <input value={nomeCartella} onChange={e => {
+                  const v = e.target.value
+                  setNomeCartella(v)
+                  setMainError(null)
+                  // Auto-split: 4297_0005 → commessa=4297, posizione=0005
+                  const parts = v.trim().split('_')
+                  if (parts.length >= 2 && /^\d+$/.test(parts[0])) {
+                    setCommessa(parts[0])
+                    setPosizione(parts[1])
+                  }
+                }}
           placeholder="Nome cartella"
           style={{ ...inputStyle, width: 120, fontWeight: 600, fontSize: 12 }}
           onFocus={e => e.target.style.borderColor = 'var(--cyan)'}

@@ -183,44 +183,29 @@ function ProgramRow({pgm,gruppo,onStato,onOperatore,onTempo,onRemove,toolStatus}
   )
 }
 
+
+// ── Classifica utensile rispetto a tools_machine ──────────────────────────────
+function classifyTool(alias, toolsDB){
+  if(!alias) return null
+  if(!toolsDB) return null  // non ancora caricato
+  const t = toolsDB[alias.toUpperCase().trim()]
+  if(!t) return 'mancante'
+  if(!t.is_enabled || t.is_worn) return 'disabilitato'
+  if(t.life_percent != null && t.life_percent < 15) return 'fin_vita'
+  return 'ok'
+}
+
 // ── FresaturaPanel ─────────────────────────────────────────────────────────────
-function FresaturaPanel({task,onUpdateTask}){
+function FresaturaPanel({task,onUpdateTask,toolsDB}){
   const fileInputRef=useRef(null)
   const programs=Array.isArray(task.programs)?task.programs:[]
   const[expanded,setExpanded]=useState(false)
   const[collapsedGroups,setCollapsedGroups]=useState({ipm:true,fresatura:true})
-  const[toolsDB,setToolsDB]=useState(undefined)  // undefined=non caricato, {}=caricato
-
-  // Carica tools_machine una volta sola quando si espande
-  useEffect(()=>{
-    if(!expanded||toolsDB!==undefined)return
-    fetch('/api/tools/')
-      .then(r=>r.ok?r.json():[])
-      .then(arr=>{
-        const map={}
-        arr.forEach(t=>{ if(t.name) map[t.name.toUpperCase().trim()]=t })
-        setToolsDB(map)
-      }).catch(()=>setToolsDB({}))
-  },[expanded])
-
-  // Classifica utensile: ok|fin_vita|disabilitato|scaffale|smontato|mancante|sconosciuto
-  function classifyTool(alias){
-    if(!alias)return null
-    if(toolsDB===undefined)return 'loading'  // ancora in caricamento
-    const a=alias.toUpperCase().trim()
-    const t=toolsDB[a]
-    if(!t)return 'mancante'
-    if(!t.is_enabled||t.is_worn)return 'disabilitato'
-    if(t.life_percent!=null&&t.life_percent<15)return 'fin_vita'
-    return 'ok'
-  }
-
   const TOOL_BADGE={
     ok:          {dot:'✓',color:'#166534',bg:'#dcfce7'},
     fin_vita:    {dot:'⚠',color:'#B45309',bg:'#FEF3C7'},
     disabilitato:{dot:'⊘',color:'#9333EA',bg:'#F3E8FF'},
     mancante:    {dot:'✗',color:'#C0392B',bg:'#FDECEA'},
-    null:        {dot:'·',color:'#9A978E',bg:'transparent'},
   }
   const ipmPrograms=programs.filter(p=>p.tipoGruppo==='ipm')
   const fresPrograms=programs.filter(p=>p.tipoGruppo!=='ipm')
@@ -268,8 +253,8 @@ function FresaturaPanel({task,onUpdateTask}){
       <div onClick={()=>setExpanded(v=>!v)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',cursor:'pointer',background:'#E8F0FA',userSelect:'none'}}>
         <span style={{fontSize:15}}>⚙️</span>
         <span style={{fontSize:13,fontWeight:800,color:'#1D5FAD',flex:1}}>PROGRAMMI FRESATURA</span>
-        {toolsDB!==undefined&&(()=>{
-          const issues=programs.filter(p=>p.utensile&&p.tipoGruppo!=='ipm'&&['mancante','fin_vita','disabilitato'].includes(classifyTool(p.utensile)))
+        {toolsDB&&(()=>{
+          const issues=programs.filter(p=>p.utensile&&p.tipoGruppo!=='ipm'&&['mancante','fin_vita','disabilitato'].includes(classifyTool(p.utensile,toolsDB)))
           return issues.length>0?(
             <span style={{fontSize:11,fontWeight:700,color:'#C0392B',background:'#FDECEA',padding:'2px 8px',borderRadius:20,border:'1px solid #C0392B44'}}>
               ⚠ {issues.length} utensil{issues.length===1?'e':'i'} problematic{issues.length===1?'o':'i'}
@@ -313,7 +298,7 @@ function FresaturaPanel({task,onUpdateTask}){
                   onOperatore={operatore=>updatePgm(pgm.id,{operatore})}
                   onTempo={tempoStimato=>updatePgm(pgm.id,{tempoStimato})}
                   onRemove={()=>updatePrograms(programs.filter(p=>p.id!==pgm.id))}
-                  toolStatus={classifyTool(pgm.utensile)}/>
+                  toolStatus={classifyTool(pgm.utensile,toolsDB)}/>
               ))}
             </div>
           ))}
@@ -431,7 +416,7 @@ function UtensiliProgetto({projectId}){
 }
 
 // ── TaskItem ───────────────────────────────────────────────────────────────────
-function TaskItem({task,idx,stepId,onToggle,onUpdateTask,onDelete,isNext,onReorderTask}){
+function TaskItem({task,idx,stepId,onToggle,onUpdateTask,onDelete,isNext,onReorderTask,toolsDB}){
   const[hovered,setHovered]=useState(false)
   const[dragOver,setDragOver]=useState(false)
   const[addingNote,setAddingNote]=useState(false)
@@ -504,14 +489,14 @@ function TaskItem({task,idx,stepId,onToggle,onUpdateTask,onDelete,isNext,onReord
         </div>
       )}
       {task.text?.trim().toLowerCase()==='fresatura'&&(
-        <div style={{marginTop:8}}><FresaturaPanel task={task} onUpdateTask={onUpdateTask}/></div>
+        <div style={{marginTop:8}}><FresaturaPanel task={task} onUpdateTask={onUpdateTask} toolsDB={toolsDB}/></div>
       )}
     </div>
   )
 }
 
 // ── StepSection ────────────────────────────────────────────────────────────────
-function StepSection({step,stepIdx,nextTaskId,onToggle,onUpdateTask,onAddTask,onDeleteTask,onReorderTask,onReorderStep,onDeleteStep,projectColor}){
+function StepSection({step,stepIdx,nextTaskId,onToggle,onUpdateTask,onAddTask,onDeleteTask,onReorderTask,onReorderStep,onDeleteStep,projectColor,toolsDB}){
   const[collapsed,setCollapsed]=useState(false)
   const[adding,setAdding]=useState(false)
   const[newTask,setNewTask]=useState('')
@@ -543,7 +528,8 @@ function StepSection({step,stepIdx,nextTaskId,onToggle,onUpdateTask,onAddTask,on
             <TaskItem key={task.id} task={task} idx={tIdx} stepId={step.id}
               onToggle={onToggle} onUpdateTask={onUpdateTask}
               onDelete={tid=>onDeleteTask(step.id,tid)}
-              isNext={task.id===nextTaskId} onReorderTask={onReorderTask}/>
+              isNext={task.id===nextTaskId} onReorderTask={onReorderTask}
+              toolsDB={toolsDB}/>
           ))}
           {adding?(
             <div style={{display:'flex',gap:8,marginTop:8,marginLeft:22}}>
@@ -682,6 +668,17 @@ function SaveAsTemplateModal({project,templates,onSave,onClose}){
 }
 // ── ProjectDetail ──────────────────────────────────────────────────────────────
 function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onSaveAsTemplate,onLanciaNC}){
+  // Carica tools_machine una volta sola per questo progetto
+  const [toolsDB, setToolsDB] = useState(null)
+  useEffect(()=>{
+    fetch('/api/tools/')
+      .then(r=>r.ok?r.json():[])
+      .then(arr=>{
+        const map={}
+        arr.forEach(t=>{ if(t.name) map[t.name.toUpperCase().trim()]=t })
+        setToolsDB(map)
+      }).catch(()=>setToolsDB({}))
+  },[])  // solo al mount del ProjectDetail
   const[logText,setLogText]=useState('')
   const[logUser,setLogUser]=useState('Tu')
   const[activeTab,setActiveTab]=useState('tasks')

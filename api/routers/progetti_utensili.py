@@ -28,13 +28,17 @@ def parse_mpf_testo(testo: str) -> set:
     return risultati
 
 
-def cerca_file_mpf(filename: str, nc_base: str) -> str | None:
-    """Cerca un file MPF ricorsivamente nella cartella NC. Ritorna il path o None."""
-    if not nc_base or not filename:
+def cerca_file_mpf(filename: str, nc_base: str, extra_dirs: list | None = None) -> str | None:
+    """Cerca un file MPF nella cartella NC e in cartelle extra. Ritorna il path o None."""
+    if not filename:
         return None
-    for root, _, files in os.walk(nc_base):
-        if filename in files:
-            return os.path.join(root, filename)
+    search_dirs = [d for d in ([nc_base] + (extra_dirs or [])) if d]
+    for base in search_dirs:
+        for root, _, files in os.walk(base):
+            # Confronto case-insensitive su Windows
+            for f in files:
+                if f.upper() == filename.upper():
+                    return os.path.join(root, f)
     return None
 
 
@@ -48,7 +52,9 @@ def estrai_alias_da_progetti(config: dict) -> dict:
     from api.routers.progetti import _load_progetti
     data     = _load_progetti(config)
     projects = [p for p in data.get("projects", []) if not p.get("archived")]
-    nc_base  = (config.get("percorso_nc_base") or "").strip()
+    nc_base     = (config.get("percorso_nc_base") or "").strip()
+    tools_folder = (config.get("tools_toa_folder") or "").strip()
+    extra_dirs = [tools_folder] if tools_folder and tools_folder != nc_base else []
 
     alias_map: dict[str, list] = {}
 
@@ -67,7 +73,7 @@ def estrai_alias_da_progetti(config: dict) -> dict:
                     if alias:
                         alias_map.setdefault(alias, []).append((pname, filename))
                     elif filename:
-                        fpath = cerca_file_mpf(filename, nc_base)
+                        fpath = cerca_file_mpf(filename, nc_base, extra_dirs)
                         if fpath:
                             try:
                                 testo = open(fpath, encoding="utf-8", errors="replace").read()
@@ -84,7 +90,9 @@ def estrai_alias_da_progetto(project: dict, config: dict) -> dict:
     Come sopra ma per un singolo progetto.
     Ritorna: { alias_upper: [filename, ...] }
     """
-    nc_base = (config.get("percorso_nc_base") or "").strip()
+    nc_base     = (config.get("percorso_nc_base") or "").strip()
+    tools_folder = (config.get("tools_toa_folder") or "").strip()
+    extra_dirs   = [tools_folder] if tools_folder and tools_folder != nc_base else []
     alias_refs: dict[str, list] = {}
 
     for step in project.get("steps", []):
@@ -100,7 +108,7 @@ def estrai_alias_da_progetto(project: dict, config: dict) -> dict:
                 if alias:
                     alias_refs.setdefault(alias, []).append(filename)
                 elif filename:
-                    fpath = cerca_file_mpf(filename, nc_base)
+                    fpath = cerca_file_mpf(filename, nc_base, extra_dirs)
                     if fpath:
                         try:
                             testo = open(fpath, encoding="utf-8", errors="replace").read()

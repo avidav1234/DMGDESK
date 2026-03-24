@@ -151,3 +151,68 @@ async def save_templates(body: TemplateUpdate):
     path = _templates_path(config)
     path.write_text(json.dumps(body.templates, ensure_ascii=False, indent=2), encoding="utf-8")
     return {"ok": True}
+
+
+class ImportBody(BaseModel):
+    projects: list
+    templates: list
+    mode: str = "merge"   # merge | replace
+
+
+@router.post("/import")
+async def import_backup(body: ImportBody):
+    """
+    Importa un backup WorkTrack.
+    mode=replace: sovrascrive tutto
+    mode=merge:   aggiunge/aggiorna senza cancellare
+    """
+    config = carica_configurazione()
+
+    if body.mode == "replace":
+        data = {"projects": body.projects}
+        _save_progetti(config, data)
+        path = _templates_path(config)
+        path.write_text(json.dumps(body.templates, ensure_ascii=False, indent=2), encoding="utf-8")
+    else:
+        # Merge: aggiorna esistenti, aggiunge nuovi
+        data = _load_progetti(config)
+        existing = {p["id"]: p for p in data.get("projects", [])}
+        for p in body.projects:
+            existing[p["id"]] = p
+        data["projects"] = list(existing.values())
+        _save_progetti(config, data)
+
+        # Template merge
+        existing_t = {t["id"]: t for t in _load_templates(config)}
+        for t in body.templates:
+            existing_t[t["id"]] = t
+        path = _templates_path(config)
+        path.write_text(json.dumps(list(existing_t.values()), ensure_ascii=False, indent=2), encoding="utf-8")
+
+    return {
+        "ok": True,
+        "progetti": len(body.projects),
+        "templates": len(body.templates),
+        "mode": body.mode,
+    }
+
+
+@router.get("/export")
+async def export_backup():
+    """Esporta tutti i dati come backup JSON (compatibile con WorkTrack)."""
+    from fastapi.responses import JSONResponse
+    from datetime import datetime
+    config = carica_configurazione()
+    data = _load_progetti(config)
+    templates = _load_templates(config)
+    payload = {
+        "_worktrack": True,
+        "version": 2,
+        "exportedAt": datetime.now().isoformat(),
+        "label": f"Backup DMGDesk {datetime.now().strftime('%Y-%m-%d')}",
+        "projects": data.get("projects", []),
+        "templates": templates,
+    }
+    return JSONResponse(content=payload, headers={
+        "Content-Disposition": f"attachment; filename=worktrack_backup_{datetime.now().strftime('%Y-%m-%d')}.json"
+    })

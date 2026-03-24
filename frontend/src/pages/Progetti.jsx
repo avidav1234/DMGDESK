@@ -652,6 +652,9 @@ export default function Progetti() {
   const [showNuovo, setShowNuovo] = useState(false)
   const [search, setSearch]       = useState('')
   const [lanciaMsg, setLanciaMsg] = useState(null)
+  const [importError, setImportError] = useState(null)
+  const [importSuccess, setImportSuccess] = useState(null)
+  const importRef = useRef(null)
   const saveTimer = useRef(null)
 
   // ── Carica ──────────────────────────────────────────────────────────────────
@@ -697,6 +700,34 @@ export default function Progetti() {
     if (p) try { await fetch(`${API}/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ data: { ...p, archived: !p.archived } }) }) } catch {}
   }
 
+  // ── Import backup ──────────────────────────────────────────────────────────
+  const handleImport = async (e, mode = 'merge') => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    try {
+      const text = await file.text()
+      const parsed = JSON.parse(text)
+      if (!parsed._worktrack && !parsed._worktrack_backup) throw new Error('File non riconosciuto')
+      if (!Array.isArray(parsed.projects) || !Array.isArray(parsed.templates)) throw new Error('Struttura backup non valida')
+      const r = await fetch(`${API}/import`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projects: parsed.projects, templates: parsed.templates, mode })
+      })
+      if (!r.ok) throw new Error(`Errore server ${r.status}`)
+      const res = await r.json()
+      setImportSuccess(`✓ ${res.progetti} progetti e ${res.templates} template importati (${mode})`)
+      setImportError(null)
+      await load()
+    } catch (err) {
+      setImportError(err.message)
+      setImportSuccess(null)
+    }
+    e.target.value = ''
+  }
+
+  const handleExport = () => { window.open(`${API}/export`, '_blank') }
+
   // ── Lancia in NC ────────────────────────────────────────────────────────────
   const lanciaNC = (project) => {
     const mpf = project.steps.flatMap(s => s.tasks).filter(t => t.text?.trim().toLowerCase() === 'fresatura').flatMap(t => (t.programs||[]).filter(p => p.tipoGruppo !== 'ipm'))
@@ -739,6 +770,7 @@ export default function Progetti() {
           </div>
           <NavBtn id='projects' label='Progetti' />
           <NavBtn id='archived' label='Archivio' badge={archivedProjects.length} />
+          <NavBtn id='backup' label='Backup' />
           {page === 'projects' && (
             <div style={{ marginLeft: 'auto', display: 'flex', gap: 12, alignItems: 'center' }}>
               <input value={search} onChange={e => setSearch(e.target.value)} placeholder='Cerca progetto...'
@@ -758,6 +790,53 @@ export default function Progetti() {
           <ProjectDetail project={selectedProject} onBack={() => setSelectedId(null)}
             onUpdate={saveProject} onDelete={eliminaProgetto} onArchive={archiviaProgetto}
             templates={templates} onSaveAsTemplate={() => {}} onLanciaNC={lanciaNC} />
+        ) : page === 'backup' ? (
+          <div style={{ maxWidth: 560 }}>
+            <div style={{ fontSize: 20, fontWeight: 800, color: T.text, marginBottom: 8 }}>💾 Backup & Importazione</div>
+            <div style={{ fontSize: 13, color: T.textMuted, marginBottom: 24 }}>Importa un backup da WorkTrack standalone o esporta i dati correnti.</div>
+
+            {importError && <div style={{ padding: '10px 14px', borderRadius: 8, background: T.redBg, border: `1px solid ${T.red}44`, color: T.red, fontSize: 13, marginBottom: 16 }}>⚠ {importError}</div>}
+            {importSuccess && <div style={{ padding: '10px 14px', borderRadius: 8, background: T.greenBg, border: `1px solid ${T.green}44`, color: T.green, fontSize: 13, marginBottom: 16 }}>{importSuccess}</div>}
+
+            {/* Import */}
+            <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 12, padding: 20, marginBottom: 16 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: T.text, marginBottom: 6 }}>📥 Importa backup</div>
+              <div style={{ fontSize: 13, color: T.textMuted, marginBottom: 16 }}>Carica un file <code>.json</code> esportato da WorkTrack o da DMGDesk.</div>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <input ref={importRef} type='file' accept='.json' style={{ display: 'none' }}
+                  onChange={e => handleImport(e, 'merge')} />
+                <button onClick={() => importRef.current?.click()}
+                  style={{ background: T.accent, border: 'none', borderRadius: 8, color: '#fff', fontWeight: 700, fontSize: 13, padding: '9px 18px', cursor: 'pointer' }}>
+                  + Importa (merge)
+                </button>
+                <input ref={importRef} type='file' accept='.json' style={{ display: 'none' }}
+                  onChange={e => handleImport(e, 'replace')} id='import-replace' />
+                <button onClick={() => document.getElementById('import-replace')?.click()}
+                  style={{ background: 'none', border: `1px solid ${T.border}`, borderRadius: 8, color: T.textSub, fontWeight: 600, fontSize: 13, padding: '9px 18px', cursor: 'pointer' }}>
+                  Sostituisci tutto
+                </button>
+              </div>
+              <div style={{ fontSize: 11, color: T.textMuted, marginTop: 10 }}>
+                <b>Merge</b>: aggiunge i progetti importati a quelli esistenti (consigliato) ·
+                <b> Sostituisci</b>: cancella tutto e importa
+              </div>
+            </div>
+
+            {/* Export */}
+            <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 12, padding: 20 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: T.text, marginBottom: 6 }}>📤 Esporta backup</div>
+              <div style={{ fontSize: 13, color: T.textMuted, marginBottom: 16 }}>
+                Scarica tutti i progetti e template come file JSON. Compatibile con WorkTrack standalone.
+              </div>
+              <button onClick={handleExport}
+                style={{ background: T.blue, border: 'none', borderRadius: 8, color: '#fff', fontWeight: 700, fontSize: 13, padding: '9px 18px', cursor: 'pointer' }}>
+                💾 Scarica backup completo
+              </button>
+              <div style={{ fontSize: 11, color: T.textMuted, marginTop: 10 }}>
+                Il file viene salvato anche in <code>P:\DMG_DMC_160U\worktrack_projects.json</code> in tempo reale.
+              </div>
+            </div>
+          </div>
         ) : page === 'archived' ? (
           <div>
             <div style={{ fontSize: 20, fontWeight: 800, color: T.text, marginBottom: 20 }}>📦 Archivio</div>

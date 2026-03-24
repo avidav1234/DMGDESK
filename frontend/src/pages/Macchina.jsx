@@ -208,6 +208,7 @@ export default function Macchina() {
   }
 
   return (
+    <>
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 12 }}>
       <SectionHeader title="In Macchina — V16"
         subtitle="Sync TOA/TMA  •  Confronto MPF  •  Tabella utensili" />
@@ -397,5 +398,6 @@ export default function Macchina() {
       <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
     </div>
     <SetupPopup />
+    </>
   )
 }

@@ -7,6 +7,42 @@ import json
 from pathlib import Path
 
 
+
+def classify_tool(alias: str, tools_db: dict) -> str:
+    """
+    Classifica un alias utensile rispetto al tools_machine.json.
+    Considera i gemelli (duplo): se il tool principale è disabilitato/worn
+    ma esiste un gemello abilitato con lo stesso nome → usa il gemello.
+
+    Ritorna: 'ok' | 'fin_vita' | 'disabilitato' | 'mancante'
+    """
+    if not alias or not tools_db:
+        return "mancante"
+
+    key = alias.upper().strip()
+
+    # Raccogli tutti i tool con questo alias (tool + gemelli)
+    tutti = [t for t in tools_db.values()
+             if (t.get("name") or "").upper().strip() == key]
+
+    if not tutti:
+        return "mancante"
+
+    # Cerca gemelli abilitati e non worn
+    abilitati = [t for t in tutti
+                 if t.get("is_enabled", True) and not t.get("is_worn", False)]
+
+    if not abilitati:
+        return "disabilitato"  # tutti i gemelli sono KO
+
+    # Tra gli abilitati, prendi quello con vita migliore
+    best = max(abilitati, key=lambda t: t.get("life_percent") or 100)
+    lp = best.get("life_percent")
+    if lp is not None and lp < 15:
+        return "fin_vita"
+    return "ok"
+
+
 def parse_mpf_testo(testo: str) -> set:
     """Estrae alias utensili (T='alias' + M6) dal testo di un file MPF."""
     pattern = re.compile(r"T\s*=\s*[\"']?([A-Z0-9.\-_\s]+)[\"']?", re.IGNORECASE)

@@ -484,32 +484,47 @@ async def check_utensili_progetto(project_id: str):
     result = []
     summary = {"ok":0,"scaffale":0,"smontato":0,"mancante":0,"fin_vita":0,"disabilitato":0,"totale":len(alias_richiesti)}
 
+    from api.routers.progetti_utensili import classify_tool as _ct
     for alias in sorted(alias_richiesti):
-        tool = in_macchina.get(alias)
-        if tool:
-            lp = tool.get("life_percent")
-            if not tool.get("is_enabled", True) or tool.get("is_worn", False):
-                stato = "disabilitato"
-            elif lp is not None and lp < 15:
-                stato = "fin_vita"
-            else:
-                stato = "ok"
+        # Usa classify_tool che considera i gemelli (duplo)
+        in_mac_stato = _ct(alias, in_macchina)
+
+        if in_mac_stato in ("ok", "fin_vita", "disabilitato"):
+            stato = in_mac_stato
+            # Trova il gemello migliore per magazine/position
+            key = alias.upper().strip()
+            abilitati = [t for t in in_macchina.values()
+                         if (t.get("name") or "").upper().strip() == key
+                         and t.get("is_enabled", True) and not t.get("is_worn", False)]
+            best_tool = max(abilitati, key=lambda t: t.get("life_percent") or 100) if abilitati else                         next((t for t in in_macchina.values()
+                              if (t.get("name") or "").upper().strip() == key), None)
         elif alias in scaffale_alias:
             stato = "scaffale"
+            best_tool = None
         elif alias in smontati_alias:
             stato = "smontato"
+            best_tool = None
         else:
             stato = "mancante"
+            best_tool = None
 
         summary[stato] = summary.get(stato, 0) + 1
+
+        # Conta i gemelli disponibili
+        tutti_gemelli = [t for t in in_macchina.values()
+                         if (t.get("name") or "").upper().strip() == alias.upper().strip()]
+        gemelli_ok = [t for t in tutti_gemelli if t.get("is_enabled", True) and not t.get("is_worn", False)]
+
         result.append({
             "alias":        alias,
             "stato":        stato,
-            "magazine":     tool.get("magazine")     if tool else None,
-            "position":     tool.get("position")     if tool else None,
-            "life_percent": tool.get("life_percent") if tool else None,
-            "length":       tool.get("length")       if tool else None,
+            "magazine":     best_tool.get("magazine")     if best_tool else None,
+            "position":     best_tool.get("position")     if best_tool else None,
+            "life_percent": best_tool.get("life_percent") if best_tool else None,
+            "length":       best_tool.get("length")       if best_tool else None,
             "files":        alias_refs.get(alias, [])[:3],
+            "n_gemelli":    len(tutti_gemelli),
+            "n_gemelli_ok": len(gemelli_ok),
         })
 
     return {"project_id": project_id, "utensili": result, "summary": summary}
@@ -564,21 +579,41 @@ async def get_analisi_setup():
     except Exception:
         pass
 
-    # Non utilizzati: in macchina ma non richiesti
+    from api.routers.progetti_utensili import classify_tool as _ct
+
+    # Non utilizzati: in macchina ma non richiesti (considera alias unici)
+    alias_in_macchina_unici = {}
+    for t in tools_db.values():
+        n = (t.get("name") or "").upper().strip()
+        if not n: continue
+        if n not in alias_in_macchina_unici:
+            alias_in_macchina_unici[n] = t
+
     non_utilizzati = []
     fin_vita        = []
-    for n, t in in_macchina.items():
-        lp = t.get("life_percent")
-        if lp is not None and lp < 15:
+    for n, t in alias_in_macchina_unici.items():
+        stato = _ct(n, in_macchina)
+        lp_best = None
+        # Vita migliore tra gemelli abilitati
+        abilitati = [x for x in in_macchina.values()
+                     if (x.get("name") or "").upper().strip() == n
+                     and x.get("is_enabled", True) and not x.get("is_worn", False)]
+        if abilitati:
+            lp_best = max((x.get("life_percent") or 0) for x in abilitati)
+
+        if stato == "fin_vita":
             fin_vita.append({"alias":n,"magazine":t.get("magazine"),
-                             "position":t.get("position"),"life_percent":lp})
+                             "position":t.get("position"),"life_percent":lp_best})
         if n not in alias_attivi:
             non_utilizzati.append({"alias":n,"magazine":t.get("magazine"),
-                                   "position":t.get("position"),"life_percent":lp})
+                                   "position":t.get("position"),"life_percent":lp_best})
 
-    # Da montare: richiesti ma non in macchina
+    # Da montare: richiesti ma non disponibili (considerando gemelli)
     da_montare = []
-    for alias in sorted(alias_attivi - set(in_macchina.keys())):
+    for alias in sorted(alias_attivi):
+        stato_alias = _ct(alias, in_macchina)
+        if stato_alias in ("ok", "fin_vita"):
+            continue  # almeno un gemello funziona
         provenienza = ("scaffale" if alias in scaffale_alias
                        else "smontato" if alias in smontati_alias
                        else "mancante")

@@ -196,14 +196,31 @@ function ProgramRow({pgm,gruppo,onStato,onOperatore,onTempo,onRemove,toolStatus}
 
 // ── Classifica utensile rispetto a tools_machine ──────────────────────────────
 // Ritorna: null (nessun alias/db), 'ok', 'fin_vita', 'disabilitato', 'mancante'
-// SOLO chiamare per programmi in stato 'in_macchina'
+// Considera i gemelli (duplo): se il tool principale è disabilitato/worn
+// ma esiste un gemello con stesso nome abilitato e vita ok → 'ok' o 'fin_vita'
 function classifyTool(alias, toolsDB){
   if(!alias || !toolsDB) return null
   const key = alias.toUpperCase().trim()
-  const t = toolsDB[key]
-  if(!t) return 'mancante'
-  if(t.is_worn === true || t.is_enabled === false) return 'disabilitato'
-  if(t.life_percent != null && t.life_percent < 15) return 'fin_vita'
+
+  // Raccoglie tutti i tool con questo alias (tool + gemelli)
+  const tutti = Object.values(toolsDB).filter(t =>
+    (t.name || '').toUpperCase().trim() === key
+  )
+  if(tutti.length === 0) return 'mancante'
+
+  // Cerca il gemello migliore: abilitato, non worn, vita massima
+  const abilitati = tutti.filter(t => t.is_enabled !== false && t.is_worn !== true)
+
+  if(abilitati.length === 0) return 'disabilitato'  // tutti i gemelli sono KO
+
+  // Tra gli abilitati, prendi quello con vita migliore
+  const best = abilitati.reduce((a, b) => {
+    const la = a.life_percent ?? 100
+    const lb = b.life_percent ?? 100
+    return la >= lb ? a : b
+  })
+
+  if(best.life_percent != null && best.life_percent < 15) return 'fin_vita'
   return 'ok'
 }
 
@@ -897,8 +914,10 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
     fetch('/api/tools/')
       .then(r=>r.ok?r.json():[])
       .then(arr=>{
+        // Indicizia per tool_id (non per name) per conservare tutti i gemelli
+        // classifyTool scansiona per name → trova tutti i gemelli con lo stesso alias
         const map={}
-        arr.forEach(t=>{ if(t.name) map[t.name.toUpperCase().trim()]=t })
+        arr.forEach(t=>{ if(t.name) map[t.tool_id]=t })
         setToolsDB(map)
       }).catch(()=>setToolsDB({}))
   },[])  // solo al mount del ProjectDetail

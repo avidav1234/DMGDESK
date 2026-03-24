@@ -602,8 +602,10 @@ async def get_analisi_setup():
             lp_best = max((x.get("life_percent") or 0) for x in abilitati)
 
         if stato == "fin_vita":
+            refs = alias_map.get(n, [])
             fin_vita.append({"alias":n,"magazine":t.get("magazine"),
-                             "position":t.get("position"),"life_percent":lp_best})
+                             "position":t.get("position"),"life_percent":lp_best,
+                             "progetti": [{"progetto": r[0], "file": r[1]} for r in refs[:3]]})
         if n not in alias_attivi:
             non_utilizzati.append({"alias":n,"magazine":t.get("magazine"),
                                    "position":t.get("position"),"life_percent":lp_best})

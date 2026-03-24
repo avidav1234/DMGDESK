@@ -774,11 +774,21 @@ class TabMacchina:
                      padx=6, pady=1).pack(side="right", padx=10)
 
         def _render_fin_vita(row, item):
-            tk.Label(row, text=item["alias"], font=("Consolas",11,"bold"),
-                     fg="#1A1814", bg="#FEF3C7").pack(side="left", padx=10, pady=5)
+            left = tk.Frame(row, bg="#FEF3C7")
+            left.pack(side="left", fill="both", expand=True, padx=10, pady=4)
+            tk.Label(left, text=item["alias"], font=("Consolas",11,"bold"),
+                     fg="#1A1814", bg="#FEF3C7").pack(anchor="w")
+            for ref in item.get("progetti", [])[:2]:
+                ref_row = tk.Frame(left, bg="#FEF3C7")
+                ref_row.pack(anchor="w")
+                fn = ref.get('file','').replace('.MPF','').replace('.mpf','')
+                tk.Label(ref_row, text=ref.get('progetto','?'),
+                         font=("DM Sans",9,"bold"), fg="#B45309", bg="#FEF3C7").pack(side="left")
+                tk.Label(ref_row, text=f" · {fn}",
+                         font=("Consolas",8), fg="#9A978E", bg="#FEF3C7").pack(side="left")
             if item.get("position") is not None:
                 tk.Label(row, text=f"P{item['position']}", font=("Consolas",10),
-                         fg="#5A5750", bg="#FEF3C7").pack(side="left", padx=4)
+                         fg="#5A5750", bg="#FEF3C7").pack(side="right", padx=4)
             if item.get("life_percent") is not None:
                 tk.Label(row, text=f"{item['life_percent']}%",
                          font=("DM Sans",11,"bold"), fg="#C0392B", bg="#FEF3C7").pack(side="right", padx=10)

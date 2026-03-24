@@ -1,13 +1,12 @@
-// Progetti.jsx — WorkTrack porting fedele completo per DMGDesk
-// Persistenza su file JSON via /api/progetti invece di localStorage
-// Tutti i componenti dell'originale inclusi
+// Progetti.jsx — WorkTrack porting fedele COMPLETO per DMGDesk
+// Persistenza su file via /api/progetti — identico all'app originale
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 const API = '/api/progetti'
 
-// ── Tema identico all'originale ───────────────────────────────────────────────
+// ── Tema identico all'originale ────────────────────────────────────────────────
 const T = {
   bg:'#F5F4F0', surface:'#FFFFFF', surface2:'#F0EEE8',
   border:'#D8D5CC', borderStrong:'#B0ADA4',
@@ -17,46 +16,47 @@ const T = {
   red:'#C0392B', redBg:'#FDECEA',
   blue:'#1D5FAD', blueBg:'#EAF1FB',
 }
-
 const COLORS = ['#D4700A','#1A7A4A','#1D5FAD','#C0392B','#8B2FC9','#C2185B','#0097A7','#E65100']
 const ICONS  = ['🌐','📱','📣','🏗️','📦','🎯','🔧','📊','✍️','🚀','💡','🎨']
-const OPERATORI = ['I.Dodon','Operatore 2','Operatore 3']
-
-const PRIORITY = {
-  alta:  { label:'Alta',  color:'#C0392B', bg:'#FDECEA', dot:'🔴' },
-  media: { label:'Media', color:'#D4700A', bg:'#FFF4E8', dot:'🟡' },
-  bassa: { label:'Bassa', color:'#1A7A4A', bg:'#E8F5EE', dot:'🟢' },
-}
-
-const STATO_NEXT = { da_fare:'in_macchina', in_macchina:'completato', completato:'da_fare' }
-const STATO_CFG  = {
-  da_fare:     { label:'Da fare',     short:'Da fare',     color:T.textMuted, bg:T.surface2, border:T.border,   dot:'○' },
-  in_macchina: { label:'In macchina', short:'In macchina', color:'#1D5FAD',   bg:'#dbeafe',  border:'#1D5FAD',  dot:'⚙' },
-  completato:  { label:'Completato',  short:'Fatto',       color:'#166534',   bg:'#dcfce7',  border:'#166534',  dot:'✓' },
-}
-
 const DRAG_STEP = 'application/x-wt-step'
 const DRAG_TASK = 'application/x-wt-task'
 
-// ── Utils ─────────────────────────────────────────────────────────────────────
+// ── Utils ──────────────────────────────────────────────────────────────────────
 function uid() { return Math.random().toString(36).slice(2,9) }
 function nowStr() { return new Date().toLocaleString('it-IT',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}).replace(',','') }
-function getProgress(p) { const all=(p.steps||[]).flatMap(s=>s.tasks||[]); if(!all.length)return 0; return Math.round(all.filter(t=>t.done).length/all.length*100) }
-function getNextTask(p) { for(const s of(p.steps||[])){const t=(s.tasks||[]).find(t=>!t.done);if(t)return{step:s,task:t}} return null }
+function getProgress(project) {
+  const all = (project.steps||[]).flatMap(s=>s.tasks||[])
+  if(!all.length) return 0
+  return Math.round(all.filter(t=>t.done).length/all.length*100)
+}
+function getNextTask(project) {
+  for(const step of (project.steps||[])){
+    const next=(step.tasks||[]).find(t=>!t.done)
+    if(next) return {step,task:next}
+  }
+  return null
+}
 function reorder(arr,from,to){const r=[...arr];const[item]=r.splice(from,1);r.splice(to,0,item);return r}
-function cloneTemplateToSteps(tmpl){return(tmpl.steps||[]).map(s=>({...s,id:uid(),tasks:(s.tasks||[]).map(t=>({...t,id:uid(),done:false,notes:[],note:'',doneAt:null}))}))}
-function daysUntil(dateStr){if(!dateStr)return null;const today=new Date();today.setHours(0,0,0,0);const target=new Date(dateStr);target.setHours(0,0,0,0);return Math.round((target-today)/86400000)}
+function cloneTemplateToSteps(tmpl){
+  return tmpl.steps.map(s=>({...s,id:uid(),tasks:s.tasks.map(t=>({...t,id:uid(),done:false,notes:[],note:'',doneAt:null}))}))
+}
+function daysUntil(dateStr){
+  if(!dateStr) return null
+  const today=new Date(); today.setHours(0,0,0,0)
+  const target=new Date(dateStr); target.setHours(0,0,0,0)
+  return Math.round((target-today)/86400000)
+}
 function deliveryUrgency(days){
-  if(days===null)return{label:'Nessuna data',color:T.textMuted,bg:T.surface2,dot:'⚪',rank:4}
-  if(days<0)return{label:'SCADUTA',color:'#fff',bg:T.red,dot:'💀',rank:0}
-  if(days===0)return{label:'OGGI',color:'#fff',bg:T.red,dot:'🚨',rank:0}
-  if(days<=3)return{label:`${days}gg`,color:T.red,bg:T.redBg,dot:'🔴',rank:1}
-  if(days<=7)return{label:`${days}gg`,color:'#C2720A',bg:'#FFF0DC',dot:'🟠',rank:2}
-  if(days<=21)return{label:`${days}gg`,color:T.accent,bg:T.accentBg,dot:'🟡',rank:3}
-  return{label:`${days}gg`,color:T.green,bg:T.greenBg,dot:'🟢',rank:4}
+  if(days===null) return {label:'Nessuna data',color:T.textMuted,bg:T.surface2,dot:'⚪',rank:4}
+  if(days<0)     return {label:'SCADUTA',      color:'#fff',    bg:T.red,     dot:'💀',rank:0}
+  if(days===0)   return {label:'OGGI',          color:'#fff',    bg:T.red,     dot:'🚨',rank:0}
+  if(days<=3)    return {label:`${days}gg`,     color:T.red,     bg:T.redBg,   dot:'🔴',rank:1}
+  if(days<=7)    return {label:`${days}gg`,     color:'#C2720A', bg:'#FFF0DC', dot:'🟠',rank:2}
+  if(days<=21)   return {label:`${days}gg`,     color:T.accent,  bg:T.accentBg,dot:'🟡',rank:3}
+  return               {label:`${days}gg`,     color:T.green,   bg:T.greenBg, dot:'🟢',rank:4}
 }
 
-// ── MPF Parser ────────────────────────────────────────────────────────────────
+// ── MPF parser ─────────────────────────────────────────────────────────────────
 function parseMpfFile(filename,content){
   const lines=content.split(/\r?\n/)
   const get=(label)=>{const l=lines.find(l=>l.includes(label));return l?l.replace(/.*:\s*/,'').trim():''}
@@ -77,7 +77,20 @@ function parseMpfFile(filename,content){
   return{numPgm,fase,tipoOp,utensile,diametro,dataPost,filename,tipoGruppo}
 }
 
-// ── Shared UI ─────────────────────────────────────────────────────────────────
+const STATO_NEXT={da_fare:'in_macchina',in_macchina:'completato',completato:'da_fare'}
+const STATO_CFG={
+  da_fare:    {label:'Da fare',    short:'Da fare',    color:T.textMuted,bg:T.surface2,border:T.border,  dot:'○'},
+  in_macchina:{label:'In macchina',short:'In macchina',color:'#1D5FAD',  bg:'#dbeafe', border:'#1D5FAD',dot:'⚙'},
+  completato: {label:'Completato', short:'Fatto',      color:'#166534',  bg:'#dcfce7', border:'#166534',dot:'✓'},
+}
+const OPERATORI=['I.Dodon','Operatore 2','Operatore 3']
+const PRIORITY={
+  alta: {label:'Alta', color:'#C0392B',bg:'#FDECEA',dot:'🔴'},
+  media:{label:'Media',color:'#D4700A',bg:'#FFF4E8',dot:'🟡'},
+  bassa:{label:'Bassa',color:'#1A7A4A',bg:'#E8F5EE',dot:'🟢'},
+}
+
+// ── Shared UI ──────────────────────────────────────────────────────────────────
 function ProgressBar({value,color}){
   return <div style={{height:6,background:T.surface2,borderRadius:3,overflow:'hidden'}}><div style={{height:'100%',width:`${value}%`,background:color||T.accent,borderRadius:3,transition:'width 0.3s'}}/></div>
 }
@@ -98,8 +111,7 @@ function ConfirmDialog({message,onConfirm,onCancel}){
     </div>
   )
 }
-
-// ── ProgramRow ────────────────────────────────────────────────────────────────
+// ── ProgramRow ─────────────────────────────────────────────────────────────────
 function ProgramRow({pgm,gruppo,onStato,onOperatore,onTempo,onRemove}){
   const[expanded,setExpanded]=useState(false)
   const[editTempo,setEditTempo]=useState(pgm.tempoStimato||'')
@@ -145,7 +157,7 @@ function ProgramRow({pgm,gruppo,onStato,onOperatore,onTempo,onRemove}){
             {editingT?(
               <div style={{display:'flex',gap:5}}>
                 <input value={editTempo} onChange={e=>setEditTempo(e.target.value)} placeholder='es. 2h30m' autoFocus
-                  style={{width:90,background:T.surface,border:`1.5px solid #1D5FAD44`,borderRadius:6,padding:'4px 8px',color:T.text,fontSize:12,outline:'none'}}
+                  style={{width:90,background:T.surface,border:'1.5px solid #1D5FAD44',borderRadius:6,padding:'4px 8px',color:T.text,fontSize:12,outline:'none'}}
                   onKeyDown={e=>{if(e.key==='Enter'){onTempo(editTempo);setEditingT(false)}if(e.key==='Escape')setEditingT(false)}}/>
                 <button onClick={()=>{onTempo(editTempo);setEditingT(false)}} style={{background:'#1D5FAD',border:'none',borderRadius:5,color:'#fff',fontSize:11,fontWeight:700,padding:'4px 9px',cursor:'pointer'}}>OK</button>
               </div>
@@ -182,20 +194,41 @@ function FresaturaPanel({task,onUpdateTask}){
   const inMacchina=programs.filter(p=>p.stato==='in_macchina').length
   const total=programs.length
   const allDone=total>0&&doneTotal===total
-
   function updatePrograms(newPrograms){
     const allComplete=newPrograms.length>0&&newPrograms.every(p=>p.stato==='completato')
     onUpdateTask({...task,programs:newPrograms,done:allComplete,doneAt:allComplete?new Date().toISOString().slice(0,10):task.doneAt})
   }
   async function handleFileUpload(e){
-    const files=Array.from(e.target.files);const parsed=[]
-    for(const file of files){const text=await file.text();const info=parseMpfFile(file.name,text);if(!programs.find(p=>p.filename===info.filename))parsed.push({id:uid(),...info,stato:'da_fare',operatore:'',tempoStimato:'',tempoInizio:null,tempoFine:null})}
-    if(parsed.length>0){const all=[...programs,...parsed].sort((a,b)=>{if(a.tipoGruppo!==b.tipoGruppo)return a.tipoGruppo==='ipm'?-1:1;return a.numPgm.localeCompare(b.numPgm,undefined,{numeric:true})});updatePrograms(all)}
+    const files=Array.from(e.target.files)
+    const parsed=[]
+    for(const file of files){
+      const text=await file.text()
+      const info=parseMpfFile(file.name,text)
+      if(!programs.find(p=>p.filename===info.filename))
+        parsed.push({id:uid(),...info,stato:'da_fare',operatore:'',tempoStimato:'',tempoInizio:null,tempoFine:null})
+    }
+    if(parsed.length>0){
+      const all=[...programs,...parsed].sort((a,b)=>{
+        if(a.tipoGruppo!==b.tipoGruppo) return a.tipoGruppo==='ipm'?-1:1
+        return a.numPgm.localeCompare(b.numPgm,undefined,{numeric:true})
+      })
+      updatePrograms(all)
+    }
     e.target.value=''
   }
-  function updatePgm(id,patch){updatePrograms(programs.map(p=>{if(p.id!==id)return p;const next={...p,...patch};if(patch.stato==='in_macchina'&&!p.tempoInizio)next.tempoInizio=nowStr();if(patch.stato==='completato')next.tempoFine=nowStr();return next}))}
-  const gruppi=[{key:'ipm',label:'Tastatura (IPM)',icon:'📏',color:'#8B2FC9',bgColor:'#F3E8FF',list:ipmPrograms},{key:'fresatura',label:'Fresatura',icon:'⚙️',color:'#1D5FAD',bgColor:'#E8F0FA',list:fresPrograms}].filter(g=>g.list.length>0)
-
+  function updatePgm(id,patch){
+    updatePrograms(programs.map(p=>{
+      if(p.id!==id) return p
+      const next={...p,...patch}
+      if(patch.stato==='in_macchina'&&!p.tempoInizio) next.tempoInizio=nowStr()
+      if(patch.stato==='completato') next.tempoFine=nowStr()
+      return next
+    }))
+  }
+  const gruppi=[
+    {key:'ipm',label:'Tastatura (IPM)',icon:'📏',color:'#8B2FC9',bgColor:'#F3E8FF',list:ipmPrograms},
+    {key:'fresatura',label:'Fresatura',icon:'⚙️',color:'#1D5FAD',bgColor:'#E8F0FA',list:fresPrograms},
+  ].filter(g=>g.list.length>0)
   return(
     <div style={{marginTop:8,background:T.surface,border:'1.5px solid #1D5FAD33',borderRadius:10,overflow:'hidden'}}>
       <div onClick={()=>setExpanded(v=>!v)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',cursor:'pointer',background:'#E8F0FA',userSelect:'none'}}>
@@ -246,7 +279,6 @@ function FresaturaPanel({task,onUpdateTask}){
     </div>
   )
 }
-
 // ── TaskItem ───────────────────────────────────────────────────────────────────
 function TaskItem({task,idx,stepId,onToggle,onUpdateTask,onDelete,isNext,onReorderTask}){
   const[hovered,setHovered]=useState(false)
@@ -258,7 +290,6 @@ function TaskItem({task,idx,stepId,onToggle,onUpdateTask,onDelete,isNext,onReord
   const noteInputRef=useRef(null)
   const notes=Array.isArray(task.notes)?task.notes:[]
   const displayNotes=notes.length>0?notes:(task.note?[{id:`legacy_${task.id}`,text:task.note,createdAt:''}]:[])
-
   function saveNewNote(){
     if(!newNote.trim()){setAddingNote(false);return}
     const legacy=(!Array.isArray(task.notes)&&task.note)?[{id:`legacy_${task.id}`,text:task.note,createdAt:''}]:[]
@@ -266,9 +297,9 @@ function TaskItem({task,idx,stepId,onToggle,onUpdateTask,onDelete,isNext,onReord
     setNewNote('');setAddingNote(false)
   }
   useEffect(()=>{if(addingNote)noteInputRef.current?.focus()},[addingNote])
-
   return(
-    <div draggable
+    <div
+      draggable
       onDragStart={e=>{e.stopPropagation();e.dataTransfer.effectAllowed='move';e.dataTransfer.setData(DRAG_TASK,JSON.stringify({stepId,idx}));setTimeout(()=>e.target.style.opacity='0.4',0)}}
       onDragEnd={e=>{e.target.style.opacity='1';setDragOver(false)}}
       onDragOver={e=>{if(e.dataTransfer.types.includes(DRAG_TASK)){e.preventDefault();e.stopPropagation();setDragOver(true)}}}
@@ -336,12 +367,10 @@ function StepSection({step,stepIdx,nextTaskId,onToggle,onUpdateTask,onAddTask,on
   const[hovered,setHovered]=useState(false)
   const[stepDragOver,setStepDragOver]=useState(false)
   const done=(step.tasks||[]).filter(t=>t.done).length
-
   const handleStepGripDragStart=e=>{
     e.stopPropagation();e.dataTransfer.effectAllowed='move';e.dataTransfer.setData(DRAG_STEP,String(stepIdx))
     setTimeout(()=>{const el=e.target.closest('[data-stepcontainer]');if(el)el.style.opacity='0.4'},0)
   }
-
   return(
     <div data-stepcontainer
       onDragOver={e=>{if(e.dataTransfer.types.includes(DRAG_STEP)){e.preventDefault();setStepDragOver(true)}}}
@@ -351,7 +380,7 @@ function StepSection({step,stepIdx,nextTaskId,onToggle,onUpdateTask,onAddTask,on
       onMouseEnter={()=>setHovered(true)} onMouseLeave={()=>setHovered(false)}
       style={{marginBottom:12,background:T.surface,border:stepDragOver?`2px solid ${projectColor}`:`1.5px solid ${T.border}`,borderLeft:`4px solid ${projectColor}`,borderRadius:10,padding:'12px 16px',transition:'box-shadow 0.15s, border 0.12s',boxShadow:hovered?'0 2px 12px rgba(0,0,0,0.08)':'none'}}>
       <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:collapsed?0:10}}>
-        <span draggable onDragStart={handleStepGripDragStart} style={{color:T.borderStrong,fontSize:14,cursor:'grab',opacity:hovered?0.8:0.25,flexShrink:0,transition:'opacity 0.15s',userSelect:'none'}} title='Trascina per spostare la fase'>⣿</span>
+        <span draggable onDragStart={handleStepGripDragStart} style={{color:T.borderStrong,fontSize:14,cursor:'grab',opacity:hovered?0.8:0.25,flexShrink:0,userSelect:'none'}} title='Trascina per spostare la fase'>⣿</span>
         <span onClick={()=>setCollapsed(!collapsed)} style={{color:T.textMuted,fontSize:12,cursor:'pointer',userSelect:'none'}}>{collapsed?'▶':'▼'}</span>
         <span style={{fontSize:15,fontWeight:700,color:T.text,flex:1,cursor:'pointer'}} onClick={()=>setCollapsed(!collapsed)}>{step.title}</span>
         <span style={{fontSize:13,color:T.textMuted,fontWeight:500}}>{done}/{(step.tasks||[]).length} completati</span>
@@ -380,7 +409,6 @@ function StepSection({step,stepIdx,nextTaskId,onToggle,onUpdateTask,onAddTask,on
     </div>
   )
 }
-
 // ── LogEntry (editabile) ───────────────────────────────────────────────────────
 function LogEntry({entry,projectColor,onUpdate,onDelete}){
   const[hovered,setHovered]=useState(false)
@@ -397,12 +425,10 @@ function LogEntry({entry,projectColor,onUpdate,onDelete}){
         {entry.editedAt&&<span style={{fontSize:11,color:T.textMuted,fontStyle:'italic'}}>· modificato {entry.editedAt}</span>}
         <div style={{marginLeft:'auto',display:'flex',gap:6,opacity:hovered?1:0,transition:'opacity 0.15s'}}>
           <button onClick={()=>{setEditing(true);setEditVal(entry.text)}} style={{background:'none',border:`1px solid ${T.border}`,borderRadius:6,color:T.textSub,fontSize:12,padding:'2px 8px',cursor:'pointer',fontWeight:600}}>✏️ Modifica</button>
-          {confirm?(
-            <><button onClick={onDelete} style={{background:T.red,border:'none',borderRadius:6,color:'#fff',fontSize:12,padding:'2px 10px',cursor:'pointer',fontWeight:700}}>Conferma elimina</button>
-            <button onClick={()=>setConfirm(false)} style={{background:'none',border:`1px solid ${T.border}`,borderRadius:6,color:T.textSub,fontSize:12,padding:'2px 8px',cursor:'pointer'}}>✕</button></>
-          ):(
-            <button onClick={()=>setConfirm(true)} style={{background:'none',border:`1px solid ${T.red}44`,borderRadius:6,color:T.red,fontSize:12,padding:'2px 8px',cursor:'pointer'}}>🗑️</button>
-          )}
+          {confirm
+            ?<><button onClick={onDelete} style={{background:T.red,border:'none',borderRadius:6,color:'#fff',fontSize:12,padding:'2px 10px',cursor:'pointer',fontWeight:700}}>Conferma elimina</button><button onClick={()=>setConfirm(false)} style={{background:'none',border:`1px solid ${T.border}`,borderRadius:6,color:T.textSub,fontSize:12,padding:'2px 8px',cursor:'pointer'}}>✕</button></>
+            :<button onClick={()=>setConfirm(true)} style={{background:'none',border:`1px solid ${T.red}44`,borderRadius:6,color:T.red,fontSize:12,padding:'2px 8px',cursor:'pointer'}}>🗑️</button>
+          }
         </div>
       </div>
       {editing?(
@@ -432,36 +458,44 @@ function SaveAsTemplateModal({project,templates,onSave,onClose}){
   const[replaceId,setReplaceId]=useState(templates[0]?.id||null)
   const[showIconPicker,setShowIconPicker]=useState(false)
   const[saved,setSaved]=useState(false)
-
   function buildSteps(){return project.steps.map(s=>({id:uid(),title:s.title,tasks:s.tasks.map(t=>({id:uid(),text:t.text}))}))}
   function handleSave(){
     const steps=buildSteps()
-    if(mode==='new')onSave({id:uid(),name:tmplName.trim()||project.name,description:tmplDesc.trim(),icon:tmplIcon,color:tmplColor,steps})
-    else{const existing=templates.find(t=>t.id===replaceId);if(!existing)return;onSave({...existing,name:tmplName.trim()||existing.name,description:tmplDesc.trim(),icon:tmplIcon,color:tmplColor,steps})}
+    if(mode==='new'){
+      onSave({id:uid(),name:tmplName.trim()||project.name,description:tmplDesc.trim(),icon:tmplIcon,color:tmplColor,steps})
+    }else{
+      const existing=templates.find(t=>t.id===replaceId)
+      if(!existing) return
+      onSave({...existing,name:tmplName.trim()||existing.name,description:tmplDesc.trim(),icon:tmplIcon,color:tmplColor,steps})
+    }
     setSaved(true);setTimeout(onClose,1200)
   }
   const inputStyle={width:'100%',background:T.surface2,border:`1.5px solid ${T.border}`,borderRadius:8,padding:'9px 12px',color:T.text,fontSize:14,outline:'none'}
   return(
     <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:150}} onClick={onClose}>
       <div onClick={e=>e.stopPropagation()} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:14,padding:30,width:500,maxWidth:'92vw',maxHeight:'90vh',overflowY:'auto',boxShadow:'0 12px 48px rgba(0,0,0,0.18)'}}>
-        {saved?(<div style={{textAlign:'center',padding:'30px 0'}}><div style={{fontSize:44,marginBottom:12}}>✅</div><div style={{fontSize:18,fontWeight:800,color:T.green}}>Template salvato!</div></div>):(
+        {saved?(
+          <div style={{textAlign:'center',padding:'30px 0'}}><div style={{fontSize:44,marginBottom:12}}>✅</div><div style={{fontSize:18,fontWeight:800,color:T.green}}>Template salvato!</div></div>
+        ):(
           <>
             <div style={{fontSize:18,fontWeight:800,color:T.text,marginBottom:6}}>💾 Salva come Template</div>
-            <div style={{fontSize:13,color:T.textSub,marginBottom:22}}>Le fasi e i task vengono copiati. I segni di spunta e le note vengono rimossi.</div>
+            <div style={{fontSize:13,color:T.textSub,marginBottom:22}}>Le fasi e i task vengono copiati nel template. I segni di spunta e le note vengono rimossi.</div>
             <div style={{display:'flex',gap:8,marginBottom:22}}>
-              <button onClick={()=>setMode('new')} style={{flex:1,padding:10,borderRadius:8,border:`2px solid ${mode==='new'?T.accent:T.border}`,background:mode==='new'?T.accentBg:T.surface2,color:mode==='new'?T.accent:T.textSub,fontWeight:700,fontSize:14,cursor:'pointer'}}>✦ Nuovo template</button>
-              <button onClick={()=>setMode('replace')} disabled={templates.length===0} style={{flex:1,padding:10,borderRadius:8,border:`2px solid ${mode==='replace'?T.accent:T.border}`,background:mode==='replace'?T.accentBg:T.surface2,color:mode==='replace'?T.accent:templates.length===0?T.textMuted:T.textSub,fontWeight:700,fontSize:14,cursor:templates.length===0?'not-allowed':'pointer',opacity:templates.length===0?0.5:1}}>↺ Sostituisci esistente</button>
+              <button onClick={()=>setMode('new')} style={{flex:1,padding:'10px',borderRadius:8,border:`2px solid ${mode==='new'?T.accent:T.border}`,background:mode==='new'?T.accentBg:T.surface2,color:mode==='new'?T.accent:T.textSub,fontWeight:700,fontSize:14,cursor:'pointer'}}>✦ Nuovo template</button>
+              <button onClick={()=>setMode('replace')} disabled={templates.length===0} style={{flex:1,padding:'10px',borderRadius:8,border:`2px solid ${mode==='replace'?T.accent:T.border}`,background:mode==='replace'?T.accentBg:T.surface2,color:mode==='replace'?T.accent:templates.length===0?T.textMuted:T.textSub,fontWeight:700,fontSize:14,cursor:templates.length===0?'not-allowed':'pointer',opacity:templates.length===0?0.5:1}}>↺ Sostituisci esistente</button>
             </div>
             {mode==='replace'&&templates.length>0&&(
               <div style={{marginBottom:18}}>
                 <label style={{fontSize:13,color:T.textSub,fontWeight:600,display:'block',marginBottom:8}}>SCEGLI IL TEMPLATE DA SOSTITUIRE</label>
-                {templates.map(t=>(
-                  <div key={t.id} onClick={()=>setReplaceId(t.id)} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 14px',borderRadius:8,border:`2px solid ${replaceId===t.id?t.color:T.border}`,background:replaceId===t.id?t.color+'12':T.surface2,cursor:'pointer',marginBottom:6,transition:'all 0.15s'}}>
-                    <span style={{fontSize:20}}>{t.icon}</span>
-                    <div style={{flex:1}}><div style={{fontSize:14,fontWeight:700,color:T.text}}>{t.name}</div><div style={{fontSize:12,color:T.textMuted}}>{t.steps.length} fasi · {t.steps.reduce((a,s)=>a+s.tasks.length,0)} task</div></div>
-                    {replaceId===t.id&&<span style={{color:t.color,fontWeight:700,fontSize:18}}>✓</span>}
-                  </div>
-                ))}
+                <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                  {templates.map(t=>(
+                    <div key={t.id} onClick={()=>setReplaceId(t.id)} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 14px',borderRadius:8,border:`2px solid ${replaceId===t.id?t.color:T.border}`,background:replaceId===t.id?t.color+'12':T.surface2,cursor:'pointer'}}>
+                      <span style={{fontSize:20}}>{t.icon}</span>
+                      <div style={{flex:1}}><div style={{fontSize:14,fontWeight:700,color:T.text}}>{t.name}</div><div style={{fontSize:12,color:T.textMuted}}>{t.steps?.length||0} fasi · {(t.steps||[]).reduce((a,s)=>a+(s.tasks||[]).length,0)} task</div></div>
+                      {replaceId===t.id&&<span style={{color:t.color,fontWeight:700,fontSize:18}}>✓</span>}
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
             <div style={{marginBottom:14}}><label style={{fontSize:13,color:T.textSub,fontWeight:600,display:'block',marginBottom:6}}>NOME TEMPLATE</label><input value={tmplName} onChange={e=>setTmplName(e.target.value)} style={inputStyle}/></div>
@@ -471,19 +505,19 @@ function SaveAsTemplateModal({project,templates,onSave,onClose}){
                 <label style={{fontSize:13,color:T.textSub,fontWeight:600,display:'block',marginBottom:8}}>ICONA</label>
                 <div style={{position:'relative'}}>
                   <button onClick={()=>setShowIconPicker(v=>!v)} style={{background:T.surface2,border:`1.5px solid ${T.border}`,borderRadius:10,padding:'8px 16px',cursor:'pointer',fontSize:22,lineHeight:1}}>{tmplIcon}</button>
-                  {showIconPicker&&<div style={{position:'absolute',top:'110%',left:0,background:T.surface,border:`1px solid ${T.border}`,borderRadius:10,padding:10,display:'flex',flexWrap:'wrap',gap:6,width:220,zIndex:30,boxShadow:'0 4px 20px rgba(0,0,0,0.12)'}}>
+                  {showIconPicker&&(<div style={{position:'absolute',top:'110%',left:0,background:T.surface,border:`1px solid ${T.border}`,borderRadius:10,padding:10,display:'flex',flexWrap:'wrap',gap:6,width:220,zIndex:30,boxShadow:'0 4px 20px rgba(0,0,0,0.12)'}}>
                     {ICONS.map(ic=><button key={ic} onClick={()=>{setTmplIcon(ic);setShowIconPicker(false)}} style={{background:ic===tmplIcon?T.surface2:'transparent',border:`1px solid ${ic===tmplIcon?T.border:'transparent'}`,borderRadius:6,padding:'5px 7px',cursor:'pointer',fontSize:20}}>{ic}</button>)}
-                  </div>}
+                  </div>)}
                 </div>
               </div>
               <div>
                 <label style={{fontSize:13,color:T.textSub,fontWeight:600,display:'block',marginBottom:8}}>COLORE</label>
-                <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>{COLORS.map(c=><div key={c} onClick={()=>setTmplColor(c)} style={{width:26,height:26,borderRadius:'50%',background:c,cursor:'pointer',border:tmplColor===c?'3px solid #333':'3px solid transparent',transition:'transform 0.15s',transform:tmplColor===c?'scale(1.15)':'scale(1)'}}/>)}</div>
+                <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>{COLORS.map(c=><div key={c} onClick={()=>setTmplColor(c)} style={{width:26,height:26,borderRadius:'50%',background:c,cursor:'pointer',border:tmplColor===c?'3px solid #333':'3px solid transparent',transform:tmplColor===c?'scale(1.15)':'scale(1)'}}/>)}</div>
               </div>
             </div>
             <div style={{background:T.surface2,borderRadius:8,padding:'12px 14px',marginBottom:22}}>
               <div style={{fontSize:12,color:T.textSub,fontWeight:700,marginBottom:8,letterSpacing:'0.06em'}}>ANTEPRIMA FASI</div>
-              {project.steps.map((s,i)=><div key={s.id} style={{display:'flex',alignItems:'center',gap:8,marginBottom:5}}><span style={{fontSize:12,color:tmplColor,fontWeight:700,minWidth:18}}>{i+1}.</span><span style={{fontSize:14,color:T.text,fontWeight:500,flex:1}}>{s.title}</span><span style={{fontSize:12,color:T.textMuted}}>{s.tasks.length} task</span></div>)}
+              {project.steps.map((s,i)=>(<div key={s.id} style={{display:'flex',alignItems:'center',gap:8,marginBottom:5}}><span style={{fontSize:12,color:tmplColor,fontWeight:700,minWidth:18}}>{i+1}.</span><span style={{fontSize:14,color:T.text,fontWeight:500,flex:1}}>{s.title}</span><span style={{fontSize:12,color:T.textMuted}}>{(s.tasks||[]).length} task</span></div>))}
             </div>
             <div style={{display:'flex',gap:10,justifyContent:'flex-end'}}>
               <button onClick={onClose} style={{background:T.surface2,border:`1px solid ${T.border}`,borderRadius:8,color:T.textSub,fontSize:14,padding:'9px 20px',cursor:'pointer',fontWeight:600}}>Annulla</button>
@@ -495,419 +529,8 @@ function SaveAsTemplateModal({project,templates,onSave,onClose}){
     </div>
   )
 }
-
-// ── TemplateEditor ─────────────────────────────────────────────────────────────
-function TemplateEditor({template,onSave,onCancel}){
-  const[name,setName]=useState(template.name)
-  const[description,setDescription]=useState(template.description)
-  const[icon,setIcon]=useState(template.icon||'🚀')
-  const[color,setColor]=useState(template.color||T.accent)
-  const[steps,setSteps]=useState((template.steps||[]).map(s=>({...s,tasks:(s.tasks||[]).map(t=>({...t}))})))
-  const[showIconPicker,setShowIconPicker]=useState(false)
-
-  function addStep(){setSteps(p=>[...p,{id:uid(),title:'Nuova fase',tasks:[]}])}
-  function updateStepTitle(id,title){setSteps(p=>p.map(s=>s.id===id?{...s,title}:s))}
-  function removeStep(id){setSteps(p=>p.filter(s=>s.id!==id))}
-  function addTask(stepId){setSteps(p=>p.map(s=>s.id===stepId?{...s,tasks:[...s.tasks,{id:uid(),text:'Nuovo task'}]}:s))}
-  function updateTask(stepId,taskId,text){setSteps(p=>p.map(s=>s.id===stepId?{...s,tasks:s.tasks.map(t=>t.id===taskId?{...t,text}:t)}:s))}
-  function removeTask(stepId,taskId){setSteps(p=>p.map(s=>s.id===stepId?{...s,tasks:s.tasks.filter(t=>t.id!==taskId)}:s))}
-  function moveStep(idx,dir){const ns=[...steps],t=idx+dir;if(t<0||t>=ns.length)return;[ns[idx],ns[t]]=[ns[t],ns[idx]];setSteps(ns)}
-  const inputStyle={background:T.surface2,border:`1.5px solid ${T.border}`,borderRadius:8,padding:'9px 12px',color:T.text,fontSize:14,outline:'none',width:'100%'}
-
-  return(
-    <div style={{display:'flex',flexDirection:'column',height:'100%',background:T.bg}}>
-      <div style={{padding:'18px 28px',borderBottom:`1px solid ${T.border}`,flexShrink:0,background:T.surface,display:'flex',alignItems:'center',gap:12}}>
-        <button onClick={onCancel} style={{background:T.surface2,border:`1px solid ${T.border}`,borderRadius:8,color:T.textSub,fontSize:14,padding:'8px 16px',cursor:'pointer',fontWeight:600}}>← Annulla</button>
-        <div style={{fontSize:18,fontWeight:800,color:T.text,flex:1}}>{template.id.startsWith('new_')?'Nuovo Template':`Modifica: ${template.name}`}</div>
-        <button onClick={()=>onSave({...template,name,description,icon,color,steps})} style={{background:color,border:'none',borderRadius:8,color:'#fff',fontWeight:700,fontSize:15,padding:'9px 22px',cursor:'pointer'}}>💾 Salva Template</button>
-      </div>
-      <div style={{flex:1,overflowY:'auto',padding:'24px 28px'}}>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16,marginBottom:20}}>
-          <div><label style={{fontSize:13,color:T.textSub,fontWeight:600,display:'block',marginBottom:6}}>NOME TEMPLATE</label><input value={name} onChange={e=>setName(e.target.value)} style={inputStyle}/></div>
-          <div><label style={{fontSize:13,color:T.textSub,fontWeight:600,display:'block',marginBottom:6}}>DESCRIZIONE</label><input value={description} onChange={e=>setDescription(e.target.value)} style={inputStyle}/></div>
-        </div>
-        <div style={{display:'flex',gap:32,marginBottom:24,alignItems:'flex-start'}}>
-          <div>
-            <label style={{fontSize:13,color:T.textSub,fontWeight:600,display:'block',marginBottom:8}}>ICONA</label>
-            <div style={{position:'relative'}}>
-              <button onClick={()=>setShowIconPicker(v=>!v)} style={{background:T.surface2,border:`1.5px solid ${T.border}`,borderRadius:10,padding:'10px 18px',cursor:'pointer',fontSize:24,lineHeight:1}}>{icon}</button>
-              {showIconPicker&&<div style={{position:'absolute',top:'110%',left:0,background:T.surface,border:`1px solid ${T.border}`,borderRadius:10,padding:12,display:'flex',flexWrap:'wrap',gap:6,width:220,zIndex:20,boxShadow:'0 4px 20px rgba(0,0,0,0.12)'}}>
-                {ICONS.map(ic=><button key={ic} onClick={()=>{setIcon(ic);setShowIconPicker(false)}} style={{background:ic===icon?T.surface2:'transparent',border:`1px solid ${ic===icon?T.border:'transparent'}`,borderRadius:6,padding:'5px 7px',cursor:'pointer',fontSize:20}}>{ic}</button>)}
-              </div>}
-            </div>
-          </div>
-          <div>
-            <label style={{fontSize:13,color:T.textSub,fontWeight:600,display:'block',marginBottom:8}}>COLORE</label>
-            <div style={{display:'flex',gap:10,flexWrap:'wrap'}}>{COLORS.map(c=><div key={c} onClick={()=>setColor(c)} style={{width:28,height:28,borderRadius:'50%',background:c,cursor:'pointer',border:color===c?'3px solid #333':'3px solid transparent',transition:'transform 0.15s',transform:color===c?'scale(1.15)':'scale(1)'}}/>)}</div>
-          </div>
-        </div>
-        <div style={{fontSize:13,color:T.textSub,fontWeight:600,letterSpacing:'0.06em',marginBottom:14}}>FASI E TASK</div>
-        {steps.map((step,idx)=>(
-          <div key={step.id} style={{background:T.surface,border:`1.5px solid ${T.border}`,borderLeft:`4px solid ${color}`,borderRadius:10,padding:'14px 16px',marginBottom:12}}>
-            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12}}>
-              <div style={{display:'flex',flexDirection:'column',gap:2}}>
-                <button onClick={()=>moveStep(idx,-1)} style={{background:T.surface2,border:`1px solid ${T.border}`,borderRadius:4,cursor:'pointer',color:idx===0?T.textMuted:T.text,fontSize:10,padding:'2px 5px',lineHeight:1}}>▲</button>
-                <button onClick={()=>moveStep(idx,1)} style={{background:T.surface2,border:`1px solid ${T.border}`,borderRadius:4,cursor:'pointer',color:idx===steps.length-1?T.textMuted:T.text,fontSize:10,padding:'2px 5px',lineHeight:1}}>▼</button>
-              </div>
-              <span style={{fontSize:12,color:color,fontWeight:700,minWidth:55}}>FASE {idx+1}</span>
-              <input value={step.title} onChange={e=>updateStepTitle(step.id,e.target.value)} style={{...inputStyle,fontWeight:700,fontSize:15}}/>
-              <button onClick={()=>removeStep(step.id)} style={{background:T.redBg,border:`1px solid ${T.red}44`,borderRadius:6,cursor:'pointer',color:T.red,fontSize:14,padding:'4px 8px',flexShrink:0}}>✕</button>
-            </div>
-            <div style={{marginLeft:32}}>
-              {(step.tasks||[]).map(task=>(
-                <div key={task.id} style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
-                  <span style={{color:color,fontSize:12,opacity:0.6,flexShrink:0}}>◦</span>
-                  <input value={task.text} onChange={e=>updateTask(step.id,task.id,e.target.value)} style={{...inputStyle,fontSize:14}}/>
-                  <button onClick={()=>removeTask(step.id,task.id)} style={{background:T.redBg,border:`1px solid ${T.red}33`,borderRadius:6,cursor:'pointer',color:T.red,fontSize:13,padding:'4px 8px',flexShrink:0}}>✕</button>
-                </div>
-              ))}
-              <button onClick={()=>addTask(step.id)} style={{background:'none',border:`1.5px dashed ${T.border}`,borderRadius:8,color:T.textMuted,fontSize:13,padding:'6px 14px',cursor:'pointer',fontWeight:500}}>+ Aggiungi task</button>
-            </div>
-          </div>
-        ))}
-        <button onClick={addStep} style={{background:'none',border:`2px dashed ${color}66`,borderRadius:10,color:color,fontSize:14,padding:14,cursor:'pointer',width:'100%',fontWeight:600}}>+ Aggiungi fase</button>
-      </div>
-    </div>
-  )
-}
-
-// ── TemplatesPage ──────────────────────────────────────────────────────────────
-function TemplatesPage({templates,onEdit,onCreate,onDelete,onDuplicate,onUseTemplate}){
-  return(
-    <div style={{flex:1,overflowY:'auto',padding:'24px 28px',background:T.bg}}>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:20}}>
-        <div style={{fontSize:13,color:T.textSub,fontWeight:700,letterSpacing:'0.06em'}}>TEMPLATE SALVATI — {templates.length}</div>
-        <button onClick={onCreate} style={{background:T.accent,border:'none',borderRadius:8,color:'#fff',fontWeight:700,fontSize:14,padding:'9px 20px',cursor:'pointer'}}>+ Nuovo Template</button>
-      </div>
-      {templates.length===0&&<div style={{textAlign:'center',padding:'60px 0',color:T.textMuted,fontSize:16}}>Nessun template. Creane uno!</div>}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill, minmax(320px, 1fr))',gap:16}}>
-        {templates.map(tmpl=>(
-          <div key={tmpl.id} style={{background:T.surface,border:`1.5px solid ${T.border}`,borderTop:`4px solid ${tmpl.color}`,borderRadius:12,padding:'18px 20px',boxShadow:'0 1px 4px rgba(0,0,0,0.05)'}}>
-            <div style={{display:'flex',alignItems:'flex-start',gap:14,marginBottom:14}}>
-              <span style={{fontSize:28,lineHeight:1}}>{tmpl.icon}</span>
-              <div style={{flex:1}}><div style={{fontSize:16,fontWeight:800,color:T.text,marginBottom:3}}>{tmpl.name}</div><div style={{fontSize:13,color:T.textSub}}>{tmpl.description}</div></div>
-            </div>
-            <div style={{background:T.surface2,borderRadius:8,padding:'10px 12px',marginBottom:10}}>
-              {(tmpl.steps||[]).map((step,i)=>(
-                <div key={step.id} style={{display:'flex',alignItems:'center',gap:8,marginBottom:i<tmpl.steps.length-1?5:0}}>
-                  <span style={{fontSize:12,color:tmpl.color,fontWeight:700,minWidth:18}}>{i+1}.</span>
-                  <span style={{fontSize:14,color:T.text,fontWeight:500,flex:1}}>{step.title}</span>
-                  <span style={{fontSize:12,color:T.textMuted}}>{(step.tasks||[]).length} task</span>
-                </div>
-              ))}
-            </div>
-            <div style={{fontSize:12,color:T.textMuted,marginBottom:14}}>{(tmpl.steps||[]).reduce((a,s)=>a+(s.tasks||[]).length,0)} task totali · {(tmpl.steps||[]).length} fasi</div>
-            <div style={{display:'flex',gap:6}}>
-              <button onClick={()=>onUseTemplate(tmpl)} style={{flex:1,background:tmpl.color,border:'none',borderRadius:8,color:'#fff',fontWeight:700,fontSize:14,padding:9,cursor:'pointer'}}>▶ Usa</button>
-              <button onClick={()=>onDuplicate(tmpl)} style={{background:T.surface2,border:`1px solid ${T.border}`,borderRadius:8,color:T.textSub,fontSize:14,padding:'9px 12px',cursor:'pointer',fontWeight:600}} title='Duplica'>⧉</button>
-              <button onClick={()=>onEdit(tmpl)} style={{background:T.surface2,border:`1px solid ${T.border}`,borderRadius:8,color:T.textSub,fontSize:14,padding:'9px 12px',cursor:'pointer',fontWeight:600}} title='Modifica'>✏️</button>
-              <button onClick={()=>onDelete(tmpl.id)} style={{background:T.redBg,border:`1px solid ${T.red}44`,borderRadius:8,color:T.red,fontSize:14,padding:'9px 12px',cursor:'pointer'}} title='Elimina'>🗑️</button>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-// ── QuickTasksSidebar ──────────────────────────────────────────────────────────
-function QuickTaskRow({task,onToggle,onDelete,onPriority,onEditText}){
-  const[hovered,setHovered]=useState(false)
-  const[showPrioPick,setShowPrioPick]=useState(false)
-  const[editing,setEditing]=useState(false)
-  const[editVal,setEditVal]=useState(task.text)
-  const p=PRIORITY[task.priority]||PRIORITY.media
-  function saveEdit(){if(editVal.trim())onEditText(editVal.trim());setEditing(false)}
-  return(
-    <div onMouseEnter={()=>setHovered(true)} onMouseLeave={()=>{setHovered(false);setShowPrioPick(false)}}
-      style={{display:'flex',alignItems:'flex-start',gap:8,padding:'8px 8px',borderRadius:8,marginBottom:3,background:hovered?T.surface2:'transparent',borderLeft:`3px solid ${task.done?T.border:p.color}`,transition:'background 0.12s',opacity:task.done?0.6:1}}>
-      <div onClick={onToggle} style={{width:18,height:18,borderRadius:5,flexShrink:0,marginTop:editing?8:1,border:task.done?'none':`2px solid ${p.color}`,background:task.done?p.color:'transparent',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
-        {task.done&&<span style={{color:'#fff',fontSize:11,fontWeight:800}}>✓</span>}
-      </div>
-      {editing?(
-        <div style={{flex:1,display:'flex',gap:5}}>
-          <input value={editVal} onChange={e=>setEditVal(e.target.value)} autoFocus
-            style={{flex:1,background:T.surface,border:`1.5px solid ${T.accent}44`,borderRadius:6,padding:'4px 8px',color:T.text,fontSize:13,outline:'none'}}
-            onKeyDown={e=>{if(e.key==='Enter')saveEdit();if(e.key==='Escape')setEditing(false)}}/>
-          <button onClick={saveEdit} style={{background:T.accent,border:'none',borderRadius:5,color:'#fff',fontSize:12,fontWeight:700,padding:'4px 9px',cursor:'pointer'}}>OK</button>
-        </div>
-      ):(
-        <span onDoubleClick={()=>{setEditVal(task.text);setEditing(true)}} style={{flex:1,fontSize:13,color:T.text,lineHeight:1.5,textDecoration:task.done?'line-through':'none',wordBreak:'break-word',cursor:'text'}} title='Doppio click per modificare'>{task.text}</span>
-      )}
-      {hovered&&!editing&&(
-        <div style={{display:'flex',flexDirection:'column',gap:3,flexShrink:0,position:'relative'}}>
-          <button onClick={()=>{setEditVal(task.text);setEditing(true)}} style={{background:'none',border:`1px solid ${T.border}`,borderRadius:5,fontSize:11,padding:'2px 5px',cursor:'pointer',color:T.textSub}}>✏️</button>
-          <button onClick={()=>setShowPrioPick(v=>!v)} style={{background:'none',border:`1px solid ${T.border}`,borderRadius:5,fontSize:12,padding:'2px 5px',cursor:'pointer',color:p.color,fontWeight:700}}>{p.dot}</button>
-          <button onClick={onDelete} style={{background:'none',border:`1px solid ${T.border}`,borderRadius:5,fontSize:11,padding:'2px 5px',cursor:'pointer',color:T.red}}>🗑️</button>
-          {showPrioPick&&(
-            <div style={{position:'absolute',right:'110%',top:0,background:T.surface,border:`1px solid ${T.border}`,borderRadius:8,padding:6,display:'flex',flexDirection:'column',gap:4,boxShadow:'0 4px 16px rgba(0,0,0,0.12)',zIndex:50,width:90}}>
-              {Object.entries(PRIORITY).map(([key,pr])=>(
-                <button key={key} onClick={()=>{onPriority(key);setShowPrioPick(false)}} style={{background:task.priority===key?pr.bg:'transparent',border:`1px solid ${task.priority===key?pr.color:'transparent'}`,borderRadius:5,color:pr.color,fontSize:12,fontWeight:700,padding:'4px 8px',cursor:'pointer',textAlign:'left'}}>{pr.dot} {pr.label}</button>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function QuickTasksSidebar({collapsed,onToggleCollapse}){
-  const[tasks,setTasks]=useState([])
-  const[newText,setNewText]=useState('')
-  const[newPrio,setNewPrio]=useState('media')
-  const[filter,setFilter]=useState('tutti')
-  const inputRef=useRef(null)
-  const pendingCount=tasks.filter(t=>!t.done).length
-
-  function addTask(){if(!newText.trim())return;setTasks(ts=>[{id:uid(),text:newText.trim(),priority:newPrio,done:false,createdAt:new Date().toISOString()},...ts]);setNewText('');inputRef.current?.focus()}
-  function toggleDone(id){setTasks(ts=>ts.map(t=>t.id===id?{...t,done:!t.done}:t))}
-  function deleteTask(id){setTasks(ts=>ts.filter(t=>t.id!==id))}
-  function setPriority(id,p){setTasks(ts=>ts.map(t=>t.id===id?{...t,priority:p}:t))}
-  function editText(id,text){setTasks(ts=>ts.map(t=>t.id===id?{...t,text}:t))}
-
-  const filtered=tasks.filter(t=>{
-    if(filter==='da_fare')return!t.done
-    if(filter==='fatti')return t.done
-    if(filter==='alta')return t.priority==='alta'
-    if(filter==='media')return t.priority==='media'
-    if(filter==='bassa')return t.priority==='bassa'
-    return true
-  })
-
-  if(collapsed){
-    return(
-      <div onClick={onToggleCollapse} title='Apri task rapidi'
-        style={{width:32,flexShrink:0,background:T.surface,borderLeft:`1px solid ${T.border}`,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',cursor:'pointer',userSelect:'none'}}>
-        <div style={{writingMode:'vertical-rl',transform:'rotate(180deg)',fontSize:12,fontWeight:700,color:T.textSub,letterSpacing:'0.1em',display:'flex',alignItems:'center',gap:6}}>
-          ⚡ TASK RAPIDI
-          {pendingCount>0&&<span style={{background:T.accent,color:'#fff',borderRadius:10,fontSize:10,fontWeight:800,padding:'2px 5px',writingMode:'horizontal-tb'}}>{pendingCount}</span>}
-        </div>
-      </div>
-    )
-  }
-
-  return(
-    <div style={{width:280,flexShrink:0,background:T.surface,borderLeft:`1px solid ${T.border}`,display:'flex',flexDirection:'column',overflow:'hidden'}}>
-      <div style={{padding:'14px 14px 10px',borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
-        <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
-          <span style={{fontSize:16}}>⚡</span>
-          <span style={{fontSize:14,fontWeight:800,color:T.text,flex:1}}>Task Rapidi</span>
-          {pendingCount>0&&<span style={{background:T.accent,color:'#fff',borderRadius:20,fontSize:11,fontWeight:800,padding:'2px 8px'}}>{pendingCount}</span>}
-          <button onClick={onToggleCollapse} style={{background:'none',border:`1px solid ${T.border}`,borderRadius:6,color:T.textMuted,fontSize:12,padding:'2px 7px',cursor:'pointer'}}>✕</button>
-        </div>
-        <div style={{display:'flex',flexDirection:'column',gap:6}}>
-          <input ref={inputRef} value={newText} onChange={e=>setNewText(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')addTask()}} placeholder='Nuovo task...'
-            style={{background:T.surface2,border:`1.5px solid ${T.border}`,borderRadius:8,padding:'8px 10px',color:T.text,fontSize:13,outline:'none',width:'100%'}}/>
-          <div style={{display:'flex',gap:5}}>
-            {Object.entries(PRIORITY).map(([key,p])=>(
-              <button key={key} onClick={()=>setNewPrio(key)} style={{flex:1,background:newPrio===key?p.bg:'transparent',border:`1.5px solid ${newPrio===key?p.color:T.border}`,borderRadius:6,color:newPrio===key?p.color:T.textMuted,fontSize:11,fontWeight:700,padding:'5px 0',cursor:'pointer',transition:'all 0.12s'}}>{p.dot} {p.label}</button>
-            ))}
-          </div>
-          <button onClick={addTask} style={{background:T.accent,border:'none',borderRadius:8,color:'#fff',fontWeight:700,fontSize:13,padding:8,cursor:'pointer',width:'100%'}}>+ Aggiungi</button>
-        </div>
-      </div>
-      <div style={{padding:'8px 10px',borderBottom:`1px solid ${T.border}`,display:'flex',flexWrap:'wrap',gap:4,flexShrink:0}}>
-        {[['tutti',`Tutti (${tasks.length})`],['da_fare',`Da fare (${tasks.filter(t=>!t.done).length})`],['fatti',`Fatti (${tasks.filter(t=>t.done).length})`],['alta','🔴'],['media','🟡'],['bassa','🟢']].map(([key,label])=>(
-          <button key={key} onClick={()=>setFilter(key)} style={{background:filter===key?T.surface2:'transparent',border:`1px solid ${filter===key?T.borderStrong:'transparent'}`,borderRadius:6,color:filter===key?T.text:T.textMuted,fontSize:11,fontWeight:600,padding:'3px 8px',cursor:'pointer'}}>{label}</button>
-        ))}
-      </div>
-      <div style={{flex:1,overflowY:'auto',padding:8}}>
-        {filtered.length===0&&<div style={{textAlign:'center',padding:'30px 10px',color:T.textMuted,fontSize:13}}>{filter==='tutti'?'Nessun task ancora.\nAggiungine uno!':'Nessun task in questa categoria.'}</div>}
-        {filtered.map(task=>(
-          <QuickTaskRow key={task.id} task={task} onToggle={()=>toggleDone(task.id)} onDelete={()=>deleteTask(task.id)} onPriority={p=>setPriority(task.id,p)} onEditText={text=>editText(task.id,text)}/>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-// ── DeliveryRow ────────────────────────────────────────────────────────────────
-function DeliveryRow({d,onToggle,onEdit,onDelete,onOpen}){
-  const[hovered,setHovered]=useState(false)
-  const u=d.urgency
-  return(
-    <div onMouseEnter={()=>setHovered(true)} onMouseLeave={()=>setHovered(false)}
-      style={{background:T.surface,border:`1.5px solid ${d.delivered?T.border:u.color+'44'}`,borderLeft:`4px solid ${d.delivered?T.border:u.color}`,borderRadius:12,padding:'14px 18px',display:'flex',alignItems:'center',gap:14,opacity:d.delivered?0.65:1,transition:'all 0.15s',boxShadow:hovered&&!d.delivered?'0 2px 12px rgba(0,0,0,0.07)':'none'}}>
-      <div onClick={onToggle} style={{width:24,height:24,borderRadius:8,flexShrink:0,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',border:d.delivered?'none':`2px solid ${u.color}`,background:d.delivered?T.green:'transparent',transition:'all 0.2s'}}>
-        {d.delivered&&<span style={{color:'#fff',fontSize:14,fontWeight:800}}>✓</span>}
-      </div>
-      <div style={{flex:1,minWidth:0}}>
-        <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:3}}>
-          {d.proj&&<div style={{width:10,height:10,borderRadius:'50%',background:d.proj.color,flexShrink:0}}/>}
-          <span style={{fontSize:15,fontWeight:700,color:T.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{d.proj?.name||<span style={{color:T.red,fontStyle:'italic'}}>Progetto eliminato</span>}</span>
-        </div>
-        <div style={{display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
-          {d.note&&<span style={{fontSize:13,color:T.textSub}}>{d.note}</span>}
-          {d.delivered&&d.deliveredAt&&<span style={{fontSize:12,color:T.textMuted,fontStyle:'italic'}}>Consegnato {d.deliveredAt}</span>}
-        </div>
-      </div>
-      {d.proj&&!d.delivered&&(
-        <div style={{width:80,flexShrink:0}}>
-          <div style={{fontSize:11,color:T.textMuted,marginBottom:3,textAlign:'right'}}>{d.progress}%</div>
-          <div style={{height:5,background:T.surface2,borderRadius:3,overflow:'hidden'}}><div style={{height:'100%',width:`${d.progress}%`,background:d.proj.color,borderRadius:3}}/></div>
-        </div>
-      )}
-      {!d.delivered&&<div style={{background:u.bg,color:u.color,border:`1.5px solid ${u.color}44`,borderRadius:20,padding:'4px 14px',fontSize:13,fontWeight:800,flexShrink:0,minWidth:70,textAlign:'center'}}>{u.dot} {d.days===null?'—':d.days===0?'OGGI':d.days<0?`${Math.abs(d.days)}gg fa`:`${d.days}gg`}</div>}
-      <div style={{fontSize:13,color:T.textMuted,flexShrink:0,minWidth:80,textAlign:'right'}}>{d.dueDate?new Date(d.dueDate).toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric'}):'—'}</div>
-      <div style={{display:'flex',gap:6,opacity:hovered?1:0,transition:'opacity 0.15s',flexShrink:0}}>
-        {d.proj&&<button onClick={onOpen} style={{background:T.surface2,border:`1px solid ${T.border}`,borderRadius:7,color:T.textSub,fontSize:12,padding:'4px 10px',cursor:'pointer',fontWeight:600}}>Apri →</button>}
-        <button onClick={onEdit} style={{background:'none',border:`1px solid ${T.border}`,borderRadius:7,color:T.textSub,fontSize:12,padding:'4px 8px',cursor:'pointer'}}>✏️</button>
-        <button onClick={onDelete} style={{background:'none',border:`1px solid ${T.red}44`,borderRadius:7,color:T.red,fontSize:12,padding:'4px 8px',cursor:'pointer'}}>🗑️</button>
-      </div>
-    </div>
-  )
-}
-
-// ── DeliveryPage ───────────────────────────────────────────────────────────────
-function DeliveryPage({projects,deliveries,setDeliveries,onNavigateToProject}){
-  const[showForm,setShowForm]=useState(false)
-  const[editId,setEditId]=useState(null)
-  const[form,setForm]=useState({projectId:'',note:'',dueDate:'',delivered:false})
-  const[confirm,setConfirm]=useState(null)
-  const activeProjects=projects.filter(p=>!p.archived)
-  const enriched=deliveries.map(d=>{
-    const proj=projects.find(p=>p.id===d.projectId)
-    const days=daysUntil(d.dueDate)
-    const urgency=deliveryUrgency(days)
-    const progress=proj?getProgress(proj):0
-    return{...d,proj,days,urgency,progress}
-  }).sort((a,b)=>{if(a.delivered!==b.delivered)return a.delivered?1:-1;if(a.days===null)return 1;if(b.days===null)return-1;return a.days-b.days})
-  const pending=enriched.filter(d=>!d.delivered)
-  const delivered=enriched.filter(d=>d.delivered)
-  const urgent=pending.filter(d=>d.days!==null&&d.days<=7)
-
-  function openNew(){setForm({projectId:activeProjects[0]?.id||'',note:'',dueDate:'',delivered:false});setEditId(null);setShowForm(true)}
-  function openEdit(d){setForm({projectId:d.projectId,note:d.note||'',dueDate:d.dueDate||'',delivered:d.delivered});setEditId(d.id);setShowForm(true)}
-  function save(){
-    if(!form.projectId||!form.dueDate)return
-    if(editId)setDeliveries(ds=>ds.map(d=>d.id===editId?{...d,...form}:d))
-    else setDeliveries(ds=>[...ds,{id:uid(),...form,createdAt:nowStr()}])
-    setShowForm(false)
-  }
-  function toggleDelivered(id){setDeliveries(ds=>ds.map(d=>d.id===id?{...d,delivered:!d.delivered,deliveredAt:!d.delivered?nowStr():null}:d))}
-  function remove(id){setDeliveries(ds=>ds.filter(d=>d.id!==id));setConfirm(null)}
-  const inputSt={background:T.surface2,border:`1.5px solid ${T.border}`,borderRadius:8,padding:'9px 12px',color:T.text,fontSize:14,outline:'none',width:'100%'}
-
-  return(
-    <div style={{flex:1,overflowY:'auto',padding:'24px 28px',background:T.bg}}>
-      {urgent.length>0&&(
-        <div style={{background:T.redBg,border:`2px solid ${T.red}44`,borderRadius:14,padding:'16px 20px',marginBottom:24}}>
-          <div style={{fontSize:13,fontWeight:800,color:T.red,letterSpacing:'0.08em',marginBottom:10}}>🎯 FOCUS DEL GIORNO — {urgent.length} CONSEGN{urgent.length===1?'A':'E'} URGENTI</div>
-          <div style={{display:'flex',flexDirection:'column',gap:8}}>
-            {urgent.map(d=>(
-              <div key={d.id} style={{display:'flex',alignItems:'center',gap:12,background:'rgba(255,255,255,0.6)',borderRadius:10,padding:'10px 14px'}}>
-                <span style={{fontSize:20}}>{d.urgency.dot}</span>
-                <div style={{flex:1}}><span style={{fontWeight:700,color:T.text,fontSize:15}}>{d.proj?.name||'—'}</span>{d.note&&<span style={{fontSize:13,color:T.textSub,marginLeft:8}}>{d.note}</span>}</div>
-                <span style={{fontSize:13,fontWeight:800,color:d.urgency.color,background:d.urgency.bg,padding:'3px 12px',borderRadius:20,border:`1px solid ${d.urgency.color}44`}}>{d.days===0?'OGGI':d.days<0?`${Math.abs(d.days)}gg fa`:`${d.days}gg`}</span>
-                <span style={{fontSize:13,color:T.textSub}}>{d.progress}%</span>
-                {d.proj&&<button onClick={()=>onNavigateToProject(d.proj.id)} style={{background:T.red,border:'none',borderRadius:7,color:'#fff',fontSize:12,fontWeight:700,padding:'5px 12px',cursor:'pointer'}}>Apri →</button>}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-      <div style={{display:'flex',alignItems:'center',marginBottom:20}}>
-        <div style={{fontSize:13,color:T.textSub,fontWeight:700,letterSpacing:'0.06em'}}>CONSEGNE — {pending.length} IN ATTESA</div>
-        <button onClick={openNew} style={{marginLeft:'auto',background:T.accent,border:'none',borderRadius:8,color:'#fff',fontWeight:700,fontSize:14,padding:'9px 20px',cursor:'pointer'}}>+ Nuova consegna</button>
-      </div>
-      {showForm&&(
-        <div style={{background:T.surface,border:`1.5px solid ${T.accent}44`,borderRadius:14,padding:20,marginBottom:20}}>
-          <div style={{fontSize:14,fontWeight:700,color:T.text,marginBottom:14}}>{editId?'✏️ Modifica consegna':'+ Nuova consegna'}</div>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}}>
-            <div>
-              <label style={{fontSize:12,color:T.textSub,fontWeight:700,display:'block',marginBottom:5}}>PROGETTO *</label>
-              <select value={form.projectId} onChange={e=>setForm(f=>({...f,projectId:e.target.value}))} style={{...inputSt,appearance:'none'}}>
-                <option value=''>— Seleziona —</option>
-                {activeProjects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={{fontSize:12,color:T.textSub,fontWeight:700,display:'block',marginBottom:5}}>DATA DI CONSEGNA *</label>
-              <input type='date' value={form.dueDate} onChange={e=>setForm(f=>({...f,dueDate:e.target.value}))} style={inputSt}/>
-            </div>
-          </div>
-          <div style={{marginBottom:14}}>
-            <label style={{fontSize:12,color:T.textSub,fontWeight:700,display:'block',marginBottom:5}}>NOTE (opzionale)</label>
-            <input value={form.note} onChange={e=>setForm(f=>({...f,note:e.target.value}))} placeholder='Es. consegna parziale...' style={inputSt}/>
-          </div>
-          <div style={{display:'flex',gap:10,justifyContent:'flex-end'}}>
-            <button onClick={()=>setShowForm(false)} style={{background:'none',border:`1px solid ${T.border}`,borderRadius:8,color:T.textSub,fontSize:14,padding:'8px 18px',cursor:'pointer'}}>Annulla</button>
-            <button onClick={save} disabled={!form.projectId||!form.dueDate} style={{background:form.projectId&&form.dueDate?T.accent:'#ccc',border:'none',borderRadius:8,color:'#fff',fontWeight:700,fontSize:14,padding:'8px 22px',cursor:form.projectId&&form.dueDate?'pointer':'default'}}>{editId?'Salva modifiche':'Aggiungi'}</button>
-          </div>
-        </div>
-      )}
-      {pending.length===0&&!showForm&&(
-        <div style={{textAlign:'center',padding:'60px 0'}}>
-          <div style={{fontSize:48,marginBottom:16}}>📅</div>
-          <div style={{fontSize:18,fontWeight:700,color:T.text,marginBottom:8}}>Nessuna consegna programmata</div>
-          <button onClick={openNew} style={{background:T.accent,border:'none',borderRadius:10,color:'#fff',fontWeight:700,fontSize:15,padding:'11px 26px',cursor:'pointer'}}>+ Prima consegna</button>
-        </div>
-      )}
-      {pending.length>0&&<div style={{display:'flex',flexDirection:'column',gap:10,marginBottom:32}}>{pending.map(d=><DeliveryRow key={d.id} d={d} onToggle={()=>toggleDelivered(d.id)} onEdit={()=>openEdit(d)} onDelete={()=>setConfirm(d.id)} onOpen={()=>d.proj&&onNavigateToProject(d.proj.id)}/>)}</div>}
-      {delivered.length>0&&(
-        <details style={{marginTop:8}}>
-          <summary style={{fontSize:13,color:T.textSub,fontWeight:700,letterSpacing:'0.06em',cursor:'pointer',marginBottom:10}}>✅ CONSEGNATE — {delivered.length}</summary>
-          <div style={{display:'flex',flexDirection:'column',gap:8,marginTop:10}}>{delivered.map(d=><DeliveryRow key={d.id} d={d} onToggle={()=>toggleDelivered(d.id)} onEdit={()=>openEdit(d)} onDelete={()=>setConfirm(d.id)} onOpen={()=>d.proj&&onNavigateToProject(d.proj.id)}/>)}</div>
-        </details>
-      )}
-      {confirm&&<ConfirmDialog message='Eliminare questa consegna?' onConfirm={()=>remove(confirm)} onCancel={()=>setConfirm(null)}/>}
-    </div>
-  )
-}
-
-// ── NewProjectModal ────────────────────────────────────────────────────────────
-function NewProjectModal({onClose,onCreate,templates,preselectedTemplate}){
-  const[name,setName]=useState('')
-  const[desc,setDesc]=useState('')
-  const[color,setColor]=useState(preselectedTemplate?.color||'#D4700A')
-  const[selectedTmpl,setSelectedTmpl]=useState(preselectedTemplate||null)
-  const[stepsRaw,setStepsRaw]=useState('')
-  function selectTmpl(t){setSelectedTmpl(t);if(t)setColor(t.color)}
-  function create(){
-    if(!name.trim())return
-    const steps=selectedTmpl?cloneTemplateToSteps(selectedTmpl):stepsRaw.split('\n').filter(l=>l.trim()).map(line=>({id:uid(),title:line.trim(),tasks:[]}))
-    onCreate({id:uid(),name:name.trim(),description:desc.trim(),color,createdAt:new Date().toISOString().slice(0,10),archived:false,steps:steps.length?steps:[{id:uid(),title:'Step 1',tasks:[]}],log:[]})
-    onClose()
-  }
-  const inputStyle={width:'100%',background:T.surface2,border:`1.5px solid ${T.border}`,borderRadius:10,padding:'10px 14px',color:T.text,fontSize:15,outline:'none'}
-  return(
-    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:100}} onClick={onClose}>
-      <div onClick={e=>e.stopPropagation()} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:14,padding:32,width:540,maxWidth:'92vw',maxHeight:'88vh',overflowY:'auto',boxShadow:'0 12px 48px rgba(0,0,0,0.2)'}}>
-        <div style={{fontSize:20,fontWeight:800,color:T.text,marginBottom:22}}>Nuovo Progetto</div>
-        <div style={{marginBottom:16}}><label style={{fontSize:13,color:T.textSub,fontWeight:600,display:'block',marginBottom:6}}>NOME PROGETTO *</label><input autoFocus value={name} onChange={e=>setName(e.target.value)} style={inputStyle} placeholder='Es. 4349_0221'/></div>
-        <div style={{marginBottom:22}}><label style={{fontSize:13,color:T.textSub,fontWeight:600,display:'block',marginBottom:6}}>DESCRIZIONE</label><input value={desc} onChange={e=>setDesc(e.target.value)} style={inputStyle} placeholder='Breve descrizione'/></div>
-        <div style={{marginBottom:22}}>
-          <label style={{fontSize:13,color:T.textSub,fontWeight:600,display:'block',marginBottom:10}}>PARTI DA UN TEMPLATE</label>
-          <div style={{display:'flex',flexWrap:'wrap',gap:8,marginBottom:12}}>
-            <button onClick={()=>selectTmpl(null)} style={{background:!selectedTmpl?T.surface2:'transparent',border:`1.5px solid ${!selectedTmpl?T.borderStrong:T.border}`,borderRadius:8,color:!selectedTmpl?T.text:T.textSub,fontSize:13,padding:'7px 14px',cursor:'pointer',fontWeight:600}}>Nessuno</button>
-            {templates.map(t=><button key={t.id} onClick={()=>selectTmpl(t)} style={{background:selectedTmpl?.id===t.id?t.color+'18':'transparent',border:`1.5px solid ${selectedTmpl?.id===t.id?t.color:T.border}`,borderRadius:8,color:selectedTmpl?.id===t.id?t.color:T.textSub,fontSize:13,padding:'7px 14px',cursor:'pointer',fontWeight:600}}>{t.icon} {t.name}</button>)}
-          </div>
-          {selectedTmpl?(
-            <div style={{background:T.surface2,border:`1px solid ${T.border}`,borderRadius:10,padding:'12px 16px'}}>
-              <div style={{fontSize:12,color:T.textSub,fontWeight:700,marginBottom:8}}>FASI INCLUSE</div>
-              {(selectedTmpl.steps||[]).map(s=><div key={s.id} style={{fontSize:14,color:T.text,marginBottom:4,display:'flex',gap:8}}><span style={{color:selectedTmpl.color,fontWeight:700}}>•</span>{s.title} <span style={{color:T.textMuted}}>({(s.tasks||[]).length} task)</span></div>)}
-            </div>
-          ):(
-            <div><label style={{fontSize:13,color:T.textSub,fontWeight:600,display:'block',marginBottom:6}}>OPPURE INSERISCI FASI (una per riga)</label>
-            <textarea value={stepsRaw} onChange={e=>setStepsRaw(e.target.value)} rows={4} placeholder={'Analisi\nDesign\nSviluppo\nDeploy'} style={{...inputStyle,resize:'vertical'}}/></div>
-          )}
-        </div>
-        <div style={{marginBottom:24}}>
-          <label style={{fontSize:13,color:T.textSub,fontWeight:600,display:'block',marginBottom:10}}>COLORE PROGETTO</label>
-          <div style={{display:'flex',gap:10}}>{COLORS.map(c=><div key={c} onClick={()=>setColor(c)} style={{width:30,height:30,borderRadius:'50%',background:c,cursor:'pointer',border:color===c?'3px solid #333':'3px solid transparent',transition:'transform 0.15s',transform:color===c?'scale(1.15)':'scale(1)'}}/>)}</div>
-        </div>
-        <div style={{display:'flex',gap:10,justifyContent:'flex-end'}}>
-          <button onClick={onClose} style={{background:T.surface2,border:`1px solid ${T.border}`,borderRadius:10,color:T.textSub,fontSize:15,padding:'10px 22px',cursor:'pointer',fontWeight:600}}>Annulla</button>
-          <button onClick={create} style={{background:color,border:'none',borderRadius:10,color:'#fff',fontWeight:800,fontSize:15,padding:'10px 26px',cursor:'pointer'}}>Crea Progetto</button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 // ── ProjectDetail ──────────────────────────────────────────────────────────────
-function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onSaveAsTemplate,onLanciaNC,deliveries,setDeliveries}){
+function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onSaveAsTemplate,onLanciaNC}){
   const[logText,setLogText]=useState('')
   const[logUser,setLogUser]=useState('Tu')
   const[activeTab,setActiveTab]=useState('tasks')
@@ -918,6 +541,7 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
   const logRef=useRef(null)
   const next=getNextTask(project)
   const progress=getProgress(project)
+  const mpfList=(project.steps||[]).flatMap(s=>s.tasks||[]).filter(t=>t.text?.trim().toLowerCase()==='fresatura').flatMap(t=>(t.programs||[]).filter(p=>p.tipoGruppo!=='ipm'))
 
   function toggleTask(taskId){onUpdate({...project,steps:project.steps.map(s=>({...s,tasks:s.tasks.map(t=>t.id===taskId?{...t,done:!t.done,doneAt:!t.done?new Date().toISOString().slice(0,10):null}:t)}))})}
   function updateTaskInProject(updatedTask){onUpdate({...project,steps:project.steps.map(s=>({...s,tasks:s.tasks.map(t=>t.id===updatedTask.id?updatedTask:t)}))})}
@@ -931,28 +555,26 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
   function updateLog(logId,newText){onUpdate({...project,log:(project.log||[]).map(e=>e.id===logId?{...e,text:newText,editedAt:nowStr()}:e)})}
   function deleteLog(logId){onUpdate({...project,log:(project.log||[]).filter(e=>e.id!==logId)})}
 
-  const mpfList=project.steps.flatMap(s=>s.tasks).filter(t=>t.text?.trim().toLowerCase()==='fresatura').flatMap(t=>(t.programs||[]).filter(p=>p.tipoGruppo!=='ipm'))
-  const Tab=({id,label})=>(
-    <button onClick={()=>setActiveTab(id)} style={{background:'none',border:'none',cursor:'pointer',color:activeTab===id?project.color:T.textSub,fontSize:15,fontWeight:700,padding:'10px 0',borderBottom:activeTab===id?`3px solid ${project.color}`:'3px solid transparent',marginRight:24,transition:'all 0.15s'}}>{label}</button>
-  )
+  const Tab=({id,label})=>(<button onClick={()=>setActiveTab(id)} style={{background:'none',border:'none',cursor:'pointer',color:activeTab===id?project.color:T.textSub,fontSize:15,fontWeight:700,padding:'10px 0',borderBottom:activeTab===id?`3px solid ${project.color}`:'3px solid transparent',marginRight:24,transition:'all 0.15s'}}>{label}</button>)
 
   return(
-    <div style={{display:'flex',flexDirection:'column',height:'100%',background:T.bg}}>
+    <div style={{display:'flex',flexDirection:'column',height:'100%',background:T.bg,fontFamily:"'DM Sans', system-ui, sans-serif"}}>
+      {/* Header */}
       <div style={{padding:'20px 28px 0',borderBottom:`1px solid ${T.border}`,flexShrink:0,background:T.surface}}>
-        <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:16}}>
+        <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:16,flexWrap:'wrap'}}>
           <button onClick={onBack} style={{background:T.surface2,border:`1px solid ${T.border}`,borderRadius:8,color:T.textSub,fontSize:14,padding:'7px 14px',cursor:'pointer',fontWeight:600}}>← Indietro</button>
           <div style={{width:14,height:14,borderRadius:'50%',background:project.color,flexShrink:0}}/>
           <div style={{fontSize:20,fontWeight:800,color:T.text,flex:1}}>{project.name}</div>
           <StatusBadge progress={progress}/>
+          <button onClick={()=>setShowSaveTemplate(true)} style={{background:T.blueBg,border:`1px solid ${T.blue}44`,borderRadius:8,color:T.blue,fontSize:13,padding:'7px 14px',cursor:'pointer',fontWeight:600}}>💾 Salva come Template</button>
           {mpfList.length>0&&<button onClick={()=>onLanciaNC(project)} style={{background:'#1D5FAD',border:'none',borderRadius:8,color:'#fff',fontWeight:700,fontSize:13,padding:'8px 16px',cursor:'pointer'}}>📄 Lancia {mpfList.length} file in NC →</button>}
-          <button onClick={()=>setShowSaveTemplate(true)} style={{background:T.blueBg,border:`1px solid ${T.blue}44`,borderRadius:8,color:T.blue,fontSize:14,padding:'7px 14px',cursor:'pointer',fontWeight:600}} title='Salva struttura come template'>💾 Salva come Template</button>
           <button onClick={()=>setConfirm('archive')} style={{background:T.surface2,border:`1px solid ${T.border}`,borderRadius:8,color:T.textSub,fontSize:14,padding:'7px 14px',cursor:'pointer',fontWeight:600}}>{project.archived?'📤 Riattiva':'📦 Archivia'}</button>
           <button onClick={()=>setConfirm('delete')} style={{background:T.redBg,border:`1px solid ${T.red}44`,borderRadius:8,color:T.red,fontSize:14,padding:'7px 14px',cursor:'pointer',fontWeight:600}}>🗑️ Elimina</button>
         </div>
         <div style={{marginBottom:14}}>
           <div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}>
             <span style={{fontSize:13,color:T.textSub,fontWeight:600}}>Avanzamento</span>
-            <span style={{fontSize:13,color:project.color,fontWeight:700}}>{progress}% — {project.steps.flatMap(s=>s.tasks).filter(t=>t.done).length} di {project.steps.flatMap(s=>s.tasks).length} task completati</span>
+            <span style={{fontSize:13,color:project.color,fontWeight:700}}>{progress}% — {project.steps.flatMap(s=>s.tasks||[]).filter(t=>t.done).length} di {project.steps.flatMap(s=>s.tasks||[]).length} task completati</span>
           </div>
           <ProgressBar value={progress} color={project.color}/>
         </div>
@@ -973,6 +595,7 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
         )}
         <div><Tab id='tasks' label='Task'/><Tab id='log' label={`Log aggiornamenti (${(project.log||[]).length})`}/></div>
       </div>
+      {/* Body */}
       <div style={{flex:1,overflow:'auto',padding:'20px 28px'}}>
         {activeTab==='tasks'&&(
           <div>
@@ -981,8 +604,9 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
               <StepSection key={step.id} step={step} stepIdx={sIdx}
                 nextTaskId={next?.step.id===step.id?next?.task.id:null}
                 onToggle={toggleTask} onUpdateTask={updateTaskInProject} onAddTask={addTask}
-                onDeleteTask={deleteTask} onReorderTask={reorderTask} onReorderStep={reorderStep}
-                onDeleteStep={deleteStep} totalSteps={project.steps.length} projectColor={project.color}/>
+                onDeleteTask={deleteTask} onReorderTask={reorderTask}
+                onReorderStep={reorderStep} onDeleteStep={deleteStep}
+                totalSteps={project.steps.length} projectColor={project.color}/>
             ))}
             {addingStep?(
               <div style={{display:'flex',gap:10,marginTop:10}}>
@@ -992,7 +616,7 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
                 <button onClick={addStep} style={{background:project.color,border:'none',borderRadius:10,color:'#fff',fontWeight:700,fontSize:15,padding:'10px 20px',cursor:'pointer'}}>Crea fase</button>
               </div>
             ):(
-              <button onClick={()=>setAddingStep(true)} style={{background:'none',border:`2px dashed ${T.border}`,borderRadius:10,color:T.textMuted,fontSize:14,padding:12,cursor:'pointer',width:'100%',marginTop:4}}>+ Aggiungi fase</button>
+              <button onClick={()=>setAddingStep(true)} style={{background:'none',border:`2px dashed ${T.border}`,borderRadius:10,color:T.textMuted,fontSize:14,padding:'12px',cursor:'pointer',width:'100%',fontWeight:500,marginTop:4}}>+ Aggiungi fase</button>
             )}
           </div>
         )}
@@ -1000,13 +624,9 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
           <div style={{display:'flex',flexDirection:'column',height:'100%'}}>
             <div ref={logRef} style={{flex:1,overflowY:'auto',marginBottom:16}}>
               {!(project.log||[]).length&&<div style={{fontSize:15,color:T.textMuted,textAlign:'center',padding:'40px 0'}}>Nessun aggiornamento ancora. Aggiungine uno!</div>}
-              {(project.log||[]).map(entry=>(
-                <LogEntry key={entry.id} entry={entry} projectColor={project.color}
-                  onUpdate={newText=>updateLog(entry.id,newText)}
-                  onDelete={()=>deleteLog(entry.id)}/>
-              ))}
+              {(project.log||[]).map(entry=>(<LogEntry key={entry.id} entry={entry} projectColor={project.color} onUpdate={newText=>updateLog(entry.id,newText)} onDelete={()=>deleteLog(entry.id)}/>))}
             </div>
-            <div style={{display:'flex',gap:10,background:T.surface,padding:14,borderRadius:12,border:`1px solid ${T.border}`}}>
+            <div style={{display:'flex',gap:10,background:T.surface,padding:'14px',borderRadius:12,border:`1px solid ${T.border}`}}>
               <input value={logUser} onChange={e=>setLogUser(e.target.value)} style={{width:90,background:T.surface2,border:`1px solid ${T.border}`,borderRadius:8,padding:'9px 10px',color:project.color,fontSize:14,fontWeight:700,outline:'none'}}/>
               <input value={logText} onChange={e=>setLogText(e.target.value)} placeholder='Scrivi un aggiornamento...'
                 style={{flex:1,background:T.surface2,border:`1px solid ${T.border}`,borderRadius:8,padding:'9px 12px',color:T.text,fontSize:15,outline:'none'}}
@@ -1022,7 +642,6 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
     </div>
   )
 }
-
 // ── ProjectCard ────────────────────────────────────────────────────────────────
 function ProjectCard({project,onClick,onDelete,onArchive,delivery,onSetDelivery}){
   const progress=getProgress(project)
@@ -1031,17 +650,16 @@ function ProjectCard({project,onClick,onDelete,onArchive,delivery,onSetDelivery}
   const[confirm,setConfirm]=useState(null)
   const[editingDate,setEditingDate]=useState(false)
   const[dateVal,setDateVal]=useState(delivery?.dueDate||'')
+  const mpfTot=(project.steps||[]).flatMap(s=>s.tasks||[]).filter(t=>t.text?.trim().toLowerCase()==='fresatura').flatMap(t=>(t.programs||[]).filter(p=>p.tipoGruppo!=='ipm'))
+  const mpfDone=mpfTot.filter(p=>p.stato==='completato').length
   const days=delivery?daysUntil(delivery.dueDate):null
   const urgency=delivery?deliveryUrgency(days):null
   const leftBorder=urgency&&!delivery?.delivered?`4px solid ${urgency.color}`:`4px solid ${project.color}`
-
   function saveDate(e){e.stopPropagation();onSetDelivery(project.id,dateVal);setEditingDate(false)}
-  const mpfTot=project.steps.flatMap(s=>s.tasks).filter(t=>t.text?.trim().toLowerCase()==='fresatura').flatMap(t=>t.programs||[]).filter(p=>p.tipoGruppo!=='ipm')
-  const mpfDone=mpfTot.filter(p=>p.stato==='completato').length
-
   return(
     <div onMouseEnter={()=>setHovered(true)} onMouseLeave={()=>setHovered(false)}
       style={{background:T.surface,border:`1.5px solid ${hovered?(urgency&&!delivery?.delivered?urgency.color+'66':project.color+'88'):T.border}`,borderLeft:leftBorder,borderRadius:12,padding:'18px 20px',position:'relative',transition:'all 0.18s',boxShadow:hovered?'0 4px 20px rgba(0,0,0,0.1)':'0 1px 4px rgba(0,0,0,0.05)',cursor:'pointer'}}>
+      {/* Azioni hover */}
       <div style={{position:'absolute',top:12,right:12,display:'flex',gap:6,opacity:hovered?1:0,transition:'opacity 0.15s'}}>
         <button onClick={e=>{e.stopPropagation();setConfirm('archive')}} style={{background:T.surface2,border:`1px solid ${T.border}`,borderRadius:6,color:T.textSub,fontSize:12,padding:'4px 9px',cursor:'pointer',fontWeight:600}}>{project.archived?'📤':'📦'}</button>
         <button onClick={e=>{e.stopPropagation();setConfirm('delete')}} style={{background:T.redBg,border:`1px solid ${T.red}44`,borderRadius:6,color:T.red,fontSize:12,padding:'4px 9px',cursor:'pointer',fontWeight:600}}>🗑️</button>
@@ -1072,16 +690,16 @@ function ProjectCard({project,onClick,onDelete,onArchive,delivery,onSetDelivery}
                 </span>
               )}
               <span style={{fontSize:12,color:T.textMuted}}>{new Date(delivery.dueDate).toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric'})}</span>
-              <button onClick={e=>{e.stopPropagation();setDateVal(delivery.dueDate);setEditingDate(true)}} style={{background:'none',border:'none',color:T.textMuted,fontSize:11,cursor:'pointer',padding:'0 2px',opacity:hovered?0.7:0,transition:'opacity 0.15s'}}>✏️</button>
-              <button onClick={e=>{e.stopPropagation();onSetDelivery(project.id,null,!delivery.delivered)}} style={{background:'none',border:`1px solid ${T.border}`,borderRadius:6,color:delivery.delivered?T.textMuted:T.green,fontSize:11,cursor:'pointer',padding:'2px 7px',opacity:hovered?1:0,transition:'opacity 0.15s'}}>{delivery.delivered?'↩ Riapri':'✓ Consegnato'}</button>
+              <button onClick={e=>{e.stopPropagation();setDateVal(delivery.dueDate);setEditingDate(true)}} style={{background:'none',border:'none',color:T.textMuted,fontSize:11,cursor:'pointer',padding:'0 2px',opacity:hovered?0.7:0}}>✏️</button>
+              <button onClick={e=>{e.stopPropagation();onSetDelivery(project.id,null,!delivery.delivered)}} title={delivery.delivered?'Segna come da consegnare':'Segna come consegnato'} style={{background:'none',border:`1px solid ${T.border}`,borderRadius:6,color:delivery.delivered?T.textMuted:T.green,fontSize:11,cursor:'pointer',padding:'2px 7px',opacity:hovered?1:0}}>{delivery.delivered?'↩ Riapri':'✓ Consegnato'}</button>
             </div>
           ):(
-            <button onClick={e=>{e.stopPropagation();setDateVal('');setEditingDate(true)}} style={{background:'none',border:`1px dashed ${T.border}`,borderRadius:6,color:T.textMuted,fontSize:12,padding:'3px 10px',cursor:'pointer',opacity:hovered?1:0.4,transition:'opacity 0.15s'}}>📅 Imposta scadenza</button>
+            <button onClick={e=>{e.stopPropagation();setDateVal('');setEditingDate(true)}} style={{background:'none',border:`1px dashed ${T.border}`,borderRadius:6,color:T.textMuted,fontSize:12,padding:'3px 10px',cursor:'pointer',opacity:hovered?1:0.4}}>📅 Imposta scadenza</button>
           )}
         </div>
         <ProgressBar value={progress} color={project.color}/>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:8,marginBottom:next?12:0}}>
-          <span style={{fontSize:13,color:T.textSub,fontWeight:500}}>{project.steps.flatMap(s=>s.tasks).filter(t=>t.done).length} / {project.steps.flatMap(s=>s.tasks).length} task</span>
+          <span style={{fontSize:13,color:T.textSub,fontWeight:500}}>{(project.steps||[]).flatMap(s=>s.tasks||[]).filter(t=>t.done).length} / {(project.steps||[]).flatMap(s=>s.tasks||[]).length} task</span>
           <div style={{display:'flex',gap:8,alignItems:'center'}}>
             {mpfTot.length>0&&<span style={{fontSize:11,color:'#1D5FAD',fontWeight:700,background:'#E8F0FA',padding:'2px 8px',borderRadius:10}}>⚙ {mpfDone}/{mpfTot.length} MPF</span>}
             <StatusBadge progress={progress}/>
@@ -1107,7 +725,419 @@ function ProjectCard({project,onClick,onDelete,onArchive,delivery,onSetDelivery}
     </div>
   )
 }
+// ── TemplateEditor ─────────────────────────────────────────────────────────────
+function TemplateEditor({template,onSave,onCancel}){
+  const[name,setName]=useState(template.name)
+  const[description,setDescription]=useState(template.description||'')
+  const[icon,setIcon]=useState(template.icon||'🚀')
+  const[color,setColor]=useState(template.color||T.accent)
+  const[steps,setSteps]=useState(template.steps.map(s=>({...s,tasks:(s.tasks||[]).map(t=>({...t}))})))
+  const[showIconPicker,setShowIconPicker]=useState(false)
+  function addStep(){setSteps(p=>[...p,{id:uid(),title:'Nuova fase',tasks:[]}])}
+  function updateStepTitle(id,title){setSteps(p=>p.map(s=>s.id===id?{...s,title}:s))}
+  function removeStep(id){setSteps(p=>p.filter(s=>s.id!==id))}
+  function addTask(stepId){setSteps(p=>p.map(s=>s.id===stepId?{...s,tasks:[...s.tasks,{id:uid(),text:'Nuovo task'}]}:s))}
+  function updateTask(stepId,taskId,text){setSteps(p=>p.map(s=>s.id===stepId?{...s,tasks:s.tasks.map(t=>t.id===taskId?{...t,text}:t)}:s))}
+  function removeTask(stepId,taskId){setSteps(p=>p.map(s=>s.id===stepId?{...s,tasks:s.tasks.filter(t=>t.id!==taskId)}:s))}
+  function moveStep(idx,dir){const ns=[...steps],t=idx+dir;if(t<0||t>=ns.length)return;[ns[idx],ns[t]]=[ns[t],ns[idx]];setSteps(ns)}
+  const inputStyle={background:T.surface2,border:`1.5px solid ${T.border}`,borderRadius:8,padding:'9px 12px',color:T.text,fontSize:14,outline:'none',width:'100%'}
+  return(
+    <div style={{display:'flex',flexDirection:'column',height:'100%',background:T.bg,fontFamily:"'DM Sans', system-ui"}}>
+      <div style={{padding:'18px 28px',borderBottom:`1px solid ${T.border}`,flexShrink:0,background:T.surface,display:'flex',alignItems:'center',gap:12}}>
+        <button onClick={onCancel} style={{background:T.surface2,border:`1px solid ${T.border}`,borderRadius:8,color:T.textSub,fontSize:14,padding:'8px 16px',cursor:'pointer',fontWeight:600}}>← Annulla</button>
+        <div style={{fontSize:18,fontWeight:800,color:T.text,flex:1}}>{template.id.startsWith('new_')?'Nuovo Template':`Modifica: ${template.name}`}</div>
+        <button onClick={()=>onSave({...template,name,description,icon,color,steps})} style={{background:color,border:'none',borderRadius:8,color:'#fff',fontWeight:700,fontSize:15,padding:'9px 22px',cursor:'pointer'}}>💾 Salva Template</button>
+      </div>
+      <div style={{flex:1,overflowY:'auto',padding:'24px 28px'}}>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16,marginBottom:20}}>
+          <div><label style={{fontSize:13,color:T.textSub,fontWeight:600,display:'block',marginBottom:6}}>NOME TEMPLATE</label><input value={name} onChange={e=>setName(e.target.value)} style={inputStyle}/></div>
+          <div><label style={{fontSize:13,color:T.textSub,fontWeight:600,display:'block',marginBottom:6}}>DESCRIZIONE</label><input value={description} onChange={e=>setDescription(e.target.value)} style={inputStyle}/></div>
+        </div>
+        <div style={{display:'flex',gap:32,marginBottom:24,alignItems:'flex-start'}}>
+          <div>
+            <label style={{fontSize:13,color:T.textSub,fontWeight:600,display:'block',marginBottom:8}}>ICONA</label>
+            <div style={{position:'relative'}}>
+              <button onClick={()=>setShowIconPicker(v=>!v)} style={{background:T.surface2,border:`1.5px solid ${T.border}`,borderRadius:10,padding:'10px 18px',cursor:'pointer',fontSize:24,lineHeight:1}}>{icon}</button>
+              {showIconPicker&&(<div style={{position:'absolute',top:'110%',left:0,background:T.surface,border:`1px solid ${T.border}`,borderRadius:10,padding:12,display:'flex',flexWrap:'wrap',gap:6,width:220,zIndex:20,boxShadow:'0 4px 20px rgba(0,0,0,0.12)'}}>
+                {ICONS.map(ic=><button key={ic} onClick={()=>{setIcon(ic);setShowIconPicker(false)}} style={{background:ic===icon?T.surface2:'transparent',border:`1px solid ${ic===icon?T.border:'transparent'}`,borderRadius:6,padding:'5px 7px',cursor:'pointer',fontSize:20}}>{ic}</button>)}
+              </div>)}
+            </div>
+          </div>
+          <div>
+            <label style={{fontSize:13,color:T.textSub,fontWeight:600,display:'block',marginBottom:8}}>COLORE</label>
+            <div style={{display:'flex',gap:10,flexWrap:'wrap'}}>{COLORS.map(c=><div key={c} onClick={()=>setColor(c)} style={{width:28,height:28,borderRadius:'50%',background:c,cursor:'pointer',border:color===c?'3px solid #333':'3px solid transparent',transform:color===c?'scale(1.15)':'scale(1)'}}/>)}</div>
+          </div>
+        </div>
+        <div style={{fontSize:13,color:T.textSub,fontWeight:600,letterSpacing:'0.06em',marginBottom:14}}>FASI E TASK</div>
+        {steps.map((step,idx)=>(
+          <div key={step.id} style={{background:T.surface,border:`1.5px solid ${T.border}`,borderLeft:`4px solid ${color}`,borderRadius:10,padding:'14px 16px',marginBottom:12}}>
+            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12}}>
+              <div style={{display:'flex',flexDirection:'column',gap:2}}>
+                <button onClick={()=>moveStep(idx,-1)} style={{background:T.surface2,border:`1px solid ${T.border}`,borderRadius:4,cursor:'pointer',color:idx===0?T.textMuted:T.text,fontSize:10,padding:'2px 5px',lineHeight:1}}>▲</button>
+                <button onClick={()=>moveStep(idx,1)} style={{background:T.surface2,border:`1px solid ${T.border}`,borderRadius:4,cursor:'pointer',color:idx===steps.length-1?T.textMuted:T.text,fontSize:10,padding:'2px 5px',lineHeight:1}}>▼</button>
+              </div>
+              <span style={{fontSize:12,color,fontWeight:700,minWidth:55}}>FASE {idx+1}</span>
+              <input value={step.title} onChange={e=>updateStepTitle(step.id,e.target.value)} style={{...inputStyle,fontWeight:700,fontSize:15}}/>
+              <button onClick={()=>removeStep(step.id)} style={{background:T.redBg,border:`1px solid ${T.red}44`,borderRadius:6,cursor:'pointer',color:T.red,fontSize:14,padding:'4px 8px',flexShrink:0}}>✕</button>
+            </div>
+            <div style={{marginLeft:32}}>
+              {(step.tasks||[]).map(task=>(
+                <div key={task.id} style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+                  <span style={{color,fontSize:12,opacity:0.6,flexShrink:0}}>◦</span>
+                  <input value={task.text} onChange={e=>updateTask(step.id,task.id,e.target.value)} style={{...inputStyle,fontSize:14}}/>
+                  <button onClick={()=>removeTask(step.id,task.id)} style={{background:T.redBg,border:`1px solid ${T.red}33`,borderRadius:6,cursor:'pointer',color:T.red,fontSize:13,padding:'4px 8px',flexShrink:0}}>✕</button>
+                </div>
+              ))}
+              <button onClick={()=>addTask(step.id)} style={{background:'none',border:`1.5px dashed ${T.border}`,borderRadius:8,color:T.textMuted,fontSize:13,padding:'6px 14px',cursor:'pointer',fontWeight:500}}>+ Aggiungi task</button>
+            </div>
+          </div>
+        ))}
+        <button onClick={addStep} style={{background:'none',border:`2px dashed ${color}66`,borderRadius:10,color,fontSize:14,padding:'14px',cursor:'pointer',width:'100%',fontWeight:600}}>+ Aggiungi fase</button>
+      </div>
+    </div>
+  )
+}
 
+// ── TemplatesPage ──────────────────────────────────────────────────────────────
+function TemplatesPage({templates,onEdit,onCreate,onDelete,onDuplicate,onUseTemplate,lastSaved}){
+  return(
+    <div style={{flex:1,overflowY:'auto',padding:'24px 28px',background:T.bg,fontFamily:"'DM Sans', system-ui"}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:20}}>
+        <div>
+          <div style={{fontSize:13,color:T.textSub,fontWeight:600,letterSpacing:'0.06em',marginBottom:4}}>TEMPLATE SALVATI — {templates.length}</div>
+          {lastSaved&&<span style={{background:T.greenBg,border:`1px solid ${T.green}44`,borderRadius:20,padding:'2px 10px',fontSize:12,color:T.green,fontWeight:600}}>💾 Salvati automaticamente · {lastSaved}</span>}
+        </div>
+        <button onClick={onCreate} style={{background:T.accent,border:'none',borderRadius:8,color:'#fff',fontWeight:700,fontSize:14,padding:'9px 20px',cursor:'pointer'}}>+ Nuovo Template</button>
+      </div>
+      {templates.length===0&&<div style={{textAlign:'center',padding:'60px 0',color:T.textMuted,fontSize:16}}>Nessun template. Creane uno!</div>}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill, minmax(320px, 1fr))',gap:16}}>
+        {templates.map(tmpl=>(
+          <div key={tmpl.id} style={{background:T.surface,border:`1.5px solid ${T.border}`,borderTop:`4px solid ${tmpl.color}`,borderRadius:12,padding:'18px 20px',boxShadow:'0 1px 4px rgba(0,0,0,0.05)'}}>
+            <div style={{display:'flex',alignItems:'flex-start',gap:14,marginBottom:14}}>
+              <span style={{fontSize:28,lineHeight:1}}>{tmpl.icon}</span>
+              <div style={{flex:1}}><div style={{fontSize:16,fontWeight:800,color:T.text,marginBottom:3}}>{tmpl.name}</div><div style={{fontSize:13,color:T.textSub}}>{tmpl.description}</div></div>
+            </div>
+            <div style={{background:T.surface2,borderRadius:8,padding:'10px 12px',marginBottom:10}}>
+              {(tmpl.steps||[]).map((step,i)=>(
+                <div key={step.id} style={{display:'flex',alignItems:'center',gap:8,marginBottom:i<tmpl.steps.length-1?5:0}}>
+                  <span style={{fontSize:12,color:tmpl.color,fontWeight:700,minWidth:18}}>{i+1}.</span>
+                  <span style={{fontSize:14,color:T.text,fontWeight:500,flex:1}}>{step.title}</span>
+                  <span style={{fontSize:12,color:T.textMuted}}>{(step.tasks||[]).length} task</span>
+                </div>
+              ))}
+            </div>
+            <div style={{fontSize:12,color:T.textMuted,marginBottom:14}}>{(tmpl.steps||[]).reduce((a,s)=>a+(s.tasks||[]).length,0)} task totali · {(tmpl.steps||[]).length} fasi</div>
+            <div style={{display:'flex',gap:6}}>
+              <button onClick={()=>onUseTemplate(tmpl)} style={{flex:1,background:tmpl.color,border:'none',borderRadius:8,color:'#fff',fontWeight:700,fontSize:14,padding:'9px',cursor:'pointer'}}>▶ Usa</button>
+              <button onClick={()=>onDuplicate(tmpl)} style={{background:T.surface2,border:`1px solid ${T.border}`,borderRadius:8,color:T.textSub,fontSize:14,padding:'9px 12px',cursor:'pointer',fontWeight:600}} title='Duplica'>⧉</button>
+              <button onClick={()=>onEdit(tmpl)} style={{background:T.surface2,border:`1px solid ${T.border}`,borderRadius:8,color:T.textSub,fontSize:14,padding:'9px 12px',cursor:'pointer',fontWeight:600}} title='Modifica'>✏️</button>
+              <button onClick={()=>onDelete(tmpl.id)} style={{background:T.redBg,border:`1px solid ${T.red}44`,borderRadius:8,color:T.red,fontSize:14,padding:'9px 12px',cursor:'pointer'}} title='Elimina'>🗑️</button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+// ── QuickTaskRow ───────────────────────────────────────────────────────────────
+function QuickTaskRow({task,onToggle,onDelete,onPriority,onEditText}){
+  const[hovered,setHovered]=useState(false)
+  const[showPrioPick,setShowPrioPick]=useState(false)
+  const[editing,setEditing]=useState(false)
+  const[editVal,setEditVal]=useState(task.text)
+  const p=PRIORITY[task.priority]||PRIORITY.media
+  function saveEdit(){if(editVal.trim())onEditText(editVal.trim());setEditing(false)}
+  return(
+    <div onMouseEnter={()=>setHovered(true)} onMouseLeave={()=>{setHovered(false);setShowPrioPick(false)}}
+      style={{display:'flex',alignItems:'flex-start',gap:8,padding:'8px 8px',borderRadius:8,marginBottom:3,background:hovered?T.surface2:'transparent',borderLeft:`3px solid ${task.done?T.border:p.color}`,transition:'background 0.12s',opacity:task.done?0.6:1}}>
+      <div onClick={onToggle} style={{width:18,height:18,borderRadius:5,flexShrink:0,marginTop:editing?8:1,border:task.done?'none':`2px solid ${p.color}`,background:task.done?p.color:'transparent',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
+        {task.done&&<span style={{color:'#fff',fontSize:11,fontWeight:800}}>✓</span>}
+      </div>
+      {editing?(
+        <div style={{flex:1,display:'flex',gap:5}}>
+          <input value={editVal} onChange={e=>setEditVal(e.target.value)} autoFocus
+            style={{flex:1,background:T.surface,border:`1.5px solid ${T.accent}44`,borderRadius:6,padding:'4px 8px',color:T.text,fontSize:13,outline:'none'}}
+            onKeyDown={e=>{if(e.key==='Enter')saveEdit();if(e.key==='Escape')setEditing(false)}}/>
+          <button onClick={saveEdit} style={{background:T.accent,border:'none',borderRadius:5,color:'#fff',fontSize:12,fontWeight:700,padding:'4px 9px',cursor:'pointer',flexShrink:0}}>OK</button>
+          <button onClick={()=>setEditing(false)} style={{background:'none',border:`1px solid ${T.border}`,borderRadius:5,color:T.textSub,fontSize:12,padding:'4px 6px',cursor:'pointer',flexShrink:0}}>✕</button>
+        </div>
+      ):(
+        <span onDoubleClick={()=>{setEditVal(task.text);setEditing(true)}} style={{flex:1,fontSize:13,color:T.text,lineHeight:1.5,textDecoration:task.done?'line-through':'none',wordBreak:'break-word',cursor:'text'}} title='Doppio click per modificare'>{task.text}</span>
+      )}
+      {hovered&&!editing&&(
+        <div style={{display:'flex',flexDirection:'column',gap:3,flexShrink:0,position:'relative'}}>
+          <button onClick={()=>{setEditVal(task.text);setEditing(true)}} style={{background:'none',border:`1px solid ${T.border}`,borderRadius:5,fontSize:11,padding:'2px 5px',cursor:'pointer',color:T.textSub}}>✏️</button>
+          <button onClick={()=>setShowPrioPick(v=>!v)} style={{background:'none',border:`1px solid ${T.border}`,borderRadius:5,fontSize:12,padding:'2px 5px',cursor:'pointer',color:p.color,fontWeight:700}}>{p.dot}</button>
+          <button onClick={onDelete} style={{background:'none',border:`1px solid ${T.border}`,borderRadius:5,fontSize:11,padding:'2px 5px',cursor:'pointer',color:T.red}}>🗑️</button>
+          {showPrioPick&&(
+            <div style={{position:'absolute',right:'110%',top:0,background:T.surface,border:`1px solid ${T.border}`,borderRadius:8,padding:6,display:'flex',flexDirection:'column',gap:4,boxShadow:'0 4px 16px rgba(0,0,0,0.12)',zIndex:50,width:90}}>
+              {Object.entries(PRIORITY).map(([key,pr])=>(
+                <button key={key} onClick={()=>{onPriority(key);setShowPrioPick(false)}} style={{background:task.priority===key?pr.bg:'transparent',border:`1px solid ${task.priority===key?pr.color:'transparent'}`,borderRadius:5,color:pr.color,fontSize:12,fontWeight:700,padding:'4px 8px',cursor:'pointer',textAlign:'left'}}>{pr.dot} {pr.label}</button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── QuickTasksSidebar ──────────────────────────────────────────────────────────
+function QuickTasksSidebar({collapsed,onToggleCollapse}){
+  const[tasks,setTasks]=useState([])
+  const[newText,setNewText]=useState('')
+  const[newPrio,setNewPrio]=useState('media')
+  const[filter,setFilter]=useState('tutti')
+  const inputRef=useRef(null)
+  const pendingCount=tasks.filter(t=>!t.done).length
+  const filtered=tasks.filter(t=>{
+    if(filter==='da_fare') return !t.done
+    if(filter==='fatti')   return t.done
+    if(filter==='alta')    return t.priority==='alta'
+    if(filter==='media')   return t.priority==='media'
+    if(filter==='bassa')   return t.priority==='bassa'
+    return true
+  })
+  function addTask(){
+    if(!newText.trim()) return
+    setTasks(ts=>[{id:uid(),text:newText.trim(),priority:newPrio,done:false,createdAt:new Date().toISOString()},...ts])
+    setNewText('');inputRef.current?.focus()
+  }
+  if(collapsed){
+    return(
+      <div onClick={onToggleCollapse} title='Apri task rapidi'
+        style={{width:32,flexShrink:0,background:T.surface,borderLeft:`1px solid ${T.border}`,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',cursor:'pointer',userSelect:'none'}}>
+        <div style={{writingMode:'vertical-rl',transform:'rotate(180deg)',fontSize:12,fontWeight:700,color:T.textSub,letterSpacing:'0.1em',display:'flex',alignItems:'center',gap:6}}>
+          ⚡ TASK RAPIDI
+          {pendingCount>0&&<span style={{background:T.accent,color:'#fff',borderRadius:10,fontSize:10,fontWeight:800,padding:'2px 5px',writingMode:'horizontal-tb'}}>{pendingCount}</span>}
+        </div>
+      </div>
+    )
+  }
+  return(
+    <div style={{width:280,flexShrink:0,background:T.surface,borderLeft:`1px solid ${T.border}`,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+      <div style={{padding:'14px 14px 10px',borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
+        <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
+          <span style={{fontSize:16}}>⚡</span>
+          <span style={{fontSize:14,fontWeight:800,color:T.text,flex:1}}>Task Rapidi</span>
+          {pendingCount>0&&<span style={{background:T.accent,color:'#fff',borderRadius:20,fontSize:11,fontWeight:800,padding:'2px 8px'}}>{pendingCount}</span>}
+          <button onClick={onToggleCollapse} style={{background:'none',border:`1px solid ${T.border}`,borderRadius:6,color:T.textMuted,fontSize:12,padding:'2px 7px',cursor:'pointer'}}>✕</button>
+        </div>
+        <div style={{display:'flex',flexDirection:'column',gap:6}}>
+          <input ref={inputRef} value={newText} onChange={e=>setNewText(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')addTask()}} placeholder='Nuovo task...'
+            style={{background:T.surface2,border:`1.5px solid ${T.border}`,borderRadius:8,padding:'8px 10px',color:T.text,fontSize:13,outline:'none',width:'100%'}}/>
+          <div style={{display:'flex',gap:5}}>
+            {Object.entries(PRIORITY).map(([key,p])=>(
+              <button key={key} onClick={()=>setNewPrio(key)} style={{flex:1,background:newPrio===key?p.bg:'transparent',border:`1.5px solid ${newPrio===key?p.color:T.border}`,borderRadius:6,color:newPrio===key?p.color:T.textMuted,fontSize:11,fontWeight:700,padding:'5px 0',cursor:'pointer'}}>{p.dot} {p.label}</button>
+            ))}
+          </div>
+          <button onClick={addTask} style={{background:T.accent,border:'none',borderRadius:8,color:'#fff',fontWeight:700,fontSize:13,padding:'8px',cursor:'pointer',width:'100%'}}>+ Aggiungi</button>
+        </div>
+      </div>
+      <div style={{padding:'8px 10px',borderBottom:`1px solid ${T.border}`,display:'flex',flexWrap:'wrap',gap:4,flexShrink:0}}>
+        {[['tutti',`Tutti (${tasks.length})`],['da_fare',`Da fare (${tasks.filter(t=>!t.done).length})`],['fatti',`Fatti (${tasks.filter(t=>t.done).length})`],['alta','🔴'],['media','🟡'],['bassa','🟢']].map(([key,label])=>(
+          <button key={key} onClick={()=>setFilter(key)} style={{background:filter===key?T.surface2:'transparent',border:`1px solid ${filter===key?T.borderStrong:'transparent'}`,borderRadius:6,color:filter===key?T.text:T.textMuted,fontSize:11,fontWeight:600,padding:'3px 8px',cursor:'pointer'}}>{label}</button>
+        ))}
+      </div>
+      <div style={{flex:1,overflowY:'auto',padding:'8px'}}>
+        {filtered.length===0&&<div style={{textAlign:'center',padding:'30px 10px',color:T.textMuted,fontSize:13}}>{filter==='tutti'?'Nessun task ancora.\nAggiungine uno!':'Nessun task in questa categoria.'}</div>}
+        {filtered.map(task=>(
+          <QuickTaskRow key={task.id} task={task}
+            onToggle={()=>setTasks(ts=>ts.map(t=>t.id===task.id?{...t,done:!t.done}:t))}
+            onDelete={()=>setTasks(ts=>ts.filter(t=>t.id!==task.id))}
+            onPriority={p=>setTasks(ts=>ts.map(t=>t.id===task.id?{...t,priority:p}:t))}
+            onEditText={text=>setTasks(ts=>ts.map(t=>t.id===task.id?{...t,text}:t))}/>
+        ))}
+      </div>
+    </div>
+  )
+}
+// ── DeliveryRow ────────────────────────────────────────────────────────────────
+function DeliveryRow({d,onToggle,onEdit,onDelete,onOpen}){
+  const[hovered,setHovered]=useState(false)
+  const u=d.urgency
+  return(
+    <div onMouseEnter={()=>setHovered(true)} onMouseLeave={()=>setHovered(false)}
+      style={{background:T.surface,border:`1.5px solid ${d.delivered?T.border:u.color+'44'}`,borderLeft:`4px solid ${d.delivered?T.border:u.color}`,borderRadius:12,padding:'14px 18px',display:'flex',alignItems:'center',gap:14,opacity:d.delivered?0.65:1,transition:'all 0.15s',boxShadow:hovered&&!d.delivered?'0 2px 12px rgba(0,0,0,0.07)':'none'}}>
+      <div onClick={onToggle} title={d.delivered?'Segna come da consegnare':'Segna come consegnato'}
+        style={{width:24,height:24,borderRadius:8,flexShrink:0,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',border:d.delivered?'none':`2px solid ${u.color}`,background:d.delivered?T.green:'transparent',transition:'all 0.2s'}}>
+        {d.delivered&&<span style={{color:'#fff',fontSize:14,fontWeight:800}}>✓</span>}
+      </div>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:3}}>
+          {d.proj&&<div style={{width:10,height:10,borderRadius:'50%',background:d.proj.color,flexShrink:0}}/>}
+          <span style={{fontSize:15,fontWeight:700,color:T.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{d.proj?.name||<span style={{color:T.red,fontStyle:'italic'}}>Progetto eliminato</span>}</span>
+        </div>
+        <div style={{display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
+          {d.note&&<span style={{fontSize:13,color:T.textSub}}>{d.note}</span>}
+          {d.delivered&&d.deliveredAt&&<span style={{fontSize:12,color:T.textMuted,fontStyle:'italic'}}>Consegnato {d.deliveredAt}</span>}
+        </div>
+      </div>
+      {d.proj&&!d.delivered&&(
+        <div style={{width:80,flexShrink:0}}>
+          <div style={{fontSize:11,color:T.textMuted,marginBottom:3,textAlign:'right'}}>{d.progress}%</div>
+          <div style={{height:5,background:T.surface2,borderRadius:3,overflow:'hidden'}}><div style={{height:'100%',width:`${d.progress}%`,background:d.proj.color,borderRadius:3}}/></div>
+        </div>
+      )}
+      {!d.delivered&&(
+        <div style={{background:u.bg,color:u.color,border:`1.5px solid ${u.color}44`,borderRadius:20,padding:'4px 14px',fontSize:13,fontWeight:800,flexShrink:0,minWidth:70,textAlign:'center'}}>
+          {u.dot} {d.days===null?'—':d.days===0?'OGGI':d.days<0?`${Math.abs(d.days)}gg fa`:`${d.days}gg`}
+        </div>
+      )}
+      <div style={{fontSize:13,color:T.textMuted,flexShrink:0,minWidth:80,textAlign:'right'}}>
+        {d.dueDate?new Date(d.dueDate).toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric'}):'—'}
+      </div>
+      <div style={{display:'flex',gap:6,opacity:hovered?1:0,transition:'opacity 0.15s',flexShrink:0}}>
+        {d.proj&&<button onClick={onOpen} style={{background:T.surface2,border:`1px solid ${T.border}`,borderRadius:7,color:T.textSub,fontSize:12,padding:'4px 10px',cursor:'pointer',fontWeight:600}}>Apri →</button>}
+        <button onClick={onEdit} style={{background:'none',border:`1px solid ${T.border}`,borderRadius:7,color:T.textSub,fontSize:12,padding:'4px 8px',cursor:'pointer'}}>✏️</button>
+        <button onClick={onDelete} style={{background:'none',border:`1px solid ${T.red}44`,borderRadius:7,color:T.red,fontSize:12,padding:'4px 8px',cursor:'pointer'}}>🗑️</button>
+      </div>
+    </div>
+  )
+}
+
+// ── DeliveryPage ───────────────────────────────────────────────────────────────
+function DeliveryPage({projects,deliveries,onSetDelivery,onNavigateToProject}){
+  const[showForm,setShowForm]=useState(false)
+  const[editId,setEditId]=useState(null)
+  const[form,setForm]=useState({projectId:'',note:'',dueDate:'',delivered:false})
+  const[confirm,setConfirm]=useState(null)
+  const activeProjects=projects.filter(p=>!p.archived)
+  const enriched=deliveries.map(d=>{
+    const proj=projects.find(p=>p.id===d.projectId)
+    const days=daysUntil(d.dueDate)
+    const urgency=deliveryUrgency(days)
+    const progress=proj?getProgress(proj):0
+    return{...d,proj,days,urgency,progress}
+  }).sort((a,b)=>{
+    if(a.delivered!==b.delivered) return a.delivered?1:-1
+    if(a.days===null) return 1;if(b.days===null) return -1
+    return a.days-b.days
+  })
+  const pending=enriched.filter(d=>!d.delivered)
+  const delivered=enriched.filter(d=>d.delivered)
+  const urgent=pending.filter(d=>d.days!==null&&d.days<=7)
+  function openNew(){setForm({projectId:activeProjects[0]?.id||'',note:'',dueDate:'',delivered:false});setEditId(null);setShowForm(true)}
+  function openEdit(d){setForm({projectId:d.projectId,note:d.note||'',dueDate:d.dueDate||'',delivered:d.delivered});setEditId(d.id);setShowForm(true)}
+  function save(){
+    if(!form.projectId||!form.dueDate) return
+    if(editId){
+      onSetDelivery(editId,form,true)
+    }else{
+      onSetDelivery(uid(),form,false)
+    }
+    setShowForm(false)
+  }
+  const inputSt={background:T.surface2,border:`1.5px solid ${T.border}`,borderRadius:8,padding:'9px 12px',color:T.text,fontSize:14,outline:'none',width:'100%'}
+  return(
+    <div style={{flex:1,overflowY:'auto',padding:'24px 28px',background:T.bg,fontFamily:"'DM Sans', system-ui"}}>
+      {urgent.length>0&&(
+        <div style={{background:T.redBg,border:`2px solid ${T.red}44`,borderRadius:14,padding:'16px 20px',marginBottom:24}}>
+          <div style={{fontSize:13,fontWeight:800,color:T.red,letterSpacing:'0.08em',marginBottom:10}}>🎯 FOCUS DEL GIORNO — {urgent.length} CONSEGN{urgent.length===1?'A':'E'} URGENTI</div>
+          <div style={{display:'flex',flexDirection:'column',gap:8}}>
+            {urgent.map(d=>(
+              <div key={d.id} style={{display:'flex',alignItems:'center',gap:12,background:'rgba(255,255,255,0.6)',borderRadius:10,padding:'10px 14px'}}>
+                <span style={{fontSize:20}}>{d.urgency.dot}</span>
+                <div style={{flex:1}}><span style={{fontWeight:700,color:T.text,fontSize:15}}>{d.proj?.name||'—'}</span>{d.note&&<span style={{fontSize:13,color:T.textSub,marginLeft:8}}>{d.note}</span>}</div>
+                <span style={{fontSize:13,fontWeight:800,color:d.urgency.color,background:d.urgency.bg,padding:'3px 12px',borderRadius:20,border:`1px solid ${d.urgency.color}44`}}>{d.days===0?'OGGI':d.days<0?`${Math.abs(d.days)}gg fa`:`${d.days}gg`}</span>
+                <span style={{fontSize:13,color:T.textSub}}>{d.progress}%</span>
+                {d.proj&&<button onClick={()=>onNavigateToProject(d.proj.id)} style={{background:T.red,border:'none',borderRadius:7,color:'#fff',fontSize:12,fontWeight:700,padding:'5px 12px',cursor:'pointer'}}>Apri →</button>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      <div style={{display:'flex',alignItems:'center',marginBottom:20}}>
+        <div style={{fontSize:13,color:T.textSub,fontWeight:700,letterSpacing:'0.06em'}}>CONSEGNE — {pending.length} IN ATTESA</div>
+        <button onClick={openNew} style={{marginLeft:'auto',background:T.accent,border:'none',borderRadius:8,color:'#fff',fontWeight:700,fontSize:14,padding:'9px 20px',cursor:'pointer'}}>+ Nuova consegna</button>
+      </div>
+      {showForm&&(
+        <div style={{background:T.surface,border:`1.5px solid ${T.accent}44`,borderRadius:14,padding:'20px',marginBottom:20}}>
+          <div style={{fontSize:14,fontWeight:700,color:T.text,marginBottom:14}}>{editId?'✏️ Modifica consegna':'+ Nuova consegna'}</div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}}>
+            <div><label style={{fontSize:12,color:T.textSub,fontWeight:700,display:'block',marginBottom:5}}>PROGETTO *</label>
+              <select value={form.projectId} onChange={e=>setForm(f=>({...f,projectId:e.target.value}))} style={{...inputSt,appearance:'none'}}>
+                <option value=''>— Seleziona —</option>
+                {activeProjects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </div>
+            <div><label style={{fontSize:12,color:T.textSub,fontWeight:700,display:'block',marginBottom:5}}>DATA DI CONSEGNA *</label><input type='date' value={form.dueDate} onChange={e=>setForm(f=>({...f,dueDate:e.target.value}))} style={inputSt}/></div>
+          </div>
+          <div style={{marginBottom:14}}><label style={{fontSize:12,color:T.textSub,fontWeight:700,display:'block',marginBottom:5}}>NOTE (opzionale)</label><input value={form.note} onChange={e=>setForm(f=>({...f,note:e.target.value}))} placeholder='Es. consegna parziale, cliente X...' style={inputSt}/></div>
+          <div style={{display:'flex',gap:10,justifyContent:'flex-end'}}>
+            <button onClick={()=>setShowForm(false)} style={{background:'none',border:`1px solid ${T.border}`,borderRadius:8,color:T.textSub,fontSize:14,padding:'8px 18px',cursor:'pointer'}}>Annulla</button>
+            <button onClick={save} disabled={!form.projectId||!form.dueDate} style={{background:form.projectId&&form.dueDate?T.accent:'#ccc',border:'none',borderRadius:8,color:'#fff',fontWeight:700,fontSize:14,padding:'8px 22px',cursor:form.projectId&&form.dueDate?'pointer':'default'}}>{editId?'Salva modifiche':'Aggiungi'}</button>
+          </div>
+        </div>
+      )}
+      {pending.length===0&&!showForm&&(
+        <div style={{textAlign:'center',padding:'60px 0'}}>
+          <div style={{fontSize:48,marginBottom:16}}>📅</div>
+          <div style={{fontSize:18,fontWeight:700,color:T.text,marginBottom:8}}>Nessuna consegna programmata</div>
+          <div style={{fontSize:15,color:T.textSub,marginBottom:20}}>Aggiungi le date di consegna dei tuoi progetti</div>
+          <button onClick={openNew} style={{background:T.accent,border:'none',borderRadius:10,color:'#fff',fontWeight:700,fontSize:15,padding:'11px 26px',cursor:'pointer'}}>+ Prima consegna</button>
+        </div>
+      )}
+      {pending.length>0&&<div style={{display:'flex',flexDirection:'column',gap:10,marginBottom:32}}>{pending.map(d=><DeliveryRow key={d.id} d={d} onToggle={()=>onSetDelivery(d.id,{delivered:!d.delivered,deliveredAt:!d.delivered?nowStr():null},true)} onEdit={()=>openEdit(d)} onDelete={()=>setConfirm(d.id)} onOpen={()=>d.proj&&onNavigateToProject(d.proj.id)}/>)}</div>}
+      {delivered.length>0&&(
+        <details style={{marginTop:8}}>
+          <summary style={{fontSize:13,color:T.textSub,fontWeight:700,letterSpacing:'0.06em',cursor:'pointer',marginBottom:10}}>✅ CONSEGNATE — {delivered.length}</summary>
+          <div style={{display:'flex',flexDirection:'column',gap:8,marginTop:10}}>{delivered.map(d=><DeliveryRow key={d.id} d={d} onToggle={()=>onSetDelivery(d.id,{delivered:!d.delivered,deliveredAt:!d.delivered?nowStr():null},true)} onEdit={()=>openEdit(d)} onDelete={()=>setConfirm(d.id)} onOpen={()=>d.proj&&onNavigateToProject(d.proj.id)}/>)}</div>
+        </details>
+      )}
+      {confirm&&<ConfirmDialog message='Eliminare questa consegna?' onConfirm={()=>{onSetDelivery(confirm,null,null,true);setConfirm(null)}} onCancel={()=>setConfirm(null)}/>}
+    </div>
+  )
+}
+
+// ── NewProjectModal ────────────────────────────────────────────────────────────
+function NewProjectModal({onClose,onCreate,templates,preselectedTemplate}){
+  const[name,setName]=useState('')
+  const[desc,setDesc]=useState('')
+  const[color,setColor]=useState(preselectedTemplate?.color||'#D4700A')
+  const[selectedTmpl,setSelectedTmpl]=useState(preselectedTemplate||null)
+  const[stepsRaw,setStepsRaw]=useState('')
+  function selectTmpl(t){setSelectedTmpl(t);if(t)setColor(t.color)}
+  function create(){
+    if(!name.trim()) return
+    const steps=selectedTmpl?cloneTemplateToSteps(selectedTmpl):stepsRaw.split('\n').filter(l=>l.trim()).map(line=>({id:uid(),title:line.trim(),tasks:[]}))
+    onCreate({id:uid(),name:name.trim(),description:desc.trim(),color,createdAt:new Date().toISOString().slice(0,10),archived:false,steps:steps.length?steps:[{id:uid(),title:'Step 1',tasks:[]}],log:[],pallet_assegnato:null})
+    onClose()
+  }
+  const inputStyle={width:'100%',background:T.surface2,border:`1.5px solid ${T.border}`,borderRadius:10,padding:'10px 14px',color:T.text,fontSize:15,outline:'none'}
+  return(
+    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:100}} onClick={onClose}>
+      <div onClick={e=>e.stopPropagation()} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:14,padding:32,width:540,maxWidth:'92vw',maxHeight:'88vh',overflowY:'auto',boxShadow:'0 12px 48px rgba(0,0,0,0.2)'}}>
+        <div style={{fontSize:20,fontWeight:800,color:T.text,marginBottom:22}}>Nuovo Progetto</div>
+        <div style={{marginBottom:16}}><label style={{fontSize:13,color:T.textSub,fontWeight:600,display:'block',marginBottom:6}}>NOME PROGETTO *</label><input autoFocus value={name} onChange={e=>setName(e.target.value)} style={inputStyle} placeholder='Es. 4349_0221'/></div>
+        <div style={{marginBottom:22}}><label style={{fontSize:13,color:T.textSub,fontWeight:600,display:'block',marginBottom:6}}>DESCRIZIONE</label><input value={desc} onChange={e=>setDesc(e.target.value)} style={inputStyle} placeholder='Breve descrizione'/></div>
+        <div style={{marginBottom:22}}>
+          <label style={{fontSize:13,color:T.textSub,fontWeight:600,display:'block',marginBottom:10}}>PARTI DA UN TEMPLATE</label>
+          <div style={{display:'flex',flexWrap:'wrap',gap:8,marginBottom:12}}>
+            <button onClick={()=>selectTmpl(null)} style={{background:!selectedTmpl?T.surface2:'transparent',border:`1.5px solid ${!selectedTmpl?T.borderStrong:T.border}`,borderRadius:8,color:!selectedTmpl?T.text:T.textSub,fontSize:13,padding:'7px 14px',cursor:'pointer',fontWeight:600}}>Nessuno</button>
+            {templates.map(t=><button key={t.id} onClick={()=>selectTmpl(t)} style={{background:selectedTmpl?.id===t.id?t.color+'18':'transparent',border:`1.5px solid ${selectedTmpl?.id===t.id?t.color:T.border}`,borderRadius:8,color:selectedTmpl?.id===t.id?t.color:T.textSub,fontSize:13,padding:'7px 14px',cursor:'pointer',fontWeight:600}}>{t.icon} {t.name}</button>)}
+          </div>
+          {selectedTmpl?(
+            <div style={{background:T.surface2,border:`1px solid ${T.border}`,borderRadius:10,padding:'12px 16px'}}>
+              <div style={{fontSize:12,color:T.textSub,fontWeight:700,marginBottom:8}}>FASI INCLUSE</div>
+              {selectedTmpl.steps.map(s=><div key={s.id} style={{fontSize:14,color:T.text,marginBottom:4,display:'flex',gap:8}}><span style={{color:selectedTmpl.color,fontWeight:700}}>•</span>{s.title} <span style={{color:T.textMuted}}>({(s.tasks||[]).length} task)</span></div>)}
+            </div>
+          ):(
+            <div><label style={{fontSize:13,color:T.textSub,fontWeight:600,display:'block',marginBottom:6}}>OPPURE INSERISCI FASI (una per riga)</label><textarea value={stepsRaw} onChange={e=>setStepsRaw(e.target.value)} rows={4} placeholder={'Preparazione\nFase 1\nFase 2'} style={{...inputStyle,resize:'vertical'}}/></div>
+          )}
+        </div>
+        <div style={{marginBottom:24}}>
+          <label style={{fontSize:13,color:T.textSub,fontWeight:600,display:'block',marginBottom:10}}>COLORE PROGETTO</label>
+          <div style={{display:'flex',gap:10}}>{COLORS.map(c=><div key={c} onClick={()=>setColor(c)} style={{width:30,height:30,borderRadius:'50%',background:c,cursor:'pointer',border:color===c?'3px solid #333':'3px solid transparent',transform:color===c?'scale(1.15)':'scale(1)'}}/>)}</div>
+        </div>
+        <div style={{display:'flex',gap:10,justifyContent:'flex-end'}}>
+          <button onClick={onClose} style={{background:T.surface2,border:`1px solid ${T.border}`,borderRadius:10,color:T.textSub,fontSize:15,padding:'10px 22px',cursor:'pointer',fontWeight:600}}>Annulla</button>
+          <button onClick={create} style={{background:color,border:'none',borderRadius:10,color:'#fff',fontWeight:800,fontSize:15,padding:'10px 26px',cursor:'pointer'}}>Crea Progetto</button>
+        </div>
+      </div>
+    </div>
+  )
+}
 // ── App principale ─────────────────────────────────────────────────────────────
 export default function Progetti(){
   const navigate=useNavigate()
@@ -1116,20 +1146,25 @@ export default function Progetti(){
   const[deliveries,setDeliveries]=useState([])
   const[loading,setLoading]=useState(true)
   const[error,setError]=useState(null)
-  const[page,setPage]=useState('projects')
+  const[page,setPage]=useState('projects')      // projects|archived|templates|templateEditor|backup|consegne
   const[selectedId,setSelectedId]=useState(null)
   const[editingTemplate,setEditingTemplate]=useState(null)
   const[showNewProject,setShowNewProject]=useState(false)
   const[preselectedTemplate,setPreselectedTemplate]=useState(null)
   const[search,setSearch]=useState('')
   const[sidebarCollapsed,setSidebarCollapsed]=useState(false)
+  const[lastSavedProj,setLastSavedProj]=useState(null)
+  const[lastSavedTmpl,setLastSavedTmpl]=useState(null)
+  const[importMsg,setImportMsg]=useState(null)
+  const importRef=useRef(null)
   const saveTimer=useRef(null)
+  const autoBackupTimer=useRef(null)
 
   // ── Carica ──────────────────────────────────────────────────────────────────
   const load=useCallback(async()=>{
     try{
       const r=await fetch(API+'/')
-      if(!r.ok)throw new Error(`Server error ${r.status}`)
+      if(!r.ok) throw new Error(`Server error ${r.status}`)
       const d=await r.json()
       setProjects(d.projects||[])
       setTemplates(d.templates||[])
@@ -1139,102 +1174,108 @@ export default function Progetti(){
   },[])
   useEffect(()=>{load()},[load])
 
-  // ── Auto-backup 5 sec dopo modifiche ────────────────────────────────────────
-  const autoBackupTimer=useRef(null)
-  useEffect(()=>{
-    clearTimeout(autoBackupTimer.current)
-    autoBackupTimer.current=setTimeout(async()=>{
-      if(projects.length===0)return
-      try{
-        await fetch(`${API}/import`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({projects,templates,mode:'replace'})})
-      }catch{}
-    },5000)
-    return()=>clearTimeout(autoBackupTimer.current)
-  },[projects,templates])
-
-  // ── Salva progetto (debounced) ───────────────────────────────────────────────
-  const saveProject=useCallback(async(project)=>{
-    setProjects(prev=>prev.map(p=>p.id===project.id?project:p))
+  // ── Salva progetti (debounced) ───────────────────────────────────────────────
+  const persistProjects=useCallback((projs)=>{
     clearTimeout(saveTimer.current)
     saveTimer.current=setTimeout(async()=>{
-      try{await fetch(`${API}/${project.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({data:project})})}catch{}
-    },600)
+      try{
+        // Salva tutti i progetti modificati in batch
+        for(const p of projs){
+          await fetch(`${API}/${p.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({data:p})})
+        }
+        setLastSavedProj(nowStr())
+      }catch{}
+    },800)
   },[])
 
-  const addProject=async(project)=>{
-    setProjects(prev=>[...prev,project])
-    setShowNewProject(false)
-    setSelectedId(project.id)
-    try{await fetch(`${API}/${project.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({data:project})})}catch{}
+  const persistTemplates=useCallback(async(tmpls)=>{
+    try{
+      await fetch(`${API}/templates/save`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({templates:tmpls})})
+      setLastSavedTmpl(nowStr())
+    }catch{}
+  },[])
+
+  // ── CRUD progetti ────────────────────────────────────────────────────────────
+  function updateProject(updated){
+    setProjects(ps=>{const next=ps.map(p=>p.id===updated.id?updated:p);persistProjects(next);return next})
   }
-  const deleteProject=async(id)=>{
-    setProjects(prev=>prev.filter(p=>p.id!==id))
+  function addProject(project){
+    setProjects(ps=>{const next=[...ps,project];persistProjects(next);return next})
+    setLastSavedProj(nowStr())
+  }
+  async function deleteProject(id){
+    setProjects(ps=>ps.filter(p=>p.id!==id))
     setSelectedId(null)
     try{await fetch(`${API}/${id}`,{method:'DELETE'})}catch{}
   }
-  const archiveProject=async(id)=>{
-    setProjects(prev=>prev.map(p=>p.id===id?{...p,archived:!p.archived}:p))
+  function archiveProject(id){
+    setProjects(ps=>{const next=ps.map(p=>p.id===id?{...p,archived:!p.archived}:p);persistProjects(next);return next})
     setSelectedId(null)
   }
 
-  // ── Template CRUD ────────────────────────────────────────────────────────────
-  const saveTemplate=async(tmpl)=>{
-    const newTemplates=templates.some(t=>t.id===tmpl.id)?templates.map(t=>t.id===tmpl.id?tmpl:t):[...templates,tmpl]
-    setTemplates(newTemplates)
+  // ── CRUD template ────────────────────────────────────────────────────────────
+  function saveTemplate(tmpl){
+    setTemplates(ts=>{const next=ts.some(t=>t.id===tmpl.id)?ts.map(t=>t.id===tmpl.id?tmpl:t):[...ts,tmpl];persistTemplates(next);return next})
     setPage('templates');setEditingTemplate(null)
-    try{await fetch(`${API}/templates/save`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({templates:newTemplates})})}catch{}
   }
-  const deleteTemplate=async(id)=>{
-    const newTemplates=templates.filter(t=>t.id!==id)
-    setTemplates(newTemplates)
-    try{await fetch(`${API}/templates/save`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({templates:newTemplates})})}catch{}
+  function deleteTemplate(id){setTemplates(ts=>{const next=ts.filter(t=>t.id!==id);persistTemplates(next);return next})}
+  function duplicateTemplate(tmpl){
+    const copy={...tmpl,id:uid(),name:`${tmpl.name} (copia)`,steps:tmpl.steps.map(s=>({...s,id:uid(),tasks:(s.tasks||[]).map(t=>({...t,id:uid()}))}))}
+    setTemplates(ts=>{const idx=ts.findIndex(t=>t.id===tmpl.id);const next=[...ts];next.splice(idx+1,0,copy);persistTemplates(next);return next})
   }
-  const duplicateTemplate=(tmpl)=>{
-    const copy={...tmpl,id:uid(),name:`${tmpl.name} (copia)`,steps:(tmpl.steps||[]).map(s=>({...s,id:uid(),tasks:(s.tasks||[]).map(t=>({...t,id:uid()}))}))}
-    const newTemplates=[...templates]
-    const idx=newTemplates.findIndex(t=>t.id===tmpl.id)
-    newTemplates.splice(idx+1,0,copy)
-    setTemplates(newTemplates)
-    fetch(`${API}/templates/save`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({templates:newTemplates})}).catch(()=>{})
-  }
-  const useTemplate=(tmpl)=>{setPreselectedTemplate(tmpl);setShowNewProject(true);setPage('projects')}
+  function useTemplate(tmpl){setPreselectedTemplate(tmpl);setShowNewProject(true);setPage('projects')}
 
-  // ── Delivery ─────────────────────────────────────────────────────────────────
-  const setDelivery=(projectId,dueDate,toggleDelivered)=>{
+  // ── Consegne ─────────────────────────────────────────────────────────────────
+  function setDelivery(id,patch,isUpdate,isDelete){
     setDeliveries(ds=>{
-      const existing=ds.find(d=>d.projectId===projectId)
-      if(toggleDelivered!==undefined&&existing)return ds.map(d=>d.projectId===projectId?{...d,delivered:toggleDelivered,deliveredAt:toggleDelivered?nowStr():null}:d)
-      if(dueDate===null)return ds.map(d=>d.projectId===projectId?{...d,dueDate:''}:d)
-      if(existing)return ds.map(d=>d.projectId===projectId?{...d,dueDate}:d)
-      return[...ds,{id:uid(),projectId,dueDate,delivered:false,createdAt:nowStr()}]
+      if(isDelete) return ds.filter(d=>d.id!==id)
+      if(isUpdate) return ds.map(d=>d.id===id?{...d,...patch}:d)
+      return[...ds,{id,createdAt:nowStr(),...patch}]
     })
   }
-  const getDelivery=(projectId)=>deliveries.find(d=>d.projectId===projectId)||null
+  function getDelivery(projectId){return deliveries.find(d=>d.projectId===projectId)||null}
 
-  // ── Backup import ────────────────────────────────────────────────────────────
-  const handleBackupImport=async({projects:impProj,templates:impTmpl},mode)=>{
+  // ── Import/Export backup ─────────────────────────────────────────────────────
+  async function handleImport(e,mode='merge'){
+    const file=e.target.files?.[0];if(!file) return
     try{
-      await fetch(`${API}/import`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({projects:impProj||[],templates:impTmpl,mode})})
+      const text=await file.text()
+      const parsed=JSON.parse(text)
+      if(!parsed._worktrack&&!parsed._worktrack_backup) throw new Error('File non riconosciuto')
+      if(!Array.isArray(parsed.projects)||!Array.isArray(parsed.templates)) throw new Error('Struttura backup non valida')
+      const r=await fetch(`${API}/import`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({projects:parsed.projects,templates:parsed.templates,mode})})
+      if(!r.ok) throw new Error(`Errore server ${r.status}`)
+      const res=await r.json()
+      setImportMsg(`✓ ${res.progetti} progetti e ${res.templates} template importati (${mode})`)
       await load()
-    }catch{}
+    }catch(err){setImportMsg(`⚠ ${err.message}`)}
+    e.target.value=''
   }
+  function handleExport(){window.open(`${API}/export`,'_blank')}
 
-  // ── Lancia NC ────────────────────────────────────────────────────────────────
-  const lanciaNC=(project)=>{
-    const mpf=project.steps.flatMap(s=>s.tasks).filter(t=>t.text?.trim().toLowerCase()==='fresatura').flatMap(t=>(t.programs||[]).filter(p=>p.tipoGruppo!=='ipm'))
-    if(!mpf.length)return
+  // ── Lancia NC ───────────────────────────────────────────────────────────────
+  function lanciaNC(project){
+    const mpf=(project.steps||[]).flatMap(s=>s.tasks||[]).filter(t=>t.text?.trim().toLowerCase()==='fresatura').flatMap(t=>(t.programs||[]).filter(p=>p.tipoGruppo!=='ipm'))
+    if(!mpf.length) return
     sessionStorage.setItem('dmgdesk_lancio_nc',JSON.stringify({projectId:project.id,projectName:project.name,nomeCartella:project.name.replace(/[^a-zA-Z0-9_-]/g,'_').toUpperCase().slice(0,20),mpfFiles:mpf.map(p=>p.filename)}))
-    setTimeout(()=>navigate('/analisi-nc'),1000)
+    navigate('/analisi-nc')
   }
 
-  // ── Derive ───────────────────────────────────────────────────────────────────
+  // ── Dati derivati ────────────────────────────────────────────────────────────
   const selectedProject=projects.find(p=>p.id===selectedId)
-  const activeProjects=projects.filter(p=>!p.archived&&(search===''||p.name.toLowerCase().includes(search.toLowerCase())||(p.description||'').toLowerCase().includes(search.toLowerCase())))
-  const archivedProjects=projects.filter(p=>p.archived)
-  const inProgress=activeProjects.filter(p=>getProgress(p)<100)
-  const completed=activeProjects.filter(p=>getProgress(p)===100)
   const isOnEditor=page==='templateEditor'&&editingTemplate
   const isOnProject=!!selectedProject
+  const activeProjects=projects.filter(p=>!p.archived&&(search===''||p.name.toLowerCase().includes(search.toLowerCase())||(p.description||'').toLowerCase().includes(search.toLowerCase())))
+  const archivedProjects=projects.filter(p=>p.archived)
+  const inProgress=activeProjects.filter(p=>getProgress(p)<100).sort((a,b)=>{
+    const da=getDelivery(a.id);const db=getDelivery(b.id)
+    const daysA=da&&da.dueDate&&!da.delivered?daysUntil(da.dueDate):9999
+    const daysB=db&&db.dueDate&&!db.delivered?daysUntil(db.dueDate):9999
+    if(daysA!==daysB) return daysA-daysB
+    return getProgress(a)-getProgress(b)
+  })
+  const completed=activeProjects.filter(p=>getProgress(p)===100)
+  const urgentProjects=inProgress.filter(p=>{const d=getDelivery(p.id);const days=d&&d.dueDate&&!d.delivered?daysUntil(d.dueDate):null;return days!==null&&days<=7})
 
   const NavBtn=({id,label,badge})=>(
     <button onClick={()=>{setPage(id);setSelectedId(null);setEditingTemplate(null)}}
@@ -1244,42 +1285,25 @@ export default function Progetti(){
     </button>
   )
 
-  if(loading)return <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100%',color:T.textMuted,background:T.bg,fontFamily:"'DM Sans', system-ui"}}>Caricamento...</div>
-
-  // Ordina in corso per urgenza scadenza
-  const sorted=[...inProgress].sort((a,b)=>{
-    const da=getDelivery(a.id);const db=getDelivery(b.id)
-    const daysA=da&&da.dueDate&&!da.delivered?daysUntil(da.dueDate):9999
-    const daysB=db&&db.dueDate&&!db.delivered?daysUntil(db.dueDate):9999
-    if(daysA!==daysB)return daysA-daysB
-    return getProgress(a)-getProgress(b)
-  })
-  const urgentProjects=sorted.filter(p=>{const d=getDelivery(p.id);const days=d&&d.dueDate&&!d.delivered?daysUntil(d.dueDate):null;return days!==null&&days<=7})
+  if(loading) return <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100%',color:T.textMuted,background:T.bg,fontFamily:"'DM Sans', system-ui"}}>Caricamento...</div>
 
   return(
     <div style={{height:'100%',display:'flex',flexDirection:'column',background:T.bg,fontFamily:"'DM Sans', system-ui, sans-serif",color:T.text}}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap');*{box-sizing:border-box}`}</style>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap');*{box-sizing:border-box}input,textarea,select{font-family:inherit}`}</style>
 
       {/* TOP BAR */}
-      {!isOnEditor&&(
-        <div style={{borderBottom:`1px solid ${T.border}`,padding:'0 28px',display:'flex',alignItems:'center',gap:24,flexShrink:0,background:T.surface,boxShadow:'0 1px 0 rgba(0,0,0,0.06)'}}>
-          <div style={{fontSize:20,fontWeight:800,color:T.text,letterSpacing:'-0.02em',paddingRight:16,borderRight:`1px solid ${T.border}`,padding:'16px 16px 16px 0'}}>
-            <span style={{color:T.accent}}>◈</span> WorkTrack
-          </div>
-          {!isOnProject&&(
-            <>
-              <NavBtn id='projects' label='Progetti'/>
-              <NavBtn id='archived' label='Archivio' badge={archivedProjects.length}/>
-              <NavBtn id='templates' label={`Template (${templates.length})`}/>
-              <NavBtn id='deliveries' label='Consegne'/>
-              <NavBtn id='backup' label='Backup'/>
-            </>
-          )}
+      {!isOnProject&&!isOnEditor&&(
+        <div style={{borderBottom:`1px solid ${T.border}`,padding:'0 28px',display:'flex',alignItems:'center',gap:0,flexShrink:0,background:T.surface,boxShadow:'0 1px 0 rgba(0,0,0,0.06)'}}>
+          <div style={{fontSize:20,fontWeight:800,color:T.text,letterSpacing:'-0.02em',padding:'16px 16px 16px 0',marginRight:4,borderRight:`1px solid ${T.border}`}}><span style={{color:T.accent}}>◈</span> WorkTrack</div>
+          <NavBtn id='projects' label='Progetti'/>
+          <NavBtn id='archived' label='Archivio' badge={archivedProjects.length}/>
+          <NavBtn id='templates' label={`Template (${templates.length})`}/>
+          <NavBtn id='consegne' label='Consegne' badge={deliveries.filter(d=>!d.delivered&&daysUntil(d.dueDate)!==null&&daysUntil(d.dueDate)<=7).length}/>
+          <NavBtn id='backup' label='Backup'/>
           {page==='projects'&&!isOnProject&&(
             <div style={{marginLeft:'auto',display:'flex',gap:12,alignItems:'center'}}>
               <input value={search} onChange={e=>setSearch(e.target.value)} placeholder='Cerca progetto...'
                 style={{background:T.surface2,border:`1px solid ${T.border}`,borderRadius:8,padding:'8px 14px',color:T.text,fontSize:14,outline:'none',width:200}}/>
-              {error&&<span style={{fontSize:12,color:T.red}}>⚠ {error}</span>}
               <span style={{fontSize:14,color:T.textSub,fontWeight:600}}>{inProgress.length} attivi</span>
               <button onClick={()=>{setPreselectedTemplate(null);setShowNewProject(true)}} style={{background:T.accent,border:'none',borderRadius:8,color:'#fff',fontWeight:700,fontSize:14,padding:'9px 20px',cursor:'pointer'}}>+ Nuovo Progetto</button>
             </div>
@@ -1293,39 +1317,51 @@ export default function Progetti(){
           {isOnEditor?(
             <TemplateEditor template={editingTemplate} onSave={saveTemplate} onCancel={()=>{setPage('templates');setEditingTemplate(null)}}/>
           ):isOnProject?(
-            <div style={{flex:1,overflow:'auto'}}>
-              <ProjectDetail project={selectedProject} onBack={()=>setSelectedId(null)}
-                onUpdate={saveProject} onDelete={deleteProject} onArchive={archiveProject}
-                templates={templates} onSaveAsTemplate={tmpl=>{setTemplates(ts=>ts.some(t=>t.id===tmpl.id)?ts.map(t=>t.id===tmpl.id?tmpl:t):[...ts,tmpl])}}
-                onLanciaNC={lanciaNC} deliveries={deliveries} setDeliveries={setDeliveries}/>
-            </div>
+            <ProjectDetail project={selectedProject} onBack={()=>setSelectedId(null)} onUpdate={updateProject} onDelete={deleteProject} onArchive={archiveProject} templates={templates} onSaveAsTemplate={tmpl=>{setTemplates(ts=>{const next=ts.some(t=>t.id===tmpl.id)?ts.map(t=>t.id===tmpl.id?tmpl:t):[...ts,tmpl];persistTemplates(next);return next})}} onLanciaNC={lanciaNC}/>
           ):page==='templates'?(
-            <TemplatesPage templates={templates} onEdit={tmpl=>{setEditingTemplate(tmpl);setPage('templateEditor')}} onCreate={()=>{setEditingTemplate({id:`new_${uid()}`,name:'Nuovo Template',description:'',icon:'🚀',color:'#D4700A',steps:[]});setPage('templateEditor')}} onDelete={deleteTemplate} onDuplicate={duplicateTemplate} onUseTemplate={useTemplate}/>
-          ):page==='deliveries'?(
-            <DeliveryPage projects={projects} deliveries={deliveries} setDeliveries={setDeliveries} onNavigateToProject={id=>{setSelectedId(id);setPage('projects')}}/>
+            <TemplatesPage templates={templates} onEdit={tmpl=>{setEditingTemplate(tmpl);setPage('templateEditor')}} onCreate={()=>{setEditingTemplate({id:`new_${uid()}`,name:'Nuovo Template',description:'',icon:'🚀',color:'#D4700A',steps:[]});setPage('templateEditor')}} onDelete={deleteTemplate} onDuplicate={duplicateTemplate} onUseTemplate={useTemplate} lastSaved={lastSavedTmpl}/>
+          ):page==='consegne'?(
+            <DeliveryPage projects={projects} deliveries={deliveries} onSetDelivery={setDelivery} onNavigateToProject={id=>{setSelectedId(id);setPage('projects')}}/>
           ):page==='backup'?(
             <div style={{flex:1,overflowY:'auto',padding:'28px',background:T.bg}}>
-              <div style={{maxWidth:600}}>
-                <div style={{fontSize:22,fontWeight:800,color:T.text,marginBottom:8}}>🗄️ Backup & Importazione</div>
-                <div style={{fontSize:14,color:T.textSub,marginBottom:24}}>Importa backup da WorkTrack standalone o esporta i dati correnti.</div>
-                <div style={{background:T.surface,border:`1.5px solid ${T.border}`,borderRadius:12,padding:20,marginBottom:16}}>
-                  <div style={{fontSize:13,color:T.textSub,fontWeight:700,letterSpacing:'0.06em',marginBottom:6}}>📤 ESPORTA FILE DI BACKUP</div>
-                  <div style={{fontSize:14,color:T.textSub,marginBottom:14}}>Scarica tutti i progetti e template come file JSON compatibile con WorkTrack.</div>
-                  <button onClick={()=>window.open(`${API}/export`,'_blank')} style={{background:T.accent,border:'none',borderRadius:10,color:'#fff',fontWeight:700,fontSize:15,padding:'11px 26px',cursor:'pointer'}}>📤 Scarica backup completo ({projects.length} progetti · {templates.length} template)</button>
+              <div style={{maxWidth:560}}>
+                <div style={{fontSize:20,fontWeight:800,color:T.text,marginBottom:4}}>💾 Backup & Importazione</div>
+                <div style={{fontSize:13,color:T.textMuted,marginBottom:24}}>Importa un backup da WorkTrack standalone o esporta i dati correnti.</div>
+                {importMsg&&<div style={{padding:'10px 14px',borderRadius:8,background:importMsg.startsWith('⚠')?T.redBg:T.greenBg,border:`1px solid ${importMsg.startsWith('⚠')?T.red:T.green}44`,color:importMsg.startsWith('⚠')?T.red:T.green,fontSize:13,marginBottom:16}}>{importMsg}</div>}
+                <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:12,padding:20,marginBottom:16}}>
+                  <div style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:6}}>📥 Importa backup</div>
+                  <div style={{fontSize:13,color:T.textMuted,marginBottom:16}}>Carica un file <code>.json</code> esportato da WorkTrack o da DMGDesk.</div>
+                  <div style={{display:'flex',gap:10}}>
+                    <input ref={importRef} type='file' accept='.json' style={{display:'none'}} onChange={e=>handleImport(e,'merge')}/>
+                    <button onClick={()=>importRef.current?.click()} style={{background:T.accent,border:'none',borderRadius:8,color:'#fff',fontWeight:700,fontSize:13,padding:'9px 18px',cursor:'pointer'}}>+ Importa (merge)</button>
+                    <input type='file' accept='.json' style={{display:'none'}} onChange={e=>handleImport(e,'replace')} id='import-replace'/>
+                    <button onClick={()=>document.getElementById('import-replace')?.click()} style={{background:'none',border:`1px solid ${T.border}`,borderRadius:8,color:T.textSub,fontWeight:600,fontSize:13,padding:'9px 18px',cursor:'pointer'}}>Sostituisci tutto</button>
+                  </div>
+                  <div style={{fontSize:11,color:T.textMuted,marginTop:10}}><b>Merge</b>: aggiunge senza cancellare (consigliato) · <b>Sostituisci</b>: cancella tutto e importa</div>
                 </div>
-                <div style={{background:T.surface,border:`1.5px solid ${T.border}`,borderRadius:12,padding:20}}>
-                  <div style={{fontSize:13,color:T.textSub,fontWeight:700,letterSpacing:'0.06em',marginBottom:6}}>📥 IMPORTA DA FILE</div>
-                  <div style={{fontSize:14,color:T.textSub,marginBottom:14}}>Carica un file .json esportato da WorkTrack. Puoi unire i dati o sostituire tutto.</div>
-                  <ImportSection onImport={handleBackupImport}/>
+                <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:12,padding:20,marginBottom:16}}>
+                  <div style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:6}}>📤 Esporta backup</div>
+                  <div style={{fontSize:13,color:T.textMuted,marginBottom:16}}>Scarica tutti i progetti e template come file JSON compatibile con WorkTrack.</div>
+                  <button onClick={handleExport} style={{background:T.blue,border:'none',borderRadius:8,color:'#fff',fontWeight:700,fontSize:13,padding:'9px 18px',cursor:'pointer'}}>💾 Scarica backup completo</button>
+                </div>
+                <div style={{background:T.blueBg,border:`1px solid ${T.blue}33`,borderRadius:10,padding:'14px 18px',display:'flex',gap:12,alignItems:'flex-start'}}>
+                  <span style={{fontSize:20,flexShrink:0}}>💡</span>
+                  <div style={{fontSize:13,color:T.blue,lineHeight:1.7}}>I dati vengono salvati in tempo reale su <code>P:\DMG_DMC_160U\worktrack_projects.json</code> condiviso tra web e desktop.</div>
                 </div>
               </div>
             </div>
           ):page==='archived'?(
             <div style={{flex:1,overflowY:'auto',padding:'24px 28px',background:T.bg}}>
               <div style={{fontSize:13,color:T.textSub,fontWeight:600,letterSpacing:'0.06em',marginBottom:18}}>ARCHIVIO — {archivedProjects.length} PROGETTI</div>
-              {archivedProjects.length===0&&<div style={{textAlign:'center',padding:'60px 0'}}><div style={{fontSize:48,marginBottom:16}}>📦</div><div style={{fontSize:18,fontWeight:700,color:T.text}}>Archivio vuoto</div></div>}
-              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill, minmax(320px, 1fr))',gap:14}}>
-                {archivedProjects.map(p=><ProjectCard key={p.id} project={p} onClick={()=>setSelectedId(p.id)} onDelete={deleteProject} onArchive={archiveProject} delivery={getDelivery(p.id)} onSetDelivery={setDelivery}/>)}
+              {archivedProjects.length===0&&(
+                <div style={{textAlign:'center',padding:'60px 0'}}>
+                  <div style={{fontSize:48,marginBottom:16}}>📦</div>
+                  <div style={{fontSize:18,fontWeight:700,color:T.text,marginBottom:8}}>Archivio vuoto</div>
+                  <div style={{fontSize:15,color:T.textSub}}>Usa il pulsante 📦 su un progetto per archiviarlo.</div>
+                </div>
+              )}
+              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill, minmax(300px, 1fr))',gap:14}}>
+                {archivedProjects.map(p=><ProjectCard key={p.id} project={p} onClick={()=>setSelectedId(p.id)} onDelete={deleteProject} onArchive={archiveProject} delivery={getDelivery(p.id)} onSetDelivery={(pid,date,toggle)=>{const d=getDelivery(pid);if(toggle!==undefined&&d)setDelivery(d.id,{delivered:toggle,deliveredAt:toggle?nowStr():null},true);else if(date!==null)d?setDelivery(d.id,{dueDate:date},true):setDelivery(uid(),{projectId:pid,dueDate:date,delivered:false},false);else if(d)setDelivery(d.id,{dueDate:''},true)}}/>)}
               </div>
             </div>
           ):(
@@ -1334,6 +1370,7 @@ export default function Progetti(){
                 <div style={{textAlign:'center',padding:'80px 0'}}>
                   <div style={{fontSize:48,marginBottom:16}}>🚀</div>
                   <div style={{fontSize:20,fontWeight:700,color:T.text,marginBottom:8}}>Nessun progetto ancora</div>
+                  <div style={{fontSize:15,color:T.textSub,marginBottom:24}}>Crea il tuo primo progetto per iniziare</div>
                   <button onClick={()=>setShowNewProject(true)} style={{background:T.accent,border:'none',borderRadius:10,color:'#fff',fontWeight:700,fontSize:16,padding:'12px 28px',cursor:'pointer'}}>+ Crea il primo progetto</button>
                 </div>
               )}
@@ -1346,11 +1383,15 @@ export default function Progetti(){
                   </div>
                 </div>
               )}
-              {sorted.length>0&&(
+              {inProgress.length>0&&(
                 <>
-                  <div style={{fontSize:13,color:T.textSub,fontWeight:700,letterSpacing:'0.06em',marginBottom:14}}>IN CORSO — {sorted.length} · ordinati per priorità</div>
+                  <div style={{fontSize:13,color:T.textSub,fontWeight:700,letterSpacing:'0.06em',marginBottom:14}}>IN CORSO — {inProgress.length} · ordinati per priorità</div>
                   <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill, minmax(320px, 1fr))',gap:14,marginBottom:32}}>
-                    {sorted.map(p=><ProjectCard key={p.id} project={p} onClick={()=>setSelectedId(p.id)} onDelete={deleteProject} onArchive={archiveProject} delivery={getDelivery(p.id)} onSetDelivery={setDelivery}/>)}
+                    {inProgress.map(p=>{
+                      const d=getDelivery(p.id)
+                      return <ProjectCard key={p.id} project={p} onClick={()=>setSelectedId(p.id)} onDelete={deleteProject} onArchive={archiveProject} delivery={d}
+                        onSetDelivery={(pid,date,toggle)=>{if(toggle!==undefined&&d)setDelivery(d.id,{delivered:toggle,deliveredAt:toggle?nowStr():null},true);else if(date!==null)d?setDelivery(d.id,{dueDate:date},true):setDelivery(uid(),{projectId:pid,dueDate:date,delivered:false},false);else if(d)setDelivery(d.id,{dueDate:''},true)}}/>
+                    })}
                   </div>
                 </>
               )}
@@ -1358,7 +1399,11 @@ export default function Progetti(){
                 <>
                   <div style={{fontSize:13,color:T.textSub,fontWeight:700,letterSpacing:'0.06em',marginBottom:14}}>COMPLETATI — {completed.length}</div>
                   <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill, minmax(320px, 1fr))',gap:14}}>
-                    {completed.map(p=><ProjectCard key={p.id} project={p} onClick={()=>setSelectedId(p.id)} onDelete={deleteProject} onArchive={archiveProject} delivery={getDelivery(p.id)} onSetDelivery={setDelivery}/>)}
+                    {completed.map(p=>{
+                      const d=getDelivery(p.id)
+                      return <ProjectCard key={p.id} project={p} onClick={()=>setSelectedId(p.id)} onDelete={deleteProject} onArchive={archiveProject} delivery={d}
+                        onSetDelivery={(pid,date,toggle)=>{if(toggle!==undefined&&d)setDelivery(d.id,{delivered:toggle,deliveredAt:toggle?nowStr():null},true);else if(date!==null)d?setDelivery(d.id,{dueDate:date},true):setDelivery(uid(),{projectId:pid,dueDate:date,delivered:false},false);else if(d)setDelivery(d.id,{dueDate:''},true)}}/>
+                    })}
                   </div>
                 </>
               )}
@@ -1368,67 +1413,9 @@ export default function Progetti(){
         <QuickTasksSidebar collapsed={sidebarCollapsed} onToggleCollapse={()=>setSidebarCollapsed(v=>!v)}/>
       </div>
 
-      {showNewProject&&<NewProjectModal onClose={()=>{setShowNewProject(false);setPreselectedTemplate(null)}} onCreate={p=>{addProject(p);setShowNewProject(false);setPreselectedTemplate(null)}} templates={templates} preselectedTemplate={preselectedTemplate}/>}
-    </div>
-  )
-}
-
-// ── ImportSection (usata nella pagina backup) ──────────────────────────────────
-function ImportSection({onImport}){
-  const[status,setStatus]=useState(null)
-  const[preview,setPreview]=useState(null)
-  const fileRef=useRef(null)
-
-  function handleFile(e){
-    const file=e.target.files?.[0];if(!file)return
-    const reader=new FileReader()
-    reader.onload=ev=>{
-      try{
-        const parsed=JSON.parse(ev.target.result)
-        if(!parsed._worktrack&&!parsed._worktrack_backup)throw new Error('File non riconosciuto')
-        if(!Array.isArray(parsed.projects)||!Array.isArray(parsed.templates))throw new Error('Struttura backup non valida')
-        setPreview({projects:parsed.projects,templates:parsed.templates,label:parsed.label})
-        setStatus(null)
-      }catch(err){setStatus({error:err.message})}
-    }
-    reader.readAsText(file)
-    e.target.value=''
-  }
-  function confirmImport(mode){
-    onImport(preview,mode)
-    setStatus({ok:`✓ ${preview.projects.length} progetti e ${preview.templates.length} template importati (${mode})`})
-    setPreview(null)
-  }
-
-  return(
-    <>
-      <input ref={fileRef} type='file' accept='.json' style={{display:'none'}} onChange={handleFile}/>
-      <button onClick={()=>fileRef.current?.click()} style={{background:T.surface2,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontWeight:700,fontSize:14,padding:'10px 22px',cursor:'pointer',display:'flex',alignItems:'center',gap:8}}>📂 Seleziona file backup...</button>
-      {status?.error&&<div style={{marginTop:12,background:T.redBg,border:`1px solid ${T.red}44`,borderRadius:8,padding:'10px 14px',fontSize:14,color:T.red,fontWeight:600}}>✕ {status.error}</div>}
-      {status?.ok&&<div style={{marginTop:12,background:T.greenBg,border:`1px solid ${T.green}44`,borderRadius:8,padding:'10px 14px',fontSize:14,color:T.green,fontWeight:600}}>{status.ok}</div>}
-      {preview&&(
-        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:200}} onClick={()=>setPreview(null)}>
-          <div onClick={e=>e.stopPropagation()} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:14,padding:'28px 32px',width:460,maxWidth:'92vw',boxShadow:'0 12px 48px rgba(0,0,0,0.2)'}}>
-            <div style={{fontSize:18,fontWeight:800,color:T.text,marginBottom:4}}>📥 Conferma importazione</div>
-            {preview.label&&<div style={{fontSize:13,color:T.textMuted,marginBottom:16}}>"{preview.label}"</div>}
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:22}}>
-              <div style={{background:T.surface2,borderRadius:8,padding:'12px 16px'}}><div style={{fontSize:22,fontWeight:800,color:T.text}}>{preview.projects.length}</div><div style={{fontSize:13,color:T.textSub}}>Progetti</div><div style={{fontSize:12,color:T.textMuted,marginTop:2}}>{preview.projects.filter(p=>!p.archived).length} attivi · {preview.projects.filter(p=>p.archived).length} archiviati</div></div>
-              <div style={{background:T.surface2,borderRadius:8,padding:'12px 16px'}}><div style={{fontSize:22,fontWeight:800,color:T.text}}>{preview.templates.length}</div><div style={{fontSize:13,color:T.textSub}}>Template</div></div>
-            </div>
-            <div style={{display:'flex',flexDirection:'column',gap:8,marginBottom:16}}>
-              <button onClick={()=>confirmImport('merge')} style={{background:T.surface2,border:`1.5px solid ${T.border}`,borderRadius:8,padding:'12px 16px',cursor:'pointer',textAlign:'left'}}>
-                <div style={{fontSize:14,fontWeight:700,color:T.text}}>🔀 Unisci ai dati esistenti</div>
-                <div style={{fontSize:12,color:T.textMuted,marginTop:2}}>Aggiunge nuovi elementi, aggiorna quelli con ID già esistente</div>
-              </button>
-              <button onClick={()=>confirmImport('replace')} style={{background:T.redBg,border:`1.5px solid ${T.red}44`,borderRadius:8,padding:'12px 16px',cursor:'pointer',textAlign:'left'}}>
-                <div style={{fontSize:14,fontWeight:700,color:T.red}}>⚠️ Sostituisci tutto</div>
-                <div style={{fontSize:12,color:`${T.red}99`,marginTop:2}}>I dati attuali vengono rimpiazzati completamente</div>
-              </button>
-            </div>
-            <button onClick={()=>setPreview(null)} style={{background:'none',border:`1px solid ${T.border}`,borderRadius:8,color:T.textSub,fontSize:14,padding:'9px 20px',cursor:'pointer',fontWeight:600,width:'100%'}}>Annulla</button>
-          </div>
-        </div>
+      {showNewProject&&(
+        <NewProjectModal onClose={()=>{setShowNewProject(false);setPreselectedTemplate(null)}} onCreate={p=>{addProject(p);setShowNewProject(false);setPreselectedTemplate(null)}} templates={templates} preselectedTemplate={preselectedTemplate}/>
       )}
-    </>
+    </div>
   )
 }

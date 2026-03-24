@@ -9,6 +9,7 @@ import HolderBussole     from './pages/HolderBussole'
 import Generatore        from './pages/Generatore'
 import AnalisiNC         from './pages/AnalisiNC'
 import InvioMacchina     from './pages/InvioMacchina'
+import Progetti          from './pages/Progetti'
 
 export default function App() {
   return (
@@ -32,6 +33,7 @@ export default function App() {
             <Route path="/analisi-nc"    element={<AnalisiNC />} />
             <Route path="/invia"          element={<InvioMacchina />} />
             <Route path="/magazzino"     element={<Smontati />} />
+            <Route path="/progetti"      element={<Progetti />} />
           </Routes>
         </main>
       </div>

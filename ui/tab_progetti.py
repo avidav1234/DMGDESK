@@ -772,7 +772,8 @@ class TabProgetti:
 
     def _render_fresatura(self, parent, project, task):
         programs = task.get("programs", [])
-        fres = [p for p in programs if p.get("tipoGruppo") != "ipm"]
+        ipm_pgm  = [p for p in programs if p.get("tipoGruppo") == "ipm"]
+        fres_pgm = [p for p in programs if p.get("tipoGruppo") != "ipm"]
         done_tot = sum(1 for p in programs if p.get("stato") == "completato")
         in_mac   = sum(1 for p in programs if p.get("stato") == "in_macchina")
 
@@ -780,6 +781,7 @@ class TabProgetti:
                       highlightbackground="#1D5FAD", highlightthickness=1)
         pf.pack(fill="x", padx=(28,0), pady=(3,6))
 
+        # ── Header principale ─────────────────────────────────────────────────
         ph = tk.Frame(pf, bg="#EAF1FB")
         ph.pack(fill="x", padx=8, pady=5)
         tk.Label(ph, text="⚙️ PROGRAMMI FRESATURA",
@@ -792,26 +794,9 @@ class TabProgetti:
             tk.Label(ph, text=f"{done_tot}/{len(programs)} completati",
                      font=("DM Sans",9,"bold"), fg=ck, bg="#EAF1FB").pack(side="left")
 
-        def _carica():
-            files = fd.askopenfilenames(title="Carica file MPF",
-                                         filetypes=[("MPF","*.MPF *.mpf"),("Tutti","*.*")])
-            for fpath in files:
-                fn = os.path.basename(fpath)
-                if not any(p.get("filename")==fn for p in programs):
-                    tokens = fn.replace(".MPF","").replace(".mpf","").split("_")
-                    programs.append({
-                        "id":uid(),"filename":fn,
-                        "numPgm":tokens[-1],"tipoGruppo":"fresatura",
-                        "utensile":"","diametro":"","tipoOp":"","dataPost":"",
-                        "stato":"da_fare","operatore":"","tempoStimato":"",
-                        "tempoInizio":None,"tempoFine":None,
-                    })
-            task["programs"] = programs
-            self._save_project(project)
-
-        # Badge anomalie
+        # Badge anomalie (solo fresatura)
         tools_db = getattr(self, "_tools_db_cache", {})
-        anomalie = [p for p in fres
+        anomalie = [p for p in fres_pgm
                     if p.get("stato")=="in_macchina" and p.get("utensile")
                     and self._classify_tool(p.get("utensile",""), tools_db) in ("mancante","fin_vita","disabilitato")]
         if anomalie:
@@ -819,12 +804,106 @@ class TabProgetti:
                      font=("DM Sans",9,"bold"), fg="#DC2626", bg="#FEE2E2",
                      padx=6, pady=1).pack(side="left", padx=6)
 
+        def _carica():
+            files = fd.askopenfilenames(title="Carica file MPF",
+                                         filetypes=[("MPF","*.MPF *.mpf"),("Tutti","*.*")])
+            for fpath in files:
+                fn = os.path.basename(fpath)
+                if not any(p.get("filename")==fn for p in programs):
+                    # Determina tipo automaticamente (IPM se contiene _IPM_)
+                    is_ipm = "_IPM_" in fn.upper()
+                    tokens = fn.replace(".MPF","").replace(".mpf","").split("_")
+                    ipm_idx = next((i for i,t in enumerate(tokens) if t.upper()=="IPM"), -1)
+                    num_pgm = tokens[ipm_idx+1] if ipm_idx >= 0 and ipm_idx+1 < len(tokens) else tokens[-1]
+                    programs.append({
+                        "id":uid(),"filename":fn,
+                        "numPgm":num_pgm,
+                        "tipoGruppo":"ipm" if is_ipm else "fresatura",
+                        "utensile":"","diametro":"","tipoOp":"","dataPost":"",
+                        "stato":"da_fare","operatore":"","tempoStimato":"",
+                        "tempoInizio":None,"tempoFine":None,
+                    })
+            task["programs"] = programs
+            self._save_project(project)
+
         tk.Button(ph, text="📂 Carica .MPF", command=_carica,
                   font=("DM Sans",9,"bold"), fg="#fff", bg=TC["blue"],
                   relief="flat", padx=6, pady=2, cursor="hand2").pack(side="right")
 
-        for pgm in fres:
-            self._render_program_row(pf, project, task, pgm, programs)
+        # ── Sezione TASTATURA IPM (viola) ─────────────────────────────────────
+        if ipm_pgm:
+            ipm_header = tk.Frame(pf, bg="#F3E8FF")
+            ipm_header.pack(fill="x")
+            done_ipm = sum(1 for p in ipm_pgm if p.get("stato")=="completato")
+
+            # Toggle collassa/espandi IPM
+            ipm_collapsed = tk.BooleanVar(value=True)
+            ipm_body = tk.Frame(pf, bg=pf.cget("bg"))
+
+            def _toggle_ipm(b=ipm_body, v=ipm_collapsed):
+                v.set(not v.get())
+                if v.get():
+                    b.pack_forget()
+                    toggle_ipm_btn.configure(text="▼")
+                else:
+                    b.pack(fill="x")
+                    toggle_ipm_btn.configure(text="▲")
+
+            tk.Label(ipm_header, text="📏", font=("Arial",9),
+                     bg="#F3E8FF").pack(side="left", padx=(6,2), pady=3)
+            tk.Label(ipm_header, text="TASTATURA (IPM)",
+                     font=("DM Sans",8,"bold"), fg="#6B21A8", bg="#F3E8FF").pack(side="left")
+            tk.Label(ipm_header, text=f"{done_ipm}/{len(ipm_pgm)}",
+                     font=("DM Sans",8), fg="#6B21A8", bg="#F3E8FF").pack(side="left", padx=4)
+            toggle_ipm_btn = tk.Button(ipm_header, text="▼",
+                     command=_toggle_ipm,
+                     font=("DM Sans",8), fg="#6B21A8", bg="#F3E8FF",
+                     relief="flat", cursor="hand2")
+            toggle_ipm_btn.pack(side="right", padx=4)
+
+            # IPM collassato di default — mostra solo se espanso
+            for pgm in ipm_pgm:
+                self._render_program_row(ipm_body, project, task, pgm, programs)
+
+        # ── Sezione FRESATURA (blu) ────────────────────────────────────────────
+        if fres_pgm and ipm_pgm:
+            # Header separatore solo se ci sono entrambi i gruppi
+            fres_header = tk.Frame(pf, bg="#E8F0FA")
+            fres_header.pack(fill="x")
+            done_fres = sum(1 for p in fres_pgm if p.get("stato")=="completato")
+
+            fres_collapsed = tk.BooleanVar(value=False)
+            fres_body = tk.Frame(pf, bg=pf.cget("bg"))
+            fres_body.pack(fill="x")
+
+            def _toggle_fres(b=fres_body, v=fres_collapsed):
+                v.set(not v.get())
+                if v.get():
+                    b.pack_forget()
+                    toggle_fres_btn.configure(text="▼")
+                else:
+                    b.pack(fill="x")
+                    toggle_fres_btn.configure(text="▲")
+
+            tk.Label(fres_header, text="⚙️", font=("Arial",9),
+                     bg="#E8F0FA").pack(side="left", padx=(6,2), pady=3)
+            tk.Label(fres_header, text="FRESATURA",
+                     font=("DM Sans",8,"bold"), fg="#1D5FAD", bg="#E8F0FA").pack(side="left")
+            tk.Label(fres_header, text=f"{done_fres}/{len(fres_pgm)}",
+                     font=("DM Sans",8), fg="#1D5FAD", bg="#E8F0FA").pack(side="left", padx=4)
+            toggle_fres_btn = tk.Button(fres_header, text="▲",
+                     command=_toggle_fres,
+                     font=("DM Sans",8), fg="#1D5FAD", bg="#E8F0FA",
+                     relief="flat", cursor="hand2")
+            toggle_fres_btn.pack(side="right", padx=4)
+
+            for pgm in fres_pgm:
+                self._render_program_row(fres_body, project, task, pgm, programs)
+
+        elif fres_pgm:
+            # Solo fresatura, nessun header separatore
+            for pgm in fres_pgm:
+                self._render_program_row(pf, project, task, pgm, programs)
 
     def _render_program_row(self, parent, project, task, pgm, programs):
         stato = pgm.get("stato","da_fare")

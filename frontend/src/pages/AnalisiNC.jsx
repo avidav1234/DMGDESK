@@ -1,80 +1,205 @@
-// pages/AnalisiNC.jsx — Analisi NC + Invio in macchina
+// pages/AnalisiNC.jsx — Flow identico al desktop:
+// 1. Aggiungi file → confronto automatico
+// 2. Inserisci nome cartella → Genera MAIN
+// 3. Invia tutto / Solo MAIN
+
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { api } from '../api/client'
 
+// ── Spinner ────────────────────────────────────────────────────────────────
+function Spinner({ small }) {
+  const sz = small ? 10 : 14
+  return <div style={{ width: sz, height: sz, border: `${small?1.5:2}px solid var(--border)`, borderTopColor: 'var(--cyan)', borderRadius: '50%', animation: 'spin 0.7s linear infinite', flexShrink: 0, display: 'inline-block' }} />
+}
+
+// ── Badge stato utensile ───────────────────────────────────────────────────
+function StatoBadge({ stato }) {
+  const cfg = {
+    ok:    { bg: 'rgba(22,163,74,0.10)',  color: '#15803d', label: '✓  OK'          },
+    manca: { bg: 'rgba(220,38,38,0.10)',  color: '#dc2626', label: '✕  Mancante'    },
+    disab: { bg: 'rgba(234,179,8,0.15)',  color: '#a16207', label: '⚠  Disabilitato' },
+  }[stato] || { bg: 'transparent', color: 'var(--text-dim)', label: stato }
+  return (
+    <span style={{ padding: '2px 8px', borderRadius: 4, fontSize: 11,
+      fontFamily: 'var(--font-mono)', fontWeight: 600,
+      background: cfg.bg, color: cfg.color }}>{cfg.label}</span>
+  )
+}
+
 export default function AnalisiNC() {
-  const [entries, setEntries] = useState([])
-  const [dragging, setDragging] = useState(false)
+  // ── File e analisi ────────────────────────────────────────────────────────
+  const [entries, setEntries]       = useState([])   // {id, file, status, result}
+  const [dragging, setDragging]     = useState(false)
   const inputRef = useRef()
-  const idRef = useRef(0)
+  const idRef    = useRef(0)
 
-  // ── Modal scaffale ─────────────────────────────────────
-  const [modal, setModal]               = useState(null)
-  const [holderInfo, setHolderInfo]     = useState(null)
-  const [loadingInfo, setLoadingInfo]   = useState(false)
-  const [selectedHolder, setSelectedHolder] = useState('')
-  const [addBusy, setAddBusy]           = useState(false)
-  const [addError, setAddError]         = useState(null)
-  const [globalSuccess, setGlobalSuccess] = useState(null)
+  // ── Stato confronto aggregato ─────────────────────────────────────────────
+  const [fonteDb, setFonteDb]       = useState('')
 
-  // ── Genera MAIN ────────────────────────────────────────
+  // ── Nome cartella (condiviso tra MAIN e invio) ───────────────────────────
   const [nomeCartella, setNomeCartella] = useState('')
-  const [selectedIds, setSelectedIds]   = useState(new Set())
-  const [mainPreview, setMainPreview]   = useState(null)
-  const [mainBusy, setMainBusy]         = useState(false)
-  const [mainError, setMainError]       = useState(null)
-  const [showPreview, setShowPreview]   = useState(false)
+
+  // ── Percorso salvataggio MAIN ─────────────────────────────────────────────
+  const [radiceNcInput, setRadiceNcInput] = useState('')
+  const [commessa, setCommessa]     = useState('')
+  const [posizione, setPosizione]   = useState('')
   const [cartelleRecenti, setCartelleRecenti] = useState([])
 
-  // Percorso salvataggio
-  const [radiceNc, setRadiceNc]         = useState(null)
-  const [radiceNcInput, setRadiceNcInput] = useState('')
-  const [radiceNcBusy, setRadiceNcBusy] = useState(false)
-  const [commessa, setCommessa]         = useState('')
-  const [posizione, setPosizione]       = useState('')
-  const [fase, setFase]                 = useState('')
-
-  const percorsoSalvataggio = radiceNcInput.trim() && commessa.trim() && posizione.trim()
-    ? [radiceNcInput.trim().replace(/[\\/]+$/, ''), commessa.trim(), posizione.trim(), ...(fase.trim() ? [fase.trim()] : [])].join('\\')
+  const percorso = radiceNcInput.trim() && commessa.trim() && posizione.trim()
+    ? [radiceNcInput.trim().replace(/[\\/]+$/, ''), commessa.trim(), posizione.trim()].join('\\')
     : ''
 
-  // ── Invio macchina ─────────────────────────────────────
-  // Il progetto è derivato automaticamente da commessa_posizione
-  const progetto = commessa.trim() && posizione.trim()
-    ? `${commessa.trim()}_${posizione.trim()}`
-    : ''
+  // ── MAIN ──────────────────────────────────────────────────────────────────
+  const [mainBusy, setMainBusy]           = useState(false)
+  const [mainError, setMainError]         = useState(null)
+  const [mainGeneratoFile, setMainGeneratoFile] = useState(null)
+  const [mainPreview, setMainPreview]     = useState(null)
+  const [showPreview, setShowPreview]     = useState(false)
 
-  const [machIp, setMachIp]         = useState('10.95.20.29')
-  const [machPort, setMachPort]     = useState(9999)
-  const [editingCfg, setEditingCfg] = useState(false)
-  const [checkResult, setCheckResult] = useState(null)   // {reachable, esistenti, dest_dir, error}
+  // ── Invio ─────────────────────────────────────────────────────────────────
+  const [machIp, setMachIp]           = useState('10.95.20.29')
+  const [machPort, setMachPort]       = useState(9999)
+  const [editingCfg, setEditingCfg]   = useState(false)
+  const [checkResult, setCheckResult] = useState(null)
   const [invioResults, setInvioResults] = useState([])
-  const [invioStatus, setInvioStatus]   = useState(null) // {type, msg}
-  const [checking, setChecking]         = useState(false)
-  const [sending, setSending]           = useState(false)
+  const [invioStatus, setInvioStatus] = useState(null)
+  const [checking, setChecking]       = useState(false)
+  const [sending, setSending]         = useState(false)
 
-  // Salva MAIN generato per includerlo nell'invio
-  const [mainGeneratoFile, setMainGeneratoFile] = useState(null)  // File object o null
+  // ── Modal scaffale ────────────────────────────────────────────────────────
+  const [modal, setModal]                       = useState(null)
+  const [holderInfo, setHolderInfo]             = useState(null)
+  const [loadingInfo, setLoadingInfo]           = useState(false)
+  const [selectedHolder, setSelectedHolder]     = useState('')
+  const [addBusy, setAddBusy]                   = useState(false)
+  const [addError, setAddError]                 = useState(null)
+  const [globalSuccess, setGlobalSuccess]       = useState(null)
 
   useEffect(() => {
-    api.getPercorsoNc()
-      .then(r => { if (r.percorso_nc_base) { setRadiceNc(r.percorso_nc_base); setRadiceNcInput(r.percorso_nc_base) } })
-      .catch(() => {})
-    api.cartelleRecenti()
-      .then(r => setCartelleRecenti(r.cartelle || []))
-      .catch(() => {})
-    api.getMachineConfig()
-      .then(r => { setMachIp(r.ip); setMachPort(r.port) })
-      .catch(() => {})
+    api.getPercorsoNc().then(r => { if (r.percorso_nc_base) setRadiceNcInput(r.percorso_nc_base) }).catch(() => {})
+    api.cartelleRecenti().then(r => setCartelleRecenti(r.cartelle || [])).catch(() => {})
+    api.getMachineConfig().then(r => { setMachIp(r.ip); setMachPort(r.port) }).catch(() => {})
   }, [])
 
-  const handleSalvaRadiceNc = async () => {
-    const val = radiceNcInput.trim().replace(/[\\/]+$/, '')
-    if (!val) return
-    setRadiceNcBusy(true)
-    try { const r = await api.setPercorsoNc(val); setRadiceNc(r.percorso_nc_base) }
-    catch (e) { setMainError(`Errore salvataggio: ${e.message}`) }
-    finally { setRadiceNcBusy(false) }
+  // ── File: aggiungi + analisi automatica ───────────────────────────────────
+  const addFiles = useCallback(async (files) => {
+    const valid = Array.from(files).filter(f => /\.(mpf|nc|spf)$/i.test(f.name))
+    if (!valid.length) return
+    const newEntries = valid.map(f => ({ id: ++idRef.current, file: f, status: 'analyzing', result: null, error: null }))
+    setEntries(prev => {
+      const names = new Set(prev.map(e => e.file.name))
+      return [...prev, ...newEntries.filter(e => !names.has(e.file.name))]
+    })
+    setCheckResult(null); setInvioResults([])
+
+    // Analisi automatica
+    for (const entry of newEntries) {
+      try {
+        const result = await api.analizzaNC(entry.file)
+        if (result.fonte_db) setFonteDb(result.fonte_db)
+        setEntries(prev => prev.map(e => e.id === entry.id ? { ...e, status: 'done', result } : e))
+      } catch (err) {
+        setEntries(prev => prev.map(e => e.id === entry.id ? { ...e, status: 'error', error: err.message } : e))
+      }
+    }
+  }, [])
+
+  const removeEntry = (id) => {
+    setEntries(prev => prev.filter(e => e.id !== id))
+    setCheckResult(null); setInvioResults([])
+  }
+
+  const clearAll = () => {
+    setEntries([]); setCheckResult(null); setInvioResults([])
+    setMainGeneratoFile(null); setMainPreview(null); setShowPreview(false)
+    setFonteDb(''); setGlobalSuccess(null)
+  }
+
+  // ── Dati aggregati ────────────────────────────────────────────────────────
+  const done         = entries.filter(e => e.status === 'done')
+  const analyzing    = entries.some(e => e.status === 'analyzing')
+  const allMancanti  = [...new Set(done.flatMap(e => e.result?.mancanti ?? []))]
+  const allDisab     = [...new Set(done.flatMap(e => e.result?.disabilitati ?? []))]
+  const allPresenti  = [...new Set(done.flatMap(e => e.result?.presenti_in_macchina ?? []))]
+  const totUtensili  = [...new Set([...allMancanti, ...allDisab, ...allPresenti])].length
+  const tuttoOk      = done.length > 0 && allMancanti.length === 0 && allDisab.length === 0
+
+  // File da inviare
+  const progetto = commessa.trim() && posizione.trim() ? `${commessa.trim()}_${posizione.trim()}` : nomeCartella.trim()
+  const fileDaInviare = [...done.map(e => e.file), ...(mainGeneratoFile ? [mainGeneratoFile] : [])]
+
+  // ── Modal scaffale ────────────────────────────────────────────────────────
+  const openModal = async (alias) => {
+    setModal({ alias }); setHolderInfo(null); setLoadingInfo(true); setAddError(null); setSelectedHolder('')
+    try {
+      const info = await api.infoAlias(alias)
+      setHolderInfo(info)
+      if (!info.ha_holder && info.holders_disponibili.length > 0) setSelectedHolder(info.holders_disponibili[0].alias_holder)
+    } catch (e) { setAddError(`${e.message}`) }
+    finally { setLoadingInfo(false) }
+  }
+  const closeModal = () => { setModal(null); setHolderInfo(null); setAddError(null); setSelectedHolder('') }
+  const handleAggiungi = async () => {
+    if (!modal) return
+    setAddBusy(true); setAddError(null)
+    try {
+      const result = await api.aggiungiAScaffale({ alias: modal.alias, holder_override: holderInfo?.ha_holder ? null : (selectedHolder || null) })
+      const r = modal.alias
+      setEntries(prev => prev.map(e => !e.result ? e : { ...e, result: { ...e.result, mancanti: (e.result.mancanti??[]).filter(a=>a!==r), totale_mancanti: ((e.result.mancanti??[]).filter(a=>a!==r)).length } }))
+      setGlobalSuccess(`${result.alias_finale} aggiunto a scaffale`)
+      closeModal()
+    } catch (e) { setAddError(e.message) }
+    finally { setAddBusy(false) }
+  }
+
+  // ── MAIN ──────────────────────────────────────────────────────────────────
+  const handleGeneraMain = async () => {
+    if (!nomeCartella.trim()) { setMainError('Inserisci il nome cartella'); return }
+    if (!percorso) { setMainError('Inserisci radice, commessa e posizione'); return }
+    if (!done.length) { setMainError('Carica almeno un file NC'); return }
+    const programmi = done.map(e => ({
+      nome_file: e.file.name,
+      utensile_principale: e.result?.utensili_nel_file?.[0]?.alias ?? '—',
+      num_cambi: e.result?.totale_file ?? 1,
+    }))
+    setMainBusy(true); setMainError(null)
+    try {
+      const res = await api.salvaMain({ nome_cartella: nomeCartella, percorso_cartella: percorso, programmi })
+      setGlobalSuccess(`✓ ${res.nome_file} salvato`)
+      const blob = new Blob([''], { type: 'text/plain' })
+      setMainGeneratoFile(new File([blob], res.nome_file, { type: 'text/plain' }))
+      api.cartelleRecenti().then(r => setCartelleRecenti(r.cartelle || [])).catch(() => {})
+      setCheckResult(null); setInvioResults([])
+    } catch (e) { setMainError(e.message) }
+    finally { setMainBusy(false) }
+  }
+
+  // ── Invio ─────────────────────────────────────────────────────────────────
+  const doCheck = async () => {
+    if (!progetto) { setInvioStatus({ type: 'warn', msg: 'Inserisci nome cartella o commessa+posizione' }); return }
+    setChecking(true); setCheckResult(null); setInvioResults([]); setInvioStatus(null)
+    try {
+      const r = await api.checkMacchina(progetto, fileDaInviare.map(f => f.name))
+      setCheckResult(r)
+      setInvioStatus(r.reachable
+        ? { type: 'ok', msg: `Connesso · ${r.esistenti.length} file già presenti` }
+        : { type: 'err', msg: `Non raggiungibile: ${r.error}` })
+    } catch (e) { setInvioStatus({ type: 'err', msg: e.message }) }
+    finally { setChecking(false) }
+  }
+
+  const doSend = async (soloMain = false) => {
+    const files = soloMain ? [mainGeneratoFile] : fileDaInviare
+    if (!files.length) return
+    setSending(true); setInvioResults([]); setInvioStatus(null)
+    try {
+      const r = await api.inviaMacchina(progetto, files)
+      setInvioResults(r.risultati)
+      setInvioStatus(r.n_err === 0
+        ? { type: 'ok',  msg: `✓ ${r.n_ok} file inviati` }
+        : { type: 'warn', msg: `${r.n_ok} OK · ${r.n_err} errori` })
+    } catch (e) { setInvioStatus({ type: 'err', msg: e.message }) }
+    finally { setSending(false) }
   }
 
   const saveMachCfg = async () => {
@@ -82,607 +207,344 @@ export default function AnalisiNC() {
     catch (e) { setInvioStatus({ type: 'err', msg: e.message }) }
   }
 
-  // ── File management ────────────────────────────────────
-  const addFiles = useCallback((files) => {
-    const valid = Array.from(files).filter(f => /\.(mpf|nc|spf)$/i.test(f.name))
-    if (!valid.length) return
-    setEntries(prev => [...prev, ...valid.map(f => ({ id: ++idRef.current, file: f, status: 'pending', result: null, error: null }))])
-    setCheckResult(null); setInvioResults([])
-  }, [])
-
-  const removeEntry = (id) => { setEntries(prev => prev.filter(e => e.id !== id)); setCheckResult(null); setInvioResults([]) }
-  const clearAll = () => { setEntries([]); setCheckResult(null); setInvioResults([]); setMainGeneratoFile(null) }
-
-  const analyzeAll = async () => {
-    const pending = entries.filter(e => e.status === 'pending' || e.status === 'error')
-    for (const entry of pending) {
-      setEntries(prev => prev.map(e => e.id === entry.id ? { ...e, status: 'analyzing' } : e))
-      try {
-        const result = await api.analizzaNC(entry.file)
-        setEntries(prev => prev.map(e => e.id === entry.id ? { ...e, status: 'done', result } : e))
-      } catch (err) {
-        setEntries(prev => prev.map(e => e.id === entry.id ? { ...e, status: 'error', error: err.message } : e))
-      }
-    }
+  // ── stili comuni ──────────────────────────────────────────────────────────
+  const inputStyle = {
+    padding: '6px 10px', borderRadius: 6, fontSize: 12,
+    background: 'var(--bg-base)', border: '1px solid var(--border)',
+    color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', outline: 'none',
+  }
+  const btnPrimary = (disabled) => ({
+    padding: '7px 16px', borderRadius: 6, fontSize: 12, fontWeight: 700,
+    cursor: disabled ? 'not-allowed' : 'pointer',
+    background: disabled ? 'var(--bg-hover)' : 'var(--navy-700)',
+    border: 'none', color: disabled ? 'var(--text-dim)' : 'white',
+    transition: 'all 0.15s',
+  })
+  const btnGhost = {
+    padding: '7px 14px', borderRadius: 6, fontSize: 12,
+    cursor: 'pointer', background: 'transparent',
+    border: '1px solid var(--border)', color: 'var(--text-secondary)',
   }
 
-  // ── Modal scaffale ─────────────────────────────────────
-  const openModal = async (alias) => {
-    setModal({ alias }); setHolderInfo(null); setLoadingInfo(true); setAddError(null); setSelectedHolder('')
-    try {
-      const info = await api.infoAlias(alias)
-      setHolderInfo(info)
-      if (!info.ha_holder && info.holders_disponibili.length > 0) setSelectedHolder(info.holders_disponibili[0].alias_holder)
-    } catch (e) { setAddError(`Impossibile caricare info alias: ${e.message}`) }
-    finally { setLoadingInfo(false) }
-  }
-
-  const closeModal = () => { setModal(null); setHolderInfo(null); setAddError(null); setSelectedHolder('') }
-
-  const handleAggiungi = async () => {
-    if (!modal) return
-    setAddBusy(true); setAddError(null)
-    try {
-      const result = await api.aggiungiAScaffale({ alias: modal.alias, holder_override: holderInfo?.ha_holder ? null : (selectedHolder || null) })
-      const aliasRimosso = modal.alias
-      setEntries(prev => prev.map(e => {
-        if (!e.result) return e
-        const nuoviMancanti = (e.result.mancanti ?? []).filter(a => a !== aliasRimosso)
-        return { ...e, result: { ...e.result, mancanti: nuoviMancanti, totale_mancanti: nuoviMancanti.length } }
-      }))
-      setGlobalSuccess(`${result.alias_finale} aggiunto a scaffale`)
-      closeModal()
-    } catch (e) { setAddError(e.message) }
-    finally { setAddBusy(false) }
-  }
-
-  // ── Genera MAIN ────────────────────────────────────────
-  const toggleSelectEntry = (id) => {
-    setSelectedIds(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })
-    setMainPreview(null); setMainError(null)
-  }
-
-  const buildProgrammi = () =>
-    done.filter(e => selectedIds.has(e.id)).map(e => ({
-      nome_file: e.file.name,
-      utensile_principale: e.result?.utensili_nel_file?.[0]?.alias ?? '—',
-      num_cambi: e.result?.totale_file ?? 1,
-    }))
-
-  const handleAnteprimaMain = async () => {
-    if (!nomeCartella.trim()) { setMainError('Inserisci il nome della cartella in macchina'); return }
-    const programmi = buildProgrammi()
-    if (!programmi.length) { setMainError('Seleziona almeno un programma'); return }
-    setMainBusy(true); setMainError(null)
-    try { const res = await api.anteprimaMain({ nome_cartella: nomeCartella, programmi }); setMainPreview(res); setShowPreview(true) }
-    catch (e) { setMainError(e.message) }
-    finally { setMainBusy(false) }
-  }
-
-  const handleGeneraMain = async () => {
-    if (!nomeCartella.trim()) { setMainError('Inserisci il nome della cartella'); return }
-    if (!percorsoSalvataggio.trim()) { setMainError('Inserisci il percorso base'); return }
-    const programmi = buildProgrammi()
-    if (!programmi.length) { setMainError('Seleziona almeno un programma'); return }
-    setMainBusy(true); setMainError(null)
-    try {
-      const res = await api.salvaMain({ nome_cartella: nomeCartella, percorso_cartella: percorsoSalvataggio, programmi })
-      setGlobalSuccess(`✓ ${res.nome_file} salvato in ${res.percorso_file}`)
-      setShowPreview(false)
-      // Crea un File object fittizio per includerlo nell'invio
-      const mainContent = mainPreview?.contenuto || ''
-      const mainBlob = new Blob([mainContent], { type: 'text/plain' })
-      setMainGeneratoFile(new File([mainBlob], res.nome_file, { type: 'text/plain' }))
-      api.cartelleRecenti().then(r => setCartelleRecenti(r.cartelle || [])).catch(() => {})
-      setCheckResult(null); setInvioResults([])
-    } catch (e) { setMainError(e.message) }
-    finally { setMainBusy(false) }
-  }
-
-  // ── Invio macchina ─────────────────────────────────────
-  // File da inviare = file analizzati (done) + MAIN generato (se presente)
-  const fileDaInviare = [
-    ...entries.filter(e => e.status === 'done').map(e => e.file),
-    ...(mainGeneratoFile ? [mainGeneratoFile] : []),
-  ]
-
-  const doCheck = async () => {
-    if (!progetto.trim()) { setInvioStatus({ type: 'warn', msg: 'Inserisci commessa e posizione per derivare la cartella macchina' }); return }
-    if (!fileDaInviare.length) { setInvioStatus({ type: 'warn', msg: 'Analizza almeno un file prima di inviare' }); return }
-    setChecking(true); setCheckResult(null); setInvioResults([]); setInvioStatus(null)
-    try {
-      const r = await api.checkMacchina(progetto, fileDaInviare.map(f => f.name))
-      setCheckResult(r)
-      if (!r.reachable) setInvioStatus({ type: 'err', msg: `Server non raggiungibile: ${r.error}` })
-      else setInvioStatus({ type: 'ok', msg: `Connesso — ${r.esistenti.length} file già presenti · cartella: ${r.dest_dir}` })
-    } catch (e) { setInvioStatus({ type: 'err', msg: e.message }) }
-    finally { setChecking(false) }
-  }
-
-  const doSend = async () => {
-    if (!checkResult?.reachable) return
-    setSending(true); setInvioResults([]); setInvioStatus(null)
-    try {
-      const r = await api.inviaMacchina(progetto, fileDaInviare)
-      setInvioResults(r.risultati)
-      if (r.n_err === 0) setInvioStatus({ type: 'ok', msg: `✓ ${r.n_ok} file inviati con successo` })
-      else setInvioStatus({ type: 'warn', msg: `${r.n_ok} inviati, ${r.n_err} errori` })
-    } catch (e) { setInvioStatus({ type: 'err', msg: e.message }) }
-    finally { setSending(false) }
-  }
-
-  const fileInvioState = (filename) => {
-    if (invioResults.length) {
-      const r = invioResults.find(r => r.filename === filename)
-      if (r) return r.ok ? 'inviato' : 'errore'
-    }
-    if (checkResult?.esistenti?.includes(filename)) return 'esistente'
-    if (checkResult?.reachable) return 'nuovo'
-    return 'pending'
-  }
-
-  // ── Derivati ───────────────────────────────────────────
-  const done        = entries.filter(e => e.status === 'done')
-  const conMancanti = done.filter(e => (e.result?.totale_mancanti ?? 0) > 0)
-  const allMancanti  = [...new Set(done.flatMap(e => e.result?.mancanti ?? []))]
-  const allDisabilitati = [...new Set(done.flatMap(e => e.result?.disabilitati ?? []))]
-  const hasPending  = entries.some(e => e.status === 'pending' || e.status === 'error')
-  const isRunning   = entries.some(e => e.status === 'analyzing')
-
-  const stateColor = { nuovo: 'var(--green)', esistente: 'var(--amber)', inviato: 'var(--cyan)', errore: 'var(--red)', pending: 'var(--text-dim)' }
-  const stateLabel = { nuovo: '🟢 Nuovo', esistente: '🟡 Da sovrascrivere', inviato: '✅ Inviato', errore: '❌ Errore', pending: '—' }
-
+  // ── Layout ────────────────────────────────────────────────────────────────
   return (
-    <div className="fade-in" style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 0 }}>
 
-      {/* Banner successo */}
-      {globalSuccess && (
-        <div style={{ background: 'rgba(0,255,136,0.08)', border: '1px solid rgba(0,255,136,0.25)', borderRadius: 'var(--radius-sm)', padding: '10px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'var(--green)', fontSize: 13, fontFamily: 'var(--font-mono)' }}>
-          <span>✓ {globalSuccess}</span>
-          <button onClick={() => setGlobalSuccess(null)} style={{ background: 'none', border: 'none', color: 'var(--green)', cursor: 'pointer', fontSize: 16 }}>✕</button>
-        </div>
-      )}
+      {/* ── Top bar ── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 0 8px', flexShrink: 0 }}>
 
-      {/* ── 1. DROPZONE ── */}
-      <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-        <div
-          onClick={() => inputRef.current.click()}
+        {/* Drop zone compatta */}
+        <div onClick={() => inputRef.current?.click()}
           onDragOver={e => { e.preventDefault(); setDragging(true) }}
           onDragLeave={() => setDragging(false)}
           onDrop={e => { e.preventDefault(); setDragging(false); addFiles(e.dataTransfer.files) }}
-          style={{ flex: 1, border: `1px dashed ${dragging ? 'var(--cyan)' : 'var(--border-bright)'}`, borderRadius: 'var(--radius)', padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 14, cursor: 'pointer', background: dragging ? 'var(--cyan-glow)' : 'var(--bg-card)', transition: 'all var(--t-med)' }}
-        >
-          <input ref={inputRef} type="file" accept=".mpf,.nc,.spf" multiple style={{ display: 'none' }} onChange={e => { addFiles(e.target.files); e.target.value = '' }} />
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style={{ flexShrink: 0, color: 'var(--text-secondary)' }}>
-            <path d="M10 3v10M7 6l3-3 3 3M3 15h14" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 600 }}>Trascina i file NC</div>
-            <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 1 }}>.MPF · .NC · .SPF — più file insieme</div>
-          </div>
+          style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 16px',
+            border: `1.5px dashed ${dragging ? 'var(--cyan)' : 'var(--border-bright)'}`,
+            borderRadius: 8, cursor: 'pointer', background: dragging ? 'var(--cyan-glow)' : 'var(--bg-card)',
+            transition: 'all 0.15s', flexShrink: 0 }}>
+          <input ref={inputRef} type="file" accept=".mpf,.nc,.spf" multiple style={{ display: 'none' }}
+            onChange={e => { addFiles(e.target.files); e.target.value = '' }} />
+          <span style={{ fontSize: 14 }}>+</span>
+          <span style={{ fontSize: 12, fontWeight: 600 }}>Aggiungi file</span>
+          <span style={{ fontSize: 10, color: 'var(--text-dim)' }}>MPF · NC · SPF</span>
         </div>
+
         {entries.length > 0 && (
-          <>
-            <button className="btn btn-primary" onClick={analyzeAll} disabled={!hasPending || isRunning} style={{ flexShrink: 0 }}>
-              {isRunning ? <><Spinner small /> Analisi...</> : `Analizza (${entries.filter(e => e.status === 'pending' || e.status === 'error').length})`}
-            </button>
-            <button className="btn btn-ghost" onClick={clearAll} disabled={isRunning} style={{ flexShrink: 0 }}>Pulisci</button>
-          </>
+          <button onClick={clearAll} style={btnGhost}>Reset</button>
+        )}
+
+        {/* Spinner analisi */}
+        {analyzing && <span style={{ fontSize: 12, color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: 6 }}><Spinner small /> Analisi...</span>}
+
+        {/* Banner stato aggregato */}
+        {done.length > 0 && !analyzing && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 4 }}>
+            {tuttoOk
+              ? <span style={{ fontSize: 12, fontWeight: 700, color: '#15803d' }}>✅ Tutti i {totUtensili} utensili presenti</span>
+              : <span style={{ fontSize: 12, fontWeight: 700, color: '#dc2626' }}>
+                  {allMancanti.length > 0 && `✕ ${allMancanti.length} mancanti`}
+                  {allMancanti.length > 0 && allDisab.length > 0 && '  '}
+                  {allDisab.length > 0 && `⚠ ${allDisab.length} disabilitati`}
+                  <span style={{ color: 'var(--text-dim)', fontWeight: 400, marginLeft: 8 }}>di {totUtensili}</span>
+                </span>
+            }
+            {fonteDb && <span style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>· {fonteDb}</span>}
+          </div>
+        )}
+
+        {/* Spazio */}
+        <div style={{ flex: 1 }} />
+
+        {/* Invia tutto */}
+        <button onClick={doCheck} disabled={checking || sending || !fileDaInviare.length || !progetto}
+          style={{ ...btnGhost, fontSize: 12 }}>
+          {checking ? '⏳' : '🔍'} Verifica
+        </button>
+        <button onClick={() => doSend(false)}
+          disabled={!checkResult?.reachable || sending || !fileDaInviare.length || !progetto}
+          style={{ padding: '7px 14px', borderRadius: 6, fontSize: 12, fontWeight: 700,
+            cursor: (!checkResult?.reachable || sending) ? 'not-allowed' : 'pointer',
+            background: checkResult?.reachable ? 'rgba(22,163,74,0.12)' : 'var(--bg-hover)',
+            border: `1px solid ${checkResult?.reachable ? 'rgba(22,163,74,0.35)' : 'var(--border)'}`,
+            color: checkResult?.reachable ? '#15803d' : 'var(--text-dim)' }}>
+          {sending ? '⏳' : '📤'} Invia tutto
+        </button>
+        {mainGeneratoFile && (
+          <button onClick={() => doSend(true)} disabled={!checkResult?.reachable || sending || !progetto}
+            style={{ padding: '7px 14px', borderRadius: 6, fontSize: 12, fontWeight: 700,
+              cursor: (!checkResult?.reachable || sending) ? 'not-allowed' : 'pointer',
+              background: checkResult?.reachable ? 'rgba(59,130,246,0.10)' : 'var(--bg-hover)',
+              border: `1px solid ${checkResult?.reachable ? 'rgba(59,130,246,0.35)' : 'var(--border)'}`,
+              color: checkResult?.reachable ? '#1d4ed8' : 'var(--text-dim)' }}>
+            📤 Solo MAIN
+          </button>
         )}
       </div>
 
-      {/* Pillole file */}
-      {entries.length > 0 && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-          {entries.map(e => {
-            const n = e.result?.totale_mancanti ?? 0
-            const color = e.status === 'analyzing' ? 'var(--text-dim)' : e.status === 'error' ? 'var(--red)' : e.status === 'done' && n > 0 ? 'var(--red)' : e.status === 'done' ? 'var(--green)' : 'var(--text-dim)'
-            return (
-              <div key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '5px 10px', background: 'var(--bg-card)', border: `1px solid ${e.status === 'done' && n > 0 ? 'rgba(255,68,85,0.3)' : 'var(--border)'}`, borderRadius: 'var(--radius-sm)', fontSize: 12 }}>
-                {e.status === 'analyzing' ? <Spinner small /> : <div style={{ width: 6, height: 6, borderRadius: '50%', background: color, flexShrink: 0 }} />}
-                <span className="mono" style={{ color: 'var(--text-primary)' }}>{e.file.name}</span>
-                {e.status === 'done' && n > 0 && <span style={{ color: 'var(--red)', fontWeight: 700 }}>{n}×</span>}
-                <button onClick={() => removeEntry(e.id)} disabled={e.status === 'analyzing'} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', padding: '0 2px', fontSize: 14, lineHeight: 1, marginLeft: 2 }}>×</button>
-              </div>
-            )
-          })}
+      {/* Status invio */}
+      {invioStatus && (
+        <div style={{ padding: '6px 12px', borderRadius: 6, fontSize: 12, marginBottom: 6, flexShrink: 0,
+          background: invioStatus.type==='ok' ? 'rgba(22,163,74,0.07)' : invioStatus.type==='err' ? 'rgba(220,38,38,0.07)' : 'rgba(234,179,8,0.07)',
+          border: `1px solid ${invioStatus.type==='ok' ? 'rgba(22,163,74,0.2)' : invioStatus.type==='err' ? 'rgba(220,38,38,0.2)' : 'rgba(234,179,8,0.2)'}`,
+          color: invioStatus.type==='ok' ? '#15803d' : invioStatus.type==='err' ? '#dc2626' : '#a16207' }}>
+          {invioStatus.msg}
         </div>
       )}
 
-      {/* ── 2. RISULTATI ANALISI ── */}
-      {done.length > 0 && (
-        <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {/* Sommario */}
-          {(() => {
-            const fonteDb = done[0]?.result?.fonte_db || ''
-            const totMancanti = done.reduce((s,e) => s + (e.result?.mancanti?.length ?? 0), 0)
-            const totDisab    = done.reduce((s,e) => s + (e.result?.disabilitati?.length ?? 0), 0)
-            const totUtensili = done.reduce((s,e) => s + (e.result?.totale_file ?? 0), 0)
-            const tutto_ok    = totMancanti === 0 && totDisab === 0
-            return (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '12px 16px', background: tutto_ok ? 'rgba(0,255,136,0.06)' : 'rgba(255,68,85,0.06)', border: `1px solid ${tutto_ok ? 'rgba(0,255,136,0.2)' : 'rgba(255,68,85,0.2)'}`, borderRadius: 'var(--radius)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                  <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-                    <span className="mono" style={{ color: 'var(--cyan)', fontWeight: 700 }}>{done.length}</span> file ·{' '}
-                    <span className="mono" style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{totUtensili}</span> utensili
-                  </span>
-                  {tutto_ok
-                    ? <span style={{ color: 'var(--green)', fontWeight: 700, fontSize: 13 }}>✅ Tutti presenti in macchina</span>
-                    : <span style={{ color: 'var(--red)', fontWeight: 700, fontSize: 13 }}>
-                        {totMancanti > 0 && `❌ ${totMancanti} mancanti`}
-                        {totMancanti > 0 && totDisab > 0 && '  '}
-                        {totDisab > 0 && `⚠ ${totDisab} disabilitati`}
-                      </span>
-                  }
-                </div>
-                {fonteDb && (
-                  <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: '0.04em' }}>
-                    Confronto da: {fonteDb}
-                  </div>
-                )}
-              </div>
-            )
-          })()}
-
-          {/* Mancanti */}
-          {allMancanti.length > 0 && (
-            <div style={{ background: 'rgba(255,68,85,0.06)', border: '1px solid rgba(255,68,85,0.2)', borderRadius: 'var(--radius)', padding: '14px 16px' }}>
-              <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--red)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 6 }}>
-                Utensili mancanti — clicca per aggiungere a scaffale
-              </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {allMancanti.map(a => (
-                  <button key={a} onClick={() => openModal(a)}
-                    style={{ padding: '5px 14px', background: 'rgba(255,68,85,0.10)', border: '1px solid rgba(255,68,85,0.25)', borderRadius: 'var(--radius-sm)', fontSize: 13, fontFamily: 'var(--font-mono)', color: 'var(--red)', fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s' }}
-                    onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,68,85,0.20)'; e.currentTarget.style.borderColor = 'rgba(255,68,85,0.5)' }}
-                    onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,68,85,0.10)'; e.currentTarget.style.borderColor = 'rgba(255,68,85,0.25)' }}
-                  >{a}<span style={{ marginLeft: 6, fontSize: 10, opacity: 0.7 }}>+ scaffale</span></button>
-                ))}
-              </div>
-              <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                {conMancanti.map(e => (
-                  <div key={e.id} style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                    <span className="mono" style={{ color: 'var(--text-primary)' }}>{e.file.name}</span>{' → '}
-                    {(e.result?.mancanti ?? []).map(a => <span key={a} className="mono" style={{ color: 'var(--red)', marginRight: 6 }}>{a}</span>)}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+      {/* Successo */}
+      {globalSuccess && (
+        <div style={{ padding: '6px 12px', borderRadius: 6, fontSize: 12, marginBottom: 6, flexShrink: 0,
+          background: 'rgba(22,163,74,0.07)', border: '1px solid rgba(22,163,74,0.2)', color: '#15803d',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>✓ {globalSuccess}</span>
+          <button onClick={() => setGlobalSuccess(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#15803d', fontSize: 14 }}>✕</button>
         </div>
       )}
 
-      {/* Stato vuoto */}
-      {entries.length === 0 && (
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 10, color: 'var(--text-dim)' }}>
-          <svg width="40" height="40" viewBox="0 0 40 40" fill="none" opacity="0.25">
-            <rect x="8" y="4" width="24" height="32" rx="3" stroke="currentColor" strokeWidth="1.5" />
-            <path d="M14 14h12M14 20h12M14 26h7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-          </svg>
-          <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Trascina i file NC per iniziare</div>
-        </div>
-      )}
+      {/* ── Corpo: due colonne ── */}
+      <div style={{ flex: 1, display: 'flex', gap: 10, minHeight: 0 }}>
 
-      {/* ── 3. PERCORSO + COMMESSA/POSIZIONE (sempre visibile dopo analisi) ── */}
-      {done.length > 0 && (
-        <div className="fade-in" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 2 }}>Percorso e cartella macchina</div>
+        {/* ── Colonna sinistra: file + risultati ── */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 }}>
 
-          {/* Radice */}
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', width: 90, flexShrink: 0 }}>RADICE</span>
-            <input type="text" value={radiceNcInput} onChange={e => setRadiceNcInput(e.target.value)} onBlur={handleSalvaRadiceNc} onKeyDown={e => e.key === 'Enter' && handleSalvaRadiceNc()} placeholder="P:\DMG_DMC_160U"
-              style={{ background: 'transparent', border: 'none', borderBottom: '1px solid var(--border)', padding: '2px 4px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', fontSize: 11, width: 260, outline: 'none' }}
-              onFocus={e => e.target.style.borderBottomColor = 'var(--cyan)'} />
-            {radiceNcBusy && <span style={{ fontSize: 10, color: 'var(--text-dim)' }}>...</span>}
-          </div>
-
-          {/* Commessa + posizione */}
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', width: 90, flexShrink: 0 }}>COMMESSA</span>
-            <input type="text" value={commessa} onChange={e => { setCommessa(e.target.value.replace(/[^a-zA-Z0-9_\-]/g, '')); setMainError(null); setCheckResult(null) }} placeholder="4348"
-              style={{ background: 'var(--bg-base)', border: '1px solid var(--border-bright)', borderRadius: 'var(--radius-sm)', padding: '6px 10px', color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 700, width: 100, outline: 'none' }}
-              onFocus={e => e.target.style.borderColor = 'var(--cyan)'} onBlur={e => e.target.style.borderColor = 'var(--border-bright)'} />
-            <span style={{ fontSize: 13, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>╲</span>
-            <input type="text" value={posizione} onChange={e => { setPosizione(e.target.value.replace(/[^a-zA-Z0-9_\-]/g, '')); setMainError(null); setCheckResult(null) }} placeholder="0221"
-              style={{ background: 'var(--bg-base)', border: '1px solid var(--border-bright)', borderRadius: 'var(--radius-sm)', padding: '6px 10px', color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 700, width: 100, outline: 'none' }}
-              onFocus={e => e.target.style.borderColor = 'var(--cyan)'} onBlur={e => e.target.style.borderColor = 'var(--border-bright)'} />
-            <span style={{ fontSize: 13, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>╲</span>
-            <input type="text" value={fase} onChange={e => { setFase(e.target.value.replace(/[^a-zA-Z0-9_\-]/g, '')); setMainError(null) }} placeholder="Fase-2 (opz.)"
-              style={{ background: 'var(--bg-base)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '6px 10px', color: fase ? 'var(--text-primary)' : 'var(--text-dim)', fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: fase ? 700 : 400, width: 130, outline: 'none' }}
-              onFocus={e => e.target.style.borderColor = 'var(--cyan)'} onBlur={e => e.target.style.borderColor = 'var(--border)'} />
-            {cartelleRecenti.slice(0, 4).map(c => {
-              const parts = c.replace(/\\/g, '/').split('/'); const pos = parts.at(-1) || ''; const com = parts.at(-2) || ''
-              return (
-                <button key={c} onClick={() => { setCommessa(com); setPosizione(pos); setMainError(null); setCheckResult(null) }}
-                  style={{ background: commessa === com && posizione === pos ? 'rgba(0,225,255,0.12)' : 'var(--bg-base)', border: `1px solid ${commessa === com && posizione === pos ? 'var(--cyan)' : 'var(--border)'}`, borderRadius: 'var(--radius-sm)', padding: '3px 10px', fontSize: 11, fontFamily: 'var(--font-mono)', color: commessa === com && posizione === pos ? 'var(--cyan)' : 'var(--text-secondary)', cursor: 'pointer' }}>
-                  {com}\{pos}
-                </button>
-              )
-            })}
-          </div>
-
-          {/* Cartella CNC */}
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-            <label style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', flexShrink: 0, width: 90 }}>CARTELLA CNC</label>
-            <input type="text" value={nomeCartella} onChange={e => { setNomeCartella(e.target.value); setMainPreview(null); setMainError(null) }} placeholder="es. Fase-3"
-              style={{ background: 'var(--bg-base)', border: '1px solid var(--border-bright)', borderRadius: 'var(--radius-sm)', padding: '6px 10px', color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 700, width: 160, outline: 'none' }}
-              onFocus={e => e.target.style.borderColor = 'var(--cyan)'} onBlur={e => e.target.style.borderColor = 'var(--border-bright)'} />
-            <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>nome WPD (EXTCALL)</span>
-          </div>
-
-          {/* Preview percorso */}
-          {percorsoSalvataggio && nomeCartella.trim() && (
-            <div style={{ paddingLeft: 98, fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--green)' }}>
-              → {percorsoSalvataggio}\0_MAIN_{nomeCartella.trim().toUpperCase()}.MPF
-            </div>
-          )}
-
-          {/* Cartella macchina derivata */}
-          {progetto && (
-            <div style={{ paddingLeft: 98, fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
-              cartella macchina: <span style={{ color: 'var(--cyan)' }}>{progetto}</span>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── 4. GENERA MAIN ── */}
-      {done.length > 0 && (
-        <div className="fade-in" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ color: 'var(--cyan)', flexShrink: 0 }}>
-              <path d="M2 13V3l5 2.5L12 3v10l-5-2.5L2 13Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
-            </svg>
-            <span style={{ fontSize: 13, fontWeight: 700 }}>Genera File MAIN</span>
-            <span style={{ fontSize: 11, color: 'var(--text-dim)', marginLeft: 4 }}>(opzionale)</span>
-            {mainGeneratoFile && (
-              <span style={{ fontSize: 11, color: 'var(--green)', fontFamily: 'var(--font-mono)', marginLeft: 8 }}>
-                ✓ {mainGeneratoFile.name} — sarà incluso nell'invio
-              </span>
-            )}
-          </div>
-
-          {/* Selezione programmi */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-            {done.map(e => {
-              const n = e.result?.totale_mancanti ?? 0; const sel = selectedIds.has(e.id)
-              return (
-                <label key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 12px', background: sel ? 'rgba(0,225,255,0.06)' : 'var(--bg-base)', border: `1px solid ${sel ? 'var(--cyan)' : 'var(--border)'}`, borderRadius: 'var(--radius-sm)', cursor: 'pointer', transition: 'all 0.15s' }}>
-                  <input type="checkbox" checked={sel} onChange={() => toggleSelectEntry(e.id)} style={{ accentColor: 'var(--cyan)', width: 13, height: 13, flexShrink: 0 }} />
-                  <span className="mono" style={{ fontSize: 13, fontWeight: 600, flex: 1 }}>{e.file.name}</span>
-                  <span style={{ fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>{e.result?.totale_file ?? 0} utensili</span>
-                  {n > 0 && <span style={{ fontSize: 11, color: 'var(--red)', fontWeight: 700 }}>⚠ {n} mancanti</span>}
-                  {n === 0 && <span style={{ fontSize: 11, color: 'var(--green)' }}>✓ ok</span>}
-                </label>
-              )
-            })}
-          </div>
-
-          {mainError && (
-            <div style={{ background: 'rgba(255,68,85,0.09)', border: '1px solid rgba(255,68,85,0.3)', borderRadius: 'var(--radius-sm)', padding: '8px 12px', fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--red)' }}>⚠ {mainError}</div>
-          )}
-
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-            <button className="btn btn-ghost" onClick={handleAnteprimaMain} disabled={mainBusy || selectedIds.size === 0 || !nomeCartella.trim()} style={{ fontSize: 12 }}>
-              {mainBusy && !showPreview ? <><Spinner small /> Caricamento...</> : '👁 Anteprima'}
-            </button>
-            <button className="btn btn-primary" onClick={handleGeneraMain} disabled={mainBusy || selectedIds.size === 0 || !nomeCartella.trim() || !percorsoSalvataggio} style={{ fontSize: 12 }}>
-              {mainBusy ? <><Spinner small /> Salvataggio...</> : `💾 Salva MAIN (${selectedIds.size} pgm)`}
-            </button>
-          </div>
-
-          {showPreview && mainPreview && (
-            <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--cyan)', letterSpacing: '0.08em' }}>ANTEPRIMA: {mainPreview.nome_file}</span>
-                <button onClick={() => setShowPreview(false)} style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 14 }}>✕</button>
-              </div>
-              <pre style={{ background: 'var(--bg-base)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '12px 14px', fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', lineHeight: 1.65, overflowX: 'auto', maxHeight: 300, overflowY: 'auto', margin: 0 }}>
-                {mainPreview.contenuto}
-              </pre>
-              <button className="btn btn-primary" onClick={handleGeneraMain} disabled={mainBusy || !percorsoSalvataggio} style={{ alignSelf: 'flex-end', fontSize: 12 }}>
-                {mainBusy ? <><Spinner small /> Salvataggio...</> : '💾 Salva MAIN'}
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── 5. INVIA IN MACCHINA ── */}
-      {done.length > 0 && (
-        <div className="fade-in" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-
-          {/* Header sezione */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ fontSize: 16 }}>📤</span>
-              <span style={{ fontSize: 13, fontWeight: 700 }}>Invia in Macchina</span>
-              <span style={{ fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
-                {fileDaInviare.length} file{mainGeneratoFile ? ' (+ MAIN)' : ''}
-              </span>
-            </div>
-            {/* Config server inline */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11 }}>
-              <span style={{ color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>SERVER</span>
-              {editingCfg ? (
-                <>
-                  <input value={machIp} onChange={e => setMachIp(e.target.value)} style={{ padding: '4px 8px', borderRadius: 4, background: 'var(--bg-base)', border: '1px solid var(--border)', color: 'var(--text-primary)', fontSize: 11, fontFamily: 'var(--font-mono)', width: 120 }} />
-                  <input value={machPort} onChange={e => setMachPort(e.target.value)} style={{ padding: '4px 8px', borderRadius: 4, background: 'var(--bg-base)', border: '1px solid var(--border)', color: 'var(--text-primary)', fontSize: 11, fontFamily: 'var(--font-mono)', width: 55 }} />
-                  <button onClick={saveMachCfg} style={{ padding: '4px 10px', borderRadius: 4, cursor: 'pointer', background: 'var(--cyan-glow)', border: '1px solid rgba(0,212,255,0.3)', color: 'var(--cyan)', fontSize: 11 }}>Salva</button>
-                  <button onClick={() => setEditingCfg(false)} style={{ padding: '4px 8px', borderRadius: 4, cursor: 'pointer', background: 'var(--bg-hover)', border: '1px solid var(--border)', color: 'var(--text-dim)', fontSize: 11 }}>✕</button>
-                </>
-              ) : (
-                <>
-                  <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--cyan)' }}>{machIp}:{machPort}</span>
-                  <button onClick={() => setEditingCfg(true)} style={{ padding: '2px 8px', borderRadius: 4, cursor: 'pointer', background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-dim)', fontSize: 10 }}>✎</button>
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* Lista file da inviare */}
-          {fileDaInviare.length > 0 && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-              {fileDaInviare.map(f => {
-                const st = fileInvioState(f.name)
-                const isMain = f.name.toUpperCase().startsWith('0_MAIN')
+          {/* Lista file */}
+          {entries.length > 0 && (
+            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', flexShrink: 0 }}>
+              {entries.map(e => {
+                const n = e.result?.totale_mancanti ?? 0
+                const color = e.status === 'analyzing' ? 'var(--text-dim)' : e.status === 'error' ? '#dc2626' : n > 0 ? '#dc2626' : '#15803d'
                 return (
-                  <div key={f.name} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px', background: 'var(--bg-base)', border: `1px solid var(--border)`, borderRadius: 'var(--radius-sm)', fontSize: 11, fontFamily: 'var(--font-mono)' }}>
-                    <span style={{ color: stateColor[st], fontSize: 10 }}>●</span>
-                    <span style={{ color: isMain ? 'var(--cyan)' : 'var(--text-primary)' }}>{isMain ? '⭐ ' : ''}{f.name}</span>
-                    <span style={{ color: 'var(--text-dim)', fontSize: 10 }}>{stateLabel[st]}</span>
+                  <div key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px',
+                    borderBottom: '1px solid var(--border)' }}
+                    onMouseEnter={ev => ev.currentTarget.style.background = 'var(--bg-hover)'}
+                    onMouseLeave={ev => ev.currentTarget.style.background = 'transparent'}>
+                    {e.status === 'analyzing' ? <Spinner small /> : <div style={{ width: 7, height: 7, borderRadius: '50%', background: color, flexShrink: 0 }} />}
+                    <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', flex: 1, color: 'var(--text-primary)' }}>{e.file.name}</span>
+                    {e.status === 'done' && n > 0 && <span style={{ fontSize: 11, color: '#dc2626', fontWeight: 700 }}>{n} mancanti</span>}
+                    {e.status === 'done' && n === 0 && <span style={{ fontSize: 11, color: '#15803d' }}>✓</span>}
+                    {e.status === 'error' && <span style={{ fontSize: 11, color: '#dc2626' }}>errore</span>}
+                    <button onClick={() => removeEntry(e.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', fontSize: 14, padding: '0 2px' }}>✕</button>
                   </div>
                 )
               })}
             </div>
           )}
 
-          {/* Cartella derivata */}
-          {progetto ? (
-            <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
-              Cartella macchina: <span style={{ color: 'var(--cyan)' }}>{progetto}</span>
-              {checkResult?.dest_dir && <span style={{ marginLeft: 8, color: 'var(--text-dim)' }}>→ {checkResult.dest_dir}</span>}
-            </div>
-          ) : (
-            <div style={{ fontSize: 11, color: 'var(--amber)', fontFamily: 'var(--font-mono)' }}>
-              ⚠ Inserisci commessa e posizione (sopra) per derivare la cartella macchina
-            </div>
-          )}
+          {/* Risultati confronto */}
+          <div style={{ flex: 1, background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
 
-          {/* Status */}
-          {invioStatus && (
-            <div style={{ padding: '8px 12px', borderRadius: 6, fontSize: 12, background: invioStatus.type === 'ok' ? 'rgba(0,255,136,0.07)' : invioStatus.type === 'err' ? 'rgba(255,68,85,0.08)' : 'rgba(255,179,0,0.08)', border: `1px solid ${invioStatus.type === 'ok' ? 'rgba(0,255,136,0.2)' : invioStatus.type === 'err' ? 'rgba(255,68,85,0.25)' : 'rgba(255,179,0,0.25)'}`, color: invioStatus.type === 'ok' ? 'var(--green)' : invioStatus.type === 'err' ? 'var(--red)' : 'var(--amber)' }}>
-              {invioStatus.msg}
+            {/* Header tabella */}
+            <div style={{ display: 'grid', gridTemplateColumns: '130px 1fr', padding: '6px 12px',
+              background: 'var(--bg-surface)', borderBottom: '1px solid var(--border)' }}>
+              {['STATO', 'UTENSILE'].map(h => (
+                <span key={h} style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-dim)',
+                  fontFamily: 'var(--font-mono)', letterSpacing: '0.08em' }}>{h}</span>
+              ))}
             </div>
-          )}
 
-          {/* Azioni */}
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-            <button onClick={doCheck} disabled={checking || sending || !fileDaInviare.length}
-              style={{ padding: '9px 18px', borderRadius: 6, cursor: checking ? 'not-allowed' : 'pointer', background: 'var(--bg-base)', border: '1px solid var(--border-bright)', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 600 }}>
-              {checking ? '⏳ Verifica...' : '🔍 Verifica'}
-            </button>
-            <button onClick={doSend} disabled={!checkResult?.reachable || sending || !fileDaInviare.length || !progetto.trim()}
-              style={{ padding: '9px 22px', borderRadius: 6, fontSize: 13, fontWeight: 700, cursor: (!checkResult?.reachable || sending) ? 'not-allowed' : 'pointer', background: checkResult?.reachable && !sending ? 'rgba(0,255,136,0.12)' : 'var(--bg-hover)', border: `1px solid ${checkResult?.reachable && !sending ? 'rgba(0,255,136,0.3)' : 'var(--border)'}`, color: checkResult?.reachable && !sending ? 'var(--green)' : 'var(--text-dim)', transition: 'all var(--t-fast)' }}>
-              {sending ? '⏳ Invio...' : `📤 Invia tutto (${done.length} file${mainGeneratoFile ? ' + MAIN' : ''})`}
-            </button>
-            {mainGeneratoFile && (
-              <button onClick={() => {
-                const soloMain = [mainGeneratoFile]
-                setSending(true); setInvioResults([]); setInvioStatus(null)
-                api.inviaMacchina(progetto, soloMain)
-                  .then(r => {
-                    setInvioResults(r.risultati)
-                    setInvioStatus(r.n_err === 0
-                      ? { type: 'ok',  msg: `✓ MAIN inviato: ${mainGeneratoFile.name}` }
-                      : { type: 'warn', msg: `Errore invio MAIN: ${r.risultati[0]?.msg}` })
-                  })
-                  .catch(e => setInvioStatus({ type: 'err', msg: e.message }))
-                  .finally(() => setSending(false))
-              }}
-              disabled={!checkResult?.reachable || sending || !progetto.trim()}
-              style={{ padding: '9px 22px', borderRadius: 6, fontSize: 13, fontWeight: 700, cursor: (!checkResult?.reachable || sending) ? 'not-allowed' : 'pointer', background: checkResult?.reachable && !sending ? 'rgba(0,212,255,0.10)' : 'var(--bg-hover)', border: `1px solid ${checkResult?.reachable && !sending ? 'rgba(0,212,255,0.3)' : 'var(--border)'}`, color: checkResult?.reachable && !sending ? 'var(--cyan)' : 'var(--text-dim)', transition: 'all var(--t-fast)' }}>
-                {sending ? '⏳ Invio...' : `📤 Solo MAIN`}
-              </button>
-            )}
+            {/* Righe */}
+            <div style={{ flex: 1, overflow: 'auto' }}>
+              {entries.length === 0 && (
+                <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--text-dim)', fontSize: 13 }}>
+                  Aggiungi file NC per il confronto automatico
+                </div>
+              )}
+              {/* Mancanti */}
+              {allMancanti.map(alias => (
+                <div key={alias}
+                  onClick={() => openModal(alias)}
+                  title="Clicca per aggiungere a scaffale"
+                  style={{ display: 'grid', gridTemplateColumns: '130px 1fr', padding: '7px 12px',
+                    borderBottom: '1px solid var(--border)', cursor: 'pointer',
+                    background: 'rgba(220,38,38,0.03)' }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(220,38,38,0.08)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'rgba(220,38,38,0.03)'}>
+                  <StatoBadge stato="manca" />
+                  <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: '#dc2626', fontWeight: 600 }}>
+                    {alias} <span style={{ fontSize: 10, opacity: 0.6 }}>+ scaffale</span>
+                  </span>
+                </div>
+              ))}
+              {/* Disabilitati */}
+              {allDisab.map(alias => (
+                <div key={alias} style={{ display: 'grid', gridTemplateColumns: '130px 1fr', padding: '7px 12px',
+                  borderBottom: '1px solid var(--border)', background: 'rgba(234,179,8,0.03)' }}>
+                  <StatoBadge stato="disab" />
+                  <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: '#a16207' }}>{alias}</span>
+                </div>
+              ))}
+              {/* Presenti */}
+              {allPresenti.map(alias => (
+                <div key={alias} style={{ display: 'grid', gridTemplateColumns: '130px 1fr', padding: '7px 12px',
+                  borderBottom: '1px solid var(--border)' }}>
+                  <StatoBadge stato="ok" />
+                  <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>{alias}</span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
-      )}
 
-      {/* Modal scaffale */}
+        {/* ── Colonna destra: nome + percorso + MAIN + invio ── */}
+        <div style={{ width: 300, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+
+          {/* Cartella macchina */}
+          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, padding: '12px 14px' }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', letterSpacing: '0.08em', marginBottom: 8 }}>
+              NOME CARTELLA MACCHINA
+            </div>
+            <input value={nomeCartella} onChange={e => { setNomeCartella(e.target.value); setMainError(null) }}
+              placeholder="es. Fase-3"
+              style={{ ...inputStyle, width: '100%', fontWeight: 700, fontSize: 13 }}
+              onFocus={e => e.target.style.borderColor = 'var(--cyan)'}
+              onBlur={e => e.target.style.borderColor = 'var(--border)'} />
+            {progetto && (
+              <div style={{ marginTop: 6, fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+                WPD: <span style={{ color: 'var(--cyan)' }}>{progetto}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Percorso salvataggio */}
+          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', letterSpacing: '0.08em' }}>PERCORSO SALVATAGGIO</div>
+            <input value={radiceNcInput} onChange={e => setRadiceNcInput(e.target.value)} onBlur={async () => { const v = radiceNcInput.trim().replace(/[\\/]+$/, ''); if (v) { try { await api.setPercorsoNc(v) } catch {} } }} placeholder="P:\DMG_DMC_160U"
+              style={{ ...inputStyle, fontSize: 11, color: 'var(--text-dim)', width: '100%' }} />
+            <div style={{ display: 'flex', gap: 6 }}>
+              <input value={commessa} onChange={e => setCommessa(e.target.value.replace(/[^a-zA-Z0-9_-]/g,''))} placeholder="4348"
+                style={{ ...inputStyle, width: '50%', fontWeight: 700 }} />
+              <input value={posizione} onChange={e => setPosizione(e.target.value.replace(/[^a-zA-Z0-9_-]/g,''))} placeholder="0221"
+                style={{ ...inputStyle, width: '50%', fontWeight: 700 }} />
+            </div>
+            {/* Recenti */}
+            {cartelleRecenti.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 2 }}>
+                {cartelleRecenti.slice(0,4).map(c => {
+                  const pts = c.replace(/\\/g,'/').split('/'); const pos=pts.at(-1)||''; const com=pts.at(-2)||''
+                  return (
+                    <button key={c} onClick={() => { setCommessa(com); setPosizione(pos) }}
+                      style={{ padding: '2px 8px', borderRadius: 4, fontSize: 10, fontFamily: 'var(--font-mono)', cursor: 'pointer',
+                        background: commessa===com&&posizione===pos ? 'rgba(0,225,255,0.12)' : 'var(--bg-base)',
+                        border: `1px solid ${commessa===com&&posizione===pos ? 'var(--cyan)' : 'var(--border)'}`,
+                        color: commessa===com&&posizione===pos ? 'var(--cyan)' : 'var(--text-secondary)' }}>
+                      {com}\{pos}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+            {percorso && nomeCartella && (
+              <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: '#15803d', marginTop: 2 }}>
+                → {percorso}\0_MAIN_{nomeCartella.toUpperCase()}.MPF
+              </div>
+            )}
+          </div>
+
+          {/* Genera MAIN */}
+          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, padding: '12px 14px' }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', letterSpacing: '0.08em', marginBottom: 8 }}>
+              GENERA MAIN <span style={{ fontWeight: 400, opacity: 0.6 }}>(opzionale)</span>
+            </div>
+            {mainError && <div style={{ fontSize: 11, color: '#dc2626', marginBottom: 6 }}>⚠ {mainError}</div>}
+            {mainGeneratoFile && (
+              <div style={{ fontSize: 11, color: '#15803d', fontFamily: 'var(--font-mono)', marginBottom: 6 }}>
+                ✓ {mainGeneratoFile.name}
+              </div>
+            )}
+            <button onClick={handleGeneraMain}
+              disabled={mainBusy || !done.length || !nomeCartella.trim() || !percorso}
+              style={btnPrimary(mainBusy || !done.length || !nomeCartella.trim() || !percorso)}>
+              {mainBusy ? <><Spinner small /> Generazione...</> : '📄 Genera e salva MAIN'}
+            </button>
+          </div>
+
+          {/* Config server */}
+          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 14px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>SERVER</span>
+              {editingCfg ? (
+                <>
+                  <input value={machIp} onChange={e => setMachIp(e.target.value)} style={{ ...inputStyle, width: 110, fontSize: 11 }} />
+                  <input value={machPort} onChange={e => setMachPort(e.target.value)} style={{ ...inputStyle, width: 55, fontSize: 11 }} />
+                  <button onClick={saveMachCfg} style={{ ...btnGhost, fontSize: 10, padding: '4px 8px' }}>✓</button>
+                  <button onClick={() => setEditingCfg(false)} style={{ ...btnGhost, fontSize: 10, padding: '4px 8px' }}>✕</button>
+                </>
+              ) : (
+                <>
+                  <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--cyan)' }}>{machIp}:{machPort}</span>
+                  <button onClick={() => setEditingCfg(true)} style={{ ...btnGhost, fontSize: 10, padding: '2px 6px', marginLeft: 'auto' }}>✎</button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Modal scaffale ── */}
       {modal && (
-        <ModalAggiungiScaffale alias={modal.alias} holderInfo={holderInfo} loadingInfo={loadingInfo} selectedHolder={selectedHolder} onSelectHolder={setSelectedHolder} addError={addError} addBusy={addBusy} onConferma={handleAggiungi} onClose={closeModal} />
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200 }}>
+          <div style={{ background: 'var(--bg-card)', borderRadius: 12, padding: 24, width: 440, display: 'flex', flexDirection: 'column', gap: 16, border: '1px solid var(--border)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 700 }}>Aggiungi a Scaffale</div>
+                <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 2 }}>Utensile mancante dall'analisi NC</div>
+              </div>
+              <button onClick={closeModal} style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 18 }}>✕</button>
+            </div>
+            <div style={{ background: 'var(--bg-base)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 12px' }}>
+              <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginBottom: 3 }}>ALIAS CNC</div>
+              <span style={{ fontSize: 14, fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--cyan)' }}>{modal.alias}</span>
+            </div>
+            {loadingInfo ? <div style={{ fontSize: 12, color: 'var(--text-dim)', display: 'flex', gap: 8, alignItems: 'center' }}><Spinner /> Caricamento...</div>
+            : holderInfo && !holderInfo.ha_holder && holderInfo.holders_disponibili.length > 0 && (
+              <div>
+                <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginBottom: 6 }}>SELEZIONA HOLDER</div>
+                {holderInfo.holders_disponibili.map(h => (
+                  <label key={h.alias_holder} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 10px', marginBottom: 4,
+                    background: selectedHolder===h.alias_holder ? 'rgba(0,225,255,0.08)' : 'var(--bg-base)',
+                    border: `1px solid ${selectedHolder===h.alias_holder ? 'var(--cyan)' : 'var(--border)'}`,
+                    borderRadius: 6, cursor: 'pointer' }}>
+                    <input type="radio" name="holder" value={h.alias_holder} checked={selectedHolder===h.alias_holder} onChange={() => setSelectedHolder(h.alias_holder)} style={{ accentColor: 'var(--cyan)' }} />
+                    <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: 12, color: 'var(--cyan)' }}>{h.alias_holder}</span>
+                    <span style={{ fontSize: 11, color: 'var(--text-secondary)', flex: 1 }}>{h.tipo_desc}</span>
+                    <span style={{ fontSize: 10, color: 'var(--text-dim)' }}>×{h.quantita}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+            {addError && <div style={{ fontSize: 11, color: '#dc2626' }}>⚠ {addError}</div>}
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button onClick={closeModal} style={btnGhost}>Annulla</button>
+              <button onClick={handleAggiungi} disabled={addBusy || (!holderInfo?.ha_holder && !selectedHolder)}
+                style={btnPrimary(addBusy || (!holderInfo?.ha_holder && !selectedHolder))}>
+                {addBusy ? <><Spinner small /> Aggiunta...</> : '+ Aggiungi a Scaffale'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
     </div>
   )
-}
-
-// ── Modal ─────────────────────────────────────────────────
-function ModalAggiungiScaffale({ alias, holderInfo, loadingInfo, selectedHolder, onSelectHolder, addError, addBusy, onConferma, onClose }) {
-  const holderIntegrato = holderInfo?.ha_holder
-  const holderCod = holderInfo?.holder_cod
-  const bussolaCod = holderInfo?.bussola_cod
-  const utensileBase = holderInfo?.utensile_base
-  const holderTarget = holderIntegrato ? holderCod : selectedHolder
-  const infoHolderTarget = holderInfo?.holders_disponibili?.find(h => h.alias_holder === holderTarget)
-  const holderDisponibile = !!infoHolderTarget
-  const qtaHolder = infoHolderTarget?.quantita ?? 0
-  const infoBussola = bussolaCod ? holderInfo?.bussole_disponibili?.find(b => b.codice_bussola === bussolaCod) : null
-  const bussolaDisponibile = infoBussola ? infoBussola.quantita > 0 : true
-  const canConfirm = !loadingInfo && !addBusy && (holderIntegrato ? true : selectedHolder.length > 0)
-
-  return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200 }}>
-      <div className="card fade-in" style={{ padding: 28, width: 460, display: 'flex', flexDirection: 'column', gap: 20 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <div><h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>Aggiungi a Scaffale</h3><p style={{ fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>Utensile mancante rilevato dall'analisi NC</p></div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 20, lineHeight: 1, padding: 4 }}>✕</button>
-        </div>
-        <div style={{ background: 'var(--bg-base)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '10px 14px' }}>
-          <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: '0.08em', marginBottom: 4 }}>ALIAS CNC</div>
-          <span className="mono" style={{ fontSize: 14, fontWeight: 700, color: 'var(--cyan)' }}>{alias}</span>
-        </div>
-        {loadingInfo ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: 'var(--text-secondary)', fontSize: 13 }}><Spinner /> Analisi alias in corso...</div>
-        ) : holderInfo && (
-          <>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <BreakdownRow label="Utensile base" value={utensileBase} color="var(--text-primary)" />
-              {holderCod && <BreakdownRow label="Holder" value={holderCod} color={holderDisponibile ? 'var(--green)' : 'var(--amber)'} suffix={holderIntegrato ? (holderDisponibile ? `✓ disponibile (×${qtaHolder})` : `⚠ non in inventario`) : null} subtext={infoHolderTarget?.tipo_desc} />}
-              {bussolaCod && <BreakdownRow label="Bussola idraulico" value={bussolaCod} color={bussolaDisponibile ? 'var(--green)' : 'var(--amber)'} suffix={infoBussola ? (bussolaDisponibile ? `✓ disponibile (×${infoBussola.quantita})` : '⚠ non in inventario') : '⚠ non in inventario'} subtext={infoBussola?.diametro} />}
-            </div>
-            {!holderIntegrato && (
-              <div>
-                <label style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: '0.08em', display: 'block', marginBottom: 8 }}>SELEZIONA HOLDER DA INVENTARIO *</label>
-                {holderInfo.holders_disponibili.length === 0
-                  ? <div style={{ fontSize: 12, color: 'var(--amber)', fontFamily: 'var(--font-mono)', padding: '8px 0' }}>⚠ Nessun holder disponibile in inventario</div>
-                  : <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    {holderInfo.holders_disponibili.map(h => (
-                      <label key={h.alias_holder} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: selectedHolder === h.alias_holder ? 'rgba(0,225,255,0.08)' : 'var(--bg-base)', border: `1px solid ${selectedHolder === h.alias_holder ? 'var(--cyan)' : 'var(--border)'}`, borderRadius: 'var(--radius-sm)', cursor: 'pointer', transition: 'all 0.15s' }}>
-                        <input type="radio" name="holder" value={h.alias_holder} checked={selectedHolder === h.alias_holder} onChange={() => onSelectHolder(h.alias_holder)} style={{ accentColor: 'var(--cyan)' }} />
-                        <span className="mono" style={{ fontWeight: 700, fontSize: 13, color: 'var(--cyan)' }}>{h.alias_holder}</span>
-                        <span style={{ fontSize: 12, color: 'var(--text-secondary)', flex: 1 }}>{h.tipo_desc}</span>
-                        <span style={{ fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>×{h.quantita}</span>
-                      </label>
-                    ))}
-                  </div>}
-              </div>
-            )}
-            {!holderIntegrato && selectedHolder && (
-              <div style={{ background: 'rgba(0,225,255,0.06)', border: '1px solid rgba(0,225,255,0.2)', borderRadius: 'var(--radius-sm)', padding: '10px 14px' }}>
-                <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', marginBottom: 4 }}>ALIAS FINALE</div>
-                <span className="mono" style={{ fontSize: 14, fontWeight: 700, color: 'var(--cyan)' }}>{alias}{selectedHolder}</span>
-              </div>
-            )}
-          </>
-        )}
-        {addError && <div style={{ background: 'rgba(255,68,85,0.1)', border: '1px solid rgba(255,68,85,0.3)', borderRadius: 'var(--radius-sm)', padding: '8px 12px', fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--red)' }}>⚠ {addError}</div>}
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
-          <button className="btn btn-ghost" onClick={onClose} disabled={addBusy}>Annulla</button>
-          <button className="btn btn-primary" onClick={onConferma} disabled={!canConfirm} style={{ minWidth: 160 }}>
-            {addBusy ? <><Spinner small /> Aggiunta...</> : '+ Aggiungi a Scaffale'}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function BreakdownRow({ label, value, color, suffix, subtext }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-      <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: '0.06em', width: 110, flexShrink: 0 }}>{label.toUpperCase()}</span>
-      <span className="mono" style={{ fontSize: 13, fontWeight: 700, color }}>{value}</span>
-      {subtext && <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{subtext}</span>}
-      {suffix && <span style={{ fontSize: 11, color: 'var(--text-dim)', marginLeft: 'auto' }}>{suffix}</span>}
-    </div>
-  )
-}
-
-function Spinner({ small }) {
-  const sz = small ? 10 : 14
-  return <div style={{ width: sz, height: sz, border: `${small ? 1.5 : 2}px solid var(--border)`, borderTopColor: 'var(--cyan)', borderRadius: '50%', animation: 'spin 0.7s linear infinite', flexShrink: 0, display: 'inline-block' }} />
 }

@@ -58,10 +58,13 @@ class TabAnalisiNC:
                                                 placeholder_text="Nome")
         self.entry_nome_cartella.pack(side="right", padx=5)
         
-        ctk.CTkButton(toolbar, text="⚙ Calibra Only",
+        ctk.CTkButton(toolbar, text="⚙",
                      command=self._apri_calibra_settings,
-                     fg_color="#7B1FA2", hover_color="#6A1B9A",
-                     font=get_font("small"), height=35, width=110).pack(side="right", padx=3)
+                     fg_color="transparent", hover_color="#E0E0E0",
+                     text_color="#9E9E9E",
+                     border_width=1, border_color="#BDBDBD",
+                     font=get_font("small"), height=28, width=32,
+                     corner_radius=6).pack(side="right", padx=2)
 
         ctk.CTkButton(toolbar, text="📄 GENERA MAIN",
                      command=self._genera_main,
@@ -199,11 +202,7 @@ class TabAnalisiNC:
         except Exception as e:
             fonte = f"Errore lettura DB: {e}"
 
-        # ── Fallback al database CSV principale ──
         usa_csv = False
-        if not tools_db and not self.main.df.empty:
-            usa_csv = True
-            fonte = "DB: database CSV principale (tools_machine.json non trovato)"
 
         # ── Estrai utensili dai file NC ──
         from logic.nc_analyzer import estrai_tutti_utensili_da_file
@@ -213,6 +212,14 @@ class TabAnalisiNC:
                 alias_richiesti.add(alias.upper().strip())
 
         # ── Confronto ──
+        if not tools_db:
+            # Sync non disponibile — blocca confronto
+            self.lbl_stato_confronto.configure(
+                text="⚠  Sync non eseguito — vai in 'In Macchina' e premi Sync macchina",
+                text_color="#F57C00")
+            self.lbl_fonte_db.configure(text="Il confronto richiede il sync TOA/TMA o MPF")
+            return
+
         if tools_db:
             alias_in_macchina = {t["name"].upper() for t in tools_db.values() if t.get("name")}
             alias_abilitati = {

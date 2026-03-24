@@ -149,16 +149,10 @@ async def analizza_file_nc(file: UploadFile = File(..., description="File NC (.M
                     dt_str = sync_time[:16]
             fonte_db = f"tools_machine.json ({(fmt_used or 'TOA/MPF').upper()} — {dt_str})"
         else:
-            # Fallback al database CSV
-            df, _ = get_db_principale()
-            if not df.empty:
-                alias_macchina = set(df[df["Stato_Utensile"] == "IN_MACCHINA"]["Alias"].str.upper())
-                mancanti = sorted(richiesti_upper - alias_macchina)
-                presenti = sorted(richiesti_upper & alias_macchina)
-                fonte_db = "database CSV principale (sync TOA non disponibile)"
-            else:
-                mancanti = sorted(richiesti_upper)
-                fonte_db = "nessun DB disponibile — eseguire Sync in Macchina"
+            # Nessun sync disponibile — non confrontare con CSV vecchio
+            mancanti = []
+            presenti = []
+            fonte_db = "⚠ Sync non eseguito — vai in 'In Macchina' e premi Sync"
 
         n_mancanti = len(mancanti) + len(disabilitati)
         log.info(f"Analisi NC: {file.filename} — {len(utensili_nc)} utensili, "

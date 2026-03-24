@@ -391,7 +391,7 @@ async def get_analisi_setup():
     non_utilizzati = []
     fin_vita        = []
     for n, t in alias_in_macchina_unici.items():
-        stato = _ct(n, in_macchina)
+        stato = _ct(n, tools_db)  # usa tools_db con tutti i gemelli, non in_macchina
         lp_best = None
         # Vita migliore tra gemelli abilitati
         abilitati = [x for x in in_macchina.values()
@@ -421,7 +421,7 @@ async def get_analisi_setup():
     # - mancante → non trovato in tools_machine.json → va in "Da montare"
     da_montare = []
     for alias in sorted(alias_attivi):
-        stato_alias = _ct(alias, in_macchina)
+        stato_alias = _ct(alias, tools_db)  # tutti i gemelli
         if stato_alias in ("ok", "fin_vita", "disabilitato"):
             continue  # fisicamente presente in macchina (anche se worn)
         # stato_alias == "mancante" → non è in tools_machine.json

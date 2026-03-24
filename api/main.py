@@ -54,38 +54,40 @@ async def startup():
 
 
 # ── Serve frontend React (se compilato) ───────────────────────────────────
-import os as _os
 from pathlib import Path as _Path
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 _FRONTEND_DIST = _Path(__file__).parent.parent / "frontend" / "dist"
 
-if _FRONTEND_DIST.exists():
-    from fastapi.staticfiles import StaticFiles
-    from fastapi.responses import FileResponse
-
-    # Monta gli asset statici (JS, CSS, immagini)
-    app.mount("/assets", StaticFiles(directory=str(_FRONTEND_DIST / "assets")), name="assets")
-
-    @app.get("/", include_in_schema=False)
-    @app.get("/{full_path:path}", include_in_schema=False)
-    async def serve_spa(full_path: str = ""):
-        """Serve il frontend React — tutte le route non-API tornano index.html (SPA)."""
-        # Non intercettare le API
-        if full_path.startswith("api/") or full_path == "docs" or full_path == "openapi.json":
-            return {"error": "not found"}
-        index = _FRONTEND_DIST / "index.html"
-        if index.exists():
-            return FileResponse(str(index))
-        return {"app": "DMG Desk API", "version": "16.0.0", "status": "running", "docs": "/docs"}
-else:
-    @app.get("/", tags=["Status"])
-    async def root():
-        return {"app": "DMG Desk API", "version": "16.0.0", "status": "running", "docs": "/docs"}
-
+@app.get("/", include_in_schema=False)
+async def root():
+    index = _FRONTEND_DIST / "index.html"
+    if index.exists():
+        return FileResponse(str(index))
+    return JSONResponse({"app": "DMG Desk API", "version": "16.0.0", "docs": "/docs"})
 
 @app.get("/health", tags=["Status"])
-async def health():
+async def health_check():
     return {"status": "ok"}
+
+# Catch-all SPA: serve index.html per tutte le route non-API
+@app.get("/{full_path:path}", include_in_schema=False)
+async def serve_spa(full_path: str):
+    # Lascia passare le API (già registrate sopra con prefix /api/...)
+    if full_path.startswith("api/"):
+        return JSONResponse({"error": "not found"}, status_code=404)
+    # Prova prima il file fisico (assets, favicon, ecc.)
+    static_file = _FRONTEND_DIST / full_path
+    if static_file.exists() and static_file.is_file():
+        return FileResponse(str(static_file))
+    # Fallback SPA
+    index = _FRONTEND_DIST / "index.html"
+    if index.exists():
+        return FileResponse(str(index))
+    return JSONResponse({"error": "frontend non compilato — esegui npm run build"}, status_code=404)
+
+
 
 
 @app.get("/api/debug", tags=["Status"])

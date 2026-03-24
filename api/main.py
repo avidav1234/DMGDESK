@@ -53,39 +53,50 @@ async def startup():
     log.info("DMG Desk API v16.0 avviata — http://0.0.0.0:8000")
 
 
-# ── Serve frontend React (se compilato) ───────────────────────────────────
+# ── Serve frontend React ──────────────────────────────────────────────────
 from pathlib import Path as _Path
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.staticfiles import NotModifiedResponse
 
 _FRONTEND_DIST = _Path(__file__).parent.parent / "frontend" / "dist"
+
+@app.get("/health", tags=["Status"])
+async def health_check():
+    return {"status": "ok"}
 
 @app.get("/", include_in_schema=False)
 async def root():
     index = _FRONTEND_DIST / "index.html"
     if index.exists():
         return FileResponse(str(index))
-    return JSONResponse({"app": "DMG Desk API", "version": "16.0.0", "docs": "/docs"})
+    return JSONResponse({"app": "DMG Desk API", "docs": "/docs"})
 
-@app.get("/health", tags=["Status"])
-async def health_check():
-    return {"status": "ok"}
+# Mount DOPO tutte le route API — StaticFiles non intercetta le route registrate
+if (_FRONTEND_DIST / "assets").exists():
+    app.mount("/assets", StaticFiles(directory=str(_FRONTEND_DIST / "assets")), name="static_assets")
 
-# Catch-all SPA: serve index.html per tutte le route non-API
-@app.get("/{full_path:path}", include_in_schema=False)
-async def serve_spa(full_path: str):
-    # Lascia passare le API (già registrate sopra con prefix /api/...)
-    if full_path.startswith("api/"):
-        return JSONResponse({"error": "not found"}, status_code=404)
-    # Prova prima il file fisico (assets, favicon, ecc.)
-    static_file = _FRONTEND_DIST / full_path
-    if static_file.exists() and static_file.is_file():
-        return FileResponse(str(static_file))
-    # Fallback SPA
-    index = _FRONTEND_DIST / "index.html"
-    if index.exists():
-        return FileResponse(str(index))
-    return JSONResponse({"error": "frontend non compilato — esegui npm run build"}, status_code=404)
+# Tutti gli altri path frontend (react-router) → index.html
+# Usiamo un middleware invece di una route per non bloccare le API
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+from starlette.responses import Response
+
+class SPAMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next) -> Response:
+        response = await call_next(request)
+        # Se 404 e non è una API, servi index.html (SPA fallback)
+        if (response.status_code == 404
+                and not request.url.path.startswith("/api/")
+                and not request.url.path.startswith("/assets/")
+                and request.url.path != "/docs"
+                and request.url.path != "/openapi.json"):
+            index = _FRONTEND_DIST / "index.html"
+            if index.exists():
+                return FileResponse(str(index))
+        return response
+
+app.add_middleware(SPAMiddleware)
 
 
 

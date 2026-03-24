@@ -655,3 +655,103 @@ async def sfoglia_cartella():
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Errore dialog: {e}")
+
+
+# ── Analisi file da disco (lancio da progetto) ─────────────────────────────
+
+@router.post("/analizza-da-disco")
+async def analizza_da_disco(body: dict):
+    """
+    Analizza file MPF già presenti su disco senza upload.
+    Usato quando si lancia da un progetto WorkTrack.
+    Body: { filenames: ["SGROSSATURA_SPIRALE_9.MPF", ...] }
+    Cerca i file in percorso_nc_base ricorsivamente.
+    Risposta: lista di { filename, result } con stesso formato di /analizza
+    """
+    import os as _os
+    from pathlib import Path as _Path
+    from config.config_loader import carica_configurazione
+
+    config   = carica_configurazione()
+    nc_base  = (config.get("percorso_nc_base") or "").strip()
+    filenames = body.get("filenames", [])
+
+    if not filenames:
+        return {"risultati": [], "errore": None}
+
+    # Costruisce indice path: filename_upper → path_assoluto
+    file_index: dict[str, str] = {}
+    if nc_base and _os.path.isdir(nc_base):
+        for root, _, files in _os.walk(nc_base):
+            for f in files:
+                if f.upper().endswith((".MPF", ".NC", ".SPF")):
+                    file_index[f.upper()] = _os.path.join(root, f)
+
+    risultati = []
+    for fn in filenames:
+        path = file_index.get(fn.upper())
+        if not path:
+            risultati.append({
+                "filename": fn,
+                "trovato":  False,
+                "result":   None,
+                "errore":   f"File non trovato in {nc_base or '(percorso NC non configurato)'}"
+            })
+            continue
+
+        try:
+            utensili_raw    = estrai_tutti_utensili_da_file(path)
+            richiesti_upper = {a.upper().strip() for a, _, _ in utensili_raw}
+
+            from api.routers.tools import _load_tools_db
+            from api.routers.progetti_utensili import classify_tool
+            tools_db, sync_time, fmt_used = _load_tools_db()
+
+            presenti, mancanti, disabilitati = [], [], []
+            fonte_db = ""
+
+            if tools_db:
+                # Costruisce indice per alias (con gemelli)
+                alias_map: dict[str, list] = {}
+                for t in tools_db.values():
+                    n = (t.get("name") or "").upper().strip()
+                    if n:
+                        alias_map.setdefault(n, []).append(t)
+
+                for alias in richiesti_upper:
+                    stato = classify_tool(alias, tools_db)
+                    if stato in ("ok", "fin_vita"):
+                        presenti.append(alias)
+                    elif stato == "disabilitato":
+                        disabilitati.append(alias)
+                    else:
+                        mancanti.append(alias)
+
+                fonte_db = f"tools_machine.json ({sync_time or 'n/d'})"
+
+            risultati.append({
+                "filename": fn,
+                "trovato":  True,
+                "result": {
+                    "utensili_nel_file":      [{"alias": a, "riga": r, "testo_riga": t}
+                                               for a, r, t in utensili_raw],
+                    "presenti_in_macchina":   presenti,
+                    "mancanti":               mancanti,
+                    "disabilitati":           disabilitati,
+                    "totale_file":            len(utensili_raw),
+                    "can_run":                len(mancanti) == 0 and len(disabilitati) == 0,
+                    "fonte_db":               fonte_db,
+                    "file_path":              path,
+                },
+                "errore": None
+            })
+
+        except Exception as e:
+            risultati.append({
+                "filename": fn,
+                "trovato":  True,
+                "result":   None,
+                "errore":   str(e)
+            })
+
+    return {"risultati": risultati}

@@ -84,22 +84,59 @@ export default function AnalisiNC() {
 
   // Stato per lancio da progetto
   const [lancioProgetto, setLancioProgetto] = useState(null)
+  const [lancioLoading,  setLancioLoading]  = useState(false)
+  const [lancioError,    setLancioError]    = useState(null)
 
   useEffect(() => {
     api.getPercorsoNc().then(r => { if (r.percorso_nc_base) setRadiceNcInput(r.percorso_nc_base) }).catch(() => {})
     api.cartelleRecenti().then(r => setCartelleRecenti(r.cartelle || [])).catch(() => {})
     api.getMachineConfig().then(r => { setMachIp(r.ip); setMachPort(r.port) }).catch(() => {})
 
-    // Leggi lancio da progetto (sessionStorage)
+    // Leggi lancio da progetto (sessionStorage) e carica i file da disco
     try {
       const raw = sessionStorage.getItem('dmgdesk_lancio_nc')
       if (raw) {
         const lancio = JSON.parse(raw)
         setLancioProgetto(lancio)
-        // Pre-carica nome cartella
         if (lancio.nomeCartella) setNomeCartella(lancio.nomeCartella)
-        // Nota: i file MPF non possono essere caricati automaticamente
-        // per motivi di sicurezza browser — l'utente deve caricarli
+
+        // Carica e analizza i file dal disco tramite API
+        if (lancio.mpfFiles?.length) {
+          setLancioLoading(true)
+          try {
+            const res = await fetch('/api/analisi-nc/analizza-da-disco', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ filenames: lancio.mpfFiles })
+            })
+            const data = await res.json()
+
+            // Aggiungi ogni risultato come entry nella lista
+            for (const r of data.risultati || []) {
+              const id = ++idRef.current
+              if (!r.trovato || !r.result) {
+                setEntries(prev => [...prev, {
+                  id, file: { name: r.filename },
+                  status: 'error',
+                  result: null,
+                  error: r.errore || 'File non trovato sul disco'
+                }])
+              } else {
+                setEntries(prev => [...prev, {
+                  id, file: { name: r.filename },
+                  status: 'done',
+                  result: r.result,
+                  error: null
+                }])
+                if (r.result.fonte_db) setFonteDb(r.result.fonte_db)
+              }
+            }
+          } catch (e) {
+            setLancioError(e.message)
+          } finally {
+            setLancioLoading(false)
+          }
+        }
       }
     } catch {}
   }, [])

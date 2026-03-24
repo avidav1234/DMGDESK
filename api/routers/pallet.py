@@ -96,7 +96,22 @@ class SetLavorazioneBody(BaseModel):
 async def get_pallet():
     """Restituisce lo stato attuale di tutti i pallet."""
     config = carica_configurazione()
-    return _load(config)
+    path = _pallet_path(config)
+    log.info(f"pallet_state.json cercato in: {path} (exists={path.exists()})")
+    state = _load(config)
+    return state
+
+@router.get("/debug-path")
+async def debug_pallet_path():
+    """Debug: mostra dove viene cercato pallet_state.json."""
+    config = carica_configurazione()
+    path = _pallet_path(config)
+    return {
+        "path": str(path),
+        "exists": path.exists(),
+        "tools_toa_folder": config.get("tools_toa_folder"),
+        "percorso_nc_base": config.get("percorso_nc_base"),
+    }
 
 
 @router.patch("/{numero}")

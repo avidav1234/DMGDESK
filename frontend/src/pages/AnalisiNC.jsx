@@ -97,6 +97,7 @@ export default function AnalisiNC() {
       try {
         const raw = sessionStorage.getItem('dmgdesk_lancio_nc')
         if (raw) {
+          sessionStorage.removeItem('dmgdesk_lancio_nc')  // consuma subito
           const lancio = JSON.parse(raw)
           setLancioProgetto(lancio)
           if (lancio.nomeCartella) setNomeCartella(lancio.nomeCartella)

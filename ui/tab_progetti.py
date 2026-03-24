@@ -565,8 +565,8 @@ class TabProgetti:
 
         # Lancia NC
         if mpf:
-            tk.Button(r1, text=f"📄 Lancia {len(mpf)} in NC →",
-                      command=lambda: self._lancia_nc(project),
+            tk.Button(r1, text=f"📄 Lancia in NC →",
+                      command=lambda: self._apri_modal_lancio(project),
                       font=("DM Sans",10,"bold"), fg="#fff", bg=TC["blue"],
                       relief="flat", padx=10, pady=4, cursor="hand2").pack(side="left", padx=8)
 
@@ -1774,9 +1774,199 @@ class TabProgetti:
         _save_templates(self._templates)
         mb.showinfo("Template salvato", f"Template '{name}' salvato con {len(steps)} fasi.")
 
-    def _lancia_nc(self, project):
-        mpf = get_mpf_list(project)
-        if not mpf: return
+    def _apri_modal_lancio(self, project):
+        """Modal di selezione programmi prima del lancio in NC — identico alla versione web."""
+        all_pgm = [pgm
+                   for step in project.get("steps", [])
+                   for task in step.get("tasks", [])
+                   if task.get("text","").strip().lower() == "fresatura"
+                   for pgm in task.get("programs", [])
+                   if pgm.get("tipoGruppo") != "ipm"]
+
+        if not all_pgm:
+            mb.showwarning("Nessun programma", "Nessun programma MPF nel progetto.")
+            return
+
+        tools_db = self._get_tools_db()
+        da_fare     = [p for p in all_pgm if p.get("stato") == "da_fare"]
+        in_macchina = [p for p in all_pgm if p.get("stato") == "in_macchina"]
+        completati  = [p for p in all_pgm if p.get("stato") == "completato"]
+
+        win = tk.Toplevel(self.parent)
+        win.title("Lancia in Analisi NC")
+        win.geometry("660x560")
+        win.grab_set()
+        win.configure(bg=TC["bg"])
+
+        # Header
+        hdr = tk.Frame(win, bg=TC["surface"])
+        hdr.pack(fill="x")
+        tk.Label(hdr, text=f"📄 Lancia in Analisi NC — {project.get('name','')}",
+                 font=("DM Sans",13,"bold"), fg=TC["text"], bg=TC["surface"]).pack(side="left", padx=14, pady=10)
+        tk.Button(hdr, text="✕", command=win.destroy,
+                  font=("DM Sans",10), fg=TC["sub"], bg=TC["surface"],
+                  relief="flat", cursor="hand2").pack(side="right", padx=8)
+        tk.Frame(win, height=1, bg=TC["border"]).pack(fill="x")
+
+        # Bottoni selezione rapida
+        sel_frame = tk.Frame(win, bg=TC["surface"])
+        sel_frame.pack(fill="x", padx=12, pady=8)
+
+        selected = {}  # filename → BooleanVar
+        check_widgets = {}  # filename → widget per aggiornare colori
+
+        def _aggiorna_counter():
+            n = sum(1 for v in selected.values() if v.get())
+            problemi = sum(1 for fn, v in selected.items() if v.get() and
+                           any(p.get("filename")==fn for p in all_pgm
+                               if p.get("stato")=="in_macchina" and
+                               self._classify_tool(p.get("utensile",""), tools_db)
+                               in ("mancante","fin_vita","disabilitato")))
+            btn_lancia.configure(
+                text=f"📄 Lancia {n} in NC →" if n > 0 else "📄 Lancia in NC →",
+                state="normal" if n > 0 else "disabled",
+                fg_color=TC["blue"] if n > 0 else TC["border"]
+            )
+            lbl_counter.configure(
+                text=f"{n} selezionati{'  ·  ⚠ ' + str(problemi) + ' problematici' if problemi else '  ·  ✓ tutti ok' if n > 0 else ''}",
+                text_color="#DC2626" if problemi else (TC["green"] if n > 0 else TC["muted"])
+            )
+
+        def _sel_da_fare():
+            for fn, var in selected.items():
+                var.set(any(p.get("filename")==fn and p.get("stato")=="da_fare"
+                            for p in all_pgm))
+            _aggiorna_counter()
+
+        def _sel_tutti():
+            for var in selected.values(): var.set(True)
+            _aggiorna_counter()
+
+        def _desel_tutti():
+            for var in selected.values(): var.set(False)
+            _aggiorna_counter()
+
+        ctk.CTkButton(sel_frame, text=f"☑ Seleziona da fare ({len(da_fare)})",
+                      command=_sel_da_fare,
+                      fg_color=TC["blue"], hover_color="#1552A0",
+                      font=("DM Sans",10,"bold"), height=28, corner_radius=6).pack(side="left", padx=3)
+        if in_macchina:
+            ctk.CTkButton(sel_frame, text=f"Seleziona tutti ({len(da_fare)+len(in_macchina)})",
+                          command=_sel_tutti,
+                          fg_color=TC["surface2"], hover_color=TC["border"],
+                          text_color=TC["sub"],
+                          font=("DM Sans",10), height=28, corner_radius=6).pack(side="left", padx=3)
+        ctk.CTkButton(sel_frame, text="Deseleziona",
+                      command=_desel_tutti,
+                      fg_color="transparent", hover_color=TC["surface2"],
+                      text_color=TC["muted"], border_width=1, border_color=TC["border"],
+                      font=("DM Sans",10), height=28, corner_radius=6).pack(side="left", padx=3)
+
+        # Lista programmi
+        TOOL_BG = {"mancante":"#FEE2E2","fin_vita":"#FEF9C3","disabilitato":"#EDE9FE"}
+        TOOL_FG = {"mancante":"#DC2626","fin_vita":"#D97706","disabilitato":"#7C3AED"}
+
+        list_frame = ctk.CTkScrollableFrame(win, fg_color=TC["bg"], corner_radius=0)
+        list_frame.pack(fill="both", expand=True, padx=4)
+
+        def _render_section(label, color, items, dimmed=False):
+            if not items: return
+            sh = tk.Frame(list_frame, bg=color)
+            sh.pack(fill="x", pady=(4,0))
+            tk.Label(sh, text=f"  {label} — {len(items)}",
+                     font=("DM Sans",8,"bold"), fg=TC["text"], bg=color).pack(side="left", pady=3)
+
+            for pgm in items:
+                fn = pgm.get("filename","")
+                var = tk.BooleanVar(value=False)
+                selected[fn] = var
+
+                ts = self._classify_tool(pgm.get("utensile",""), tools_db)                      if pgm.get("stato")=="in_macchina" else None
+                row_bg = TOOL_BG.get(ts, TC["surface"] if not dimmed else "#F8F8F8")
+
+                row = tk.Frame(list_frame, bg=row_bg,
+                               highlightbackground=TOOL_FG.get(ts, TC["border"]),
+                               highlightthickness=1)
+                row.pack(fill="x", pady=1, padx=2)
+
+                cb = tk.Checkbutton(row, variable=var, command=_aggiorna_counter,
+                                    bg=row_bg, activebackground=row_bg,
+                                    cursor="hand2", relief="flat")
+                cb.pack(side="left", padx=4)
+                row.bind("<Button-1>", lambda e, v=var: [v.set(not v.get()), _aggiorna_counter()])
+
+                alias = pgm.get("utensile","") or "—"
+                badge = {"mancante":" ✗","fin_vita":" ⚠","disabilitato":" ⊘"}.get(ts,"")
+                tk.Label(row, text=alias+badge,
+                         font=("Consolas",9,"bold" if ts else "normal"),
+                         fg=TOOL_FG.get(ts, TC["text"] if not dimmed else TC["muted"]),
+                         bg=row_bg, width=22, anchor="w").pack(side="left", padx=2)
+                op = (pgm.get("tipoOp","") or "").replace("- NESSUN TESTO","").strip()[:40]
+                tk.Label(row, text=op or pgm.get("filename",""),
+                         font=("DM Sans",9), fg=TC["sub"] if not dimmed else TC["muted"],
+                         bg=row_bg).pack(side="left", padx=4)
+                tk.Label(row, text=f"#{pgm.get('numPgm','')}",
+                         font=("Consolas",9), fg=TC["blue"], bg=row_bg).pack(side="right", padx=6)
+
+        _render_section("DA FARE", "#F0F4FF", da_fare)
+        _render_section("IN MACCHINA", "#E8F0FA", in_macchina, dimmed=True)
+        # Completati collassati
+        if completati:
+            show_comp = tk.BooleanVar(value=False)
+            comp_frame = tk.Frame(list_frame, bg=TC["bg"])
+            def _toggle_comp():
+                show_comp.set(not show_comp.get())
+                if show_comp.get():
+                    _render_section("COMPLETATI", "#F0EEE8", completati, dimmed=True)
+                    toggle_btn.configure(text=f"▲ COMPLETATI — {len(completati)}")
+                else:
+                    toggle_btn.configure(text=f"▼ COMPLETATI — {len(completati)}")
+            toggle_btn = tk.Button(list_frame, text=f"▼ COMPLETATI — {len(completati)}",
+                                   command=_toggle_comp,
+                                   font=("DM Sans",8,"bold"), fg=TC["muted"], bg=TC["bg"],
+                                   relief="flat", cursor="hand2")
+            toggle_btn.pack(anchor="w", padx=8, pady=4)
+
+        # Footer
+        tk.Frame(win, height=1, bg=TC["border"]).pack(fill="x")
+        footer = tk.Frame(win, bg="#F5F4F0")
+        footer.pack(fill="x", padx=12, pady=8)
+
+        lbl_counter = ctk.CTkLabel(footer, text="Nessun programma selezionato",
+                                    font=("DM Sans",11), text_color=TC["muted"])
+        lbl_counter.pack(side="left")
+
+        tk.Button(footer, text="Annulla", command=win.destroy,
+                  font=("DM Sans",11), fg=TC["sub"], bg=TC["surface2"],
+                  relief="flat", padx=12, pady=6, cursor="hand2").pack(side="right", padx=4)
+
+        btn_lancia = ctk.CTkButton(footer, text="📄 Lancia in NC →",
+                                    command=lambda: self._esegui_lancio(
+                                        project,
+                                        [p for p in all_pgm if selected.get(p.get("filename",""), tk.BooleanVar()).get()],
+                                        win),
+                                    fg_color=TC["border"], state="disabled",
+                                    font=("DM Sans",11,"bold"), height=34, corner_radius=6)
+        btn_lancia.pack(side="right", padx=4)
+
+        # Seleziona da fare di default
+        _sel_da_fare()
+
+    def _esegui_lancio(self, project, pgm_selezionati, win):
+        """Esegue il lancio in NC con i programmi selezionati."""
+        if win:
+            win.destroy()
+        self._lancia_nc(project, pgm_selezionati)
+
+    def _lancia_nc(self, project, pgm_selezionati=None):
+        # Se pgm_selezionati è passato dal modal, usa quelli; altrimenti da_fare
+        if pgm_selezionati is not None:
+            mpf = [p for p in pgm_selezionati if p.get("tipoGruppo") != "ipm"]
+        else:
+            mpf = [p for p in get_mpf_list(project) if p.get("stato") == "da_fare"]
+        if not mpf:
+            mb.showwarning("Nessun programma", "Nessun programma selezionato.")
+            return
         cfg    = _carica_config()
         base_nc = (cfg.get("percorso_nc_base") or "").strip()
         filenames = [p.get("filename","") for p in mpf if p.get("filename")]

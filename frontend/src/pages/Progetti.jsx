@@ -1666,7 +1666,7 @@ export default function Progetti(){
     sessionStorage.setItem('dmgdesk_lancio_nc', JSON.stringify({
       projectId:   project.id,
       projectName: project.name,
-      nomeCartella: project.name.replace(/[^a-zA-Z0-9_-]/g,'_').toUpperCase().slice(0,20),
+      nomeCartella: project.name.replace(/\s+/g,'_').replace(/[^a-zA-Z0-9_]/g,'').toUpperCase(),
       mpfFiles:    mpf.map(p=>p.filename)
     }))
     navigate('/analisi-nc')

@@ -1912,18 +1912,38 @@ class TabProgetti:
                 cb.pack(side="left", padx=4)
                 row.bind("<Button-1>", lambda e, v=var: [v.set(not v.get()), _aggiorna_counter()])
 
+                # Stato badge
+                stato = pgm.get("stato","da_fare")
+                STATO_LABEL = {
+                    "da_fare":    ("Da fare",    "#9A978E","#F0EEE8"),
+                    "in_macchina":("In macchina","#1D5FAD","#DBEAFE"),
+                    "completato": ("Fatto",      "#166534","#DCFCE7"),
+                }
+                slbl, sfg, sbg = STATO_LABEL.get(stato, ("?", "#9A978E","#F0EEE8"))
+                tk.Label(row, text=slbl,
+                         font=("DM Sans",8,"bold"), fg=sfg, bg=sbg,
+                         padx=5, pady=1).pack(side="left", padx=(2,4))
+
+                # Filename (primario, blu)
+                fn_clean = pgm.get("filename","").replace(".MPF","").replace(".mpf","") or f"#{pgm.get('numPgm','')}"
+                tk.Label(row, text=fn_clean,
+                         font=("Consolas",9,"bold"),
+                         fg=TC["blue"] if not dimmed else TC["muted"],
+                         bg=row_bg, width=22, anchor="w").pack(side="left", padx=2)
+
+                # Utensile (con badge anomalia)
                 alias = pgm.get("utensile","") or "—"
                 badge = {"mancante":" ✗","fin_vita":" ⚠","disabilitato":" ⊘"}.get(ts,"")
                 tk.Label(row, text=alias+badge,
                          font=("Consolas",9,"bold" if ts else "normal"),
                          fg=TOOL_FG.get(ts, TC["text"] if not dimmed else TC["muted"]),
-                         bg=row_bg, width=22, anchor="w").pack(side="left", padx=2)
-                op = (pgm.get("tipoOp","") or "").replace("- NESSUN TESTO","").strip()[:40]
-                tk.Label(row, text=op or pgm.get("filename",""),
+                         bg=row_bg, width=20, anchor="w").pack(side="left", padx=2)
+
+                # Operazione
+                op = (pgm.get("tipoOp","") or "").replace("- NESSUN TESTO","").strip()[:35]
+                tk.Label(row, text=op,
                          font=("DM Sans",9), fg=TC["sub"] if not dimmed else TC["muted"],
                          bg=row_bg).pack(side="left", padx=4)
-                tk.Label(row, text=f"#{pgm.get('numPgm','')}",
-                         font=("Consolas",9), fg=TC["blue"], bg=row_bg).pack(side="right", padx=6)
 
         _render_section("DA FARE", "#F0F4FF", da_fare)
         _render_section("IN MACCHINA", "#E8F0FA", in_macchina, dimmed=True)

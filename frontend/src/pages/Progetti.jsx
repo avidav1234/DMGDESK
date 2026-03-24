@@ -756,14 +756,28 @@ function LancioNCModal({project, toolsDB, onLancia, onClose}){
           display:'flex',alignItems:'center',justifyContent:'center'}}>
           {sel&&<span style={{color:'#fff',fontSize:12,fontWeight:800}}>✓</span>}
         </div>
+        {/* Badge stato */}
+        {(()=>{const s=pgm.stato||'da_fare';const cfg={
+          da_fare:    {label:'Da fare',    color:'#9A978E',bg:'#F0EEE8'},
+          in_macchina:{label:'In macchina',color:'#1D5FAD',bg:'#DBEAFE'},
+          completato: {label:'Fatto',      color:'#166534',bg:'#DCFCE7'},
+        }[s]||{label:s,color:'#9A978E',bg:'#F0EEE8'};return(
+          <span style={{fontSize:10,fontWeight:700,color:cfg.color,background:cfg.bg,
+            padding:'2px 7px',borderRadius:10,flexShrink:0,whiteSpace:'nowrap'}}>
+            {cfg.label}
+          </span>
+        )})()}
+        {/* Filename */}
         <span style={{fontSize:12,fontFamily:'monospace',fontWeight:700,
-          color:'#1D5FAD',minWidth:150,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+          color:'#1D5FAD',minWidth:145,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
           {pgm.filename?.replace(/\.MPF$/i,'')||`#${pgm.numPgm}`}
         </span>
-        <span style={{fontSize:11,fontFamily:'monospace',color:'#5A5750',
-          minWidth:130,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+        {/* Utensile */}
+        <span style={{fontSize:11,fontFamily:'monospace',color:'#1A1814',
+          minWidth:120,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
           {pgm.utensile||'—'}
         </span>
+        {/* Operazione */}
         <span style={{fontSize:11,color:'#9A978E',flex:1,
           overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
           {(pgm.tipoOp||'').replace(/[-–]\s*NESSUN TESTO\s*/gi,'').trim()||''}

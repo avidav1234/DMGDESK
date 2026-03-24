@@ -30,9 +30,33 @@ class CalibrationLogic:
         self.contatore_programmi_finitura = 0
         self.ultimo_utensile = None
         self.ultimo_tipo = None
-        self.soglia_cambi_standard = 3
-        self.soglia_programmi_finitura = 3
         self.log_calibrazioni = []
+
+        # Carica impostazioni da calibra_only_settings.json
+        s = self._load_settings()
+        self.mode              = s.get('mode', 'finitura_unico')
+        self.soglia_cambi_standard      = s.get('x_qualsiasi', 3)
+        self.soglia_programmi_finitura  = s.get('x_finitura', 3)
+
+    @staticmethod
+    def _load_settings() -> dict:
+        """Cerca calibra_only_settings.json accanto all'exe o nella cwd."""
+        import sys, json, os
+        candidates = [
+            os.path.join(os.path.dirname(sys.executable), 'calibra_only_settings.json')
+            if getattr(sys, 'frozen', False) else None,
+            'calibra_only_settings.json',
+            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                         'calibra_only_settings.json'),
+        ]
+        for path in candidates:
+            if path and os.path.exists(path):
+                try:
+                    with open(path, encoding='utf-8') as f:
+                        return json.load(f)
+                except Exception:
+                    pass
+        return {}
     
     def classifica_utensile(self, alias):
         """Classifica utensile come FINITURA o STANDARD"""
@@ -46,10 +70,18 @@ class CalibrationLogic:
     
     def necessita_calibrazione(self, utensile_corrente, nuovo_programma=True):
         """
-        Determina se serve calibrazione basandosi sulla logica V10
+        Determina se serve calibrazione basandosi sulla modalità configurata.
         """
         if not utensile_corrente:
             return False, "Nessun utensile"
+
+        # Modalità MAI: nessuna calibrazione aggiuntiva
+        if self.mode == 'mai':
+            return False, "Modalità: mai"
+
+        # Modalità INIZIO: solo calibrazione iniziale (già inserita), niente altro
+        if self.mode == 'inizio':
+            return False, "Modalità: solo inizio"
         
         tipo_corrente = self.classifica_utensile(utensile_corrente)
         cambio_utensile = (self.ultimo_utensile is not None and
@@ -306,13 +338,15 @@ def genera_programma_main_gcode(program_paths, identificativo_testo):
     gcode_output += f";{'-'*50}\n"
     gcode_output += f";EXTCALL (\"{BASE_PATH}{full_main_program_name}\")\n\n"
     
-    # Calibrazione iniziale
-    gcode_output += f"; ===== CALIBRAZIONE INIZIALE =====\n"
-    gcode_output += f"CALIBRA_ONLY\n\n"
-    
-    # 🔧 V12 FIX: Traccia che abbiamo fatto calibrazione iniziale
-    calibrazione_iniziale_fatta = True
-    ultima_calibrazione_idx = -1  # Traccia l'ultimo file dove abbiamo calibrato
+    # Calibrazione iniziale — rispetta la modalità configurata
+    mode = calibration.mode
+    calibrazione_iniziale_fatta = False
+    ultima_calibrazione_idx = -1
+
+    if mode != 'mai':
+        gcode_output += f"; ===== CALIBRAZIONE INIZIALE =====\n"
+        gcode_output += f"CALIBRA_ONLY\n\n"
+        calibrazione_iniziale_fatta = True
     
     # Analizza ogni file
     for idx, file_path in enumerate(program_paths, 1):

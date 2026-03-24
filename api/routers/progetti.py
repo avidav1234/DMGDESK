@@ -405,16 +405,26 @@ async def get_analisi_setup():
             fin_vita.append({"alias":n,"magazine":t.get("magazine"),
                              "position":t.get("position"),"life_percent":lp_best,
                              "progetti": [{"progetto": r[0], "file": r[1]} for r in refs[:3]]})
+        if stato == "disabilitato" and n in alias_attivi:
+            # In macchina ma worn/disabilitato E richiesto da un progetto → trattalo come fin_vita
+            refs = alias_map.get(n, [])
+            fin_vita.append({"alias":n,"magazine":t.get("magazine"),
+                             "position":t.get("position"),"life_percent":0,
+                             "disabilitato": True,
+                             "progetti": [{"progetto": r[0], "file": r[1]} for r in refs[:3]]})
         if n not in alias_attivi:
             non_utilizzati.append({"alias":n,"magazine":t.get("magazine"),
                                    "position":t.get("position"),"life_percent":lp_best})
 
-    # Da montare: richiesti ma non disponibili (considerando gemelli)
+    # Da montare: richiesti ma FISICAMENTE ASSENTI dalla macchina
+    # - ok, fin_vita, disabilitato → è fisicamente in macchina (worn/KO ma presente) → NON montare
+    # - mancante → non trovato in tools_machine.json → va in "Da montare"
     da_montare = []
     for alias in sorted(alias_attivi):
         stato_alias = _ct(alias, in_macchina)
-        if stato_alias in ("ok", "fin_vita"):
-            continue  # almeno un gemello funziona
+        if stato_alias in ("ok", "fin_vita", "disabilitato"):
+            continue  # fisicamente presente in macchina (anche se worn)
+        # stato_alias == "mancante" → non è in tools_machine.json
         provenienza = ("scaffale" if alias in scaffale_alias
                        else "smontato" if alias in smontati_alias
                        else "mancante")

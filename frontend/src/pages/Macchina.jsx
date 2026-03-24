@@ -101,13 +101,15 @@ export default function Macchina() {
                   <span style={{fontSize:13,fontFamily:'monospace',fontWeight:700,color:'#1A1814'}}>{item.alias}</span>
                   {(item.progetti||[]).slice(0,2).map((r,i)=>(
                     <div key={i} style={{fontSize:10,color:'#5A5750',marginTop:1}}>
-                      <span style={{fontWeight:700,color:'#B45309'}}>{r.progetto}</span>
+                      <span style={{fontWeight:700,color:item.disabilitato?'#7C3AED':'#B45309'}}>{r.progetto}</span>
                       <span style={{color:'#9A978E',fontFamily:'monospace'}}> · {r.file?.replace(/\.MPF$/i,'')}</span>
                     </div>
                   ))}
                 </div>
                 {item.position!=null&&<span style={{fontSize:11,color:'#5A5750',fontFamily:'monospace',flexShrink:0}}>P{item.position}</span>}
-                <span style={{fontSize:12,fontWeight:800,color:'#C0392B',flexShrink:0}}>{item.life_percent}%</span>
+                {item.disabilitato
+                  ? <span style={{fontSize:11,fontWeight:800,color:'#7C3AED',background:'#EDE9FE',padding:'1px 8px',borderRadius:10,flexShrink:0}}>⊘ Disab.</span>
+                  : <span style={{fontSize:12,fontWeight:800,color:'#C0392B',flexShrink:0}}>{item.life_percent}%</span>}
               </>}
             />
             <Section title={`📦 NON UTILIZZATI — ${non_utilizzati.length}`}

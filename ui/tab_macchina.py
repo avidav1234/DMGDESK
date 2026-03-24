@@ -6,6 +6,7 @@ Allineato con Macchina.jsx della web app.
 
 import customtkinter as ctk
 from tkinter import filedialog, messagebox
+import tkinter as tk
 import tkinter.ttk as ttk
 import json, os, threading, sys, re
 from datetime import datetime

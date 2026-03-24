@@ -131,24 +131,24 @@ def _normalizza(raw: dict) -> dict:
         out["numero_utensile"] = None
 
     # pallet_attivo → int (1-6)
-    # Prima cerca DB0.DBB67 (metodo diretto)
-    # Poi estrai da workPandProgName: /_N_WKS_DIR/_N_PALLET_WPD/_N_PALLET4_MPF → 4
+    # Fonte primaria: workPandProgName — sempre nel log OpcUa
+    # es. /_N_WKS_DIR/_N_PALLET_WPD/_N_PALLET4_MPF → 4
+    # Fallback: DB0.DBB67 se presente nel log
+    import re as _re
     pallet = None
-    try:
-        v = int(raw.get("pallet_attivo", 0))
+    prog = raw.get("programma_attivo", "") or ""
+    m = _re.search(r"_N_PALLET(\d)_MPF", prog, _re.IGNORECASE)
+    if m:
+        v = int(m.group(1))
         if 1 <= v <= 6:
             pallet = v
-    except (ValueError, TypeError):
-        pass
     if pallet is None:
-        prog = raw.get("programma_attivo", "") or ""
-        import re as _re
-        # Cerca _N_PALLETx_MPF dove x è il numero pallet
-        m = _re.search(r"_N_PALLET(\d)_MPF", prog, _re.IGNORECASE)
-        if m:
-            v = int(m.group(1))
+        try:
+            v = int(raw.get("pallet_attivo", 0))
             if 1 <= v <= 6:
                 pallet = v
+        except (ValueError, TypeError):
+            pass
     out["pallet_attivo"] = pallet
 
     # programma_attivo — pulisci path lungo

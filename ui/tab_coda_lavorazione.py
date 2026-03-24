@@ -129,22 +129,23 @@ def _normalizza(raw: dict) -> dict:
         out["numero_utensile"] = int(raw.get("numero_utensile", 0))
     except Exception:
         out["numero_utensile"] = None
-    # Priorità: $A_DBB[67] (DB0.DBB67) — variabile PLC ufficiale
-    # Fallback: estrai da workPandProgName es. _N_PALLET4_MPF → 4
+    # Fonte primaria: workPandProgName — sempre presente nel log OpcUa
+    # es. /_N_WKS_DIR/_N_PALLET_WPD/_N_PALLET4_MPF → pallet 4
+    # Fallback: DB0.DBB67 se disponibile nel log
     pallet = None
-    try:
-        v = int(raw.get("pallet_attivo", 0))
+    prog = raw.get("programma_attivo", "") or ""
+    m = re.search(r"_N_PALLET(\d)_MPF", prog, re.IGNORECASE)
+    if m:
+        v = int(m.group(1))
         if 1 <= v <= 6:
             pallet = v
-    except Exception:
-        pass
     if pallet is None:
-        prog = raw.get("programma_attivo", "") or ""
-        m = re.search(r"_N_PALLET(\d)_MPF", prog, re.IGNORECASE)
-        if m:
-            v = int(m.group(1))
+        try:
+            v = int(raw.get("pallet_attivo", 0))
             if 1 <= v <= 6:
                 pallet = v
+        except Exception:
+            pass
     out["pallet_attivo"] = pallet
     prog = raw.get("programma_attivo", "")
     out["programma_attivo"] = prog if prog and prog != "0" else None

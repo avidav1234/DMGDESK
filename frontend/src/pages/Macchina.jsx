@@ -252,7 +252,7 @@ export default function Macchina() {
               : 'Nessun sync'}
           </span>
           <button
-            onClick={()=>{ if(!setupData) loadSetupAnalisi(); else setSetupPopup(v=>!v) }}
+            onClick={()=>{ loadSetupAnalisi(); setSetupPopup(true) }}
             style={{
               padding:'9px 18px', borderRadius:8, fontSize:13, cursor:'pointer',
               background: setupPopup

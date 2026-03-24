@@ -241,9 +241,10 @@ export default function Macchina() {
             </thead>
             <tbody>
               {filtered.map(t => {
-                const isDis  = !t.is_enabled || t.is_worn
-                const isWorn = t.life_percent !== null && t.life_percent < 10
-                const rowBg  = isDis ? 'rgba(255,68,85,0.04)' : isWorn ? 'rgba(109,40,217,0.04)' : 'transparent'
+                const fuoriMag = t.magazine == null
+                const isDis    = !t.is_enabled || t.is_worn
+                const isWorn   = t.life_percent !== null && t.life_percent < 10
+                const rowBg    = fuoriMag ? 'rgba(0,0,0,0.02)' : isDis ? 'rgba(255,68,85,0.04)' : isWorn ? 'rgba(109,40,217,0.04)' : 'transparent'
                 const posFmt = t.magazine != null && t.position != null
                   ? `M${t.magazine}·${String(t.position).padStart(3,'0')}` : '—'
                 return (
@@ -263,7 +264,10 @@ export default function Macchina() {
                       color: 'var(--text-secondary)' }}>{t.radius?.toFixed(3)}</td>
                     <td style={{ padding: '8px 14px' }}><LifeBar pct={t.life_percent} /></td>
                     <td style={{ padding: '8px 14px' }}>
-                      {isDis
+                      {fuoriMag
+                        ? <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)',
+                            background: 'rgba(0,0,0,0.05)', padding: '2px 7px', borderRadius: 3 }}>FUORI MAG.</span>
+                        : isDis
                         ? <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--red)',
                             background: 'rgba(255,68,85,0.1)', padding: '2px 7px', borderRadius: 3 }}>DISAB.</span>
                         : isWorn

@@ -665,20 +665,24 @@ class TabMacchina:
             is_worn   = life is not None and life < 10
             nome_up   = t["name"].upper()
 
+            mag_ok = t.get("magazine") is not None
+
             if nome_up in alias_missing:
                 tag, stato = "disabled", "MANCANTE"
             elif nome_up in alias_disabled:
                 tag, stato = "disabled", "DISAB."
             elif nome_up in alias_worn:
-                tag, stato = "worn", "VITA BASSA"
+                tag, stato = "worn",    "VITA BASSA"
             elif nome_up in alias_ok:
-                tag, stato = "highlight", "OK (usato)"
+                tag, stato = "highlight","OK (usato)"
+            elif not mag_ok:
+                tag, stato = "empty",   "FUORI MAG."
             elif is_dis:
-                tag, stato = "disabled", "DISAB."
+                tag, stato = "disabled","DISAB."
             elif is_worn:
-                tag, stato = "worn", "VITA BASSA"
+                tag, stato = "worn",    "VITA BASSA"
             else:
-                tag, stato = "ok", "OK"
+                tag, stato = "ok",      "OK"
 
             mag = t.get("magazine"); pos = t.get("position")
             pos_str = ("M" + str(mag) + "." + str(pos).zfill(3)

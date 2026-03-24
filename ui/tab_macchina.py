@@ -701,7 +701,8 @@ class TabMacchina:
                 self.parent.after(0, lambda: self._mostra_setup_popup(
                     non_utilizzati, da_montare, fin_vita))
             except Exception as e:
-                self.parent.after(0, lambda: print(f"Analisi setup errore: {e}"))
+                err = str(e)
+                self.parent.after(0, lambda: print(f"Analisi setup errore: {err}"))
 
         threading.Thread(target=_worker, daemon=True).start()
 

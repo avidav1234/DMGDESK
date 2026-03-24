@@ -584,10 +584,6 @@ class TabCodaLavorazione:
                 bar_fill.place(relx=0, rely=0, relwidth=pct_w/100, relheight=1)
 
                 lbl_pct = tk.Label(f, text=f"{int(info['pct'])}% · {info['done']}/{info['tot']}",
-                                   font=("DM Sans", 7), fg=colors["fg"], bg=colors["bg"], opacity=0.7
-                                   if hasattr(tk.Label, 'opacity') else 1)
-                # opacity non supportato su tk, usa colore muted
-                lbl_pct = tk.Label(f, text=f"{int(info['pct'])}% · {info['done']}/{info['tot']}",
                                    font=("DM Sans", 7), fg="#666666", bg=colors["bg"])
                 lbl_pct._dmg_pallet_proj = True
                 lbl_pct.pack(side="bottom", fill="x", padx=4)

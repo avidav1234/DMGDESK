@@ -200,6 +200,7 @@ function ProgramRow({pgm,gruppo,onStato,onOperatore,onTempo,onRemove,toolStatus}
 // ma esiste un gemello con stesso nome abilitato e vita ok → 'ok' o 'fin_vita'
 function classifyTool(alias, toolsDB){
   if(!alias || !toolsDB) return null
+  if(Object.keys(toolsDB).length === 0) return null  // db non ancora caricato
   const key = alias.toUpperCase().trim()
 
   // Raccoglie tutti i tool con questo alias (tool + gemelli)
@@ -940,7 +941,8 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
         // Indicizia per tool_id (non per name) per conservare tutti i gemelli
         // classifyTool scansiona per name → trova tutti i gemelli con lo stesso alias
         const map={}
-        arr.forEach(t=>{ if(t.name) map[t.tool_id]=t })
+        arr.forEach(t=>{ if(t.name) map[String(t.tool_id)]=t })
+        console.log('[toolsDB] caricati', Object.keys(map).length, 'tools')
         setToolsDB(map)
       }).catch(()=>setToolsDB({}))
   },[])  // solo al mount del ProjectDetail

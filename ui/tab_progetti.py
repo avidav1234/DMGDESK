@@ -1985,7 +1985,14 @@ class TabProgetti:
                         nc_tab.file_paths.append(fp)
                 nc_tab._aggiorna_lista()
                 nc_tab._confronta()
-                nome = project.get("name","").upper().replace(" ","_")[:20]
+                # Estrai nome cartella dal pattern file MPF (es. 4297_007_03_009.mpf → 4297_007)
+                import re as _re
+                first_fn = (filenames[0] if filenames else "").replace(".MPF","").replace(".mpf","")
+                tokens = first_fn.split("_")
+                if len(tokens) >= 2 and _re.match(r'^\d+$', tokens[0]):
+                    nome = f"{tokens[0]}_{tokens[1]}"
+                else:
+                    nome = project.get("name","").upper().replace(" ","_")
                 nc_tab.entry_nome.delete(0,"end")
                 nc_tab.entry_nome.insert(0, nome)
                 self.main.tabview.set("📄 Analisi NC")

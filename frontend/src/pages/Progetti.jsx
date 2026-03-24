@@ -1663,10 +1663,20 @@ export default function Progetti(){
       .filter(t=>t.text?.trim().toLowerCase()==='fresatura')
       .flatMap(t=>(t.programs||[]).filter(p=>p.tipoGruppo!=='ipm'&&p.stato==='da_fare'))
     if(!mpf.length) return
+    // Estrai nomeCartella dal pattern dei file MPF (es. 4297_007_03_009.mpf → 4297_007)
+    // Fallback: usa il nome del progetto
+    const firstFile = mpf[0]?.filename || ''
+    const baseTokens = firstFile.replace(/\.MPF$/i,'').split('_')
+    const nomeFromFile = /^\d+$/.test(baseTokens[0]) && baseTokens.length >= 2
+      ? `${baseTokens[0]}_${baseTokens[1]}`
+      : null
+    const nomeCartella = nomeFromFile
+      || project.name.replace(/\s+/g,'_').replace(/[^a-zA-Z0-9_]/g,'').toUpperCase()
+
     sessionStorage.setItem('dmgdesk_lancio_nc', JSON.stringify({
       projectId:   project.id,
       projectName: project.name,
-      nomeCartella: project.name.replace(/\s+/g,'_').replace(/[^a-zA-Z0-9_]/g,'').toUpperCase(),
+      nomeCartella,
       mpfFiles:    mpf.map(p=>p.filename)
     }))
     navigate('/analisi-nc')

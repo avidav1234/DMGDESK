@@ -553,8 +553,37 @@ class TabProgetti:
                   font=("DM Sans",10), fg=TC["sub"], bg=TC["surface2"],
                   relief="flat", padx=10, pady=4, cursor="hand2").pack(side="left")
 
-        tk.Label(r1, text=f"● {project.get('name','?')}",
-                 font=("DM Sans",16,"bold"), fg=TC["text"], bg=TC["surface"]).pack(side="left", padx=8)
+        nome_lbl = tk.Label(r1, text=f"● {project.get('name','?')}",
+                 font=("DM Sans",16,"bold"), fg=TC["text"], bg=TC["surface"])
+        nome_lbl.pack(side="left", padx=(8,2))
+
+        def _rinomina():
+            win2 = tk.Toplevel(self.parent)
+            win2.title("Rinomina progetto")
+            win2.geometry("380x140")
+            win2.grab_set()
+            win2.configure(bg=TC["bg"])
+            tk.Label(win2, text="Nuovo nome progetto:",
+                     font=("DM Sans",11), fg=TC["sub"], bg=TC["bg"]).pack(anchor="w", padx=20, pady=(16,4))
+            entry = ctk.CTkEntry(win2, width=320, height=34, corner_radius=6)
+            entry.pack(padx=20)
+            entry.insert(0, project.get("name",""))
+            entry.select_range(0, "end")
+            entry.focus()
+            def _salva(e=None):
+                nuovo = entry.get().strip()
+                if nuovo and nuovo != project.get("name"):
+                    project["name"] = nuovo
+                    self._save_project(project)
+                win2.destroy()
+            entry.bind("<Return>", _salva)
+            ctk.CTkButton(win2, text="✓ Salva", command=_salva,
+                          fg_color=project.get("color", TC["accent"]),
+                          font=("DM Sans",11,"bold"), height=32, corner_radius=6).pack(pady=10)
+
+        tk.Button(r1, text="✏️", command=_rinomina,
+                  font=("DM Sans",10), fg=TC["muted"], bg=TC["surface"],
+                  relief="flat", cursor="hand2").pack(side="left")
 
         # Pallet
         tk.Label(r1, text="Pallet:", font=("DM Sans",10), fg=TC["muted"], bg=TC["surface"]).pack(side="left", padx=(16,3))
@@ -1985,14 +2014,14 @@ class TabProgetti:
                         nc_tab.file_paths.append(fp)
                 nc_tab._aggiorna_lista()
                 nc_tab._confronta()
-                # Estrai nome cartella dal pattern file MPF (es. 4297_007_03_009.mpf → 4297_007)
+                # Nome cartella: progetto come fonte primaria, file MPF come fallback
                 import re as _re
-                first_fn = (filenames[0] if filenames else "").replace(".MPF","").replace(".mpf","")
-                tokens = first_fn.split("_")
-                if len(tokens) >= 2 and _re.match(r'^\d+$', tokens[0]):
-                    nome = f"{tokens[0]}_{tokens[1]}"
-                else:
-                    nome = project.get("name","").upper().replace(" ","_")
+                nome = project.get("name","").replace(" ","_").upper()
+                if not nome:
+                    first_fn = (filenames[0] if filenames else "").replace(".MPF","").replace(".mpf","")
+                    tokens = first_fn.split("_")
+                    if len(tokens) >= 2 and _re.match(r'^\d+$', tokens[0]):
+                        nome = f"{tokens[0]}_{tokens[1]}" 
                 nc_tab.entry_nome.delete(0,"end")
                 nc_tab.entry_nome.insert(0, nome)
                 self.main.tabview.set("📄 Analisi NC")

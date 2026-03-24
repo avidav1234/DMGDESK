@@ -923,6 +923,8 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
   },[])  // solo al mount del ProjectDetail
   const[logText,setLogText]=useState('')
   const[logUser,setLogUser]=useState('Tu')
+  const[editingName,setEditingName]=useState(false)
+  const[editNameVal,setEditNameVal]=useState('')
   const[activeTab,setActiveTab]=useState('tasks')
   const[addingStep,setAddingStep]=useState(false)
   const[newStepName,setNewStepName]=useState('')
@@ -954,7 +956,33 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
         <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:16,flexWrap:'wrap'}}>
           <button onClick={onBack} style={{background:T.surface2,border:`1px solid ${T.border}`,borderRadius:8,color:T.textSub,fontSize:14,padding:'7px 14px',cursor:'pointer',fontWeight:600}}>← Indietro</button>
           <div style={{width:14,height:14,borderRadius:'50%',background:project.color,flexShrink:0}}/>
-          <div style={{fontSize:20,fontWeight:800,color:T.text,flex:1}}>{project.name}</div>
+          {editingName
+            ? <div style={{display:'flex',gap:6,flex:1,alignItems:'center'}}>
+                <input autoFocus value={editNameVal}
+                  onChange={e=>setEditNameVal(e.target.value)}
+                  onKeyDown={e=>{
+                    if(e.key==='Enter'){onUpdate({...project,name:editNameVal.trim()||project.name});setEditingName(false)}
+                    if(e.key==='Escape')setEditingName(false)
+                  }}
+                  style={{fontSize:18,fontWeight:800,color:T.text,background:T.surface2,
+                    border:`2px solid ${project.color}`,borderRadius:8,padding:'4px 10px',
+                    outline:'none',flex:1}}/>
+                <button onClick={()=>{onUpdate({...project,name:editNameVal.trim()||project.name});setEditingName(false)}}
+                  style={{background:project.color,border:'none',borderRadius:7,color:'#fff',
+                    fontWeight:700,fontSize:13,padding:'5px 12px',cursor:'pointer'}}>✓</button>
+                <button onClick={()=>setEditingName(false)}
+                  style={{background:'none',border:`1px solid ${T.border}`,borderRadius:7,
+                    color:T.textSub,fontSize:13,padding:'5px 10px',cursor:'pointer'}}>✕</button>
+              </div>
+            : <div style={{display:'flex',alignItems:'center',gap:6,flex:1}}>
+                <div style={{fontSize:20,fontWeight:800,color:T.text}}>{project.name}</div>
+                <button onClick={()=>{setEditNameVal(project.name);setEditingName(true)}}
+                  title="Rinomina progetto"
+                  style={{background:'none',border:'none',cursor:'pointer',
+                    color:T.textMuted,fontSize:13,opacity:0.5,padding:'2px 4px',
+                    lineHeight:1}}>✏️</button>
+              </div>
+          }
           <StatusBadge progress={progress}/>
           <button onClick={()=>setShowSaveTemplate(true)} style={{background:T.blueBg,border:`1px solid ${T.blue}44`,borderRadius:8,color:T.blue,fontSize:13,padding:'7px 14px',cursor:'pointer',fontWeight:600}}>💾 Salva come Template</button>
           {mpfList.length>0&&<button onClick={()=>setShowLancioModal(true)} style={{background:'#1D5FAD',border:'none',borderRadius:8,color:'#fff',fontWeight:700,fontSize:13,padding:'8px 16px',cursor:'pointer'}}>📄 Lancia in NC →</button>}
@@ -1663,15 +1691,15 @@ export default function Progetti(){
       .filter(t=>t.text?.trim().toLowerCase()==='fresatura')
       .flatMap(t=>(t.programs||[]).filter(p=>p.tipoGruppo!=='ipm'&&p.stato==='da_fare'))
     if(!mpf.length) return
-    // Estrai nomeCartella dal pattern dei file MPF (es. 4297_007_03_009.mpf → 4297_007)
-    // Fallback: usa il nome del progetto
+    // nomeCartella: usa nome progetto come fonte primaria
+    // Fallback su pattern file MPF solo se nome progetto è troppo generico
+    const nomeFromProject = project.name.replace(/\s+/g,'_').replace(/[^a-zA-Z0-9_]/g,'').toUpperCase()
     const firstFile = mpf[0]?.filename || ''
     const baseTokens = firstFile.replace(/\.MPF$/i,'').split('_')
     const nomeFromFile = /^\d+$/.test(baseTokens[0]) && baseTokens.length >= 2
       ? `${baseTokens[0]}_${baseTokens[1]}`
       : null
-    const nomeCartella = nomeFromFile
-      || project.name.replace(/\s+/g,'_').replace(/[^a-zA-Z0-9_]/g,'').toUpperCase()
+    const nomeCartella = nomeFromProject || nomeFromFile || ''
 
     sessionStorage.setItem('dmgdesk_lancio_nc', JSON.stringify({
       projectId:   project.id,

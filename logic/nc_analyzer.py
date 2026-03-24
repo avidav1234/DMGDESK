@@ -70,64 +70,71 @@ class CalibrationLogic:
     
     def necessita_calibrazione(self, utensile_corrente, nuovo_programma=True):
         """
-        Determina se serve calibrazione basandosi sulla modalità configurata.
+        Determina se serve calibrazione in base alla modalità configurata.
+
+        Modalità:
+          mai          → sempre False
+          inizio       → sempre False (il CALIBRA_ONLY iniziale è già inserito)
+          finitura_unico → solo al cambio di utensile FF/FFPI
+          finitura_x   → al cambio FF/FFPI + ogni X richiami consecutivi dello stesso FF
+          ogni_x       → ogni X richiami di qualsiasi utensile
         """
         if not utensile_corrente:
             return False, "Nessun utensile"
 
-        # Modalità MAI: nessuna calibrazione aggiuntiva
-        if self.mode == 'mai':
-            return False, "Modalità: mai"
+        if self.mode in ('mai', 'inizio'):
+            # Aggiorna comunque il tracking utensile
+            self.ultimo_utensile = utensile_corrente
+            self.ultimo_tipo = self.classifica_utensile(utensile_corrente)
+            return False, f"Modalità: {self.mode}"
 
-        # Modalità INIZIO: solo calibrazione iniziale (già inserita), niente altro
-        if self.mode == 'inizio':
-            return False, "Modalità: solo inizio"
-        
         tipo_corrente = self.classifica_utensile(utensile_corrente)
         cambio_utensile = (self.ultimo_utensile is not None and
-                          utensile_corrente != self.ultimo_utensile)
-        
+                           utensile_corrente != self.ultimo_utensile)
+        primo_utensile = self.ultimo_utensile is None
+
         calibra = False
-        motivo = ""
-        
-        if tipo_corrente == 'FINITURA':
-            if cambio_utensile:
+        motivo  = ""
+
+        if self.mode == 'finitura_unico':
+            # Calibra solo al cambio di utensile FF — mai per richiami ripetuti
+            if tipo_corrente == 'FINITURA' and (cambio_utensile or primo_utensile):
                 calibra = True
-                motivo = f"Finitura - Cambio da {self.ultimo_utensile} a {utensile_corrente}"
-                self.contatore_programmi_finitura = 0
-            elif nuovo_programma:
-                self.contatore_programmi_finitura += 1
-                if self.contatore_programmi_finitura >= self.soglia_programmi_finitura:
+                motivo = f"Finitura unico - {'Primo' if primo_utensile else 'Cambio'}: {utensile_corrente}"
+
+        elif self.mode == 'finitura_x':
+            # Calibra ad ogni cambio FF + ogni X richiami dello stesso FF
+            if tipo_corrente == 'FINITURA':
+                if cambio_utensile or primo_utensile:
                     calibra = True
-                    motivo = f"Finitura - Dopo {self.contatore_programmi_finitura} programmi"
+                    motivo = f"Finitura - Cambio: {utensile_corrente}"
                     self.contatore_programmi_finitura = 0
-            if self.ultimo_utensile is None:
+                elif nuovo_programma:
+                    self.contatore_programmi_finitura += 1
+                    if self.contatore_programmi_finitura >= self.soglia_programmi_finitura:
+                        calibra = True
+                        motivo = f"Finitura - Ogni {self.soglia_programmi_finitura}: {utensile_corrente}"
+                        self.contatore_programmi_finitura = 0
+
+        elif self.mode == 'ogni_x':
+            # Calibra ogni X richiami di qualsiasi utensile (conta TUTTI i richiami, non solo i cambi)
+            self.contatore_cambi_standard += 1
+            if self.contatore_cambi_standard >= self.soglia_cambi_standard:
                 calibra = True
-                motivo = f"Finitura - Primo: {utensile_corrente}"
-        else:
-            if cambio_utensile or self.ultimo_utensile is None:
-                self.contatore_cambi_standard += 1
-                if self.contatore_cambi_standard >= self.soglia_cambi_standard:
-                    calibra = True
-                    motivo = f"Standard - {self.contatore_cambi_standard} cambi"
-                    self.contatore_cambi_standard = 0
-                else:
-                    motivo = f"Standard - Cambio {self.contatore_cambi_standard}/{self.soglia_cambi_standard}"
-            if self.ultimo_utensile is None and not calibra:
-                self.contatore_cambi_standard = 1
-                motivo = f"Standard - Primo ({self.contatore_cambi_standard}/{self.soglia_cambi_standard})"
-        
+                motivo = f"Ogni {self.soglia_cambi_standard} richiami: #{self.contatore_cambi_standard}"
+                self.contatore_cambi_standard = 0
+
         self.ultimo_utensile = utensile_corrente
         self.ultimo_tipo = tipo_corrente
-        
+
         if calibra:
             self.log_calibrazioni.append({
                 'utensile': utensile_corrente,
-                'tipo': tipo_corrente,
-                'motivo': motivo,
+                'tipo':     tipo_corrente,
+                'motivo':   motivo,
                 'timestamp': datetime.now().isoformat()
             })
-        
+
         return calibra, motivo
     
     def get_statistiche(self):
@@ -412,7 +419,7 @@ def genera_programma_main_gcode(program_paths, identificativo_testo):
     
     # Footer statistiche
     stats = calibration.get_statistiche()
-    totale_calibrazioni = stats['totale_calibrazioni'] + 1
+    totale_calibrazioni = stats['totale_calibrazioni'] + (1 if calibrazione_iniziale_fatta else 0)
     
     gcode_output += f"\n; ===== STATISTICHE V11 =====\n"
     gcode_output += f"; TOTALE calibrazioni: {totale_calibrazioni}\n"

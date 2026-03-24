@@ -44,14 +44,18 @@ export default function CodaLavorazione() {
 
       setMacchina(macchinaData);
 
+      // Backend ritorna { pallet: [{numero:1, stato:"grezzo"}, ...] }
+      const palletArr = palletData?.pallet || [];
       setPallets(prev => prev.map(p => {
-        const saved = palletData?.[p.id] || {};
-        let stato = saved.stato || "VUOTO";
+        const saved = palletArr.find(s => s.numero === p.id) || {};
+        // Backend usa minuscolo, UI usa maiuscolo
+        let stato = (saved.stato || "vuoto").toUpperCase().replace("_", " ");
+        if (stato === "IN LAVORAZIONE") stato = "VUOTO"; // non sovrascrivere con dato stale
 
-        // Sovrascrive con IN LAVORAZIONE se macchina lo conferma
+        // Sovrascrive con IN LAVORAZIONE se macchina lo conferma live
         if (
-          macchinaData?.palletAttivo === p.id &&
-          macchinaData?.progStatus === 3
+          macchinaData?.pallet_attivo === p.id &&
+          macchinaData?.stato_programma === 3
         ) {
           stato = "IN LAVORAZIONE";
         }

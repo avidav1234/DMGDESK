@@ -98,13 +98,13 @@ class MainWindow(ctk.CTk):
         
         # Crea tabs - ANALISI NC PRIMO!
         self.tabview.add("⬡ Coda")
+        self.tabview.add("📋 Progetti")
         self.tabview.add("📄 Analisi NC")
         self.tabview.add("📝 Generatore")
         self.tabview.add("🔧 In Macchina")
         self.tabview.add("🏠 Scaffale")
         self.tabview.add("📦 Smontati")
         self.tabview.add("🔩 Holder & Bussole")
-        self.tabview.add("📋 Progetti")
         
         # Inizializza tabs
         self.tab_analisi_nc = TabAnalisiNC(

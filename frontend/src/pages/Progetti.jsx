@@ -679,9 +679,220 @@ function SaveAsTemplateModal({project,templates,onSave,onClose}){
   )
 }
 // ── ProjectDetail ──────────────────────────────────────────────────────────────
+
+// ── LancioNCModal ─────────────────────────────────────────────────────────────
+function LancioNCModal({project, toolsDB, onLancia, onClose}){
+  const allPgm = (project.steps||[])
+    .flatMap(s=>s.tasks||[])
+    .filter(t=>t.text?.trim().toLowerCase()==='fresatura')
+    .flatMap(t=>(t.programs||[]).filter(p=>p.tipoGruppo!=='ipm'))
+
+  const da_fare    = allPgm.filter(p=>p.stato==='da_fare')
+  const in_macchina= allPgm.filter(p=>p.stato==='in_macchina')
+  const completati = allPgm.filter(p=>p.stato==='completato')
+
+  const [selected, setSelected] = useState(new Set())
+  const [showCompletati, setShowCompletati] = useState(false)
+
+  function toggle(id){ setSelected(s=>{ const n=new Set(s); n.has(id)?n.delete(id):n.add(id); return n }) }
+  function selezionaDaFare(){ setSelected(new Set(da_fare.map(p=>p.id))) }
+  function selezionaTutti(){ setSelected(new Set([...da_fare,...in_macchina].map(p=>p.id))) }
+  function deselezionaTutti(){ setSelected(new Set()) }
+
+  const pgmSelezionati = allPgm.filter(p=>selected.has(p.id))
+  const problemi = pgmSelezionati.filter(p=>{
+    const s = classifyTool(p.utensile, toolsDB)
+    return s==='mancante'||s==='fin_vita'||s==='disabilitato'
+  })
+  const mancanti = pgmSelezionati.filter(p=>classifyTool(p.utensile,toolsDB)==='mancante')
+
+  function ToolBadge({alias}){
+    if(!alias||!toolsDB) return null
+    const s=classifyTool(alias,toolsDB)
+    const cfg={
+      ok:          {dot:'✓',color:'#166534',bg:'#dcfce7'},
+      fin_vita:    {dot:'⚠',color:'#D97706',bg:'#FEF9C3'},
+      disabilitato:{dot:'⊘',color:'#7C3AED',bg:'#EDE9FE'},
+      mancante:    {dot:'✗',color:'#DC2626',bg:'#FEE2E2'},
+    }[s]
+    if(!cfg) return null
+    return <span style={{fontSize:11,fontWeight:700,color:cfg.color,background:cfg.bg,
+      padding:'1px 7px',borderRadius:20,flexShrink:0}}>{cfg.dot} {s==='ok'?'ok':s==='fin_vita'?'vita bassa':s==='disabilitato'?'disab.':'mancante'}</span>
+  }
+
+  function PgmRow({pgm, dimmed}){
+    const sel = selected.has(pgm.id)
+    const ts  = classifyTool(pgm.utensile, toolsDB)
+    const rowBg = sel
+      ? ts==='mancante'?'#FEE2E2':ts==='fin_vita'?'#FEF9C3':'#EFF6FF'
+      : dimmed?'#FAFAFA':'#FFFFFF'
+    return(
+      <div onClick={()=>toggle(pgm.id)}
+        style={{display:'flex',alignItems:'center',gap:10,padding:'8px 14px',
+          cursor:'pointer',background:rowBg,
+          borderLeft:sel?(ts==='mancante'?'3px solid #DC2626':ts==='fin_vita'?'3px solid #D97706':'3px solid #1D5FAD'):'3px solid transparent',
+          borderBottom:'1px solid #F0EEE8',transition:'background 0.1s',
+          opacity:dimmed?0.55:1}}>
+        <div style={{width:18,height:18,borderRadius:5,flexShrink:0,
+          border:sel?'none':'2px solid #B0ADA4',
+          background:sel?'#1D5FAD':'transparent',
+          display:'flex',alignItems:'center',justifyContent:'center'}}>
+          {sel&&<span style={{color:'#fff',fontSize:12,fontWeight:800}}>✓</span>}
+        </div>
+        <span style={{fontSize:12,fontFamily:'monospace',fontWeight:700,
+          color:'#1A1814',minWidth:140}}>{pgm.utensile||'—'}</span>
+        <span style={{fontSize:11,color:'#5A5750',flex:1,
+          overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+          {(pgm.tipoOp||'').replace(/[-–]\s*NESSUN TESTO\s*/gi,'').trim()||pgm.filename}
+        </span>
+        <span style={{fontSize:10,color:'#9A978E',fontFamily:'monospace',
+          minWidth:40,textAlign:'right'}}>#{pgm.numPgm}</span>
+        <ToolBadge alias={pgm.utensile}/>
+      </div>
+    )
+  }
+
+  return(
+    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',
+      display:'flex',alignItems:'center',justifyContent:'center',zIndex:400}}>
+      <div style={{background:'#FFFFFF',borderRadius:16,width:660,maxWidth:'94vw',
+        maxHeight:'88vh',display:'flex',flexDirection:'column',
+        border:'1px solid #D8D5CC',boxShadow:'0 16px 56px rgba(0,0,0,0.22)'}}>
+
+        {/* Header */}
+        <div style={{padding:'18px 22px 14px',borderBottom:'1px solid #E8E6E0'}}>
+          <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:4}}>
+            <span style={{fontSize:18}}>📄</span>
+            <div style={{flex:1}}>
+              <div style={{fontSize:16,fontWeight:800,color:'#1A1814'}}>Lancia in Analisi NC</div>
+              <div style={{fontSize:12,color:'#9A978E',marginTop:1}}>{project.name}</div>
+            </div>
+            <button onClick={onClose} style={{background:'none',border:'1px solid #D8D5CC',
+              borderRadius:8,color:'#5A5750',fontSize:13,padding:'5px 12px',cursor:'pointer'}}>✕</button>
+          </div>
+
+          {/* Bottoni selezione rapida */}
+          <div style={{display:'flex',gap:8,flexWrap:'wrap',marginTop:10}}>
+            <button onClick={selezionaDaFare}
+              style={{background:'#1D5FAD',border:'none',borderRadius:7,color:'#fff',
+                fontSize:12,fontWeight:700,padding:'6px 14px',cursor:'pointer'}}>
+              ☑ Seleziona da fare ({da_fare.length})
+            </button>
+            {in_macchina.length>0&&<button onClick={selezionaTutti}
+              style={{background:'#F0EEE8',border:'1px solid #D8D5CC',borderRadius:7,
+                color:'#5A5750',fontSize:12,fontWeight:600,padding:'6px 14px',cursor:'pointer'}}>
+              Seleziona tutti ({da_fare.length+in_macchina.length})
+            </button>}
+            {selected.size>0&&<button onClick={deselezionaTutti}
+              style={{background:'none',border:'1px solid #D8D5CC',borderRadius:7,
+                color:'#9A978E',fontSize:12,padding:'6px 14px',cursor:'pointer'}}>
+              Deseleziona tutto
+            </button>}
+          </div>
+        </div>
+
+        {/* Lista programmi */}
+        <div style={{flex:1,overflowY:'auto'}}>
+          {/* Da fare */}
+          {da_fare.length>0&&(
+            <div>
+              <div style={{padding:'8px 14px 4px',fontSize:10,fontWeight:700,
+                color:'#9A978E',letterSpacing:'0.07em',background:'#F5F4F0',
+                borderBottom:'1px solid #E8E6E0'}}>
+                DA FARE — {da_fare.length}
+              </div>
+              {da_fare.map(p=><PgmRow key={p.id} pgm={p}/>)}
+            </div>
+          )}
+
+          {/* In macchina */}
+          {in_macchina.length>0&&(
+            <div>
+              <div style={{padding:'8px 14px 4px',fontSize:10,fontWeight:700,
+                color:'#1D5FAD',letterSpacing:'0.07em',background:'#F0F4FF',
+                borderBottom:'1px solid #E8E6E0'}}>
+                IN MACCHINA — {in_macchina.length}
+              </div>
+              {in_macchina.map(p=><PgmRow key={p.id} pgm={p} dimmed/>)}
+            </div>
+          )}
+
+          {/* Completati (collassati) */}
+          {completati.length>0&&(
+            <div>
+              <div onClick={()=>setShowCompletati(v=>!v)}
+                style={{padding:'8px 14px',fontSize:10,fontWeight:700,
+                  color:'#9A978E',letterSpacing:'0.07em',background:'#FAFAFA',
+                  borderBottom:'1px solid #E8E6E0',cursor:'pointer',
+                  display:'flex',alignItems:'center',gap:6}}>
+                {showCompletati?'▼':'▶'} COMPLETATI — {completati.length}
+              </div>
+              {showCompletati&&completati.map(p=><PgmRow key={p.id} pgm={p} dimmed/>)}
+            </div>
+          )}
+
+          {allPgm.length===0&&(
+            <div style={{padding:40,textAlign:'center',color:'#9A978E',fontSize:14}}>
+              Nessun programma MPF caricato
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div style={{borderTop:'1px solid #E8E6E0',padding:'12px 22px',
+          background:'#F5F4F0',borderRadius:'0 0 16px 16px'}}>
+
+          {/* Avviso problemi */}
+          {mancanti.length>0&&(
+            <div style={{background:'#FEE2E2',border:'1px solid #DC262633',borderRadius:8,
+              padding:'8px 12px',marginBottom:10,fontSize:12,color:'#DC2626',fontWeight:600}}>
+              ⚠ {mancanti.length} programm{mancanti.length===1?'o':'i'} con utensile mancante —
+              il MAIN verrà generato ma {mancanti.length===1?'quel programma potrebbe':'quei programmi potrebbero'} non essere eseguibil{mancanti.length===1?'e':'i'}.
+            </div>
+          )}
+          {problemi.length>0&&mancanti.length===0&&(
+            <div style={{background:'#FEF9C3',border:'1px solid #D9770633',borderRadius:8,
+              padding:'8px 12px',marginBottom:10,fontSize:12,color:'#D97706',fontWeight:600}}>
+              ⚠ {problemi.length} programm{problemi.length===1?'o':'i'} con utensile a fine vita — verificare prima di procedere.
+            </div>
+          )}
+
+          <div style={{display:'flex',alignItems:'center',gap:12}}>
+            {/* Counter */}
+            <div style={{flex:1,fontSize:13,color:'#5A5750'}}>
+              {selected.size===0
+                ? <span style={{color:'#9A978E'}}>Nessun programma selezionato</span>
+                : <><span style={{fontWeight:700,color:'#1A1814'}}>{selected.size} selezionat{selected.size===1?'o':'i'}</span>
+                    {problemi.length===0&&<span style={{color:'#166534',marginLeft:6}}>· tutti ok ✓</span>}
+                    {mancanti.length>0&&<span style={{color:'#DC2626',marginLeft:6}}>· {mancanti.length} mancant{mancanti.length===1?'e':'i'}</span>}
+                  </>
+              }
+            </div>
+            <button onClick={onClose}
+              style={{background:'none',border:'1px solid #D8D5CC',borderRadius:8,
+                color:'#5A5750',fontSize:13,padding:'9px 18px',cursor:'pointer',fontWeight:600}}>
+              Annulla
+            </button>
+            <button
+              disabled={selected.size===0}
+              onClick={()=>onLancia(pgmSelezionati)}
+              style={{background:selected.size===0?'#D8D5CC':'#1D5FAD',border:'none',
+                borderRadius:8,color:'#fff',fontWeight:700,fontSize:14,
+                padding:'9px 22px',cursor:selected.size===0?'default':'pointer',
+                transition:'background 0.15s'}}>
+              📄 Lancia {selected.size>0?selected.size:''} in NC →
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onSaveAsTemplate,onLanciaNC}){
   // Carica tools_machine una volta sola per questo progetto
   const [toolsDB, setToolsDB] = useState(null)
+  const [showLancioModal, setShowLancioModal] = useState(false)
   useEffect(()=>{
     fetch('/api/tools/')
       .then(r=>r.ok?r.json():[])
@@ -727,7 +938,7 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
           <div style={{fontSize:20,fontWeight:800,color:T.text,flex:1}}>{project.name}</div>
           <StatusBadge progress={progress}/>
           <button onClick={()=>setShowSaveTemplate(true)} style={{background:T.blueBg,border:`1px solid ${T.blue}44`,borderRadius:8,color:T.blue,fontSize:13,padding:'7px 14px',cursor:'pointer',fontWeight:600}}>💾 Salva come Template</button>
-          {mpfList.length>0&&<button onClick={()=>onLanciaNC(project)} style={{background:'#1D5FAD',border:'none',borderRadius:8,color:'#fff',fontWeight:700,fontSize:13,padding:'8px 16px',cursor:'pointer'}}>📄 Lancia {mpfList.length} file in NC →</button>}
+          {mpfList.length>0&&<button onClick={()=>setShowLancioModal(true)} style={{background:'#1D5FAD',border:'none',borderRadius:8,color:'#fff',fontWeight:700,fontSize:13,padding:'8px 16px',cursor:'pointer'}}>📄 Lancia in NC →</button>}
           <button onClick={()=>setConfirm('archive')} style={{background:T.surface2,border:`1px solid ${T.border}`,borderRadius:8,color:T.textSub,fontSize:14,padding:'7px 14px',cursor:'pointer',fontWeight:600}}>{project.archived?'📤 Riattiva':'📦 Archivia'}</button>
           <button onClick={()=>setConfirm('delete')} style={{background:T.redBg,border:`1px solid ${T.red}44`,borderRadius:8,color:T.red,fontSize:14,padding:'7px 14px',cursor:'pointer',fontWeight:600}}>🗑️ Elimina</button>
         </div>
@@ -801,6 +1012,15 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
       {confirm==='delete'&&<ConfirmDialog message={`Eliminare il progetto "${project.name}"? L'operazione è irreversibile.`} onConfirm={()=>{onDelete(project.id);setConfirm(null)}} onCancel={()=>setConfirm(null)}/>}
       {confirm==='archive'&&<ConfirmDialog message={project.archived?`Riportare "${project.name}" tra i progetti attivi?`:`Archiviare "${project.name}"?`} onConfirm={()=>{onArchive(project.id);setConfirm(null)}} onCancel={()=>setConfirm(null)}/>}
       {showSaveTemplate&&<SaveAsTemplateModal project={project} templates={templates} onSave={tmpl=>{onSaveAsTemplate(tmpl);setShowSaveTemplate(false)}} onClose={()=>setShowSaveTemplate(false)}/>}
+      {showLancioModal&&<LancioNCModal
+        project={project}
+        toolsDB={toolsDB}
+        onClose={()=>setShowLancioModal(false)}
+        onLancia={pgmSelezionati=>{
+          setShowLancioModal(false)
+          onLanciaNC(project, pgmSelezionati)
+        }}
+      />}
     </div>
   )
 }
@@ -1416,10 +1636,20 @@ export default function Progetti(){
   function handleExport(){window.open(`${API}/export`,'_blank')}
 
   // ── Lancia NC ───────────────────────────────────────────────────────────────
-  function lanciaNC(project){
-    const mpf=(project.steps||[]).flatMap(s=>s.tasks||[]).filter(t=>t.text?.trim().toLowerCase()==='fresatura').flatMap(t=>(t.programs||[]).filter(p=>p.tipoGruppo!=='ipm'))
+  function lanciaNC(project, pgmSelezionati){
+    // pgmSelezionati = array di programmi scelti nel modal
+    // Se non passati (chiamata diretta), usa tutti i da_fare
+    const mpf = pgmSelezionati || (project.steps||[])
+      .flatMap(s=>s.tasks||[])
+      .filter(t=>t.text?.trim().toLowerCase()==='fresatura')
+      .flatMap(t=>(t.programs||[]).filter(p=>p.tipoGruppo!=='ipm'&&p.stato==='da_fare'))
     if(!mpf.length) return
-    sessionStorage.setItem('dmgdesk_lancio_nc',JSON.stringify({projectId:project.id,projectName:project.name,nomeCartella:project.name.replace(/[^a-zA-Z0-9_-]/g,'_').toUpperCase().slice(0,20),mpfFiles:mpf.map(p=>p.filename)}))
+    sessionStorage.setItem('dmgdesk_lancio_nc', JSON.stringify({
+      projectId:   project.id,
+      projectName: project.name,
+      nomeCartella: project.name.replace(/[^a-zA-Z0-9_-]/g,'_').toUpperCase().slice(0,20),
+      mpfFiles:    mpf.map(p=>p.filename)
+    }))
     navigate('/analisi-nc')
   }
 

@@ -82,10 +82,26 @@ export default function AnalisiNC() {
   const [addError, setAddError]                 = useState(null)
   const [globalSuccess, setGlobalSuccess]       = useState(null)
 
+  // Stato per lancio da progetto
+  const [lancioProgetto, setLancioProgetto] = useState(null)
+
   useEffect(() => {
     api.getPercorsoNc().then(r => { if (r.percorso_nc_base) setRadiceNcInput(r.percorso_nc_base) }).catch(() => {})
     api.cartelleRecenti().then(r => setCartelleRecenti(r.cartelle || [])).catch(() => {})
     api.getMachineConfig().then(r => { setMachIp(r.ip); setMachPort(r.port) }).catch(() => {})
+
+    // Leggi lancio da progetto (sessionStorage)
+    try {
+      const raw = sessionStorage.getItem('dmgdesk_lancio_nc')
+      if (raw) {
+        const lancio = JSON.parse(raw)
+        setLancioProgetto(lancio)
+        // Pre-carica nome cartella
+        if (lancio.nomeCartella) setNomeCartella(lancio.nomeCartella)
+        // Nota: i file MPF non possono essere caricati automaticamente
+        // per motivi di sicurezza browser — l'utente deve caricarli
+      }
+    } catch {}
   }, [])
 
   // ── File: aggiungi + analisi automatica ───────────────────────────────────

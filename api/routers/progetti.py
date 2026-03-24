@@ -705,6 +705,20 @@ async def debug_utensili(project_id: str):
     return {"project_id": project_id, "programs": result}
 
 
+@router.get("/debug-setup")
+async def debug_setup():
+    """Debug: mostra cosa vede analisi setup."""
+    from api.routers.progetti_utensili import estrai_alias_da_progetti
+    config = carica_configurazione()
+    alias_map = estrai_alias_da_progetti(config)
+    return {
+        "nc_base": config.get("percorso_nc_base"),
+        "tools_folder": config.get("tools_toa_folder"),
+        "n_alias": len(alias_map),
+        "alias_sample": {k: v[:2] for k, v in list(alias_map.items())[:10]},
+    }
+
+
 @router.post("/{project_id}/riparsing-utensili")
 async def riparsing_utensili(project_id: str):
     """

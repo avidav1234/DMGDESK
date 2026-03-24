@@ -8,6 +8,122 @@ function LifeBar({ pct }) {
     return <span style={{ color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>—</span>
   const c = Math.min(100, Math.max(0, pct))
   const color = c < 10 ? 'var(--red)' : c < 30 ? 'var(--amber)' : 'var(--green)'
+
+  // ── Popup Analisi Setup ────────────────────────────────────────────────────
+  const SetupPopup = () => {
+    if (!setupPopup || !setupData) return null
+    const {non_utilizzati, da_montare, fin_vita} = setupData
+
+    const Section = ({title, items, color, bg, renderItem}) => (
+      items.length > 0 && (
+        <div style={{marginBottom:16}}>
+          <div style={{fontSize:12,fontWeight:700,color,letterSpacing:'0.06em',marginBottom:8}}>{title}</div>
+          <div style={{border:'1px solid #D8D5CC',borderRadius:8,overflow:'hidden'}}>
+            {items.map((item,i) => (
+              <div key={item.alias} style={{display:'flex',alignItems:'center',gap:10,
+                padding:'7px 12px',background:i%2===0?'#FFFFFF':bg,
+                borderBottom:i<items.length-1?'1px solid #D8D5CC':'none'}}>
+                {renderItem(item)}
+              </div>
+            ))}
+          </div>
+        </div>
+      )
+    )
+
+    return (
+      <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',
+        display:'flex',alignItems:'center',justifyContent:'center',zIndex:500}}>
+        <div style={{background:'#FFFFFF',borderRadius:14,
+          width:580,maxWidth:'92vw',maxHeight:'85vh',
+          display:'flex',flexDirection:'column',
+          border:'1px solid #D8D5CC',boxShadow:'0 12px 48px rgba(0,0,0,0.2)'}}>
+
+          {/* Header */}
+          <div style={{padding:'18px 24px',borderBottom:'1px solid #D8D5CC',
+            display:'flex',alignItems:'center',gap:10}}>
+            <span style={{fontSize:20}}>🔧</span>
+            <div style={{flex:1}}>
+              <div style={{fontSize:17,fontWeight:800,color:'#1A1814'}}>Analisi Setup Macchina</div>
+              {setupData.sync_time && (
+                <div style={{fontSize:11,color:'#9A978E',marginTop:2}}>
+                  Ultimo sync: {new Date(setupData.sync_time).toLocaleString('it-IT')}
+                </div>
+              )}
+            </div>
+            <button onClick={()=>setSetupPopup(false)}
+              style={{background:'none',border:'1px solid #D8D5CC',borderRadius:8,
+                color:'#5A5750',fontSize:13,padding:'5px 12px',cursor:'pointer',fontWeight:600}}>
+              Chiudi
+            </button>
+          </div>
+
+          {/* Body scrollabile */}
+          <div style={{flex:1,overflowY:'auto',padding:'20px 24px'}}>
+
+            <Section
+              title={`✗ MANCANTI / DA MONTARE — ${da_montare.length}`}
+              items={da_montare} color='#C0392B' bg='#FDECEA'
+              renderItem={item=><>
+                <span style={{flex:1,fontSize:13,fontFamily:'monospace',fontWeight:700,color:'#1A1814'}}>
+                  {item.alias}
+                </span>
+                <span style={{fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:12,
+                  color:item.provenienza==='mancante'?'#C0392B':item.provenienza==='scaffale'?'#1D5FAD':'#C2720A',
+                  background:item.provenienza==='mancante'?'#FDECEA':item.provenienza==='scaffale'?'#dbeafe':'#FFF0DC'}}>
+                  {item.provenienza==='scaffale'?'🏠 A scaffale':item.provenienza==='smontato'?'📦 Smontato':'✗ Non trovato'}
+                </span>
+              </>}
+            />
+
+            <Section
+              title={`⚠ FINE VITA (<15%) — ${fin_vita.length}`}
+              items={fin_vita} color='#B45309' bg='#FEF3C7'
+              renderItem={item=><>
+                <span style={{flex:1,fontSize:13,fontFamily:'monospace',fontWeight:700,color:'#1A1814'}}>
+                  {item.alias}
+                </span>
+                {item.magazine!=null&&<span style={{fontSize:11,color:'#5A5750',fontFamily:'monospace'}}>
+                  M{item.magazine}{item.position!=null?` P${item.position}`:''}
+                </span>}
+                <span style={{fontSize:12,fontWeight:800,color:'#C0392B'}}>
+                  {item.life_percent}%
+                </span>
+              </>}
+            />
+
+            <Section
+              title={`📦 NON UTILIZZATI DA NESSUN PROGETTO — ${non_utilizzati.length}`}
+              items={non_utilizzati} color='#5A5750' bg='#F0EEE8'
+              renderItem={item=><>
+                <span style={{flex:1,fontSize:13,fontFamily:'monospace',color:'#5A5750'}}>
+                  {item.alias}
+                </span>
+                {item.magazine!=null&&<span style={{fontSize:11,color:'#9A978E',fontFamily:'monospace'}}>
+                  M{item.magazine}{item.position!=null?` P${item.position}`:''}
+                </span>}
+                {item.life_percent!=null&&<span style={{fontSize:11,color:'#9A978E'}}>
+                  {item.life_percent}%
+                </span>}
+              </>}
+            />
+          </div>
+
+          {/* Footer */}
+          <div style={{padding:'12px 24px',borderTop:'1px solid #D8D5CC',
+            display:'flex',gap:10,justifyContent:'flex-end',
+            background:'#F5F4F0',borderRadius:'0 0 14px 14px'}}>
+            <button onClick={()=>setSetupPopup(false)}
+              style={{background:'#D4700A',border:'none',borderRadius:8,
+                color:'#fff',fontWeight:700,fontSize:13,padding:'8px 20px',cursor:'pointer'}}>
+              OK, ho capito
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
       <div style={{ width: 44, height: 4, background: 'var(--border)', borderRadius: 2, overflow: 'hidden' }}>
@@ -15,6 +131,7 @@ function LifeBar({ pct }) {
       </div>
       <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color }}>{Math.round(c)}%</span>
     </div>
+    <SetupPopup />
   )
 }
 
@@ -28,6 +145,9 @@ const COL = {
 export default function Macchina() {
   const [tools, setTools]             = useState([])
   const [syncStatus, setSyncStatus]   = useState(null)
+  const [setupPopup, setSetupPopup]   = useState(false)
+  const [setupData,  setSetupData]    = useState(null)
+  const [setupLoading, setSetupLoading] = useState(false)
   const [loading, setLoading]         = useState(false)
   const [syncing, setSyncing]         = useState(false)
   const [syncMsg, setSyncMsg]         = useState(null)
@@ -57,8 +177,26 @@ export default function Macchina() {
       const fmtLabel = r.format_used ? ` · ${r.format_used.toUpperCase()}` : ''
       setSyncMsg(`${r.tool_count} utensili, ${r.positions_mapped} posizioni${fmtLabel}`)
       await loadSync()
+      // Dopo sync, carica analisi setup automaticamente
+      loadSetupAnalisi()
     } catch (e) { setErrorSync(e.message) }
     finally { setSyncing(false) }
+  }
+
+  async function loadSetupAnalisi() {
+    setSetupLoading(true)
+    try {
+      const r = await fetch('/api/progetti/analisi-setup/non-utilizzati')
+      if (r.ok) {
+        const d = await r.json()
+        setSetupData(d)
+        // Mostra popup solo se ci sono situazioni da gestire
+        if (d.non_utilizzati.length > 0 || d.da_montare.length > 0 || d.fin_vita.length > 0) {
+          setSetupPopup(true)
+        }
+      }
+    } catch {}
+    finally { setSetupLoading(false) }
   }
 
   async function handleCheckFiles(newFiles) {

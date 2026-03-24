@@ -216,3 +216,213 @@ async def export_backup():
     return JSONResponse(content=payload, headers={
         "Content-Disposition": f"attachment; filename=worktrack_backup_{datetime.now().strftime('%Y-%m-%d')}.json"
     })
+
+
+# ── Utensili check ──────────────────────────────────────────────────────────
+
+@router.get("/{project_id}/utensili-check")
+async def check_utensili_progetto(project_id: str):
+    """
+    Incrocia gli utensili richiesti dai programmi MPF del progetto
+    con tools_machine.json, scaffale CSV e smontati CSV.
+    Ritorna per ogni alias: stato (ok|scaffale|smontato|mancante|fin_vita|disabilitato)
+    """
+    import sys, os
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+    config = carica_configurazione()
+
+    # Carica progetto
+    data    = _load_progetti(config)
+    project = next((p for p in data.get("projects", []) if p.get("id") == project_id), None)
+    if not project:
+        raise HTTPException(404, f"Progetto {project_id} non trovato")
+
+    # Estrai alias MPF dal FresaturaPanel
+    alias_richiesti = set()
+    for step in project.get("steps", []):
+        for task in step.get("tasks", []):
+            if task.get("text", "").strip().lower() == "fresatura":
+                for pgm in task.get("programs", []):
+                    if pgm.get("tipoGruppo") != "ipm" and pgm.get("utensile"):
+                        alias_richiesti.add(pgm["utensile"].upper().strip())
+
+    if not alias_richiesti:
+        return {"project_id": project_id, "utensili": [], "summary": {
+            "ok": 0, "scaffale": 0, "smontato": 0, "mancante": 0,
+            "fin_vita": 0, "disabilitato": 0, "totale": 0
+        }}
+
+    # Carica tools_machine.json
+    tools_folder = (config.get("tools_toa_folder") or "").strip()
+    tools_db = {}
+    if tools_folder:
+        tm_path = Path(tools_folder) / "tools_machine.json"
+        if tm_path.exists():
+            try:
+                raw = json.loads(tm_path.read_text(encoding="utf-8"))
+                tools_db = raw.get("tools", {})
+            except Exception:
+                pass
+
+    # Indice tools_machine per alias
+    in_macchina = {}  # alias_upper -> tool_dict
+    for t in tools_db.values():
+        n = (t.get("name") or "").upper().strip()
+        if n:
+            in_macchina[n] = t
+
+    # Carica scaffale e smontati CSV
+    from database.db_handler import (
+        auto_find_db_paths, carica_database, carica_database_utensili_smontati
+    )
+    db_paths = auto_find_db_paths(config)
+
+    scaffale_alias = set()
+    if db_paths.get("principale"):
+        try:
+            df, _ = carica_database(db_paths["principale"])
+            scaffale_alias = set(df["Alias"].str.upper().str.strip().tolist())
+        except Exception:
+            pass
+
+    smontati_alias = set()
+    if db_paths.get("utensili_smontati"):
+        try:
+            df_s, _ = carica_database_utensili_smontati(db_paths["utensili_smontati"])
+            if "Alias_Utensile" in df_s.columns:
+                smontati_alias = set(df_s["Alias_Utensile"].str.upper().str.strip().tolist())
+        except Exception:
+            pass
+
+    # Classifica ogni alias
+    result = []
+    summary = {"ok": 0, "scaffale": 0, "smontato": 0, "mancante": 0,
+               "fin_vita": 0, "disabilitato": 0, "totale": len(alias_richiesti)}
+
+    for alias in sorted(alias_richiesti):
+        tool = in_macchina.get(alias)
+        if tool:
+            lp = tool.get("life_percent")
+            if not tool.get("is_enabled", True) or tool.get("is_worn", False):
+                stato = "disabilitato"
+            elif lp is not None and lp < 15:
+                stato = "fin_vita"
+            else:
+                stato = "ok"
+        elif alias in scaffale_alias:
+            stato = "scaffale"
+        elif alias in smontati_alias:
+            stato = "smontato"
+        else:
+            stato = "mancante"
+
+        summary[stato] = summary.get(stato, 0) + 1
+
+        result.append({
+            "alias":        alias,
+            "stato":        stato,
+            "magazine":     tool.get("magazine")     if tool else None,
+            "position":     tool.get("position")     if tool else None,
+            "life_percent": tool.get("life_percent") if tool else None,
+            "length":       tool.get("length")       if tool else None,
+        })
+
+    return {"project_id": project_id, "utensili": result, "summary": summary}
+
+
+@router.get("/analisi-setup/non-utilizzati")
+async def get_utensili_non_utilizzati():
+    """
+    Confronta utensili in macchina con quelli richiesti dai progetti attivi.
+    Ritorna: non_utilizzati, da_montare, fin_vita
+    """
+    from database.db_handler import (
+        auto_find_db_paths, carica_database, carica_database_utensili_smontati
+    )
+
+    config   = carica_configurazione()
+    data     = _load_progetti(config)
+    projects = [p for p in data.get("projects", []) if not p.get("archived")]
+
+    # Tutti gli alias richiesti dai progetti attivi
+    alias_attivi = set()
+    for project in projects:
+        for step in project.get("steps", []):
+            for task in step.get("tasks", []):
+                if task.get("text", "").strip().lower() == "fresatura":
+                    for pgm in task.get("programs", []):
+                        if pgm.get("tipoGruppo") != "ipm" and pgm.get("utensile"):
+                            alias_attivi.add(pgm["utensile"].upper().strip())
+
+    # Carica tools_machine
+    tools_folder = (config.get("tools_toa_folder") or "").strip()
+    tools_db = {}
+    if tools_folder:
+        tm_path = Path(tools_folder) / "tools_machine.json"
+        if tm_path.exists():
+            try:
+                raw = json.loads(tm_path.read_text(encoding="utf-8"))
+                tools_db = raw.get("tools", {})
+            except Exception:
+                pass
+
+    db_paths = auto_find_db_paths(config)
+
+    scaffale_rows = []
+    if db_paths.get("principale"):
+        try:
+            df, _ = carica_database(db_paths["principale"])
+            scaffale_rows = df.to_dict("records")
+        except Exception:
+            pass
+
+    smontati_rows = []
+    if db_paths.get("utensili_smontati"):
+        try:
+            df_s, _ = carica_database_utensili_smontati(db_paths["utensili_smontati"])
+            if "Alias_Utensile" in df_s.columns:
+                smontati_rows = df_s.to_dict("records")
+        except Exception:
+            pass
+
+    # Non utilizzati: in macchina ma non richiesti da nessun progetto attivo
+    non_utilizzati = []
+    fin_vita        = []
+    for t in tools_db.values():
+        n = (t.get("name") or "").upper().strip()
+        if not n: continue
+        lp = t.get("life_percent")
+        if lp is not None and lp < 15:
+            fin_vita.append({
+                "alias": n, "magazine": t.get("magazine"),
+                "position": t.get("position"), "life_percent": lp
+            })
+        if n not in alias_attivi:
+            non_utilizzati.append({
+                "alias": n, "magazine": t.get("magazine"),
+                "position": t.get("position"), "life_percent": lp
+            })
+
+    # Da montare: richiesti da progetti attivi ma non in macchina
+    in_macchina_alias = {(t.get("name") or "").upper().strip() for t in tools_db.values()}
+    scaffale_alias    = {str(r.get("Alias","")).upper().strip() for r in scaffale_rows}
+    smontati_alias    = {str(r.get("Alias_Utensile","")).upper().strip() for r in smontati_rows}
+
+    da_montare = []
+    for alias in sorted(alias_attivi - in_macchina_alias):
+        if alias in scaffale_alias:
+            provenienza = "scaffale"
+        elif alias in smontati_alias:
+            provenienza = "smontato"
+        else:
+            provenienza = "mancante"
+        da_montare.append({"alias": alias, "provenienza": provenienza})
+
+    return {
+        "non_utilizzati": sorted(non_utilizzati, key=lambda x: x["alias"]),
+        "da_montare":     da_montare,
+        "fin_vita":       sorted(fin_vita, key=lambda x: x.get("life_percent") or 0),
+        "sync_time":      json.loads((Path(tools_folder) / "tools_machine.json").read_text())
+                          .get("sync_time") if tools_folder and (Path(tools_folder)/"tools_machine.json").exists() else None,
+    }

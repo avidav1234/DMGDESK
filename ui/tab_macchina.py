@@ -309,6 +309,18 @@ class TabMacchina:
                       font=get_font("small"), height=36, width=110,
                       corner_radius=6).pack(side="right", padx=3)
 
+        self.btn_setup = ctk.CTkButton(
+            toolbar_right,
+            text="🔧 Analisi Setup",
+            command=self._analisi_setup,
+            fg_color="transparent",
+            hover_color="#F5F5F5",
+            text_color="#546E7A",
+            border_width=1, border_color="#E0E0E0",
+            font=get_font("small"), height=30, width=130, corner_radius=6
+        )
+        self.btn_setup.pack(side="right", padx=3)
+
         self.btn_sync = ctk.CTkButton(
             toolbar, text="↻ Sync macchina",
             command=self._do_sync,
@@ -611,6 +623,163 @@ class TabMacchina:
         if tma_warning:
             lines.append("Attenzione: " + tma_warning)
         messagebox.showinfo("Sync completato", "\n".join(lines))
+        # Avvia analisi setup in background
+        self.parent.after(200, self._analisi_setup)
+
+    def _analisi_setup(self):
+        """Mostra popup con utensili non utilizzati, da montare e fine vita."""
+        import threading
+        def _worker():
+            try:
+                from database.db_handler import auto_find_db_paths, carica_database, carica_database_utensili_smontati
+                from pathlib import Path
+                import json
+
+                cfg = _carica_config()
+                tools_folder = (cfg.get("tools_toa_folder") or "").strip()
+
+                # Carica tools_machine
+                tools_db = {}
+                if tools_folder:
+                    tm = Path(tools_folder) / "tools_machine.json"
+                    if tm.exists():
+                        raw = json.loads(tm.read_text(encoding="utf-8"))
+                        tools_db = raw.get("tools", {})
+
+                # Alias in macchina
+                in_macchina = {(t.get("name") or "").upper().strip(): t
+                               for t in tools_db.values() if t.get("name")}
+
+                # Carica scaffale e smontati
+                db_paths = auto_find_db_paths(cfg)
+                scaffale_alias, smontati_alias = set(), set()
+                try:
+                    df, _ = carica_database(db_paths["principale"])
+                    scaffale_alias = set(df["Alias"].str.upper().str.strip())
+                except Exception: pass
+                try:
+                    df_s, _ = carica_database_utensili_smontati(db_paths["utensili_smontati"])
+                    if "Alias_Utensile" in df_s.columns:
+                        smontati_alias = set(df_s["Alias_Utensile"].str.upper().str.strip())
+                except Exception: pass
+
+                # Carica alias richiesti da progetti attivi
+                from api.routers.progetti import _load_progetti
+                data = _load_progetti(cfg)
+                alias_attivi = set()
+                for p in data.get("projects", []):
+                    if p.get("archived"): continue
+                    for step in p.get("steps", []):
+                        for task in step.get("tasks", []):
+                            if task.get("text","").strip().lower() == "fresatura":
+                                for pgm in task.get("programs", []):
+                                    if pgm.get("tipoGruppo") != "ipm" and pgm.get("utensile"):
+                                        alias_attivi.add(pgm["utensile"].upper().strip())
+
+                # Calcola liste
+                non_utilizzati = [
+                    {"alias": n, **{k: t.get(k) for k in ["magazine","position","life_percent"]}}
+                    for n, t in in_macchina.items() if n not in alias_attivi
+                ]
+                da_montare = [
+                    {"alias": a, "provenienza": "scaffale" if a in scaffale_alias
+                                               else "smontato" if a in smontati_alias
+                                               else "mancante"}
+                    for a in sorted(alias_attivi - set(in_macchina.keys()))
+                ]
+                fin_vita = [
+                    {"alias": n, **{k: t.get(k) for k in ["magazine","position","life_percent"]}}
+                    for n, t in in_macchina.items()
+                    if t.get("life_percent") is not None and t["life_percent"] < 15
+                ]
+
+                self.parent.after(0, lambda: self._mostra_setup_popup(
+                    non_utilizzati, da_montare, fin_vita))
+            except Exception as e:
+                self.parent.after(0, lambda: print(f"Analisi setup errore: {e}"))
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _mostra_setup_popup(self, non_utilizzati, da_montare, fin_vita):
+        if not non_utilizzati and not da_montare and not fin_vita:
+            messagebox.showinfo("Analisi Setup", "✓ Tutto ok!\nNessuna anomalia rilevata.")
+            return
+
+        win = tk.Toplevel(self.parent)
+        win.title("🔧 Analisi Setup Macchina")
+        win.geometry("620x540")
+        win.grab_set()
+        win.configure(bg="#F5F4F0")
+
+        # Header
+        hdr = ctk.CTkFrame(win, fg_color="#FFFFFF", height=60, corner_radius=0)
+        hdr.pack(fill="x")
+        hdr.pack_propagate(False)
+        ctk.CTkLabel(hdr, text="🔧  Analisi Setup Macchina",
+                     font=("DM Sans",16,"bold"), text_color="#1A1814").pack(side="left", padx=16, pady=14)
+        ctk.CTkButton(hdr, text="Chiudi", command=win.destroy,
+                      fg_color="transparent", hover_color="#F5F5F5",
+                      text_color="#5A5750", border_width=1, border_color="#D8D5CC",
+                      font=("DM Sans",11), height=28, corner_radius=6).pack(side="right", padx=12)
+
+        tk.Frame(win, height=1, bg="#D8D5CC").pack(fill="x")
+
+        # Body scrollabile
+        body = ctk.CTkScrollableFrame(win, fg_color="#F5F4F0", corner_radius=0)
+        body.pack(fill="both", expand=True, padx=16, pady=12)
+
+        def _sezione(titolo, items, color, bg, render_fn):
+            if not items: return
+            ctk.CTkLabel(body, text=titolo, font=("DM Sans",10,"bold"),
+                         text_color=color).pack(anchor="w", pady=(10,4))
+            for item in items:
+                row = tk.Frame(body, bg=bg, highlightbackground="#D8D5CC", highlightthickness=1)
+                row.pack(fill="x", pady=1)
+                render_fn(row, item)
+
+        def _render_da_montare(row, item):
+            tk.Label(row, text=item["alias"], font=("Consolas",11,"bold"),
+                     fg="#1A1814", bg=bg_dm).pack(side="left", padx=10, pady=5)
+            prov_cfg = {"scaffale":("🏠 A scaffale","#1D5FAD","#dbeafe"),
+                        "smontato": ("📦 Smontato", "#C2720A","#FFF0DC"),
+                        "mancante": ("✗ Non trovato","#C0392B","#FDECEA")}
+            lbl, fg, pbg = prov_cfg.get(item.get("provenienza","mancante"),
+                                          prov_cfg["mancante"])
+            tk.Label(row, text=lbl, font=("DM Sans",10,"bold"), fg=fg, bg=pbg,
+                     padx=6, pady=1).pack(side="right", padx=10)
+
+        def _render_fin_vita(row, item):
+            tk.Label(row, text=item["alias"], font=("Consolas",11,"bold"),
+                     fg="#1A1814", bg="#FEF3C7").pack(side="left", padx=10, pady=5)
+            if item.get("magazine") is not None:
+                tk.Label(row, text=f"M{item['magazine']}", font=("Consolas",10),
+                         fg="#5A5750", bg="#FEF3C7").pack(side="left", padx=4)
+            if item.get("life_percent") is not None:
+                tk.Label(row, text=f"{item['life_percent']}%",
+                         font=("DM Sans",11,"bold"), fg="#C0392B", bg="#FEF3C7").pack(side="right", padx=10)
+
+        def _render_non_usati(row, item):
+            tk.Label(row, text=item["alias"], font=("Consolas",11),
+                     fg="#5A5750", bg="#F0EEE8").pack(side="left", padx=10, pady=5)
+            if item.get("magazine") is not None:
+                tk.Label(row, text=f"M{item['magazine']}", font=("Consolas",9),
+                         fg="#9A978E", bg="#F0EEE8").pack(side="left", padx=4)
+            if item.get("life_percent") is not None:
+                tk.Label(row, text=f"{item['life_percent']}%",
+                         font=("DM Sans",9), fg="#9A978E", bg="#F0EEE8").pack(side="right", padx=10)
+
+        bg_dm = "#FDECEA"
+        _sezione(f"✗  MANCANTI / DA MONTARE — {len(da_montare)}", da_montare, "#C0392B", bg_dm, _render_da_montare)
+        _sezione(f"⚠  FINE VITA (<15%) — {len(fin_vita)}", fin_vita, "#B45309", "#FEF3C7", _render_fin_vita)
+        _sezione(f"📦  NON UTILIZZATI DA NESSUN PROGETTO — {len(non_utilizzati)}", non_utilizzati, "#5A5750", "#F0EEE8", _render_non_usati)
+
+        # Footer
+        ftr = ctk.CTkFrame(win, fg_color="#F5F4F0", height=48, corner_radius=0)
+        ftr.pack(fill="x")
+        ftr.pack_propagate(False)
+        ctk.CTkButton(ftr, text="OK, ho capito", command=win.destroy,
+                      fg_color="#D4700A", hover_color="#B5600A",
+                      font=("DM Sans",12,"bold"), height=32, corner_radius=6).pack(side="right", padx=12, pady=8)
 
     def _sync_error(self, msg):
         self.btn_sync.configure(state="normal", text="↻ Sync macchina")

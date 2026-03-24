@@ -279,6 +279,114 @@ function FresaturaPanel({task,onUpdateTask}){
     </div>
   )
 }
+
+// ── UtensiliProgetto ───────────────────────────────────────────────────────────
+function UtensiliProgetto({projectId}){
+  const[data,setData]=useState(null)
+  const[loading,setLoading]=useState(true)
+  const[expanded,setExpanded]=useState(false)
+
+  useEffect(()=>{
+    if(!expanded)return
+    setLoading(true)
+    fetch(`/api/progetti/${projectId}/utensili-check`)
+      .then(r=>r.ok?r.json():null)
+      .then(d=>{setData(d);setLoading(false)})
+      .catch(()=>setLoading(false))
+  },[projectId,expanded])
+
+  const CFG={
+    ok:         {label:'In macchina',   color:'#166534',bg:'#dcfce7',dot:'✓'},
+    fin_vita:   {label:'Fine vita <15%',color:'#B45309',bg:'#FEF3C7',dot:'⚠'},
+    disabilitato:{label:'Disabilitato', color:'#9333EA',bg:'#F3E8FF',dot:'⊘'},
+    scaffale:   {label:'A scaffale',    color:'#1D5FAD',bg:'#dbeafe',dot:'🏠'},
+    smontato:   {label:'Smontato',      color:'#C2720A',bg:'#FFF0DC',dot:'📦'},
+    mancante:   {label:'Non trovato',   color:'#C0392B',bg:'#FDECEA',dot:'✗'},
+  }
+
+  const hasIssues = data && (
+    data.summary.mancante>0 || data.summary.fin_vita>0 ||
+    data.summary.scaffale>0 || data.summary.smontato>0 || data.summary.disabilitato>0
+  )
+
+  return(
+    <div style={{marginTop:12,border:`1.5px solid ${hasIssues&&expanded?'#C0392B33':'#D8D5CC'}`,borderRadius:10,overflow:'hidden'}}>
+      <div onClick={()=>setExpanded(v=>!v)}
+        style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',cursor:'pointer',
+          background:hasIssues?'#FFF4E8':'#F5F4F0',userSelect:'none'}}>
+        <span style={{fontSize:14}}>🔧</span>
+        <span style={{fontSize:13,fontWeight:800,color:'#1A1814',flex:1}}>UTENSILI RICHIESTI</span>
+        {data&&<>
+          <span style={{fontSize:11,fontWeight:700,color:'#166534',background:'#dcfce7',padding:'2px 8px',borderRadius:20}}>
+            ✓ {data.summary.ok}
+          </span>
+          {data.summary.fin_vita>0&&<span style={{fontSize:11,fontWeight:700,color:'#B45309',background:'#FEF3C7',padding:'2px 8px',borderRadius:20}}>
+            ⚠ {data.summary.fin_vita} vita bassa
+          </span>}
+          {(data.summary.scaffale+data.summary.smontato)>0&&<span style={{fontSize:11,fontWeight:700,color:'#1D5FAD',background:'#dbeafe',padding:'2px 8px',borderRadius:20}}>
+            🏠 {data.summary.scaffale+data.summary.smontato} da montare
+          </span>}
+          {data.summary.mancante>0&&<span style={{fontSize:11,fontWeight:700,color:'#C0392B',background:'#FDECEA',padding:'2px 8px',borderRadius:20}}>
+            ✗ {data.summary.mancante} mancanti
+          </span>}
+        </>}
+        <span style={{fontSize:11,color:'#9A978E',fontWeight:700}}>{expanded?'▲':'▼'}</span>
+      </div>
+
+      {expanded&&(
+        <div>
+          {loading&&<div style={{padding:16,textAlign:'center',color:'#9A978E',fontSize:13}}>Caricamento...</div>}
+          {!loading&&data&&data.utensili.length===0&&(
+            <div style={{padding:16,textAlign:'center',color:'#9A978E',fontSize:13}}>
+              Nessun utensile rilevato nei programmi MPF
+            </div>
+          )}
+          {!loading&&data&&data.utensili.length>0&&(
+            <>
+              {/* Header colonne */}
+              <div style={{display:'flex',background:'#F0EEE8',borderBottom:'1px solid #D8D5CC',
+                fontSize:10,fontWeight:700,color:'#9A978E',letterSpacing:'0.07em'}}>
+                <div style={{width:110,padding:'5px 10px',borderRight:'1px solid #D8D5CC'}}>STATO</div>
+                <div style={{flex:1,padding:'5px 10px',borderRight:'1px solid #D8D5CC'}}>ALIAS</div>
+                <div style={{width:80,padding:'5px 10px',borderRight:'1px solid #D8D5CC',textAlign:'center'}}>MAG/POS</div>
+                <div style={{width:80,padding:'5px 10px',textAlign:'center'}}>VITA</div>
+              </div>
+              {data.utensili.map(u=>{
+                const cfg=CFG[u.stato]||CFG.mancante
+                return(
+                  <div key={u.alias} style={{display:'flex',alignItems:'center',
+                    borderBottom:'1px solid #D8D5CC',
+                    background:u.stato==='mancante'?'#FFFAF9':u.stato==='ok'?'#FAFFFE':'#FFFFFF'}}>
+                    <div style={{width:110,padding:'6px 10px',borderRight:'1px solid #D8D5CC',
+                      display:'flex',alignItems:'center',gap:5,
+                      background:cfg.bg,color:cfg.color,fontWeight:700,fontSize:12}}>
+                      {cfg.dot} {cfg.label}
+                    </div>
+                    <div style={{flex:1,padding:'6px 10px',borderRight:'1px solid #D8D5CC',
+                      fontSize:12,fontFamily:'monospace',fontWeight:700,color:'#1A1814'}}>
+                      {u.alias}
+                    </div>
+                    <div style={{width:80,padding:'6px 10px',borderRight:'1px solid #D8D5CC',
+                      textAlign:'center',fontSize:11,color:'#5A5750',fontFamily:'monospace'}}>
+                      {u.magazine!=null?`M${u.magazine}`:''}{u.position!=null?` P${u.position}`:''}
+                      {u.magazine==null&&u.position==null?'—':''}
+                    </div>
+                    <div style={{width:80,padding:'6px 10px',textAlign:'center',fontSize:11,
+                      fontWeight:700,
+                      color:u.life_percent!=null?(u.life_percent<15?'#C0392B':u.life_percent<30?'#D4700A':'#1A7A4A'):'#9A978E'}}>
+                      {u.life_percent!=null?`${u.life_percent}%`:'—'}
+                    </div>
+                  </div>
+                )
+              })}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── TaskItem ───────────────────────────────────────────────────────────────────
 function TaskItem({task,idx,stepId,onToggle,onUpdateTask,onDelete,isNext,onReorderTask}){
   const[hovered,setHovered]=useState(false)
@@ -555,6 +663,12 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
   function updateLog(logId,newText){onUpdate({...project,log:(project.log||[]).map(e=>e.id===logId?{...e,text:newText,editedAt:nowStr()}:e)})}
   function deleteLog(logId){onUpdate({...project,log:(project.log||[]).filter(e=>e.id!==logId)})}
 
+  // Estrai alias utensili da tutti i programmi MPF del progetto
+  const aliasUsati=new Set((project.steps||[]).flatMap(s=>s.tasks||[])
+    .filter(t=>t.text?.trim().toLowerCase()==='fresatura')
+    .flatMap(t=>(t.programs||[]).filter(p=>p.tipoGruppo!=='ipm'&&p.utensile)
+    .map(p=>p.utensile)))
+
   const Tab=({id,label})=>(<button onClick={()=>setActiveTab(id)} style={{background:'none',border:'none',cursor:'pointer',color:activeTab===id?project.color:T.textSub,fontSize:15,fontWeight:700,padding:'10px 0',borderBottom:activeTab===id?`3px solid ${project.color}`:'3px solid transparent',marginRight:24,transition:'all 0.15s'}}>{label}</button>)
 
   return(
@@ -600,6 +714,8 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
         {activeTab==='tasks'&&(
           <div>
             <div style={{fontSize:12,color:T.textMuted,marginBottom:12,display:'flex',alignItems:'center',gap:6}}><span>⣿</span> Trascina per riordinare fasi e task</div>
+            {aliasUsati.size>0&&<UtensiliProgetto projectId={project.id}/>}
+
             {project.steps.map((step,sIdx)=>(
               <StepSection key={step.id} step={step} stepIdx={sIdx}
                 nextTaskId={next?.step.id===step.id?next?.task.id:null}

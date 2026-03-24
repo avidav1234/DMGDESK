@@ -46,6 +46,8 @@ app.include_router(tools.router,          prefix="/api/tools",          tags=["T
 app.include_router(macchina_live.router,  prefix="/api/macchina-live",  tags=["Stato Macchina Live"])
 app.include_router(pallet.router,         prefix="/api/pallet",         tags=["Gestione Pallet"])
 app.include_router(macchina_invio.router,  prefix="/api/macchina-invio",  tags=["Invio Macchina"])
+from api.routers import progetti
+app.include_router(progetti.router,       prefix="/api/progetti",         tags=["Progetti WorkTrack"])
 
 
 @app.on_event("startup")

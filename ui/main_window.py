@@ -13,6 +13,7 @@ from database.db_handler import *
 
 from .tab_coda_lavorazione import TabCodaLavorazione
 from .tab_macchina import TabMacchina
+from .tab_progetti import TabProgetti
 from .tab_scaffale import TabScaffale
 from .tab_smontati import TabSmontati
 from .tab_holder_bussole import TabHolderBussole
@@ -138,6 +139,10 @@ class MainWindow(ctk.CTk):
         self.tab_holder_bussole = TabHolderBussole(
             self.tabview.tab("🔩 Holder & Bussole"),
             self
+        )
+
+        self.tab_progetti = TabProgetti(
+            self.tabview.tab("Progetti"), self
         )
         
         # Imposta tab Analisi NC come default

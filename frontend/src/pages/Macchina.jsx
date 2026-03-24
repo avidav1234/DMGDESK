@@ -349,9 +349,9 @@ export default function Macchina() {
         </span>
       </div>
 
-            {setupPopup && <SetupPannel />}
+      {setupPopup && <SetupPannel />}
 
-{/* Tabella utensili */}
+      {/* Tabella utensili */}
       {loading ? <Loader /> : tools.length === 0 ? null : (
         <div style={{ flex: 1, overflow: 'auto', background: 'var(--bg-surface)',
           borderRadius: 10, border: '1px solid var(--border)' }}>

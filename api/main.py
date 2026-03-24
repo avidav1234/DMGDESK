@@ -53,9 +53,34 @@ async def startup():
     log.info("DMG Desk API v16.0 avviata — http://0.0.0.0:8000")
 
 
-@app.get("/", tags=["Status"])
-async def root():
-    return {"app": "DMG Desk API", "version": "16.0.0", "status": "running", "docs": "/docs"}
+# ── Serve frontend React (se compilato) ───────────────────────────────────
+import os as _os
+from pathlib import Path as _Path
+
+_FRONTEND_DIST = _Path(__file__).parent.parent / "frontend" / "dist"
+
+if _FRONTEND_DIST.exists():
+    from fastapi.staticfiles import StaticFiles
+    from fastapi.responses import FileResponse
+
+    # Monta gli asset statici (JS, CSS, immagini)
+    app.mount("/assets", StaticFiles(directory=str(_FRONTEND_DIST / "assets")), name="assets")
+
+    @app.get("/", include_in_schema=False)
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def serve_spa(full_path: str = ""):
+        """Serve il frontend React — tutte le route non-API tornano index.html (SPA)."""
+        # Non intercettare le API
+        if full_path.startswith("api/") or full_path == "docs" or full_path == "openapi.json":
+            return {"error": "not found"}
+        index = _FRONTEND_DIST / "index.html"
+        if index.exists():
+            return FileResponse(str(index))
+        return {"app": "DMG Desk API", "version": "16.0.0", "status": "running", "docs": "/docs"}
+else:
+    @app.get("/", tags=["Status"])
+    async def root():
+        return {"app": "DMG Desk API", "version": "16.0.0", "status": "running", "docs": "/docs"}
 
 
 @app.get("/health", tags=["Status"])

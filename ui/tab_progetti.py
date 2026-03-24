@@ -1742,8 +1742,37 @@ class TabProgetti:
         self.parent.after(0, self._refresh)
 
     def _set_pallet(self, project, value):
-        project["pallet_assegnato"] = None if value == "—" else int(value)
+        new_pallet = None if value == "—" else int(value)
+        old_pallet = project.get("pallet_assegnato")
+        project["pallet_assegnato"] = new_pallet
+        self._projects = [project if p["id"]==project["id"] else p for p in self._projects]
         threading.Thread(target=lambda: _save_progetti(self._projects), daemon=True).start()
+
+        # Sincronizza pallet_state.json tramite API locale
+        def _sync_pallet():
+            try:
+                import urllib.request, json as _j, urllib.parse
+                base = "http://localhost:8000"
+                # Rimuovi assegnazione dal vecchio pallet se c'era
+                if old_pallet and old_pallet != new_pallet:
+                    body = _j.dumps({"progetto_id": None, "progetto_nome": None, "progetto_colore": None}).encode()
+                    req = urllib.request.Request(f"{base}/api/pallet/{old_pallet}/assegna-progetto",
+                        data=body, headers={"Content-Type": "application/json"}, method="PATCH")
+                    urllib.request.urlopen(req, timeout=2)
+                # Assegna al nuovo pallet
+                if new_pallet:
+                    body = _j.dumps({
+                        "progetto_id":     project["id"],
+                        "progetto_nome":   project.get("name", ""),
+                        "progetto_colore": project.get("color", "#1D5FAD")
+                    }).encode()
+                    req = urllib.request.Request(f"{base}/api/pallet/{new_pallet}/assegna-progetto",
+                        data=body, headers={"Content-Type": "application/json"}, method="PATCH")
+                    urllib.request.urlopen(req, timeout=2)
+            except Exception:
+                pass  # API non disponibile — solo salva il progetto
+
+        threading.Thread(target=_sync_pallet, daemon=True).start()
 
     def _archivia(self, project):
         project["archived"] = not project.get("archived", False)

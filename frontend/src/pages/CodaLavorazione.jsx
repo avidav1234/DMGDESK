@@ -102,6 +102,22 @@ export default function CodaLavorazione() {
 
       setLastUpdate(new Date().toLocaleTimeString("it-IT"));
       setError(null);
+
+      // Carica info progetto per pallet con progetto_id assegnato
+      const pInfo = {};
+      for (const pal of palletArr) {
+        if (pal.progetto_id) {
+          try {
+            const r = await fetch(`/api/pallet/${pal.numero}/progetto-info`);
+            if (r.ok) {
+              const d = await r.json();
+              if (d.progetto) pInfo[pal.numero] = d.progetto;
+            }
+          } catch {}
+        }
+      }
+      setProgettiPallet(pInfo);
+
     } catch {
       setError("Errore connessione");
     }

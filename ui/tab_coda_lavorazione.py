@@ -410,8 +410,11 @@ class TabCodaLavorazione:
                             "IN_LAVORAZIONE": "IN LAVORAZIONE",
                             "FINITO": "FINITO", "GUASTO": "GUASTO"
                         }
-                        pallets[pid-1]["stato"]    = stato_map.get(stato_raw, "VUOTO")
-                        pallets[pid-1]["programma"] = p_saved.get("programma")
+                        pallets[pid-1]["stato"]      = stato_map.get(stato_raw, "VUOTO")
+                        pallets[pid-1]["programma"]   = p_saved.get("programma")
+                        pallets[pid-1]["progetto_id"] = p_saved.get("progetto_id")
+                        pallets[pid-1]["progetto_nome"] = p_saved.get("progetto_nome")
+                        pallets[pid-1]["progetto_colore"] = p_saved.get("progetto_colore")
             except Exception:
                 pass
 
@@ -512,17 +515,13 @@ class TabCodaLavorazione:
             try: w.configure(bg=colors["bg"])
             except: pass
 
-        widgets["lbl_num"].configure(
-            bg=colors["bg"], fg=colors["fg"])
-        widgets["lbl_stato"].configure(
-            text=stato, bg=colors["bg"], fg=colors["fg"])
+        widgets["lbl_num"].configure(bg=colors["bg"], fg=colors["fg"])
+        widgets["lbl_stato"].configure(text=stato, bg=colors["bg"], fg=colors["fg"])
 
         prog_display = prog
         if prog and len(prog) > 20:
-            # Estrai solo la parte finale dopo l'ultimo /
             prog_display = prog.split("/")[-1].replace("_N_", "").replace("_MPF", "")
-        widgets["lbl_prog"].configure(
-            text=prog_display, bg=colors["bg"], fg=colors["fg"])
+        widgets["lbl_prog"].configure(text=prog_display, bg=colors["bg"], fg=colors["fg"])
 
         # Dot indicatore attivo
         dot = widgets["lbl_dot"]
@@ -530,6 +529,68 @@ class TabCodaLavorazione:
             dot.configure(text="●", fg="#f59e0b", bg=colors["bg"])
         else:
             dot.configure(text="", bg=colors["bg"])
+
+        # ── Progetto assegnato ─────────────────────────────────────────────
+        proj_nome   = pallet.get("progetto_nome") or ""
+        proj_colore = pallet.get("progetto_colore") or "#1D5FAD"
+
+        # Rimuovi eventuali widget progetto precedenti
+        for w in f.winfo_children():
+            if getattr(w, "_dmg_pallet_proj", False):
+                w.destroy()
+
+        if proj_nome:
+            # Nome progetto
+            lbl_proj = tk.Label(f, text=f"● {proj_nome}",
+                                font=("DM Sans", 8, "bold"),
+                                fg=proj_colore, bg=colors["bg"],
+                                anchor="w", wraplength=120)
+            lbl_proj._dmg_pallet_proj = True
+            lbl_proj.pack(side="bottom", fill="x", padx=4, pady=(0,2))
+
+            # Calcola avanzamento dal progetto
+            def _calc_pct(pn=proj_nome):
+                try:
+                    cfg = _carica_config()
+                    import json as _j
+                    from pathlib import Path as _P
+                    folder = (cfg.get("tools_toa_folder") or "").strip()
+                    if not folder: return None
+                    pf = _P(folder) / "worktrack_projects.json"
+                    if not pf.exists(): return None
+                    data = _j.loads(pf.read_text(encoding="utf-8"))
+                    proj = next((p for p in data.get("projects",[]) if p.get("name")==pn), None)
+                    if not proj: return None
+                    pgms = [pgm for step in proj.get("steps",[]) for task in step.get("tasks",[])
+                            if task.get("text","").strip().lower()=="fresatura"
+                            for pgm in task.get("programs",[]) if pgm.get("tipoGruppo")!="ipm"]
+                    if not pgms: return None
+                    done = sum(1 for p in pgms if p.get("stato")=="completato")
+                    da_fare = sum(1 for p in pgms if p.get("stato")=="da_fare")
+                    return {"pct": round(done/len(pgms)*100,0), "done": done,
+                            "tot": len(pgms), "da_fare": da_fare}
+                except Exception:
+                    return None
+
+            info = _calc_pct()
+            if info:
+                # Barra avanzamento
+                bar_frame = tk.Frame(f, bg=colors["bg"], height=4)
+                bar_frame._dmg_pallet_proj = True
+                bar_frame.pack(side="bottom", fill="x", padx=4, pady=(0,1))
+                bar_frame.pack_propagate(False)
+                bar_fill = tk.Frame(bar_frame, bg=proj_colore, height=4)
+                pct_w = max(2, int(info["pct"]))
+                bar_fill.place(relx=0, rely=0, relwidth=pct_w/100, relheight=1)
+
+                lbl_pct = tk.Label(f, text=f"{int(info['pct'])}% · {info['done']}/{info['tot']}",
+                                   font=("DM Sans", 7), fg=colors["fg"], bg=colors["bg"], opacity=0.7
+                                   if hasattr(tk.Label, 'opacity') else 1)
+                # opacity non supportato su tk, usa colore muted
+                lbl_pct = tk.Label(f, text=f"{int(info['pct'])}% · {info['done']}/{info['tot']}",
+                                   font=("DM Sans", 7), fg="#666666", bg=colors["bg"])
+                lbl_pct._dmg_pallet_proj = True
+                lbl_pct.pack(side="bottom", fill="x", padx=4)
 
     # ── Click pallet ─────────────────────────────────────────────────────────
 

@@ -757,7 +757,8 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
                 onToggle={toggleTask} onUpdateTask={updateTaskInProject} onAddTask={addTask}
                 onDeleteTask={deleteTask} onReorderTask={reorderTask}
                 onReorderStep={reorderStep} onDeleteStep={deleteStep}
-                totalSteps={project.steps.length} projectColor={project.color}/>
+                totalSteps={project.steps.length} projectColor={project.color}
+                toolsDB={toolsDB}/>
             ))}
             {addingStep?(
               <div style={{display:'flex',gap:10,marginTop:10}}>

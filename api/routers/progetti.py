@@ -641,3 +641,28 @@ async def segna_in_macchina(project_id: str, body: dict):
         path.write_text(json.dumps(data_to_save, ensure_ascii=False, indent=2), encoding="utf-8")
 
     return {"aggiornati": aggiornati, "project_id": project_id}
+
+
+@router.get("/{project_id}/debug-utensili")
+async def debug_utensili(project_id: str):
+    """Debug: mostra gli alias estratti dai programmi del progetto."""
+    config  = carica_configurazione()
+    data    = _load_progetti(config)
+    project = next((p for p in data.get("projects", []) if p.get("id") == project_id), None)
+    if not project:
+        raise HTTPException(404, "Progetto non trovato")
+
+    result = []
+    for step in project.get("steps", []):
+        for task in step.get("tasks", []):
+            if task.get("text", "").strip().lower() != "fresatura":
+                continue
+            for pgm in task.get("programs", []):
+                result.append({
+                    "filename": pgm.get("filename"),
+                    "stato":    pgm.get("stato"),
+                    "utensile": pgm.get("utensile"),
+                    "diametro": pgm.get("diametro"),
+                    "tipoGruppo": pgm.get("tipoGruppo"),
+                })
+    return {"project_id": project_id, "programs": result}

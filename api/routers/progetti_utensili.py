@@ -75,15 +75,24 @@ def estrai_alias_da_progetti(config: dict) -> dict:
 
                     if alias:
                         alias_map.setdefault(alias, []).append((pname, filename))
-                    elif filename:
-                        fpath = cerca_file_mpf(filename, nc_base, extra_dirs)
-                        if fpath:
-                            try:
-                                testo = open(fpath, encoding="utf-8", errors="replace").read()
-                                for a in parse_mpf_testo(testo):
-                                    alias_map.setdefault(a, []).append((pname, filename))
-                            except Exception:
-                                pass
+                    else:
+                        # Prova a leggere il file da disco
+                        found = False
+                        if filename:
+                            fpath = cerca_file_mpf(filename, nc_base, extra_dirs)
+                            if fpath:
+                                try:
+                                    testo = open(fpath, encoding="utf-8", errors="replace").read()
+                                    parsed = parse_mpf_testo(testo)
+                                    for a in parsed:
+                                        alias_map.setdefault(a, []).append((pname, filename))
+                                    if parsed:
+                                        found = True
+                                except Exception:
+                                    pass
+                        # Fallback: usa diametro dal nome file o tipoOp
+                        if not found and pgm.get("diametro"):
+                            pass  # non abbastanza info per ricostruire alias
 
     return alias_map
 

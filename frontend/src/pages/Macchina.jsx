@@ -55,10 +55,12 @@ export default function Macchina() {
     )
 
     return (
-      <div style={{marginTop:12,border:'1px solid #D8D5CC',borderRadius:12,overflow:'hidden',background:'#FFFFFF'}}>
-        <div style={{display:'flex',flexDirection:'column'}}>
+      <div style={{marginTop:12,border:'1px solid #D8D5CC',borderRadius:12,
+        overflow:'hidden',background:'#FFFFFF',
+        maxHeight:'70vh',display:'flex',flexDirection:'column'}}>
+        <div style={{display:'flex',flexDirection:'column',height:'100%',overflow:'hidden'}}>
           <div style={{padding:'18px 24px',borderBottom:'1px solid #D8D5CC',
-            display:'flex',alignItems:'center',gap:10}}>
+            display:'flex',alignItems:'center',gap:10,flexShrink:0}}>
             <span style={{fontSize:20}}>🔧</span>
             <div style={{flex:1}}>
               <div style={{fontSize:17,fontWeight:800,color:'#1A1814'}}>Analisi Setup Macchina</div>
@@ -74,7 +76,7 @@ export default function Macchina() {
               Chiudi
             </button>
           </div>
-          <div style={{flex:1,overflowY:'auto',padding:'20px 24px'}}>
+          <div style={{flex:1,overflowY:'auto',padding:'20px 24px',minHeight:0}}>
             <Section title={`✗ MANCANTI / DA MONTARE — ${da_montare.length}`}
               items={da_montare} c='#C0392B' bg='#FDECEA'
               renderItem={item=><>

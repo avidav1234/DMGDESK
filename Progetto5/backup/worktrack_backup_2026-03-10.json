@@ -1,0 +1,1198 @@
+{
+  "_worktrack": true,
+  "version": 2,
+  "exportedAt": "2026-03-10T07:04:51.489Z",
+  "label": "Backup 2026-03-10",
+  "projects": [
+    {
+      "id": "wztu8iv",
+      "name": "4348_0221",
+      "description": "",
+      "color": "#D4700A",
+      "createdAt": "2026-03-04",
+      "archived": false,
+      "steps": [
+        {
+          "id": "3bu92gi",
+          "title": "Preparazione",
+          "tasks": [
+            {
+              "id": "trhmfxm",
+              "text": "Copia modello",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-04"
+            },
+            {
+              "id": "ehfv1dc",
+              "text": "Copia Grezzo",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-04"
+            },
+            {
+              "id": "0427fub",
+              "text": "Creazione archivio",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-04"
+            },
+            {
+              "id": "dh8y5a8",
+              "text": "Posizionamento Staffaggio",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-04"
+            }
+          ]
+        },
+        {
+          "id": "99aqrif",
+          "title": "Fase 1",
+          "tasks": [
+            {
+              "id": "03ne3v9",
+              "text": "Programmazione Percorsi",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-04"
+            },
+            {
+              "id": "lo21239",
+              "text": "Programmazione IPM",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-04"
+            },
+            {
+              "id": "zga6glx",
+              "text": "Simulazione",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-04"
+            },
+            {
+              "id": "6b7e5jd",
+              "text": "PP",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-04"
+            },
+            {
+              "id": "watkvok",
+              "text": "Report",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-04"
+            }
+          ]
+        },
+        {
+          "id": "d3ga5uy",
+          "title": "Fase 2",
+          "tasks": [
+            {
+              "id": "lm87vv5",
+              "text": "Programmazione Percorsi",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-04"
+            },
+            {
+              "id": "sf4an1m",
+              "text": "Programmazione IPM",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-04"
+            },
+            {
+              "id": "o2mrp88",
+              "text": "Simulazione",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-04"
+            },
+            {
+              "id": "frn5dk8",
+              "text": "PP",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-04"
+            },
+            {
+              "id": "rmbf7zy",
+              "text": "Report",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-04"
+            },
+            {
+              "id": "sna4sp9",
+              "text": "Fresatura",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-06",
+              "notes": [
+                {
+                  "id": "04bdr8e",
+                  "text": "Escludere il programma di finiture piani pgm 12 arrivare a 19",
+                  "createdAt": ""
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "799t6e7",
+          "title": "Fase 3",
+          "tasks": [
+            {
+              "id": "170qux7",
+              "text": "Programmazione Percorsi",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-04"
+            },
+            {
+              "id": "a4oayqx",
+              "text": "Programmazione IPM",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-04"
+            },
+            {
+              "id": "okhdp64",
+              "text": "Simulazione",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-09"
+            },
+            {
+              "id": "ues24se",
+              "text": "PP",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-04"
+            },
+            {
+              "id": "go6752s",
+              "text": "Report",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-05"
+            },
+            {
+              "id": "645fgmf",
+              "text": "Fresatura",
+              "done": false,
+              "note": "",
+              "doneAt": null
+            }
+          ]
+        }
+      ],
+      "log": [
+        {
+          "id": "bahid6n",
+          "user": "Tu",
+          "text": "Ri PP PGM 7-8 (procedure 72-73)",
+          "time": "05/03/2026 08:19"
+        },
+        {
+          "id": "wsd02x8",
+          "user": "Tu",
+          "text": "confermo presenza body pretempta",
+          "time": "05/03/2026 08:24"
+        }
+      ]
+    },
+    {
+      "id": "oyo0cja",
+      "name": "4397_0007",
+      "description": "",
+      "color": "#1A7A4A",
+      "createdAt": "2026-03-04",
+      "archived": false,
+      "steps": [
+        {
+          "id": "ibu0r1m",
+          "title": "Preparazione",
+          "tasks": [
+            {
+              "id": "zjk406x",
+              "text": "Copia modello",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-04"
+            },
+            {
+              "id": "7zgi1cv",
+              "text": "Copia Grezzo",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-04"
+            },
+            {
+              "id": "0b8jdsu",
+              "text": "Creazione archivio",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-04"
+            },
+            {
+              "id": "a53jlie",
+              "text": "Posizionamento Staffaggio",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-04"
+            }
+          ]
+        },
+        {
+          "id": "vb1rxld",
+          "title": "Fase 1",
+          "tasks": [
+            {
+              "id": "9i44ey2",
+              "text": "Programmazione Percorsi",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-04"
+            },
+            {
+              "id": "rv511kj",
+              "text": "Programmazione IPM",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-04"
+            },
+            {
+              "id": "yu7aw2g",
+              "text": "Simulazione",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-04"
+            },
+            {
+              "id": "l9bq7h7",
+              "text": "PP",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-04"
+            },
+            {
+              "id": "1ycec87",
+              "text": "Report",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-04"
+            },
+            {
+              "id": "kaji34c",
+              "text": "Fresatura",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-04"
+            }
+          ]
+        },
+        {
+          "id": "ne40vvo",
+          "title": "Fase 2",
+          "tasks": [
+            {
+              "id": "v0dr02y",
+              "text": "Programmazione Percorsi",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-04"
+            },
+            {
+              "id": "vshdzdq",
+              "text": "Programmazione IPM",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-04"
+            },
+            {
+              "id": "ec2f0w1",
+              "text": "Simulazione",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-06"
+            },
+            {
+              "id": "7fvcd68",
+              "text": "PP",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-04"
+            },
+            {
+              "id": "tveec4g",
+              "text": "Report",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-04"
+            },
+            {
+              "id": "2cw616n",
+              "text": "Fresatura",
+              "done": false,
+              "note": "",
+              "doneAt": null,
+              "notes": [
+                {
+                  "id": "frhmz70",
+                  "text": "piazzare",
+                  "createdAt": ""
+                },
+                {
+                  "id": "6sjupw6",
+                  "text": "verifiacare parete",
+                  "createdAt": "05/03/2026 08:35"
+                }
+              ]
+            },
+            {
+              "id": "fvopep8",
+              "text": "Verificare la planarità della parete",
+              "done": false,
+              "note": "",
+              "doneAt": null
+            }
+          ]
+        }
+      ],
+      "log": [
+        {
+          "id": "mo2l506",
+          "user": "Tu",
+          "text": "verificare la planarità del piano storto nella commessa 4296",
+          "time": "05/03/2026 08:29"
+        }
+      ]
+    },
+    {
+      "id": "ivhngk0",
+      "name": "Piastra_Body",
+      "description": "",
+      "color": "#D4700A",
+      "createdAt": "2026-03-04",
+      "archived": false,
+      "steps": [
+        {
+          "id": "e904n5t",
+          "title": "Preparazione",
+          "tasks": [
+            {
+              "id": "dmpqoeg",
+              "text": "Copia modello",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-04"
+            },
+            {
+              "id": "pyf4dee",
+              "text": "Copia Grezzo",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-04"
+            },
+            {
+              "id": "90f2e6n",
+              "text": "Creazione archivio",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-04"
+            },
+            {
+              "id": "rhneni5",
+              "text": "Posizionamento Staffaggio",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-04"
+            }
+          ]
+        },
+        {
+          "id": "qw0u8fj",
+          "title": "Fase 1",
+          "tasks": [
+            {
+              "id": "lcb48j4",
+              "text": "Programmazione Percorsi",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-04"
+            },
+            {
+              "id": "oegdvvn",
+              "text": "Programmazione IPM",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-04"
+            },
+            {
+              "id": "rf0h2fq",
+              "text": "Simulazione",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-04"
+            },
+            {
+              "id": "u9ovzdz",
+              "text": "PP",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-04"
+            },
+            {
+              "id": "nw5unj2",
+              "text": "Report",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-04"
+            },
+            {
+              "id": "bp70kll",
+              "text": "Fresatura",
+              "done": false,
+              "note": "",
+              "doneAt": null,
+              "notes": [
+                {
+                  "id": "nn5h38o",
+                  "text": "riprendere la filettatura tutto a +0.4 decimi",
+                  "createdAt": "09/03/2026 14:51"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "o04xbzo",
+          "title": "Fase 2",
+          "tasks": [
+            {
+              "id": "kr5pshd",
+              "text": "Programmazione Percorsi",
+              "done": false,
+              "note": "",
+              "doneAt": null
+            },
+            {
+              "id": "avck68v",
+              "text": "Programmazione IPM",
+              "done": false,
+              "note": "",
+              "doneAt": null
+            },
+            {
+              "id": "m7ex55b",
+              "text": "Simulazione",
+              "done": false,
+              "note": "",
+              "doneAt": null
+            },
+            {
+              "id": "5m87c0s",
+              "text": "PP",
+              "done": false,
+              "note": "",
+              "doneAt": null
+            },
+            {
+              "id": "5p1d1ac",
+              "text": "Report",
+              "done": false,
+              "note": "",
+              "doneAt": null
+            },
+            {
+              "id": "wy2fhkz",
+              "text": "Fresatura",
+              "done": false,
+              "note": "",
+              "doneAt": null
+            }
+          ]
+        },
+        {
+          "id": "lripjcm",
+          "title": "Fase 3",
+          "tasks": [
+            {
+              "id": "yhnkisb",
+              "text": "Programmazione Percorsi",
+              "done": false,
+              "note": "",
+              "doneAt": null
+            },
+            {
+              "id": "m6jki8a",
+              "text": "Programmazione IPM",
+              "done": false,
+              "note": "",
+              "doneAt": null
+            },
+            {
+              "id": "0dmwnxq",
+              "text": "Simulazione",
+              "done": false,
+              "note": "",
+              "doneAt": null
+            },
+            {
+              "id": "rp3jm1c",
+              "text": "PP",
+              "done": false,
+              "note": "",
+              "doneAt": null
+            },
+            {
+              "id": "3rvknba",
+              "text": "Report",
+              "done": false,
+              "note": "",
+              "doneAt": null
+            },
+            {
+              "id": "l83pgii",
+              "text": "Fresatura",
+              "done": false,
+              "note": "",
+              "doneAt": null
+            }
+          ]
+        }
+      ],
+      "log": []
+    },
+    {
+      "id": "poufy4v",
+      "name": "4360_7221",
+      "description": "",
+      "color": "#D4700A",
+      "createdAt": "2026-03-04",
+      "archived": false,
+      "steps": [
+        {
+          "id": "wj0fw8p",
+          "title": "Preparazione",
+          "tasks": [
+            {
+              "id": "1lpy06r",
+              "text": "Copia modello",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-04"
+            },
+            {
+              "id": "n50ocit",
+              "text": "Copia Grezzo",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-04"
+            },
+            {
+              "id": "b9fez5w",
+              "text": "Creazione archivio",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-04"
+            },
+            {
+              "id": "nb4y71g",
+              "text": "Posizionamento Staffaggio",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-04"
+            }
+          ]
+        },
+        {
+          "id": "fe4zf2c",
+          "title": "Fase 1",
+          "tasks": [
+            {
+              "id": "ouzz8lv",
+              "text": "Programmazione Percorsi",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-04"
+            },
+            {
+              "id": "qs23hrn",
+              "text": "Programmazione IPM",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-04"
+            },
+            {
+              "id": "sexwm4y",
+              "text": "Simulazione",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-09",
+              "notes": [
+                {
+                  "id": "736oqox",
+                  "text": "ok",
+                  "createdAt": "09/03/2026 13:00"
+                }
+              ]
+            },
+            {
+              "id": "a255iim",
+              "text": "PP",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-09"
+            },
+            {
+              "id": "561zsmb",
+              "text": "Report",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-09"
+            },
+            {
+              "id": "bbu6g8w",
+              "text": "Fresatura",
+              "done": false,
+              "note": "",
+              "doneAt": null
+            }
+          ]
+        },
+        {
+          "id": "cduxd4f",
+          "title": "Fase 2",
+          "tasks": [
+            {
+              "id": "4zygn0k",
+              "text": "Programmazione Percorsi",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-09"
+            },
+            {
+              "id": "l2b9a6s",
+              "text": "Programmazione IPM",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-09"
+            },
+            {
+              "id": "k09isok",
+              "text": "Simulazione",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-09"
+            },
+            {
+              "id": "fq0bhaf",
+              "text": "PP",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-09"
+            },
+            {
+              "id": "lseh4tp",
+              "text": "Report",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-10"
+            },
+            {
+              "id": "bke39os",
+              "text": "Fresatura",
+              "done": false,
+              "note": "",
+              "doneAt": null
+            }
+          ]
+        },
+        {
+          "id": "6exrfop",
+          "title": "Fase 3",
+          "tasks": [
+            {
+              "id": "0rpygid",
+              "text": "Programmazione Percorsi",
+              "done": false,
+              "note": "",
+              "doneAt": null
+            },
+            {
+              "id": "txugbj5",
+              "text": "Programmazione IPM",
+              "done": false,
+              "note": "",
+              "doneAt": null
+            },
+            {
+              "id": "v6s4tcz",
+              "text": "Simulazione",
+              "done": false,
+              "note": "",
+              "doneAt": null
+            },
+            {
+              "id": "lzawapg",
+              "text": "PP",
+              "done": false,
+              "note": "",
+              "doneAt": null
+            },
+            {
+              "id": "trfcymx",
+              "text": "Report",
+              "done": false,
+              "note": "",
+              "doneAt": null
+            },
+            {
+              "id": "wxqh9kf",
+              "text": "Fresatura",
+              "done": false,
+              "note": "",
+              "doneAt": null
+            }
+          ]
+        }
+      ],
+      "log": []
+    },
+    {
+      "id": "kvo9itm",
+      "name": "4297_0005",
+      "description": "",
+      "color": "#1A7A4A",
+      "createdAt": "2026-03-04",
+      "archived": false,
+      "steps": [
+        {
+          "id": "tywetz5",
+          "title": "Preparazione",
+          "tasks": [
+            {
+              "id": "xhzk38w",
+              "text": "Copia modello",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-04"
+            },
+            {
+              "id": "6poui2z",
+              "text": "Copia Grezzo",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-04"
+            },
+            {
+              "id": "hy8q2z4",
+              "text": "Creazione archivio",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-04"
+            },
+            {
+              "id": "2dto3kq",
+              "text": "Posizionamento Staffaggio",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-04"
+            },
+            {
+              "id": "baoid6s",
+              "text": "confronto grezzi 4295/6/7",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-04"
+            }
+          ]
+        },
+        {
+          "id": "uvbbsy1",
+          "title": "Fase 1",
+          "tasks": [
+            {
+              "id": "rrm064l",
+              "text": "Programmazione Percorsi",
+              "done": true,
+              "note": "",
+              "doneAt": "2026-03-04"
+            },
+            {
+              "id": "50j9jec",
+              "text": "Programmazione IPM",
+              "done": false,
+              "note": "La finitura delle chiusure è stata programmata a +0.04",
+              "doneAt": null
+            },
+            {
+              "id": "wasgdlt",
+              "text": "Simulazione",
+              "done": false,
+              "note": "sim ok fino alla procedura 182",
+              "doneAt": null
+            },
+            {
+              "id": "3t7w9e6",
+              "text": "PP",
+              "done": false,
+              "note": "",
+              "doneAt": null
+            },
+            {
+              "id": "9ghu4b3",
+              "text": "Report",
+              "done": false,
+              "note": "",
+              "doneAt": null
+            },
+            {
+              "id": "96yz9qn",
+              "text": "Fresatura",
+              "done": false,
+              "note": "",
+              "doneAt": null
+            }
+          ]
+        }
+      ],
+      "log": []
+    }
+  ],
+  "templates": [
+    {
+      "id": "new_l98lduz",
+      "name": "1 Fase",
+      "description": "",
+      "icon": "🚀",
+      "color": "#1A7A4A",
+      "steps": [
+        {
+          "id": "qhsdq1k",
+          "title": "Preparazione",
+          "tasks": [
+            {
+              "id": "jmru7iy",
+              "text": "Copia modello"
+            },
+            {
+              "id": "46dsrrs",
+              "text": "Copia Grezzo"
+            },
+            {
+              "id": "hbcphhj",
+              "text": "Creazione archivio"
+            },
+            {
+              "id": "qchr0ra",
+              "text": "Posizionamento Staffaggio"
+            }
+          ]
+        },
+        {
+          "id": "z6j8uz8",
+          "title": "Fase 1",
+          "tasks": [
+            {
+              "id": "oks3ryb",
+              "text": "Programmazione Percorsi"
+            },
+            {
+              "id": "nx2xicw",
+              "text": "Programmazione IPM"
+            },
+            {
+              "id": "9glg5xh",
+              "text": "Simulazione"
+            },
+            {
+              "id": "61gd6bf",
+              "text": "PP"
+            },
+            {
+              "id": "x8idsfz",
+              "text": "Report"
+            },
+            {
+              "id": "vm59ysq",
+              "text": "Generare MAIN / verifica frese"
+            },
+            {
+              "id": "duoqi91",
+              "text": "Fresatura"
+            }
+          ]
+        },
+        {
+          "id": "8peavul",
+          "title": "Backup",
+          "tasks": [
+            {
+              "id": "f103037",
+              "text": "Eseguire backup "
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "to1w7fg",
+      "name": "2 Fasi",
+      "description": "",
+      "icon": "🚀",
+      "color": "#1A7A4A",
+      "steps": [
+        {
+          "id": "igguyoy",
+          "title": "Preparazione",
+          "tasks": [
+            {
+              "id": "y27hxnc",
+              "text": "Copia modello"
+            },
+            {
+              "id": "h3in44f",
+              "text": "Copia Grezzo"
+            },
+            {
+              "id": "d7ivpdz",
+              "text": "Creazione archivio"
+            },
+            {
+              "id": "2e0rwhd",
+              "text": "Posizionamento Staffaggio"
+            }
+          ]
+        },
+        {
+          "id": "x28g9o7",
+          "title": "Fase 1",
+          "tasks": [
+            {
+              "id": "mgo4xde",
+              "text": "Programmazione Percorsi"
+            },
+            {
+              "id": "686l8bv",
+              "text": "Programmazione IPM"
+            },
+            {
+              "id": "cha5u91",
+              "text": "Simulazione"
+            },
+            {
+              "id": "7n6amvc",
+              "text": "PP"
+            },
+            {
+              "id": "9y15nyb",
+              "text": "Report"
+            },
+            {
+              "id": "rv4hnv5",
+              "text": "Generare MAIN / verifica frese"
+            },
+            {
+              "id": "8igowpw",
+              "text": "Fresatura"
+            }
+          ]
+        },
+        {
+          "id": "nuw750l",
+          "title": "Fase 2",
+          "tasks": [
+            {
+              "id": "ksfisg2",
+              "text": "Programmazione Percorsi"
+            },
+            {
+              "id": "m6dbrla",
+              "text": "Programmazione IPM"
+            },
+            {
+              "id": "u642ldg",
+              "text": "Simulazione"
+            },
+            {
+              "id": "3ejviib",
+              "text": "PP"
+            },
+            {
+              "id": "1ygn5ei",
+              "text": "Report"
+            },
+            {
+              "id": "bbcmr7w",
+              "text": "Generare MAIN / verifica frese"
+            },
+            {
+              "id": "bhxiyy3",
+              "text": "Fresatura"
+            }
+          ]
+        },
+        {
+          "id": "onkhs1c",
+          "title": "Backup",
+          "tasks": [
+            {
+              "id": "ycv1203",
+              "text": "Eseguire backup "
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "new_8qcrz5o",
+      "name": "3 Fasi",
+      "description": "",
+      "icon": "🚀",
+      "color": "#1A7A4A",
+      "steps": [
+        {
+          "id": "rlolnw7",
+          "title": "Preparazione",
+          "tasks": [
+            {
+              "id": "y6unzsw",
+              "text": "Copia modello"
+            },
+            {
+              "id": "vbmatbu",
+              "text": "Copia Grezzo"
+            },
+            {
+              "id": "qszcdh7",
+              "text": "Creazione archivio"
+            },
+            {
+              "id": "kfmm2ez",
+              "text": "Posizionamento Staffaggio"
+            }
+          ]
+        },
+        {
+          "id": "5glqeac",
+          "title": "Fase 1",
+          "tasks": [
+            {
+              "id": "20uogb0",
+              "text": "Programmazione Percorsi"
+            },
+            {
+              "id": "9vnbeho",
+              "text": "Programmazione IPM"
+            },
+            {
+              "id": "gbbbwuk",
+              "text": "Simulazione"
+            },
+            {
+              "id": "ykvzi2j",
+              "text": "PP"
+            },
+            {
+              "id": "mq7augt",
+              "text": "Report"
+            },
+            {
+              "id": "ox6cn1p",
+              "text": "Generare MAIN / verifica frese"
+            },
+            {
+              "id": "y6rqyml",
+              "text": "Fresatura"
+            }
+          ]
+        },
+        {
+          "id": "7vw7bpe",
+          "title": "Fase 2",
+          "tasks": [
+            {
+              "id": "g6enwav",
+              "text": "Programmazione Percorsi"
+            },
+            {
+              "id": "c2mc72r",
+              "text": "Programmazione IPM"
+            },
+            {
+              "id": "823izu7",
+              "text": "Simulazione"
+            },
+            {
+              "id": "u5pnu7x",
+              "text": "PP"
+            },
+            {
+              "id": "uz1vxic",
+              "text": "Report"
+            },
+            {
+              "id": "z3ovlth",
+              "text": "Generare MAIN / verifica frese"
+            },
+            {
+              "id": "uemh12i",
+              "text": "Fresatura"
+            }
+          ]
+        },
+        {
+          "id": "vnnbh3d",
+          "title": "Fase 3",
+          "tasks": [
+            {
+              "id": "4brahm6",
+              "text": "Programmazione Percorsi"
+            },
+            {
+              "id": "d54jm0y",
+              "text": "Programmazione IPM"
+            },
+            {
+              "id": "5l3kssd",
+              "text": "Simulazione"
+            },
+            {
+              "id": "k31o91l",
+              "text": "PP"
+            },
+            {
+              "id": "3olgymc",
+              "text": "Report"
+            },
+            {
+              "id": "bzqbu4k",
+              "text": "Generare MAIN / verifica frese"
+            },
+            {
+              "id": "40dubut",
+              "text": "Fresatura"
+            }
+          ]
+        },
+        {
+          "id": "ngikej9",
+          "title": "Backup",
+          "tasks": [
+            {
+              "id": "sm03hkp",
+              "text": "Eseguire backup "
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

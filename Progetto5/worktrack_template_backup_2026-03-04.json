@@ -1,0 +1,194 @@
+[
+  {
+    "id": "new_l98lduz",
+    "name": "Matrice 2 Fasi",
+    "description": "",
+    "icon": "🚀",
+    "color": "#1A7A4A",
+    "steps": [
+      {
+        "id": "qhsdq1k",
+        "title": "Preparazione",
+        "tasks": [
+          {
+            "id": "jmru7iy",
+            "text": "Copia modello"
+          },
+          {
+            "id": "46dsrrs",
+            "text": "Copia Grezzo"
+          },
+          {
+            "id": "hbcphhj",
+            "text": "Creazione archivio"
+          },
+          {
+            "id": "qchr0ra",
+            "text": "Posizionamento Staffaggio"
+          }
+        ]
+      },
+      {
+        "id": "z6j8uz8",
+        "title": "Fase 1",
+        "tasks": [
+          {
+            "id": "oks3ryb",
+            "text": "Programmazione Percorsi"
+          },
+          {
+            "id": "nx2xicw",
+            "text": "Programmazione IPM"
+          },
+          {
+            "id": "9glg5xh",
+            "text": "Simulazione"
+          },
+          {
+            "id": "61gd6bf",
+            "text": "PP"
+          },
+          {
+            "id": "x8idsfz",
+            "text": "Report"
+          }
+        ]
+      },
+      {
+        "id": "7t7nomp",
+        "title": "Fase 2",
+        "tasks": [
+          {
+            "id": "eajxgyp",
+            "text": "Programmazione Percorsi"
+          },
+          {
+            "id": "c79uzra",
+            "text": "Programmazione IPM"
+          },
+          {
+            "id": "nxgh9n2",
+            "text": "Simulazione"
+          },
+          {
+            "id": "tervo2q",
+            "text": "PP"
+          },
+          {
+            "id": "wm4x15h",
+            "text": "Report"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "new_8qcrz5o",
+    "name": "Matrice 3 Fasi",
+    "description": "",
+    "icon": "🚀",
+    "color": "#D4700A",
+    "steps": [
+      {
+        "id": "rlolnw7",
+        "title": "Preparazione",
+        "tasks": [
+          {
+            "id": "y6unzsw",
+            "text": "Copia modello"
+          },
+          {
+            "id": "vbmatbu",
+            "text": "Copia Grezzo"
+          },
+          {
+            "id": "qszcdh7",
+            "text": "Creazione archivio"
+          },
+          {
+            "id": "kfmm2ez",
+            "text": "Posizionamento Staffaggio"
+          }
+        ]
+      },
+      {
+        "id": "5glqeac",
+        "title": "Fase 1",
+        "tasks": [
+          {
+            "id": "20uogb0",
+            "text": "Programmazione Percorsi"
+          },
+          {
+            "id": "9vnbeho",
+            "text": "Programmazione IPM"
+          },
+          {
+            "id": "gbbbwuk",
+            "text": "Simulazione"
+          },
+          {
+            "id": "ykvzi2j",
+            "text": "PP"
+          },
+          {
+            "id": "mq7augt",
+            "text": "Report"
+          }
+        ]
+      },
+      {
+        "id": "7vw7bpe",
+        "title": "Fase 2",
+        "tasks": [
+          {
+            "id": "g6enwav",
+            "text": "Programmazione Percorsi"
+          },
+          {
+            "id": "c2mc72r",
+            "text": "Programmazione IPM"
+          },
+          {
+            "id": "823izu7",
+            "text": "Simulazione"
+          },
+          {
+            "id": "u5pnu7x",
+            "text": "PP"
+          },
+          {
+            "id": "uz1vxic",
+            "text": "Report"
+          }
+        ]
+      },
+      {
+        "id": "vnnbh3d",
+        "title": "Fase 3",
+        "tasks": [
+          {
+            "id": "4brahm6",
+            "text": "Programmazione Percorsi"
+          },
+          {
+            "id": "d54jm0y",
+            "text": "Programmazione IPM"
+          },
+          {
+            "id": "5l3kssd",
+            "text": "Simulazione"
+          },
+          {
+            "id": "k31o91l",
+            "text": "PP"
+          },
+          {
+            "id": "3olgymc",
+            "text": "Report"
+          }
+        ]
+      }
+    ]
+  }
+]

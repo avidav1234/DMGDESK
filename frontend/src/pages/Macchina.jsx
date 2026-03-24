@@ -131,7 +131,6 @@ function LifeBar({ pct }) {
       </div>
       <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color }}>{Math.round(c)}%</span>
     </div>
-    <SetupPopup />
   )
 }
 
@@ -423,5 +422,6 @@ export default function Macchina() {
       )}
       <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
     </div>
+    <SetupPopup />
   )
 }

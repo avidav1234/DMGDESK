@@ -858,13 +858,17 @@ class TabProgetti:
             ipm_body = tk.Frame(pf, bg=pf.cget("bg"))
 
             def _toggle_ipm(b=ipm_body, v=ipm_collapsed):
-                v.set(not v.get())
                 if v.get():
+                    # Era collassato → espandi
+                    v.set(False)
+                    b.pack(fill="x", after=ipm_header)
+                    toggle_ipm_btn.configure(text="▲")
+                else:
+                    # Era espanso → collassa
+                    v.set(True)
                     b.pack_forget()
                     toggle_ipm_btn.configure(text="▼")
-                else:
-                    b.pack(fill="x")
-                    toggle_ipm_btn.configure(text="▲")
+                pf.update_idletasks()
 
             tk.Label(ipm_header, text="📏", font=("Arial",9),
                      bg="#F3E8FF").pack(side="left", padx=(6,2), pady=3)
@@ -878,9 +882,10 @@ class TabProgetti:
                      relief="flat", cursor="hand2")
             toggle_ipm_btn.pack(side="right", padx=4)
 
-            # IPM collassato di default — mostra solo se espanso
+            # Popola il body (non packato = collassato di default)
             for pgm in ipm_pgm:
                 self._render_program_row(ipm_body, project, task, pgm, programs)
+            # Non chiamare .pack() qui — rimane nascosto finché non si clicca
 
         # ── Sezione FRESATURA (blu) ────────────────────────────────────────────
         if fres_pgm and ipm_pgm:

@@ -666,7 +666,7 @@ async def analizza_da_disco(body: dict):
     Body: { filenames: ["4297_007_03_009.MPF", ...] }
     """
     import os as _os
-    from config.config_loader import carica_configurazione
+    from database.db_handler import carica_configurazione
 
     config    = carica_configurazione()
     nc_base   = (config.get("percorso_nc_base") or "").strip()

@@ -177,28 +177,23 @@ class TabAnalisiNC:
         tools_db = {}
         fonte = ""
         try:
-            cfg = _carica_config()
-            folder = (cfg.get("tools_toa_folder") or "").strip()
-            if not folder:
-                db_path_raw = (cfg.get("database_path") or "")
-                if db_path_raw:
-                    folder = str(_Path(db_path_raw).parent)
-            if folder:
-                tdb_path = _Path(folder) / "tools_machine.json"
-                if tdb_path.exists():
-                    data = _json.loads(tdb_path.read_text(encoding="utf-8"))
-                    tools_db = data.get("tools", {})
-                    fmt = data.get("format_used", "")
-                    sync_time = data.get("sync_time", "")
-                    dt_str = ""
-                    if sync_time:
-                        try:
-                            from datetime import datetime
-                            dt_str = datetime.fromisoformat(sync_time).strftime("%d/%m %H:%M")
-                        except Exception:
-                            dt_str = sync_time[:16]
-                    fmt_label = fmt.upper() if fmt else "TOA/MPF"
-                    fonte = f"DB: tools_machine.json ({fmt_label} — {dt_str})"
+            # Usa la stessa logica di tab_macchina._get_tools_db_path()
+            from ui.tab_macchina import _get_tools_db_path as _tmdb_path
+            tdb_path = _tmdb_path()
+            if tdb_path.exists():
+                data = _json.loads(tdb_path.read_text(encoding="utf-8"))
+                tools_db = data.get("tools", {})
+                fmt = data.get("format_used", "")
+                sync_time = data.get("sync_time", "")
+                dt_str = ""
+                if sync_time:
+                    try:
+                        from datetime import datetime
+                        dt_str = datetime.fromisoformat(sync_time).strftime("%d/%m %H:%M")
+                    except Exception:
+                        dt_str = sync_time[:16]
+                fmt_label = fmt.upper() if fmt else "TOA/MPF"
+                fonte = f"DB: tools_machine.json ({fmt_label} — {dt_str})"
         except Exception as e:
             fonte = f"Errore lettura DB: {e}"
 

@@ -89,9 +89,21 @@ def _get_share_path() -> str:
 
 
 def _get_tools_db_path() -> Path:
-    """Percorso del DB utensili (JSON locale)."""
+    """Percorso del DB utensili (JSON locale).
+    Priorità: tools_toa_folder → radice → database_path.parent
+    Deve coincidere con la logica di tab_macchina.py nel desktop.
+    """
     config = carica_configurazione()
-    db_path = config.get("database_path", ".")
+    # 1. tools_toa_folder (stesso usato dal desktop per salvare)
+    folder = (config.get("tools_toa_folder") or "").strip()
+    if folder:
+        return Path(folder) / "tools_machine.json"
+    # 2. radice share
+    radice = (config.get("radice") or "").strip()
+    if radice:
+        return Path(radice) / "tools_machine.json"
+    # 3. accanto al database CSV (fallback)
+    db_path = (config.get("database_path") or ".")
     return Path(db_path).parent / "tools_machine.json"
 
 

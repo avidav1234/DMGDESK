@@ -703,3 +703,67 @@ async def debug_utensili(project_id: str):
                     "tipoGruppo": pgm.get("tipoGruppo"),
                 })
     return {"project_id": project_id, "programs": result}
+
+
+@router.post("/{project_id}/riparsing-utensili")
+async def riparsing_utensili(project_id: str):
+    """
+    Rilegge i file MPF dal disco e aggiorna il campo 'utensile'
+    per tutti i programmi che ce l'hanno vuoto.
+    """
+    from api.routers.progetti_utensili import cerca_file_mpf, parse_mpf_testo
+
+    config  = carica_configurazione()
+    data    = _load_progetti(config)
+    projects = data.get("projects", [])
+    project = next((p for p in projects if p.get("id") == project_id), None)
+    if not project:
+        raise HTTPException(404, "Progetto non trovato")
+
+    nc_base      = (config.get("percorso_nc_base") or "").strip()
+    tools_folder = (config.get("tools_toa_folder") or "").strip()
+    extra_dirs   = [tools_folder] if tools_folder and tools_folder != nc_base else []
+
+    aggiornati = 0
+    for step in project.get("steps", []):
+        for task in step.get("tasks", []):
+            if task.get("text", "").strip().lower() != "fresatura":
+                continue
+            for pgm in task.get("programs", []):
+                if pgm.get("tipoGruppo") == "ipm":
+                    continue
+                if pgm.get("utensile"):
+                    continue  # già popolato
+                filename = pgm.get("filename", "")
+                if not filename:
+                    continue
+                fpath = cerca_file_mpf(filename, nc_base, extra_dirs)
+                if not fpath:
+                    continue
+                try:
+                    testo = open(fpath, encoding="utf-8", errors="replace").read()
+                    # Cerca TOOL COMMENT nel header Cimatron
+                    for line in testo.splitlines():
+                        if "TOOL COMMENT:" in line.upper():
+                            alias = line.split("TOOL COMMENT:")[-1].strip()
+                            if alias:
+                                pgm["utensile"] = alias.upper()
+                                aggiornati += 1
+                            break
+                    # Fallback: usa parse_mpf_testo (T= + M6)
+                    if not pgm.get("utensile"):
+                        aliases = parse_mpf_testo(testo)
+                        if aliases:
+                            pgm["utensile"] = sorted(aliases)[0]
+                            aggiornati += 1
+                except Exception:
+                    pass
+
+    if aggiornati > 0:
+        now = datetime.now().isoformat()
+        tools_folder2 = (config.get("tools_toa_folder") or "").strip()
+        path = Path(tools_folder2) / "worktrack_projects.json" if tools_folder2 else Path("worktrack_projects.json")
+        path.write_text(json.dumps({"projects": projects, "ultimo_aggiornamento": now},
+                                   ensure_ascii=False, indent=2), encoding="utf-8")
+
+    return {"aggiornati": aggiornati, "project_id": project_id}

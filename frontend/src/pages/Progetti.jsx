@@ -225,7 +225,7 @@ function classifyTool(alias, toolsDB){
 }
 
 // ── FresaturaPanel ─────────────────────────────────────────────────────────────
-function FresaturaPanel({task,onUpdateTask,toolsDB}){
+function FresaturaPanel({task,onUpdateTask,toolsDB,projectId}){
   const fileInputRef=useRef(null)
   const programs=Array.isArray(task.programs)?task.programs:[]
   const[expanded,setExpanded]=useState(false)
@@ -445,7 +445,7 @@ function UtensiliProgetto({projectId}){
 }
 
 // ── TaskItem ───────────────────────────────────────────────────────────────────
-function TaskItem({task,idx,stepId,onToggle,onUpdateTask,onDelete,isNext,onReorderTask,toolsDB}){
+function TaskItem({task,idx,stepId,onToggle,onUpdateTask,onDelete,isNext,onReorderTask,toolsDB,projectId}){
   const[hovered,setHovered]=useState(false)
   const[dragOver,setDragOver]=useState(false)
   const[addingNote,setAddingNote]=useState(false)
@@ -518,14 +518,14 @@ function TaskItem({task,idx,stepId,onToggle,onUpdateTask,onDelete,isNext,onReord
         </div>
       )}
       {task.text?.trim().toLowerCase()==='fresatura'&&(
-        <div style={{marginTop:8}}><FresaturaPanel task={task} onUpdateTask={onUpdateTask} toolsDB={toolsDB}/></div>
+        <div style={{marginTop:8}}><FresaturaPanel task={task} onUpdateTask={onUpdateTask} toolsDB={toolsDB} projectId={projectId}/></div>
       )}
     </div>
   )
 }
 
 // ── StepSection ────────────────────────────────────────────────────────────────
-function StepSection({step,stepIdx,nextTaskId,onToggle,onUpdateTask,onAddTask,onDeleteTask,onReorderTask,onReorderStep,onDeleteStep,projectColor,toolsDB}){
+function StepSection({step,stepIdx,nextTaskId,onToggle,onUpdateTask,onAddTask,onDeleteTask,onReorderTask,onReorderStep,onDeleteStep,projectColor,toolsDB,projectId}){
   const[collapsed,setCollapsed]=useState(false)
   const[adding,setAdding]=useState(false)
   const[newTask,setNewTask]=useState('')
@@ -558,7 +558,7 @@ function StepSection({step,stepIdx,nextTaskId,onToggle,onUpdateTask,onAddTask,on
               onToggle={onToggle} onUpdateTask={onUpdateTask}
               onDelete={tid=>onDeleteTask(step.id,tid)}
               isNext={task.id===nextTaskId} onReorderTask={onReorderTask}
-              toolsDB={toolsDB}/>
+              toolsDB={toolsDB} projectId={projectId}/>
           ))}
           {adding?(
             <div style={{display:'flex',gap:8,marginTop:8,marginLeft:22}}>
@@ -1044,7 +1044,7 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
                 onDeleteTask={deleteTask} onReorderTask={reorderTask}
                 onReorderStep={reorderStep} onDeleteStep={deleteStep}
                 totalSteps={project.steps.length} projectColor={project.color}
-                toolsDB={toolsDB}/>
+                toolsDB={toolsDB} projectId={project.id}/>
             ))}
             {addingStep?(
               <div style={{display:'flex',gap:10,marginTop:10}}>

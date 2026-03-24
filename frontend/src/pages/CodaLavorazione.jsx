@@ -113,6 +113,63 @@ export default function CodaLavorazione() {
       background: "var(--bg-base, #eef2f7)",
     }}>
 
+      {/* ── Banner live context (programma in esecuzione) ───────── */}
+      {liveCtx?.match && (
+        <div style={{ marginBottom: 16, padding: '12px 16px', borderRadius: 10,
+          background: liveCtx.match.allerta_utensile === 'fin_vita' ? '#FEF9C3'
+            : liveCtx.match.allerta_utensile === 'disabilitato' ? '#FEE2E2'
+            : '#EFF6FF',
+          border: `1px solid ${liveCtx.match.allerta_utensile ? '#D97706' : '#1D5FAD'}44`,
+          display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ width: 10, height: 10, borderRadius: '50%',
+              background: liveCtx.match.progetto_colore, flexShrink: 0 }}/>
+            <span style={{ fontSize: 14, fontWeight: 800, color: '#1A1814' }}>
+              {liveCtx.match.progetto_nome}
+            </span>
+            {liveCtx.match.pallet && (
+              <span style={{ fontSize: 12, color: '#5A5750' }}>· Pallet {liveCtx.match.pallet}</span>
+            )}
+            <span style={{ fontSize: 12, fontFamily: 'monospace', color: '#1D5FAD',
+              background: '#DBEAFE', padding: '1px 8px', borderRadius: 6, marginLeft: 4 }}>
+              {liveCtx.match.programma_corrente}
+            </span>
+            {liveCtx.match.allerta_utensile && (
+              <span style={{ fontSize: 11, fontWeight: 700,
+                color: liveCtx.match.allerta_utensile === 'fin_vita' ? '#D97706' : '#DC2626',
+                background: liveCtx.match.allerta_utensile === 'fin_vita' ? '#FEF9C3' : '#FEE2E2',
+                padding: '2px 8px', borderRadius: 20 }}>
+                {liveCtx.match.allerta_utensile === 'fin_vita' ? '⚠ Utensile a fine vita' : '✗ Utensile disabilitato'}
+              </span>
+            )}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ flex: 1, height: 5, background: '#E2E8F0', borderRadius: 3, overflow: 'hidden' }}>
+              <div style={{ height: '100%', borderRadius: 3,
+                width: `${liveCtx.match.pct_avanzamento}%`,
+                background: liveCtx.match.progetto_colore,
+                transition: 'width 0.5s' }}/>
+            </div>
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#5A5750', minWidth: 80 }}>
+              {liveCtx.match.programmi_completati}/{liveCtx.match.programmi_totali} pgm · {liveCtx.match.pct_avanzamento}%
+            </span>
+            {liveCtx.match.prossimi_programmi?.length > 0 && (
+              <span style={{ fontSize: 11, color: '#9A978E' }}>
+                Prossimo: {liveCtx.match.prossimi_programmi[0].filename}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+      {liveCtx && !liveCtx.match && liveCtx.programma_attivo && (
+        <div style={{ marginBottom: 12, padding: '8px 14px', borderRadius: 8,
+          background: '#F5F4F0', border: '1px solid #D8D5CC',
+          fontSize: 12, color: '#9A978E', display: 'flex', gap: 8 }}>
+          <span>⚙</span>
+          <span>In esecuzione: <code style={{ fontFamily: 'monospace' }}>{liveCtx.programma_attivo}</code> — nessun progetto associato</span>
+        </div>
+      )}
+
       {/* ── Griglia 2×3 pallet ─────────────────────────────────── */}
       <div style={{ flexShrink: 0 }}>
         <div style={{

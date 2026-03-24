@@ -220,3 +220,202 @@ async def get_log_config():
         "log_trovato":      log_path is not None,
         "log_path":         log_path,
     }
+
+# ── Live Context ───────────────────────────────────────────────────────────────
+# Quando il log fornirà il programma attivo, questo endpoint fa il matching
+# con i progetti e ritorna il contesto completo: commessa, avanzamento, ETA.
+
+@router.get("/live-context")
+async def get_live_context():
+    """
+    Incrocia lo stato live della macchina con i progetti WorkTrack.
+
+    Struttura risposta:
+    {
+      "programma_attivo":  "SGROSSATURA_SPIRALE_14.MPF" | null,
+      "pallet_attivo":     3 | null,
+      "stato_programma":   3,
+      "connessa":          true,
+      "match": {
+        "progetto_id":    "abc123",
+        "progetto_nome":  "4349_0221",
+        "progetto_colore": "#D4700A",
+        "programma_idx":  5,          # indice nel FresaturaPanel
+        "programmi_totali": 23,
+        "programmi_completati": 4,
+        "programmi_in_macchina": 19,
+        "pct_avanzamento": 17.4,
+        "utensile_corrente": "FS25R2L85",
+        "prossimi_programmi": [        # i prossimi 3 da_fare/in_macchina
+          {"filename": "SGROSSATURA_SPIRALE_15.MPF", "utensile": "FS25R2L85"},
+          ...
+        ],
+        "allerta_utensile": null | "fin_vita" | "mancante",
+      } | null,
+      "ultimo_aggiornamento": "24/03/2026 18:57:29"
+    }
+    """
+    from pathlib import Path as _Path
+    from api.routers.progetti import _load_progetti
+
+    config   = carica_configurazione()
+    log_path = _trova_log_path(config)
+
+    # Stato macchina base
+    if not log_path:
+        return {"connessa": False, "programma_attivo": None, "pallet_attivo": None,
+                "stato_programma": 0, "match": None, "ultimo_aggiornamento": None,
+                "_nota": "Log OpcUa non trovato. Quando disponibile, questo endpoint "
+                         "mostrerà commessa attiva, avanzamento e allerte utensile in tempo reale."}
+
+    raw  = _parse_log(log_path)
+    data = _normalizza(raw)
+
+    prog_raw     = data.get("programma_attivo")    # es. "/_N_WKS_DIR/_N_4349_0221_WPD/_N_SGROSSATURA_SPIRALE_14_MPF"
+    pallet       = data.get("pallet_attivo")
+    stato_pgm    = data.get("stato_programma", 0)
+
+    try:
+        mtime = os.path.getmtime(log_path)
+        ts    = datetime.fromtimestamp(mtime).strftime("%d/%m/%Y %H:%M:%S")
+    except Exception:
+        ts = None
+
+    # Estrai nome file MPF dal path OpcUa
+    # formato: /_N_WKS_DIR/_N_CARTELLA_WPD/_N_NOME_PROGRAMMA_MPF
+    mpf_filename = None
+    cartella_wpd = None
+    if prog_raw:
+        import re as _re
+        # Estrai nome file: ultimo segmento _N_XXX_MPF → XXX.MPF
+        m = _re.search(r'_N_([^/]+)_MPF', prog_raw, _re.IGNORECASE)
+        if m:
+            mpf_filename = m.group(1).replace('_', '_') + '.MPF'
+            # Potrebbe avere underscore → es _N_SGROSSATURA_SPIRALE_14_MPF
+            # → SGROSSATURA_SPIRALE_14.MPF
+        # Estrai cartella WPD (commessa)
+        mw = _re.search(r'_N_([^/]+)_WPD', prog_raw, _re.IGNORECASE)
+        if mw:
+            cartella_wpd = mw.group(1)  # es. "4349_0221"
+
+    # Matching con progetti WorkTrack
+    match = None
+    if mpf_filename:
+        try:
+            progetti_data = _load_progetti(config)
+            projects = [p for p in progetti_data.get("projects", []) if not p.get("archived")]
+
+            for project in projects:
+                all_pgm = [pgm
+                           for step in project.get("steps", [])
+                           for task in step.get("tasks", [])
+                           if task.get("text","").strip().lower() == "fresatura"
+                           for pgm in task.get("programs", [])
+                           if pgm.get("tipoGruppo") != "ipm"]
+
+                # Cerca il programma attivo nella lista
+                pgm_match = next(
+                    (p for p in all_pgm
+                     if p.get("filename","").upper() == mpf_filename.upper()),
+                    None
+                )
+                if pgm_match is None:
+                    continue
+
+                # Trovato — calcola statistiche
+                totale     = len(all_pgm)
+                completati = sum(1 for p in all_pgm if p.get("stato") == "completato")
+                in_mac     = sum(1 for p in all_pgm if p.get("stato") == "in_macchina")
+                idx_corrente = all_pgm.index(pgm_match)
+                pct = round(completati / totale * 100, 1) if totale else 0
+
+                # Prossimi programmi (da_fare o in_macchina dopo quello corrente)
+                prossimi = [
+                    {"filename": p.get("filename"), "utensile": p.get("utensile"),
+                     "stato": p.get("stato"), "numPgm": p.get("numPgm")}
+                    for p in all_pgm[idx_corrente+1:]
+                    if p.get("stato") in ("da_fare", "in_macchina")
+                ][:4]
+
+                # Allerta utensile corrente
+                allerta = None
+                tools_folder = (config.get("tools_toa_folder") or "").strip()
+                if tools_folder and pgm_match.get("utensile"):
+                    tm_path = _Path(tools_folder) / "tools_machine.json"
+                    if tm_path.exists():
+                        try:
+                            tm = json.loads(tm_path.read_text(encoding="utf-8"))
+                            alias = pgm_match["utensile"].upper().strip()
+                            for t in tm.get("tools", {}).values():
+                                if (t.get("name") or "").upper().strip() == alias:
+                                    lp = t.get("life_percent")
+                                    if not t.get("is_enabled", True) or t.get("is_worn"):
+                                        allerta = "disabilitato"
+                                    elif lp is not None and lp < 15:
+                                        allerta = "fin_vita"
+                                    break
+                        except Exception:
+                            pass
+
+                match = {
+                    "progetto_id":           project.get("id"),
+                    "progetto_nome":         project.get("name"),
+                    "progetto_colore":       project.get("color", "#D4700A"),
+                    "programma_corrente":    mpf_filename,
+                    "programma_idx":         idx_corrente + 1,
+                    "programmi_totali":      totale,
+                    "programmi_completati":  completati,
+                    "programmi_in_macchina": in_mac,
+                    "pct_avanzamento":       pct,
+                    "utensile_corrente":     pgm_match.get("utensile"),
+                    "tempo_inizio":          pgm_match.get("tempoInizio"),
+                    "prossimi_programmi":    prossimi,
+                    "allerta_utensile":      allerta,
+                    "cartella_wpd":          cartella_wpd,
+                    "pallet":                pallet,
+                }
+                break  # trovato il progetto
+
+        except Exception as e:
+            match = {"_errore_matching": str(e)}
+
+    return {
+        "connessa":             True,
+        "programma_attivo":     mpf_filename,
+        "programma_attivo_raw": prog_raw,
+        "pallet_attivo":        pallet,
+        "stato_programma":      stato_pgm,
+        "utensile_attivo":      data.get("utensile_attivo"),
+        "numero_utensile":      data.get("numero_utensile"),
+        "allarme":              data.get("allarme"),
+        "match":                match,
+        "ultimo_aggiornamento": ts,
+        "_nota": (
+            "programma_attivo è null perché il log OpcUa non fornisce ancora "
+            "workPandProgName. Quando disponibile, il matching con i progetti "
+            "WorkTrack avverrà automaticamente."
+            if not prog_raw else None
+        ),
+    }
+
+
+@router.post("/aggiorna-stati-da-log")
+async def aggiorna_stati_da_log():
+    """
+    FUTURO: chiamata dal frontend ogni N secondi.
+    Legge il programma attivo dal log e aggiorna automaticamente
+    lo stato dei programmi nei progetti:
+    - programma che sta girando → in_macchina (se era da_fare)
+    - programma appena finito (cambio programma) → completato
+
+    Oggi ritorna solo il contesto senza modificare nulla.
+    Quando il log sarà affidabile, abilitare la scrittura.
+    """
+    ctx = await get_live_context()
+
+    return {
+        "contesto": ctx,
+        "aggiornamenti_applicati": 0,
+        "_nota": "Aggiornamento automatico stati disabilitato — "
+                 "abilitare quando il log OpcUa è stabile e affidabile."
+    }

@@ -1,11 +1,12 @@
-"""Tab Analisi NC - Confronto programmi con database"""
+"""Tab Analisi NC - DMGDesk V16"""
 
 import customtkinter as ctk
 from tkinter import filedialog, messagebox
+import tkinter as tk
 import tkinter.ttk as ttk
-import os
-import re
-import sys
+import os, re, sys, json
+from datetime import datetime
+from pathlib import Path
 
 from config.theme import *
 from config.constants import *
@@ -14,466 +15,494 @@ from logic.nc_analyzer import estrai_tutti_utensili_da_file, confronta_utensili_
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
-class TabAnalisiNC:
-    """Tab per analisi programmi NC multipli."""
-    
-    def __init__(self, parent, main_window):
-        self.parent = parent
-        self.main = main_window
-        self.file_paths = []
-        self._main_generato_path = None   # path del MAIN generato (per Solo MAIN)
-        
-        self._create_ui()
-    
-    def _create_ui(self):
-        """Crea interfaccia."""
-        # Header con descrizione
-        header = ctk.CTkFrame(self.parent, fg_color=COLOR_PRIMARY, height=int(80))
-        header.pack(fill="x")
-        header.pack_propagate(False)
-        
-        ctk.CTkLabel(header, text="📄 ANALISI PROGRAMMI NC",
-                    font=get_font("title", bold=True),
-                    text_color="white").pack(pady=(12, 2))
-        
-        ctk.CTkLabel(header, text="Confronta file NC con database • Genera programma MAIN",
-                    font=get_font("body"),
-                    text_color=COLOR_PRIMARY_LIGHT).pack(pady=(0, 8))
-        
-        # Toolbar
-        toolbar = ctk.CTkFrame(self.parent, fg_color="transparent")
-        toolbar.pack(fill="x", padx=20, pady=10)
-        
-        ctk.CTkButton(toolbar, text="📁 Seleziona File .MPF",
-                     command=self._seleziona_files,
-                     **get_button_style("primary", "medium")).pack(side="left", padx=5)
-        
-        ctk.CTkButton(toolbar, text="🔄 Reset",
-                     command=self._pulisci_lista,
-                     **get_button_style("neutral", "medium")).pack(side="left", padx=5)
-        
-        # Nome cartella + GENERA MAIN
-        ctk.CTkLabel(toolbar, text="📁", font=get_font("normal")).pack(side="right", padx=2)
-        self.entry_nome_cartella = ctk.CTkEntry(toolbar, width=int(120), height=int(35),
-                                                placeholder_text="Nome")
-        self.entry_nome_cartella.pack(side="right", padx=5)
-        
-        ctk.CTkButton(toolbar, text="⚙",
-                     command=self._apri_calibra_settings,
-                     fg_color="transparent", hover_color="#E0E0E0",
-                     text_color="#9E9E9E",
-                     border_width=1, border_color="#BDBDBD",
-                     font=get_font("small"), height=28, width=32,
-                     corner_radius=6).pack(side="right", padx=2)
+# ── Helpers ───────────────────────────────────────────────────────────────────
 
-        ctk.CTkButton(toolbar, text="📄 GENERA MAIN",
-                     command=self._genera_main,
-                     **get_button_style("accent", "large")).pack(side="right", padx=5)
-        
-        self.btn_invia_main = ctk.CTkButton(toolbar, text="📤 Solo MAIN",
-                     command=self._invia_solo_main,
-                     fg_color="#1565C0", hover_color="#0D47A1",
-                     font=get_font("medium"), height=35, width=110,
-                     state="disabled")
-        self.btn_invia_main.pack(side="right", padx=3)
-        
-        self.btn_invia_tutto = ctk.CTkButton(toolbar, text="📤 Invia tutto",
-                     command=self._invia_tutto,
-                     fg_color="#2E7D32", hover_color="#1B5E20",
-                     font=get_font("medium"), height=35, width=110,
-                     state="disabled")
-        self.btn_invia_tutto.pack(side="right", padx=3)
-        
-        # Banner stato confronto
-        self.frame_stato = ctk.CTkFrame(self.parent, fg_color="transparent")
-        self.frame_stato.pack(fill="x", padx=20, pady=(4, 0))
-        self.lbl_stato_confronto = ctk.CTkLabel(
+def _carica_config() -> dict:
+    try:
+        from database.db_handler import carica_configurazione
+        cfg = carica_configurazione()
+        if isinstance(cfg, dict):
+            return cfg
+    except Exception:
+        pass
+    try:
+        base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        if getattr(sys, 'frozen', False):
+            base = os.path.dirname(sys.executable)
+        with open(os.path.join(base, "config.json"), encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _load_tools_machine() -> tuple[dict, str]:
+    """Carica tools_machine.json. Ritorna (tools_db, label_fonte)."""
+    try:
+        from ui.tab_macchina import _get_tools_db_path
+        tdb_path = _get_tools_db_path()
+        if tdb_path.exists():
+            data = json.loads(tdb_path.read_text(encoding="utf-8"))
+            tools = data.get("tools", {})
+            fmt   = (data.get("format_used") or "").upper() or "TOA/MPF"
+            sync  = data.get("sync_time", "")
+            dt    = ""
+            if sync:
+                try:
+                    dt = datetime.fromisoformat(sync).strftime("%d/%m  %H:%M")
+                except Exception:
+                    dt = sync[:16]
+            fonte = f"{fmt}  ·  {dt}"
+            return tools, fonte
+    except Exception:
+        pass
+    return {}, ""
+
+
+# ── Tab ───────────────────────────────────────────────────────────────────────
+
+class TabAnalisiNC:
+
+    def __init__(self, parent, main_window):
+        self.parent            = parent
+        self.main              = main_window
+        self.file_paths        = []
+        self._main_generato_path = None
+        self._create_ui()
+
+    # ── UI ────────────────────────────────────────────────────────────────────
+
+    def _create_ui(self):
+        # ── Zona azioni (top bar compatta) ────────────────────────────────
+        top = ctk.CTkFrame(self.parent, fg_color="white",
+                           corner_radius=0, height=56,
+                           border_width=0)
+        top.pack(fill="x")
+        top.pack_propagate(False)
+
+        # Sinistra: azioni primarie
+        left = ctk.CTkFrame(top, fg_color="transparent")
+        left.pack(side="left", padx=12, pady=8)
+
+        self.btn_seleziona = ctk.CTkButton(
+            left, text="+ Aggiungi file",
+            command=self._seleziona_files,
+            fg_color=COLOR_PRIMARY, hover_color="#1565C0",
+            font=get_font("medium", bold=True), height=38, width=130, corner_radius=8)
+        self.btn_seleziona.pack(side="left", padx=(0, 6))
+
+        self.btn_reset = ctk.CTkButton(
+            left, text="Reset",
+            command=self._pulisci_lista,
+            fg_color="#ECEFF1", hover_color="#CFD8DC",
+            text_color="#546E7A",
+            font=get_font("medium"), height=38, width=70, corner_radius=8)
+        self.btn_reset.pack(side="left")
+
+        # Centro: banner stato (appare dopo analisi)
+        self.frame_stato = ctk.CTkFrame(top, fg_color="transparent")
+        self.frame_stato.pack(side="left", padx=16, fill="y")
+        self.lbl_stato = ctk.CTkLabel(
             self.frame_stato, text="",
             font=get_font("medium", bold=True), anchor="w")
-        self.lbl_stato_confronto.pack(side="left", padx=4)
-        self.lbl_fonte_db = ctk.CTkLabel(
+        self.lbl_stato.pack(anchor="w")
+        self.lbl_fonte = ctk.CTkLabel(
             self.frame_stato, text="",
-            font=get_font("small"), text_color=COLOR_TEXT_SECONDARY, anchor="w")
-        self.lbl_fonte_db.pack(side="left", padx=8)
+            font=get_font("small"), text_color="#90A4AE", anchor="w")
+        self.lbl_fonte.pack(anchor="w")
 
-        # Lista file selezionati
-        list_frame = ctk.CTkFrame(self.parent, fg_color=COLOR_SURFACE, corner_radius=int(10))
-        list_frame.pack(fill="both", expand=True, padx=20, pady=10)
-        
-        ctk.CTkLabel(list_frame, text="File selezionati:",
-                    font=get_font("medium", bold=True)).pack(anchor="w", padx=10, pady=5)
-        
-        self.list_files = ctk.CTkTextbox(list_frame, height=int(150), font=get_font("normal"))
-        self.list_files.pack(fill="both", expand=True, padx=10, pady=10)
-        
-        # Risultati
-        result_frame = ctk.CTkFrame(self.parent, fg_color=COLOR_SURFACE, corner_radius=int(10))
-        result_frame.pack(fill="both", expand=True, padx=20, pady=(0, 20))
-        
-        ctk.CTkLabel(result_frame, text="Risultati confronto:",
-                    font=get_font("medium", bold=True)).pack(anchor="w", padx=10, pady=5)
-        
-        tree_scroll = ttk.Scrollbar(result_frame)
-        tree_scroll.pack(side="right", fill="y")
-        
-        self.tree = ttk.Treeview(result_frame, columns=("Stato", "Alias", "File", "Riga"),
-                                show="headings", height=int(15), yscrollcommand=tree_scroll.set)
-        tree_scroll.config(command=self.tree.yview)
-        
-        self.tree.heading("Stato", text="STATO")
-        self.tree.heading("Alias", text="ALIAS")
-        self.tree.heading("File", text="FILE")
-        self.tree.heading("Riga", text="N°RIGA")
-        
-        self.tree.column("Stato", width=int(80))
-        self.tree.column("Alias", width=int(300))
-        self.tree.column("File", width=int(250))
-        self.tree.column("Riga", width=int(80))
-        
-        self.tree.pack(fill="both", expand=True, padx=10, pady=10)
-        
-        # Binding doppio click per aggiungere utensile mancante
+        # Destra: invio + MAIN
+        right = ctk.CTkFrame(top, fg_color="transparent")
+        right.pack(side="right", padx=12, pady=8)
+
+        # ⚙ Calibra (piccolo, discreto)
+        ctk.CTkButton(
+            right, text="⚙",
+            command=self._apri_calibra_settings,
+            fg_color="transparent", hover_color="#ECEFF1",
+            text_color="#B0BEC5", border_width=1, border_color="#CFD8DC",
+            font=get_font("small"), height=30, width=30, corner_radius=6
+        ).pack(side="right", padx=(4, 0))
+
+        # Campo nome progetto
+        self.entry_nome = ctk.CTkEntry(
+            right, width=110, height=38,
+            placeholder_text="Nome progetto",
+            font=get_font("body"), corner_radius=8)
+        self.entry_nome.pack(side="right", padx=6)
+
+        ctk.CTkLabel(right, text="Progetto:", font=get_font("small"),
+                     text_color="#90A4AE").pack(side="right", padx=(0, 2))
+
+        # Genera MAIN
+        self.btn_genera = ctk.CTkButton(
+            right, text="📄  Genera MAIN",
+            command=self._genera_main,
+            fg_color="#5C6BC0", hover_color="#3949AB",
+            font=get_font("medium", bold=True), height=38, width=130, corner_radius=8)
+        self.btn_genera.pack(side="right", padx=6)
+
+        # Solo MAIN (blu, disabilitato finché MAIN non generato)
+        self.btn_solo_main = ctk.CTkButton(
+            right, text="📤  Solo MAIN",
+            command=self._invia_solo_main,
+            fg_color="#1E88E5", hover_color="#1565C0",
+            font=get_font("medium"), height=38, width=115, corner_radius=8,
+            state="disabled")
+        self.btn_solo_main.pack(side="right", padx=3)
+
+        # Invia tutto (verde, disabilitato finché no file)
+        self.btn_invia = ctk.CTkButton(
+            right, text="📤  Invia tutto",
+            command=self._invia_tutto,
+            fg_color="#43A047", hover_color="#2E7D32",
+            font=get_font("medium"), height=38, width=115, corner_radius=8,
+            state="disabled")
+        self.btn_invia.pack(side="right", padx=3)
+
+        # ── Separatore ────────────────────────────────────────────────────
+        sep = ctk.CTkFrame(self.parent, fg_color="#E8EDF2", height=1)
+        sep.pack(fill="x")
+
+        # ── Corpo principale: lista file (sinistra) + risultati (destra) ──
+        body = ctk.CTkFrame(self.parent, fg_color="transparent")
+        body.pack(fill="both", expand=True, padx=12, pady=10)
+
+        # ── Pannello sinistra: lista file ─────────────────────────────────
+        pnl_sx = ctk.CTkFrame(body, fg_color="white", corner_radius=10,
+                              border_width=1, border_color="#E0E6ED")
+        pnl_sx.pack(side="left", fill="both", padx=(0, 8), pady=0,
+                    ipadx=0, ipady=0, expand=False)
+        pnl_sx.configure(width=260)
+        pnl_sx.pack_propagate(False)
+
+        hdr_sx = ctk.CTkFrame(pnl_sx, fg_color="#F5F7FA", corner_radius=0, height=36)
+        hdr_sx.pack(fill="x")
+        hdr_sx.pack_propagate(False)
+        ctk.CTkLabel(hdr_sx, text="File NC caricati",
+                     font=get_font("small", bold=True),
+                     text_color="#546E7A").pack(side="left", padx=12, pady=8)
+        self.lbl_n_file = ctk.CTkLabel(hdr_sx, text="",
+                                        font=get_font("small"),
+                                        text_color="#90A4AE")
+        self.lbl_n_file.pack(side="right", padx=10)
+
+        # Lista file come Listbox scrollabile
+        list_wrapper = ctk.CTkFrame(pnl_sx, fg_color="transparent")
+        list_wrapper.pack(fill="both", expand=True, padx=6, pady=6)
+
+        sb_files = ttk.Scrollbar(list_wrapper)
+        sb_files.pack(side="right", fill="y")
+
+        self.lb_files = tk.Listbox(
+            list_wrapper,
+            font=("Consolas", 10),
+            bg="white", fg="#37474F",
+            selectbackground="#E3F2FD", selectforeground="#1565C0",
+            relief="flat", bd=0,
+            highlightthickness=0,
+            yscrollcommand=sb_files.set,
+            activestyle="none")
+        self.lb_files.pack(fill="both", expand=True)
+        sb_files.config(command=self.lb_files.yview)
+
+        # Rimuovi file con tasto Canc
+        self.lb_files.bind("<Delete>", self._rimuovi_selezionato)
+
+        # ── Pannello destra: risultati ────────────────────────────────────
+        pnl_dx = ctk.CTkFrame(body, fg_color="white", corner_radius=10,
+                              border_width=1, border_color="#E0E6ED")
+        pnl_dx.pack(side="left", fill="both", expand=True)
+
+        hdr_dx = ctk.CTkFrame(pnl_dx, fg_color="#F5F7FA", corner_radius=0, height=36)
+        hdr_dx.pack(fill="x")
+        hdr_dx.pack_propagate(False)
+        ctk.CTkLabel(hdr_dx, text="Risultati confronto utensili",
+                     font=get_font("small", bold=True),
+                     text_color="#546E7A").pack(side="left", padx=12, pady=8)
+        ctk.CTkLabel(hdr_dx, text="Doppio click su un utensile mancante per aggiungerlo a scaffale",
+                     font=get_font("small"), text_color="#B0BEC5").pack(side="right", padx=12)
+
+        # Treeview risultati
+        style = ttk.Style()
+        style.configure("NC.Treeview",
+                        font=("Consolas", 10),
+                        rowheight=28,
+                        background="white",
+                        fieldbackground="white",
+                        foreground="#37474F")
+        style.configure("NC.Treeview.Heading",
+                        font=("Helvetica", 9, "bold"),
+                        background="#F5F7FA",
+                        foreground="#546E7A",
+                        relief="flat")
+        style.map("NC.Treeview", background=[("selected", "#E3F2FD")],
+                  foreground=[("selected", "#1565C0")])
+
+        tree_wrap = ctk.CTkFrame(pnl_dx, fg_color="transparent")
+        tree_wrap.pack(fill="both", expand=True, padx=6, pady=6)
+
+        sb_tree = ttk.Scrollbar(tree_wrap)
+        sb_tree.pack(side="right", fill="y")
+
+        self.tree = ttk.Treeview(
+            tree_wrap,
+            columns=("stato", "alias", "file", "riga"),
+            show="headings",
+            style="NC.Treeview",
+            yscrollcommand=sb_tree.set)
+        sb_tree.config(command=self.tree.yview)
+
+        self.tree.heading("stato", text="STATO",  anchor="w")
+        self.tree.heading("alias", text="ALIAS",  anchor="w")
+        self.tree.heading("file",  text="FILE",   anchor="w")
+        self.tree.heading("riga",  text="RIGA",   anchor="w")
+
+        self.tree.column("stato", width=90,  minwidth=70,  anchor="w")
+        self.tree.column("alias", width=320, minwidth=150, anchor="w")
+        self.tree.column("file",  width=220, minwidth=100, anchor="w")
+        self.tree.column("riga",  width=60,  minwidth=40,  anchor="center")
+
+        self.tree.tag_configure("ok",     background="#F1F8E9", foreground="#2E7D32")
+        self.tree.tag_configure("manca",  background="#FFEBEE", foreground="#C62828")
+        self.tree.tag_configure("disab",  background="#FFF8E1", foreground="#E65100")
+        self.tree.tag_configure("empty",  background="white",   foreground="#90A4AE")
+
+        self.tree.pack(fill="both", expand=True)
         self.tree.bind("<Double-Button-1>", self._on_double_click)
-    
+
+        # Placeholder stato vuoto
+        self._show_placeholder()
+
+    def _show_placeholder(self):
+        self.tree.delete(*self.tree.get_children())
+        self.tree.insert("", "end", values=("", "Carica file .MPF per iniziare il confronto", "", ""), tags=("empty",))
+
+    # ── Lista file ────────────────────────────────────────────────────────────
+
     def _seleziona_files(self):
-        """Selezione multipla file .MPF con confronto automatico."""
         files = filedialog.askopenfilenames(
             title="Seleziona programmi NC",
-            filetypes=[("Programmi MPF", "*.MPF"), ("Tutti i file", "*.*")]
-        )
-        
+            filetypes=[("Programmi MPF", "*.MPF *.mpf"), ("Tutti i file", "*.*")])
         if files:
-            self.file_paths.extend(files)
+            for f in files:
+                if f not in self.file_paths:
+                    self.file_paths.append(f)
             self._aggiorna_lista()
-            # CONFRONTO AUTOMATICO dopo selezione
             self._confronta()
-    
+
+    def _rimuovi_selezionato(self, event=None):
+        sel = self.lb_files.curselection()
+        if not sel:
+            return
+        idx = sel[0]
+        self.file_paths.pop(idx)
+        self._aggiorna_lista()
+        if self.file_paths:
+            self._confronta()
+        else:
+            self._pulisci_lista()
+
     def _pulisci_lista(self):
-        """Pulisce lista file."""
         self.file_paths = []
         self._main_generato_path = None
-        self.list_files.delete("1.0", "end")
-        self.tree.delete(*self.tree.get_children())
-        self.btn_invia_tutto.configure(state="disabled")
-        self.btn_invia_main.configure(state="disabled")
-    
+        self.lb_files.delete(0, "end")
+        self.lbl_n_file.configure(text="")
+        self.lbl_stato.configure(text="")
+        self.lbl_fonte.configure(text="")
+        self.btn_invia.configure(state="disabled")
+        self.btn_solo_main.configure(state="disabled")
+        self._show_placeholder()
+
     def _aggiorna_lista(self):
-        """Aggiorna visualizzazione lista file."""
-        self.list_files.delete("1.0", "end")
-        for i, fp in enumerate(self.file_paths, 1):
-            self.list_files.insert("end", f"{i}. {os.path.basename(fp)}\n")
-    
+        self.lb_files.delete(0, "end")
+        for fp in self.file_paths:
+            self.lb_files.insert("end", os.path.basename(fp))
+        n = len(self.file_paths)
+        self.lbl_n_file.configure(text=f"{n} file" if n else "")
+
+    # ── Confronto ─────────────────────────────────────────────────────────────
+
     def _confronta(self, show_message=False):
-        """Confronta utensili richiesti con il DB In Macchina (tools_machine.json)."""
         if not self.file_paths:
-            if show_message:
-                return messagebox.showwarning("Attenzione", "Seleziona almeno un file")
             return
 
-        # ── Carica utensili da tools_machine.json (TOA/MPF sync) ──
-        import json as _json
-        from pathlib import Path as _Path
+        tools_db, fonte = _load_tools_machine()
 
-        tools_db = {}
-        fonte = ""
-        try:
-            # Usa la stessa logica di tab_macchina._get_tools_db_path()
-            from ui.tab_macchina import _get_tools_db_path as _tmdb_path
-            tdb_path = _tmdb_path()
-            if tdb_path.exists():
-                data = _json.loads(tdb_path.read_text(encoding="utf-8"))
-                tools_db = data.get("tools", {})
-                fmt = data.get("format_used", "")
-                sync_time = data.get("sync_time", "")
-                dt_str = ""
-                if sync_time:
-                    try:
-                        from datetime import datetime
-                        dt_str = datetime.fromisoformat(sync_time).strftime("%d/%m %H:%M")
-                    except Exception:
-                        dt_str = sync_time[:16]
-                fmt_label = fmt.upper() if fmt else "TOA/MPF"
-                fonte = f"DB: tools_machine.json ({fmt_label} — {dt_str})"
-        except Exception as e:
-            fonte = f"Errore lettura DB: {e}"
+        if not tools_db:
+            self.lbl_stato.configure(
+                text="⚠  Sync non eseguito",
+                text_color="#F57C00")
+            self.lbl_fonte.configure(
+                text="Vai in 'In Macchina' e premi Sync macchina")
+            self.tree.delete(*self.tree.get_children())
+            self.tree.insert("", "end",
+                values=("", "Esegui il Sync TOA/MPF prima di confrontare", "", ""),
+                tags=("empty",))
+            return
 
-        usa_csv = False
-
-        # ── Estrai utensili dai file NC ──
-        from logic.nc_analyzer import estrai_tutti_utensili_da_file
+        # Estrai alias dai file NC
         alias_richiesti = set()
         for fp in self.file_paths:
             for alias, _, _ in estrai_tutti_utensili_da_file(fp):
                 alias_richiesti.add(alias.upper().strip())
 
-        # ── Confronto ──
-        if not tools_db:
-            # Sync non disponibile — blocca confronto
-            self.lbl_stato_confronto.configure(
-                text="⚠  Sync non eseguito — vai in 'In Macchina' e premi Sync macchina",
-                text_color="#F57C00")
-            self.lbl_fonte_db.configure(text="Il confronto richiede il sync TOA/TMA o MPF")
-            return
+        alias_in_macchina = {t["name"].upper() for t in tools_db.values() if t.get("name")}
+        alias_abilitati   = {
+            t["name"].upper() for t in tools_db.values()
+            if t.get("name") and t.get("is_enabled", True) and not t.get("is_worn", False)
+        }
+        mancanti     = sorted(alias_richiesti - alias_in_macchina)
+        disabilitati = sorted(alias_richiesti & (alias_in_macchina - alias_abilitati))
+        presenti     = sorted(alias_richiesti - set(mancanti) - set(disabilitati))
+        n_problemi   = len(mancanti) + len(disabilitati)
 
-        if tools_db:
-            alias_in_macchina = {t["name"].upper() for t in tools_db.values() if t.get("name")}
-            alias_abilitati = {
-                t["name"].upper() for t in tools_db.values()
-                if t.get("name") and t.get("is_enabled", True) and not t.get("is_worn", False)
-            }
-            mancanti    = alias_richiesti - alias_in_macchina
-            disabilitati = alias_richiesti & (alias_in_macchina - alias_abilitati)
-            presenti    = alias_richiesti - mancanti - disabilitati
-        elif usa_csv:
-            utensili_richiesti, mancanti_report = confronta_utensili_logica(
-                self.main.df, self.file_paths)
-            mancanti     = {a for a, _, _ in mancanti_report}
-            disabilitati = set()
-            presenti     = alias_richiesti - mancanti
-        else:
-            self.lbl_stato_confronto.configure(
-                text="⚠  Nessun DB disponibile — esegui prima Sync in 'In Macchina'",
-                text_color="#F57C00")
-            self.lbl_fonte_db.configure(text="")
-            return
-
-        # ── Aggiorna tree ──
+        # Aggiorna tree
         self.tree.delete(*self.tree.get_children())
-        n_mancanti = len(mancanti) + len(disabilitati)
+        for alias in mancanti:
+            self.tree.insert("", "end", values=("❌  Mancante", alias, "—", "—"), tags=("manca",))
+        for alias in disabilitati:
+            self.tree.insert("", "end", values=("⚠  Disabilitato", alias, "—", "—"), tags=("disab",))
+        for alias in presenti:
+            self.tree.insert("", "end", values=("✓  OK", alias, "—", "—"), tags=("ok",))
 
-        if n_mancanti == 0:
-            self.tree.insert("", "end", values=("✅ OK", "Tutti gli utensili presenti", "-", "-"))
-        else:
-            for alias in sorted(mancanti):
-                self.tree.insert("", "end", values=("❌ MANCA", alias, "—", "—"))
-            for alias in sorted(disabilitati):
-                self.tree.insert("", "end", values=("⚠ DISAB.", alias, "—", "—"))
-            for alias in sorted(presenti):
-                self.tree.insert("", "end", values=("✅ OK", alias, "—", "—"))
+        if not alias_richiesti:
+            self.tree.insert("", "end",
+                values=("", "Nessun utensile trovato nei file NC", "", ""),
+                tags=("empty",))
 
-        # ── Banner stato ──
-        if n_mancanti == 0:
-            self.lbl_stato_confronto.configure(
-                text=f"✅  Tutti i {len(alias_richiesti)} utensili presenti in macchina",
-                text_color=COLOR_SUCCESS)
+        # Banner stato
+        tot = len(alias_richiesti)
+        if n_problemi == 0:
+            self.lbl_stato.configure(
+                text=f"✅  Tutti i {tot} utensili presenti in macchina",
+                text_color="#2E7D32")
         else:
-            self.lbl_stato_confronto.configure(
-                text=f"❌  {len(mancanti)} mancanti  |  ⚠ {len(disabilitati)} disabilitati  |  {len(alias_richiesti)} totali",
+            parti = []
+            if mancanti:     parti.append(f"❌ {len(mancanti)} mancanti")
+            if disabilitati: parti.append(f"⚠ {len(disabilitati)} disabilitati")
+            self.lbl_stato.configure(
+                text=f"{'  ·  '.join(parti)}  di {tot} totali",
                 text_color="#C62828")
-        self.lbl_fonte_db.configure(text=fonte)
 
-        # ── Abilita invio ──
-        if self.file_paths:
-            self.btn_invia_tutto.configure(state="normal")
+        self.lbl_fonte.configure(text=fonte)
+        self.btn_invia.configure(state="normal")
 
         if show_message:
             messagebox.showinfo("Confronto completato",
-                               f"Utensili richiesti: {len(alias_richiesti)}\n"
-                               f"Mancanti: {len(mancanti)}\n"
-                               f"Disabilitati: {len(disabilitati)}")
-    
+                f"Utensili richiesti: {tot}\n"
+                f"Mancanti: {len(mancanti)}\n"
+                f"Disabilitati: {len(disabilitati)}")
+
+    # ── Double click → aggiungi a scaffale ───────────────────────────────────
+
     def _on_double_click(self, event):
-        """Doppio click su utensile mancante per aggiungerlo."""
         sel = self.tree.selection()
         if not sel:
             return
-        
-        item = self.tree.item(sel[0])
-        values = item['values']
-        
-        # Verifica che sia un utensile mancante
-        if values[0] != "❌ MANCA":
+        item  = self.tree.item(sel[0])
+        stato = item["values"][0] if item["values"] else ""
+        if "Mancante" not in str(stato):
             return
-        
-        alias = values[1]
-        
-        # VERIFICA SE HA GIÀ HOLDER
+        alias = item["values"][1]
+
         from database.db_handler import ha_holder
-        
         if ha_holder(alias):
-            # Ha già holder! Non serve aggiungerlo
-            messagebox.showinfo("Info", 
-                f"Utensile '{alias}' contiene già un holder.\n\n"
-                f"Verrà aggiunto direttamente senza selezione holder.")
-            
+            messagebox.showinfo("Info",
+                f"'{alias}' ha già un holder incorporato.\n"
+                f"Verrà aggiunto direttamente a Scaffale.")
             try:
-                # Aggiungi direttamente senza dialog
                 import pandas as pd
                 from database.db_handler import salva_database
-                from config.constants import STATO_SCAFFALE
-                
-                new_row = pd.DataFrame([{
-                    'Posizione': '',
-                    'Alias': alias,  # Mantiene holder esistente
-                    'Stato_Utensile': STATO_SCAFFALE
-                }])
-                
+                new_row = pd.DataFrame([{"Posizione": "", "Alias": alias, "Stato_Utensile": STATO_SCAFFALE}])
                 self.main.df = pd.concat([self.main.df, new_row], ignore_index=True)
-                
-                success, err = salva_database(self.main.df, self.main.db_path)
-                
-                if success:
+                ok, err = salva_database(self.main.df, self.main.db_path)
+                if ok:
                     self.main.refresh_all_tabs()
                     self.main._update_status()
                     self.tree.delete(sel[0])
-                    messagebox.showinfo("Successo", f"Utensile '{alias}' aggiunto a SCAFFALE")
+                    messagebox.showinfo("Successo", f"'{alias}' aggiunto a Scaffale")
                 else:
                     messagebox.showerror("Errore", err)
-                    
             except Exception as e:
-                import traceback
-                traceback.print_exc()
-                messagebox.showerror("Errore", f"Errore aggiunta utensile:\n{e}")
-            
-            return  # STOP - non continuare con dialog holder
-        
-        # Dialog conferma
-        if not messagebox.askyesno("Aggiungi Utensile", 
-                                   f"Aggiungere '{alias}' al database?\n\n"
-                                   f"Verrà aggiunto come SCAFFALE.\n"
-                                   f"DEVI selezionare un holder."):
+                messagebox.showerror("Errore", str(e))
             return
-        
+
+        if not messagebox.askyesno("Aggiungi a Scaffale",
+                f"Aggiungere '{alias}' al database come SCAFFALE?\n"
+                f"Dovrai selezionare un holder."):
+            return
+
         try:
-            # DIALOG SELEZIONE HOLDER (obbligatorio per invarianza!)
             from ui.dialogs import SelezionaHolderDialog
-            
-            dialog = SelezionaHolderDialog(
-                self.parent,
-                alias,
-                self.main.df_holder_smontati,
-                self.main.df_bussole_idraulico
-            )
-            
-            if not dialog.success:
-                return  # Annullato
-            
-            # Ottieni alias finale con holder
-            alias_finale = dialog.alias_finale
-            holder_usato = dialog.holder_cod
-            bussola_usata = dialog.bussola_cod
-            
-            print(f"\n=== AGGIUNGI UTENSILE MANCANTE ===")
-            print(f"Alias originale: {alias}")
-            print(f"Alias finale: {alias_finale}")
-            print(f"Holder: {holder_usato}")
-            print(f"Bussola: {bussola_usata}")
-            
-            # DECREMENTA HOLDER da smontati
+            dlg = SelezionaHolderDialog(self.parent, alias,
+                                        self.main.df_holder_smontati,
+                                        self.main.df_bussole_idraulico)
+            if not dlg.success:
+                return
+
+            alias_finale  = dlg.alias_finale
+            holder_usato  = dlg.holder_cod
+            bussola_usata = dlg.bussola_cod
+
+            # Decrementa holder
             df_h = self.main.df_holder_smontati
             if not df_h.empty:
-                df_h['Alias_Holder'] = df_h['Alias_Holder'].astype(str).str.strip()
-                holder_strip = str(holder_usato).strip()
-                
-                if holder_strip in df_h['Alias_Holder'].values:
-                    idx_h = df_h['Alias_Holder'] == holder_strip
-                    qty_prima = df_h.loc[idx_h, 'Quantita'].values[0]
-                    df_h.loc[idx_h, 'Quantita'] = df_h.loc[idx_h, 'Quantita'].astype(int) - 1
-                    qty_dopo = df_h.loc[idx_h, 'Quantita'].values[0]
-                    
-                    print(f"→ Holder {holder_strip} decrementato: {qty_prima} → {qty_dopo}")
-                    
-                    # Rimuovi se qty=0
-                    if qty_dopo <= 0:
-                        df_h = df_h[~idx_h].reset_index(drop=True)
-                        print(f"→ Holder {holder_strip} rimosso (qty=0)")
-                    
-                    # Salva
+                df_h["Alias_Holder"] = df_h["Alias_Holder"].astype(str).str.strip()
+                hs = str(holder_usato).strip()
+                if hs in df_h["Alias_Holder"].values:
+                    m = df_h["Alias_Holder"] == hs
+                    df_h.loc[m, "Quantita"] = df_h.loc[m, "Quantita"].astype(int) - 1
+                    df_h = df_h[df_h["Quantita"] > 0].reset_index(drop=True)
                     self.main.df_holder_smontati = df_h
                     from database.db_handler import salva_database_holder_smontati
-                    salva_database_holder_smontati(df_h, self.main.db_paths.get('holder_smontati', ''))
-                else:
-                    messagebox.showwarning("Attenzione", 
-                        f"Holder {holder_strip} non disponibile in smontati!\n"
-                        f"Verrà usato comunque ma TOTALE aumenterà.")
-            
-            # DECREMENTA BUSSOLA se usata
+                    salva_database_holder_smontati(df_h, self.main.db_paths.get("holder_smontati", ""))
+
+            # Decrementa bussola
             if bussola_usata:
                 df_b = self.main.df_bussole_idraulico
                 if not df_b.empty:
-                    df_b['Codice_Bussola'] = df_b['Codice_Bussola'].astype(str).str.strip()
-                    bussola_strip = str(bussola_usata).strip()
-                    
-                    if bussola_strip in df_b['Codice_Bussola'].values:
-                        idx_b = df_b['Codice_Bussola'] == bussola_strip
-                        qty_prima = df_b.loc[idx_b, 'Quantita'].values[0]
-                        df_b.loc[idx_b, 'Quantita'] = df_b.loc[idx_b, 'Quantita'].astype(int) - 1
-                        qty_dopo = df_b.loc[idx_b, 'Quantita'].values[0]
-                        
-                        print(f"→ Bussola {bussola_strip} decrementata: {qty_prima} → {qty_dopo}")
-                        
-                        if qty_dopo <= 0:
-                            df_b = df_b[~idx_b].reset_index(drop=True)
-                            print(f"→ Bussola {bussola_strip} rimossa (qty=0)")
-                        
-                        # Salva
+                    df_b["Codice_Bussola"] = df_b["Codice_Bussola"].astype(str).str.strip()
+                    bs = str(bussola_usata).strip()
+                    if bs in df_b["Codice_Bussola"].values:
+                        m = df_b["Codice_Bussola"] == bs
+                        df_b.loc[m, "Quantita"] = df_b.loc[m, "Quantita"].astype(int) - 1
+                        df_b = df_b[df_b["Quantita"] > 0].reset_index(drop=True)
                         self.main.df_bussole_idraulico = df_b
                         from database.db_handler import salva_database_bussole_idraulico
-                        salva_database_bussole_idraulico(df_b, self.main.db_paths.get('bussole_idraulico', ''))
-            
-            # Aggiungi al database come SCAFFALE con alias finale
+                        salva_database_bussole_idraulico(df_b, self.main.db_paths.get("bussole_idraulico", ""))
+
             import pandas as pd
             from database.db_handler import salva_database
-            from config.constants import STATO_SCAFFALE
-            
-            new_row = pd.DataFrame([{
-                'Posizione': '',
-                'Alias': alias_finale,  # CON HOLDER!
-                'Stato_Utensile': STATO_SCAFFALE
-            }])
-            
+            new_row = pd.DataFrame([{"Posizione": "", "Alias": alias_finale, "Stato_Utensile": STATO_SCAFFALE}])
             self.main.df = pd.concat([self.main.df, new_row], ignore_index=True)
-            
-            success, err = salva_database(self.main.df, self.main.db_path)
-            
-            if success:
-                # Refresh UI
+            ok, err = salva_database(self.main.df, self.main.db_path)
+            if ok:
                 self.main.refresh_all_tabs()
                 self.main._update_status()
-                
-                # Aggiorna tree - rimuovi riga mancante
                 self.tree.delete(sel[0])
-                
-                print("=== UTENSILE AGGIUNTO CON SUCCESSO ===\n")
-                
-                msg_parts = [f"Utensile: {alias_finale}"]
-                if holder_usato:
-                    msg_parts.append(f"Holder {holder_usato} -1")
-                if bussola_usata:
-                    msg_parts.append(f"Bussola {bussola_usata} -1")
-                
-                messagebox.showinfo("Successo", 
-                    f"Aggiunto a SCAFFALE!\n\n" + "\n".join(msg_parts))
+                messagebox.showinfo("Successo", f"'{alias_finale}' aggiunto a Scaffale")
             else:
                 messagebox.showerror("Errore", err)
-                
         except Exception as e:
-            import traceback
-            traceback.print_exc()
-            messagebox.showerror("Errore", f"Errore aggiunta utensile:\n{e}")
-    
-    
+            messagebox.showerror("Errore", str(e))
+
+    # ── Azioni ────────────────────────────────────────────────────────────────
+
     def _apri_calibra_settings(self):
-        """Apre il dialog impostazioni CALIBRA ONLY."""
         try:
             from ui.calibra_only_settings_dialog import show_calibra_settings
             show_calibra_settings(self.parent)
         except Exception as e:
-            messagebox.showerror("Errore", f"Errore apertura impostazioni:\n{e}")
+            messagebox.showerror("Errore", str(e))
 
     def _invia_tutto(self):
-        """Invia tutti i file analizzati alla macchina."""
         if not self.file_paths:
-            return messagebox.showwarning("Attenzione", "Seleziona almeno un file MPF")
+            return messagebox.showwarning("Attenzione", "Nessun file caricato")
+        progetto = self.entry_nome.get().strip()
+        if not progetto:
+            return messagebox.showwarning("Attenzione", "Inserisci il nome progetto")
         try:
             from ui.dialog_invia_macchina import DialogInviaMacchina
-            import os
-            # Usa il nome della cartella come progetto
-            progetto = self.entry_nome_cartella.get().strip()
-            if not progetto:
-                return messagebox.showwarning("Attenzione",
-                    "Inserisci il nome progetto/cartella prima di inviare")
-            # Includi MAIN se esiste
             paths = list(self.file_paths)
             if self._main_generato_path and os.path.exists(self._main_generato_path):
                 if self._main_generato_path not in paths:
@@ -481,73 +510,41 @@ class TabAnalisiNC:
             dlg = DialogInviaMacchina(self.parent, paths, progetto)
             self.parent.wait_window(dlg)
         except Exception as e:
-            messagebox.showerror("Errore", f"Errore apertura dialog invio:\n{e}")
+            messagebox.showerror("Errore", str(e))
 
     def _invia_solo_main(self):
-        """Invia solo il file MAIN generato."""
-        if not self._main_generato_path:
-            return messagebox.showwarning("Attenzione",
-                "Genera prima il file MAIN con '📄 GENERA MAIN'")
-        import os
-        if not os.path.exists(self._main_generato_path):
-            return messagebox.showwarning("File non trovato",
-                f"Il file MAIN non esiste più:\n{self._main_generato_path}\n\n"
-                "Rigenera il MAIN prima di inviare.")
+        if not self._main_generato_path or not os.path.exists(self._main_generato_path):
+            return messagebox.showwarning("Attenzione", "Genera prima il file MAIN")
+        progetto = self.entry_nome.get().strip()
+        if not progetto:
+            return messagebox.showwarning("Attenzione", "Inserisci il nome progetto")
         try:
             from ui.dialog_invia_macchina import DialogInviaMacchina
-            progetto = self.entry_nome_cartella.get().strip()
-            if not progetto:
-                return messagebox.showwarning("Attenzione",
-                    "Inserisci il nome progetto/cartella prima di inviare")
             dlg = DialogInviaMacchina(self.parent, [self._main_generato_path], progetto)
             self.parent.wait_window(dlg)
         except Exception as e:
-            messagebox.showerror("Errore", f"Errore apertura dialog invio:\n{e}")
+            messagebox.showerror("Errore", str(e))
 
     def _genera_main(self):
-        """Genera programma MAIN dai file analizzati."""
         if not self.file_paths:
             return messagebox.showwarning("Attenzione", "Seleziona almeno un file")
-        
-        nome_progetto = self.entry_nome_cartella.get().strip()
-        if not nome_progetto:
-            return messagebox.showwarning("Attenzione", "Inserisci nome progetto")
-        
+        nome = self.entry_nome.get().strip()
+        if not nome:
+            return messagebox.showwarning("Attenzione", "Inserisci il nome progetto")
         try:
-            # Importa funzione generazione V12
             from logic.nc_analyzer import genera_programma_main_gcode
-            
-            # Genera MAIN con logica V12 completa
-            gcode_content, main_filename = genera_programma_main_gcode(
-                self.file_paths,
-                nome_progetto
-            )
-            
-            # Dialog salvataggio
-            from tkinter import filedialog
-            
+            gcode, filename = genera_programma_main_gcode(self.file_paths, nome)
             save_path = filedialog.asksaveasfilename(
-                title="Salva Programma MAIN",
-                initialfile=main_filename,
+                title="Salva MAIN", initialfile=filename,
                 defaultextension=".MPF",
-                filetypes=[("MPF Program", "*.MPF"), ("All", "*.*")]
-            )
-            
+                filetypes=[("MPF", "*.MPF"), ("Tutti", "*.*")])
             if not save_path:
                 return
-            
-            # Salva file
-            with open(save_path, 'w', encoding='utf-8') as f:
-                f.write(gcode_content)
-            
+            with open(save_path, "w", encoding="utf-8") as f:
+                f.write(gcode)
             self._main_generato_path = save_path
-            self.btn_invia_main.configure(state="normal")
-            messagebox.showinfo("Successo", 
-                              f"MAIN generato:\n{save_path}\n\n"
-                              f"Usa logica calibrazione V12:\n"
-                              f"• CALIBRA_ONLY iniziale\n"
-                              f"• Finitura: sempre su cambio\n"
-                              f"• Standard: ogni 3 cambi")
-            
+            self.btn_solo_main.configure(state="normal")
+            messagebox.showinfo("MAIN generato",
+                f"File salvato:\n{save_path}")
         except Exception as e:
-            messagebox.showerror("Errore", f"Errore generazione: {e}")
+            messagebox.showerror("Errore generazione", str(e))

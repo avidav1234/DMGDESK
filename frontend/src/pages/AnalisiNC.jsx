@@ -93,18 +93,19 @@ export default function AnalisiNC() {
     api.getMachineConfig().then(r => { setMachIp(r.ip); setMachPort(r.port) }).catch(() => {})
 
     // Leggi lancio da progetto (sessionStorage) e carica i file da disco
-    try {
-      const raw = sessionStorage.getItem('dmgdesk_lancio_nc')
-      if (raw) {
-        const lancio = JSON.parse(raw)
-        setLancioProgetto(lancio)
-        if (lancio.nomeCartella) setNomeCartella(lancio.nomeCartella)
+    const caricaDaDisco = async () => {
+      try {
+        const raw = sessionStorage.getItem('dmgdesk_lancio_nc')
+        if (raw) {
+          const lancio = JSON.parse(raw)
+          setLancioProgetto(lancio)
+          if (lancio.nomeCartella) setNomeCartella(lancio.nomeCartella)
 
-        // Carica e analizza i file dal disco tramite API
-        if (lancio.mpfFiles?.length) {
-          setLancioLoading(true)
-          try {
-            const res = await fetch('/api/analisi-nc/analizza-da-disco', {
+          // Carica e analizza i file dal disco tramite API
+          if (lancio.mpfFiles?.length) {
+            setLancioLoading(true)
+            try {
+              const res = await fetch('/api/analisi-nc/analizza-da-disco', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ filenames: lancio.mpfFiles })
@@ -139,6 +140,8 @@ export default function AnalisiNC() {
         }
       }
     } catch {}
+    }
+    caricaDaDisco()
   }, [])
 
   // ── File: aggiungi + analisi automatica ───────────────────────────────────

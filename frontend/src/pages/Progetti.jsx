@@ -122,12 +122,22 @@ function ProgramRow({pgm,gruppo,onStato,onOperatore,onTempo,onRemove,toolStatus}
     <div style={{borderBottom:`1px solid ${T.border}`,background:pgm.stato==='completato'?'#f0fdf4':pgm.stato==='in_macchina'?'#eff6ff':T.surface,opacity:pgm.stato==='completato'?0.75:1,transition:'background 0.15s'}}>
       <div style={{display:'flex',alignItems:'center',minHeight:38}}>
         <div onClick={()=>onStato(STATO_NEXT[pgm.stato])} title={`→ ${STATO_CFG[STATO_NEXT[pgm.stato]].label}`}
-          style={{flexShrink:0,width:110,display:'flex',alignItems:'center',justifyContent:'center',gap:5,padding:'0 10px',cursor:'pointer',borderRight:`1px solid ${T.border}`,background:sc.bg,color:sc.color,fontWeight:700,fontSize:12,userSelect:'none',alignSelf:'stretch',transition:'all 0.12s'}}>
+          style={{flexShrink:0,width:110,display:'flex',alignItems:'center',justifyContent:'center',gap:5,padding:'0 10px',cursor:'pointer',borderRight:`1px solid ${T.border}`,background:toolStatus==='mancante'?'#FEE2E2':toolStatus==='fin_vita'?'#FEF9C3':sc.bg,color:toolStatus==='mancante'?'#DC2626':toolStatus==='fin_vita'?'#D97706':sc.color,fontWeight:700,fontSize:12,userSelect:'none',alignSelf:'stretch',transition:'all 0.12s'}}>
           <span style={{fontSize:14}}>{sc.dot}</span>{sc.short}
         </div>
         <div style={{flexShrink:0,width:52,textAlign:'center',borderRight:`1px solid ${T.border}`,alignSelf:'stretch',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:2}}>
           <span style={{fontSize:13,fontWeight:800,color:gruppo.color,fontFamily:'monospace'}}>{pgm.numPgm}</span>
-          {toolStatus&&toolStatus!=='ok'&&toolStatus!=='loading'&&(()=>{const b=({fin_vita:{dot:'⚠',c:'#B45309'},disabilitato:{dot:'⊘',c:'#9333EA'},mancante:{dot:'✗',c:'#C0392B'}})[toolStatus];return b?<span style={{fontSize:9,fontWeight:800,color:b.c}}>{b.dot}</span>:null})()}
+          {toolStatus&&toolStatus!=='ok'&&(()=>{
+            const cfg={
+              mancante: {dot:'✗',label:'MANCANTE',c:'#DC2626',bg:'#FEE2E2'},
+              fin_vita: {dot:'⚠',label:'VITA BASSA',c:'#D97706',bg:'#FEF9C3'},
+              disabilitato:{dot:'⊘',label:'DISAB.',c:'#7C3AED',bg:'#EDE9FE'}
+            }
+            const b=cfg[toolStatus]
+            return b?<span style={{fontSize:9,fontWeight:800,color:b.c,background:b.bg,
+              padding:'1px 4px',borderRadius:3,display:'block',lineHeight:1.3,
+              whiteSpace:'nowrap'}}>{b.dot} {b.label}</span>:null
+          })()}
         </div>
         <div style={{flexShrink:0,width:140,borderRight:`1px solid ${T.border}`,padding:'0 10px',alignSelf:'stretch',display:'flex',flexDirection:'column',justifyContent:'center'}}>
           <span style={{fontSize:12,fontWeight:700,color:T.text,fontFamily:'monospace',lineHeight:1.2}}>{pgm.utensile||'—'}</span>

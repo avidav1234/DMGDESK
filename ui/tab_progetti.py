@@ -498,6 +498,42 @@ class TabProgetti:
     # Dettaglio progetto
     # ══════════════════════════════════════════════════════════════════════════
 
+    def _get_tools_db(self) -> dict:
+        """Carica tools_machine.json e ritorna dict alias_upper→tool."""
+        try:
+            from pathlib import Path as _P
+            cfg = _carica_config()
+            folder = (cfg.get("tools_toa_folder") or "").strip()
+            if not folder:
+                return {}
+            tm = _P(folder) / "tools_machine.json"
+            if not tm.exists():
+                return {}
+            import json as _j
+            raw = _j.loads(tm.read_text(encoding="utf-8"))
+            result = {}
+            for t in raw.get("tools", {}).values():
+                n = (t.get("name") or "").upper().strip()
+                if n:
+                    result[n] = t
+            return result
+        except Exception:
+            return {}
+
+    def _classify_tool(self, alias: str, tools_db: dict) -> str | None:
+        """Ritorna: ok | fin_vita | disabilitato | mancante | None (no alias/db)."""
+        if not alias or not tools_db:
+            return None
+        t = tools_db.get(alias.upper().strip())
+        if not t:
+            return "mancante"
+        if t.get("is_worn") or not t.get("is_enabled", True):
+            return "disabilitato"
+        lp = t.get("life_percent")
+        if lp is not None and lp < 15:
+            return "fin_vita"
+        return "ok"
+
     def _render_detail(self, project):
         pct   = get_progress(project)
         color = project.get("color", TC["accent"])
@@ -595,6 +631,7 @@ class TabProgetti:
         content.pack(fill="both", expand=True, padx=16, pady=12)
 
         if self._active_detail_tab == "tasks":
+            self._tools_db_cache = self._get_tools_db()
             self._render_tasks(content, project)
         else:
             self._render_log(content, project)
@@ -771,6 +808,16 @@ class TabProgetti:
             task["programs"] = programs
             self._save_project(project)
 
+        # Badge anomalie
+        tools_db = getattr(self, "_tools_db_cache", {})
+        anomalie = [p for p in fres
+                    if p.get("stato")=="in_macchina" and p.get("utensile")
+                    and self._classify_tool(p.get("utensile",""), tools_db) in ("mancante","fin_vita","disabilitato")]
+        if anomalie:
+            tk.Label(ph, text=f"⚠ {len(anomalie)} utensili problematici",
+                     font=("DM Sans",9,"bold"), fg="#DC2626", bg="#FEE2E2",
+                     padx=6, pady=1).pack(side="left", padx=6)
+
         tk.Button(ph, text="📂 Carica .MPF", command=_carica,
                   font=("DM Sans",9,"bold"), fg="#fff", bg=TC["blue"],
                   relief="flat", padx=6, pady=2, cursor="hand2").pack(side="right")
@@ -782,7 +829,28 @@ class TabProgetti:
         stato = pgm.get("stato","da_fare")
         lbl, fg, bg = STATO_CFG.get(stato, STATO_CFG["da_fare"])
 
-        row = tk.Frame(parent, bg=bg)
+        # Classifica utensile — solo se in_macchina
+        tools_db = getattr(self, "_tools_db_cache", {})
+        tool_status = None
+        if stato == "in_macchina":
+            tool_status = self._classify_tool(pgm.get("utensile",""), tools_db)
+
+        # Colori riga in base allo stato utensile
+        TOOL_BG = {
+            "mancante":    "#FEE2E2",
+            "fin_vita":    "#FEF9C3",
+            "disabilitato":"#EDE9FE",
+        }
+        TOOL_FG = {
+            "mancante":    "#DC2626",
+            "fin_vita":    "#D97706",
+            "disabilitato":"#7C3AED",
+        }
+        row_bg = TOOL_BG.get(tool_status, bg)
+
+        row = tk.Frame(parent, bg=row_bg,
+                       highlightbackground=TOOL_FG.get(tool_status, row_bg),
+                       highlightthickness=2 if tool_status in TOOL_BG else 0)
         row.pack(fill="x", padx=4, pady=1)
 
         def _adv(p=pgm):
@@ -797,19 +865,26 @@ class TabProgetti:
             task["doneAt"] = datetime.now().isoformat()[:10] if all_done else None
             self._save_project(project)
 
+        btn_bg = TOOL_BG.get(tool_status, bg)
+        btn_fg = TOOL_FG.get(tool_status, fg)
         tk.Button(row, text=lbl, command=_adv,
-                  font=("DM Sans",9,"bold"), fg=fg, bg=bg,
+                  font=("DM Sans",9,"bold"), fg=btn_fg, bg=btn_bg,
                   relief="flat", padx=6, pady=2, cursor="hand2", width=13).pack(side="left", padx=3)
         tk.Label(row, text=pgm.get("numPgm",""),
-                 font=("Consolas",9,"bold"), fg=TC["blue"], bg=bg, width=5).pack(side="left")
-        tk.Label(row, text=(pgm.get("utensile","—") or "—"),
-                 font=("Consolas",9), fg=TC["text"], bg=bg, width=18, anchor="w").pack(side="left")
+                 font=("Consolas",9,"bold"), fg=TC["blue"], bg=row_bg, width=5).pack(side="left")
+        # Badge utensile con colore problema
+        alias_txt = pgm.get("utensile","") or "—"
+        badge_sfx = {"mancante":" ✗","fin_vita":" ⚠","disabilitato":" ⊘"}.get(tool_status,"")
+        tk.Label(row, text=alias_txt+badge_sfx,
+                 font=("Consolas",9,"bold" if tool_status else "normal"),
+                 fg=TOOL_FG.get(tool_status, TC["text"]),
+                 bg=row_bg, width=20, anchor="w").pack(side="left")
         op = (pgm.get("tipoOp","") or "").replace("- NESSUN TESTO","").strip()[:38]
-        tk.Label(row, text=op or "—", font=("DM Sans",9), fg=TC["sub"], bg=bg).pack(side="left", padx=3)
+        tk.Label(row, text=op or "—", font=("DM Sans",9), fg=TC["sub"], bg=row_bg).pack(side="left", padx=3)
         if pgm.get("tempoFine"):
-            tk.Label(row, text=f"■{pgm['tempoFine']}", font=("Consolas",8), fg=TC["green"], bg=bg).pack(side="right", padx=3)
+            tk.Label(row, text=f"■{pgm['tempoFine']}", font=("Consolas",8), fg=TC["green"], bg=row_bg).pack(side="right", padx=3)
         elif pgm.get("tempoInizio"):
-            tk.Label(row, text=f"▶{pgm['tempoInizio']}", font=("Consolas",8), fg=TC["blue"], bg=bg).pack(side="right", padx=3)
+            tk.Label(row, text=f"▶{pgm['tempoInizio']}", font=("Consolas",8), fg=TC["blue"], bg=row_bg).pack(side="right", padx=3)
 
     # ── Log ────────────────────────────────────────────────────────────────────
 

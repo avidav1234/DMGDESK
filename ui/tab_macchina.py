@@ -756,10 +756,15 @@ class TabMacchina:
             left.pack(side="left", fill="both", expand=True, padx=10, pady=4)
             tk.Label(left, text=item["alias"], font=("Consolas",11,"bold"),
                      fg="#1A1814", bg=bg_dm).pack(anchor="w")
-            for ref in item.get("progetti", [])[:2]:
-                tk.Label(left,
-                         text=f"{ref.get('progetto','?')} · {ref.get('file','')}",
-                         font=("DM Sans",9), fg="#9A978E", bg=bg_dm).pack(anchor="w")
+            for ref in item.get("progetti", [])[:3]:
+                proj = ref.get('progetto','?')
+                fn   = ref.get('file','').replace('.MPF','').replace('.mpf','')
+                ref_row = tk.Frame(left, bg=bg_dm)
+                ref_row.pack(anchor="w")
+                tk.Label(ref_row, text=proj,
+                         font=("DM Sans",9,"bold"), fg="#1D5FAD", bg=bg_dm).pack(side="left")
+                tk.Label(ref_row, text=f" · {fn}",
+                         font=("Consolas",8), fg="#9A978E", bg=bg_dm).pack(side="left")
             prov_cfg = {"scaffale":("🏠 A scaffale","#1D5FAD","#dbeafe"),
                         "smontato": ("📦 Smontato", "#C2720A","#FFF0DC"),
                         "mancante": ("✗ Non trovato","#C0392B","#FDECEA")}
@@ -771,8 +776,8 @@ class TabMacchina:
         def _render_fin_vita(row, item):
             tk.Label(row, text=item["alias"], font=("Consolas",11,"bold"),
                      fg="#1A1814", bg="#FEF3C7").pack(side="left", padx=10, pady=5)
-            if item.get("magazine") is not None:
-                tk.Label(row, text=f"M{item['magazine']}", font=("Consolas",10),
+            if item.get("position") is not None:
+                tk.Label(row, text=f"P{item['position']}", font=("Consolas",10),
                          fg="#5A5750", bg="#FEF3C7").pack(side="left", padx=4)
             if item.get("life_percent") is not None:
                 tk.Label(row, text=f"{item['life_percent']}%",
@@ -781,8 +786,8 @@ class TabMacchina:
         def _render_non_usati(row, item):
             tk.Label(row, text=item["alias"], font=("Consolas",11),
                      fg="#5A5750", bg="#F0EEE8").pack(side="left", padx=10, pady=5)
-            if item.get("magazine") is not None:
-                tk.Label(row, text=f"M{item['magazine']}", font=("Consolas",9),
+            if item.get("position") is not None:
+                tk.Label(row, text=f"P{item['position']}", font=("Consolas",9),
                          fg="#9A978E", bg="#F0EEE8").pack(side="left", padx=4)
             if item.get("life_percent") is not None:
                 tk.Label(row, text=f"{item['life_percent']}%",

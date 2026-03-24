@@ -78,26 +78,27 @@ export default function Macchina() {
             <Section title={`✗ MANCANTI / DA MONTARE — ${da_montare.length}`}
               items={da_montare} c='#C0392B' bg='#FDECEA'
               renderItem={item=><>
-                <span style={{flex:1,fontSize:13,fontFamily:'monospace',fontWeight:700,color:'#1A1814'}}>{item.alias}</span>
-                <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:2}}>
-                  <span style={{fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:12,
-                    color:item.provenienza==='mancante'?'#C0392B':item.provenienza==='scaffale'?'#1D5FAD':'#C2720A',
-                    background:item.provenienza==='mancante'?'#FDECEA':item.provenienza==='scaffale'?'#dbeafe':'#FFF0DC'}}>
-                    {item.provenienza==='scaffale'?'🏠 A scaffale':item.provenienza==='smontato'?'📦 Smontato':'✗ Non trovato'}
-                  </span>
-                  {(item.progetti||[]).map((r,i)=>(
-                    <span key={i} style={{fontSize:10,color:'#9A978E',fontFamily:'monospace'}}>
-                      {r.progetto} · {r.file}
-                    </span>
+                <div style={{flex:1}}>
+                  <span style={{fontSize:13,fontFamily:'monospace',fontWeight:700,color:'#1A1814'}}>{item.alias}</span>
+                  {(item.progetti||[]).slice(0,3).map((r,i)=>(
+                    <div key={i} style={{fontSize:10,color:'#5A5750',marginTop:1}}>
+                      <span style={{fontWeight:700,color:'#1D5FAD'}}>{r.progetto}</span>
+                      <span style={{color:'#9A978E',fontFamily:'monospace'}}> · {r.file?.replace(/\.MPF$/i,'')}</span>
+                    </div>
                   ))}
                 </div>
+                <span style={{fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:12,flexShrink:0,
+                  color:item.provenienza==='mancante'?'#C0392B':item.provenienza==='scaffale'?'#1D5FAD':'#C2720A',
+                  background:item.provenienza==='mancante'?'#FDECEA':item.provenienza==='scaffale'?'#dbeafe':'#FFF0DC'}}>
+                  {item.provenienza==='scaffale'?'🏠 A scaffale':item.provenienza==='smontato'?'📦 Smontato':'✗ Non trovato'}
+                </span>
               </>}
             />
             <Section title={`⚠ FINE VITA (<15%) — ${fin_vita.length}`}
               items={fin_vita} c='#B45309' bg='#FEF3C7'
               renderItem={item=><>
                 <span style={{flex:1,fontSize:13,fontFamily:'monospace',fontWeight:700,color:'#1A1814'}}>{item.alias}</span>
-                {item.magazine!=null&&<span style={{fontSize:11,color:'#5A5750',fontFamily:'monospace'}}>M{item.magazine}{item.position!=null?` P${item.position}`:''}</span>}
+                {item.position!=null&&<span style={{fontSize:11,color:'#5A5750',fontFamily:'monospace'}}>P{item.position}</span>}
                 <span style={{fontSize:12,fontWeight:800,color:'#C0392B'}}>{item.life_percent}%</span>
               </>}
             />

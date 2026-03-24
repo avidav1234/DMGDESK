@@ -81,6 +81,71 @@ def _save(config: dict, state: dict):
 
 # ── Modelli ────────────────────────────────────────────────────────────────
 
+
+def _sincronizza_pallet_progetto(config: dict, stato_pallet: str, progetto_id: str, now: str):
+    """
+    Sincronizza lo stato del pallet con il progetto assegnato.
+
+    vuoto   → rimuove pallet_assegnato dal progetto (pallet libero)
+    grezzo  → nessuna azione (pronto da lavorare)
+    guasto  → nessuna azione (problema hardware)
+    finito  → segna tutti i programmi in_macchina come completati nel progetto
+    """
+    from api.routers.progetti import _load_progetti, _progetti_path
+    from pathlib import Path as _Path
+    import json as _json
+
+    data     = _load_progetti(config)
+    projects = data.get("projects", [])
+    project  = next((p for p in projects if p.get("id") == progetto_id), None)
+    if not project:
+        return
+
+    changed = False
+
+    if stato_pallet == "vuoto":
+        # Pallet liberato — rimuovi il legame dal progetto
+        if project.get("pallet_assegnato") is not None:
+            project["pallet_assegnato"] = None
+            changed = True
+
+    elif stato_pallet == "finito":
+        # Pallet finito — segna tutti i programmi in_macchina come completati
+        for step in project.get("steps", []):
+            for task in step.get("tasks", []):
+                if task.get("text", "").strip().lower() != "fresatura":
+                    continue
+                for pgm in task.get("programs", []):
+                    if pgm.get("stato") == "in_macchina":
+                        pgm["stato"]    = "completato"
+                        pgm["tempoFine"] = now
+                        changed = True
+
+        # Controlla se tutto è completato
+        all_pgm = [pgm
+                   for step in project.get("steps", [])
+                   for task in step.get("tasks", [])
+                   if task.get("text","").strip().lower() == "fresatura"
+                   for pgm in task.get("programs", [])
+                   if pgm.get("tipoGruppo") != "ipm"]
+        if all_pgm and all(p.get("stato") == "completato" for p in all_pgm):
+            # Segna anche il task fresatura come done
+            for step in project.get("steps", []):
+                for task in step.get("tasks", []):
+                    if task.get("text","").strip().lower() == "fresatura":
+                        task["done"]   = True
+                        task["doneAt"] = now[:10]
+                        changed = True
+
+    if changed:
+        path = _progetti_path(config)
+        path.write_text(
+            _json.dumps({"projects": projects, "ultimo_aggiornamento": now},
+                        ensure_ascii=False, indent=2),
+            encoding="utf-8"
+        )
+
+
 class SetStatoBody(BaseModel):
     stato:    str
     programma: str | None = None
@@ -131,18 +196,29 @@ async def set_stato_pallet(numero: int, body: SetStatoBody):
     config = carica_configurazione()
     state  = _load(config)
 
+    now = datetime.now().isoformat()
+    pallet_found = None
     for p in state["pallet"]:
         if p["numero"] == numero:
             p["stato"]     = body.stato
-            p["aggiornato"] = datetime.now().isoformat()
+            p["aggiornato"] = now
             if body.programma is not None: p["programma"] = body.programma
             if body.main      is not None: p["main"]      = body.main
             if body.commessa  is not None: p["commessa"]  = body.commessa
+            pallet_found = p
             break
     else:
         raise HTTPException(404, f"Pallet {numero} non trovato")
 
     _save(config, state)
+
+    # ── Sincronizzazione stato pallet → progetto ───────────────────────────
+    progetto_id = pallet_found.get("progetto_id")
+    if progetto_id:
+        try:
+            _sincronizza_pallet_progetto(config, body.stato, progetto_id, now)
+        except Exception:
+            pass  # non blocca la risposta
     return {"ok": True, "pallet": numero, "stato": body.stato}
 
 

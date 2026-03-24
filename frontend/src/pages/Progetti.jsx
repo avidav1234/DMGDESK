@@ -927,7 +927,12 @@ function LancioNCModal({project, toolsDB, onLancia, onClose}){
 function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onSaveAsTemplate,onLanciaNC}){
   // Carica tools_machine una volta sola per questo progetto
   const [toolsDB, setToolsDB] = useState(null)
-  const [showLancioModal, setShowLancioModal] = useState(false)
+  const [showLancioModal, setShowLancioModal] = useState(()=>{
+    // Apri automaticamente se arrivato dalla Coda con bottone Avvia
+    const flag = sessionStorage.getItem('dmgdesk_apri_modal_lancio')
+    if(flag){ sessionStorage.removeItem('dmgdesk_apri_modal_lancio'); return true }
+    return false
+  })
   useEffect(()=>{
     fetch('/api/tools/')
       .then(r=>r.ok?r.json():[])

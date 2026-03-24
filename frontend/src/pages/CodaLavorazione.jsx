@@ -115,7 +115,29 @@ export default function CodaLavorazione() {
 
   const setPalletStato = async (id, stato) => {
     if (stato === "IN LAVORAZIONE") return;
-    // Aggiornamento ottimistico immediato
+    // Se FINITO e c'è un progetto assegnato — avvisa che i programmi verranno completati
+    if (stato === "FINITO") {
+      const proj = progettiPallet[id];
+      if (proj && proj.in_macchina > 0) {
+        const ok = window.confirm(
+          `Segnare Pallet ${id} come FINITO?\n\n` +
+          `${proj.in_macchina} programma/i "in macchina" del progetto "${proj.nome}" ` +
+          `verranno segnati come COMPLETATI automaticamente.`
+        );
+        if (!ok) return;
+      }
+    }
+    // Se VUOTO e c'è un progetto — avvisa che il legame viene rimosso
+    if (stato === "VUOTO") {
+      const proj = progettiPallet[id];
+      if (proj) {
+        const ok = window.confirm(
+          `Svuotare Pallet ${id}?\n\nIl progetto "${proj.nome}" verrà slegato dal pallet.`
+        );
+        if (!ok) return;
+      }
+    }
+    // Aggiornamento ottimistico
     setPallets(prev => prev.map(p => p.id === id ? { ...p, stato } : p));
     try {
       const res = await fetch(`/api/pallet/${id}`, {
@@ -126,7 +148,10 @@ export default function CodaLavorazione() {
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         setError(`Errore: ${err.detail || res.status}`);
-        await fetchAll(); // ripristina stato reale
+        await fetchAll();
+      } else {
+        // Ricarica subito per riflettere sync progetto
+        await fetchAll();
       }
     } catch {
       setError("Errore aggiornamento");
@@ -379,6 +404,13 @@ export default function CodaLavorazione() {
                           style={{marginTop:4,width:'100%',background:'#1D5FAD',border:'none',borderRadius:4,
                             color:'#fff',fontWeight:700,fontSize:8,padding:'3px 0',cursor:'pointer'}}>
                           ▶ Avvia ({progettiPallet[p.id].da_fare})
+                        </button>
+                      )}
+                      {progettiPallet[p.id].pct===100 && p.stato!=='FINITO' && (
+                        <button onClick={e=>{e.stopPropagation();setPalletStato(p.id,'FINITO')}}
+                          style={{marginTop:3,width:'100%',background:'#166534',border:'none',borderRadius:4,
+                            color:'#fff',fontWeight:700,fontSize:8,padding:'3px 0',cursor:'pointer'}}>
+                          ✓ Segna Finito
                         </button>
                       )}
                     </div>

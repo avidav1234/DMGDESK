@@ -1,337 +1,671 @@
-// Progetti.jsx — WorkTrack integrato in DMGDesk
-// Persistenza su file JSON via /api/progetti invece di localStorage
-// Aggiunge: pallet_assegnato, bottone "Lancia in Analisi NC"
+// Progetti.jsx — WorkTrack porting fedele per DMGDesk
+// Flow identico all'app originale, persistenza su file via /api/progetti
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 const API = '/api/progetti'
 
-// ── Palette colori coerente con DMGDesk dark ─────────────────────────────────
-const C = {
-  bg:       'var(--bg-base)',
-  card:     'var(--bg-card)',
-  border:   'var(--border)',
-  text:     'var(--text-primary)',
-  sub:      'var(--text-secondary)',
-  muted:    'var(--text-dim)',
-  accent:   'var(--cyan)',
-  green:    '#22c55e',
-  red:      '#ef4444',
-  orange:   '#f59e0b',
-  blue:     '#3b82f6',
+// ── Tema (warm/cream come l'originale ma compatibile con dark sidebar) ─────────
+const T = {
+  bg:      '#F5F4F0', surface: '#FFFFFF', surface2: '#F0EEE8',
+  border:  '#D8D5CC', borderStrong: '#B0ADA4',
+  text:    '#1A1814', textSub: '#5A5750', textMuted: '#9A978E',
+  accent:  '#D4700A', accentBg: '#FFF4E8',
+  green:   '#1A7A4A', greenBg: '#E8F5EE',
+  red:     '#C0392B', redBg: '#FDECEA',
+  blue:    '#1D5FAD', blueBg: '#EAF1FB',
 }
 
+// ── Utils ──────────────────────────────────────────────────────────────────────
 function uid() { return Math.random().toString(36).slice(2, 9) }
-function nowStr() { return new Date().toLocaleString('it-IT') }
+function nowStr() { return new Date().toLocaleString('it-IT', { year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' }).replace(',', '') }
 
 function getProgress(project) {
   const all = (project.steps || []).flatMap(s => s.tasks || [])
   if (!all.length) return 0
   return Math.round(all.filter(t => t.done).length / all.length * 100)
 }
-
-function getMpfList(project) {
-  const mpf = []
-  for (const step of project.steps || []) {
-    for (const task of step.tasks || []) {
-      if (task.text?.trim().toLowerCase() === 'fresatura') {
-        for (const pgm of task.programs || []) {
-          if (pgm.tipoGruppo !== 'ipm') mpf.push(pgm)
-        }
-      }
-    }
+function getNextTask(project) {
+  for (const step of (project.steps || [])) {
+    const next = (step.tasks || []).find(t => !t.done)
+    if (next) return { step, task: next }
   }
-  return mpf
+  return null
+}
+function reorder(arr, from, to) {
+  const r = [...arr]; const [item] = r.splice(from, 1); r.splice(to, 0, item); return r
 }
 
-// ── ProgressBar ───────────────────────────────────────────────────────────────
-function ProgressBar({ value, color = C.accent }) {
+// ── MPF parser (identico all'originale) ───────────────────────────────────────
+function parseMpfFile(filename, content) {
+  const lines = content.split(/\r?\n/)
+  const get = (label) => { const l = lines.find(l => l.includes(label)); return l ? l.replace(/.*:\s*/, '').trim() : '' }
+  const opLine = lines.find(l => /N\d+;/.test(l) && !l.includes('DIAMETER') && !l.includes('TOOL COMMENT') && !l.includes('CIMATRON') && !l.includes('DOCUMENTO') && !l.includes('UTENTE') && !l.includes('POST') && !l.includes('REVISIONE') && !l.includes('DATA') && !l.includes('N.UT') && l.includes(';') && l.replace(/N\d+;\s*/, '').trim().length > 3)
+  const tipoOp = opLine ? opLine.replace(/N\d+;\s*/, '').trim() : ''
+  const toolLine = lines.find(l => l.includes('TOOL COMMENT:'))
+  const utensile = toolLine ? toolLine.replace(/.*TOOL COMMENT:\s*/, '').trim() : ''
+  const diaLine = lines.find(l => l.includes('DIAMETER:'))
+  const diametro = diaLine ? diaLine.replace(/.*DIAMETER:\s*/, '').replace(/CORNER.*/, '').trim() : ''
+  const dataPost = get('DATA ESECUZIONE POST')
+  const isIPM = /[_\-]IPM[_\-]/i.test(filename) || utensile.toUpperCase().includes('RENISHAW')
+  const tipoGruppo = isIPM ? 'ipm' : 'fresatura'
+  const baseName = filename.replace(/\.MPF$/i, '')
+  const tokens = baseName.split('_')
+  const ipmIdx = tokens.findIndex(t => t.toUpperCase() === 'IPM')
+  const numPgm = ipmIdx >= 0 && tokens[ipmIdx+1] ? tokens[ipmIdx+1] : tokens[tokens.length-1]
+  const fase = tokens.length >= 3 ? tokens[tokens.length - (isIPM ? 3 : 2)] : ''
+  return { numPgm, fase, tipoOp, utensile, diametro, dataPost, filename, tipoGruppo }
+}
+
+// ── Stato programmi ────────────────────────────────────────────────────────────
+const STATO_NEXT = { da_fare: 'in_macchina', in_macchina: 'completato', completato: 'da_fare' }
+const STATO_CFG = {
+  da_fare:     { label: 'Da fare',     short: 'Da fare',     color: T.textMuted, bg: T.surface2, border: T.border,   dot: '○' },
+  in_macchina: { label: 'In macchina', short: 'In macchina', color: '#1D5FAD',   bg: '#dbeafe',  border: '#1D5FAD',  dot: '⚙' },
+  completato:  { label: 'Completato',  short: 'Fatto',       color: '#166534',   bg: '#dcfce7',  border: '#166534',  dot: '✓' },
+}
+const OPERATORI = ['I.Dodon', 'Operatore 2', 'Operatore 3']
+
+// ── Shared UI ─────────────────────────────────────────────────────────────────
+function ProgressBar({ value, color }) {
   return (
-    <div style={{ height: 4, background: 'var(--bg-hover)', borderRadius: 2, overflow: 'hidden' }}>
-      <div style={{ height: '100%', width: `${value}%`, background: color, borderRadius: 2, transition: 'width 0.3s' }} />
+    <div style={{ height: 6, background: T.surface2, borderRadius: 3, overflow: 'hidden' }}>
+      <div style={{ height: '100%', width: `${value}%`, background: color || T.accent, borderRadius: 3, transition: 'width 0.3s' }} />
     </div>
   )
 }
-
-// ── Card singolo progetto ─────────────────────────────────────────────────────
-function ProgettoCard({ project, onSelect, onPalletChange, onLanciaNC }) {
-  const pct = getProgress(project)
-  const mpf = getMpfList(project)
-  const color = project.color || C.blue
-
+function StatusBadge({ progress }) {
+  const cfg = progress === 100
+    ? { label: '✓ Completato', color: T.green, bg: T.greenBg }
+    : progress > 0
+    ? { label: `${progress}% — In corso`, color: T.accent, bg: T.accentBg }
+    : { label: 'Non iniziato', color: T.textMuted, bg: T.surface2 }
+  return <span style={{ fontSize: 12, fontWeight: 700, color: cfg.color, background: cfg.bg, padding: '3px 10px', borderRadius: 20, border: `1px solid ${cfg.color}33` }}>{cfg.label}</span>
+}
+function ConfirmDialog({ message, onConfirm, onCancel }) {
   return (
-    <div
-      onClick={() => onSelect(project.id)}
-      style={{
-        background: C.card, border: `1px solid ${C.border}`,
-        borderLeft: `3px solid ${color}`,
-        borderRadius: 10, padding: '14px 16px',
-        cursor: 'pointer', transition: 'all 0.15s',
-        display: 'flex', flexDirection: 'column', gap: 10,
-      }}
-      onMouseEnter={e => e.currentTarget.style.borderColor = color}
-      onMouseLeave={e => e.currentTarget.style.borderLeft = `3px solid ${color}`}
-    >
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{project.name}</div>
-          {project.description && (
-            <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>{project.description}</div>
-          )}
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300 }}>
+      <div style={{ background: T.surface, borderRadius: 14, padding: 28, maxWidth: 420, border: `1px solid ${T.border}`, boxShadow: '0 8px 32px rgba(0,0,0,0.18)' }}>
+        <p style={{ fontSize: 15, color: T.text, marginBottom: 20 }}>{message}</p>
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+          <button onClick={onCancel} style={{ background: T.surface2, border: `1px solid ${T.border}`, borderRadius: 8, color: T.textSub, fontSize: 14, padding: '8px 18px', cursor: 'pointer', fontWeight: 600 }}>Annulla</button>
+          <button onClick={onConfirm} style={{ background: T.red, border: 'none', borderRadius: 8, color: '#fff', fontSize: 14, padding: '8px 18px', cursor: 'pointer', fontWeight: 700 }}>Conferma</button>
         </div>
-        <div style={{ fontSize: 12, fontWeight: 700, color: pct === 100 ? C.green : C.sub }}>
-          {pct}%
-        </div>
-      </div>
-
-      {/* Barra progresso */}
-      <ProgressBar value={pct} color={pct === 100 ? C.green : color} />
-
-      {/* Dettagli */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        {/* MPF count */}
-        {mpf.length > 0 && (
-          <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 4,
-            background: 'rgba(59,130,246,0.1)', color: C.blue, fontFamily: 'var(--font-mono)' }}>
-            ⚙ {mpf.filter(p => p.stato === 'completato').length}/{mpf.length} MPF
-          </span>
-        )}
-
-        {/* Pallet assegnato */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }} onClick={e => e.stopPropagation()}>
-          <span style={{ fontSize: 10, color: C.muted }}>Pallet:</span>
-          <select
-            value={project.pallet_assegnato || ''}
-            onChange={e => onPalletChange(project.id, e.target.value ? Number(e.target.value) : null)}
-            style={{ fontSize: 10, padding: '2px 4px', borderRadius: 4,
-              background: 'var(--bg-hover)', border: `1px solid ${C.border}`,
-              color: project.pallet_assegnato ? C.accent : C.muted, cursor: 'pointer' }}
-          >
-            <option value="">—</option>
-            {[1,2,3,4,5,6].map(n => <option key={n} value={n}>P{n}</option>)}
-          </select>
-        </div>
-
-        <div style={{ flex: 1 }} />
-
-        {/* Bottone Lancia NC */}
-        {mpf.length > 0 && (
-          <button
-            onClick={e => { e.stopPropagation(); onLanciaNC(project) }}
-            style={{ fontSize: 10, padding: '4px 10px', borderRadius: 5,
-              background: 'var(--navy-700)', border: 'none', color: 'white',
-              cursor: 'pointer', fontWeight: 700 }}
-          >
-            📄 Lancia in NC →
-          </button>
-        )}
       </div>
     </div>
   )
 }
 
-// ── Vista dettaglio progetto ──────────────────────────────────────────────────
-function ProgettoDetail({ project, onUpdate, onBack }) {
-  const toggleTask = (stepId, taskId) => {
-    const updated = {
-      ...project,
-      steps: project.steps.map(s => s.id !== stepId ? s : {
-        ...s,
-        tasks: s.tasks.map(t => t.id !== taskId ? t : {
-          ...t, done: !t.done, doneAt: !t.done ? new Date().toISOString().slice(0,10) : null
-        })
-      })
-    }
-    onUpdate(updated)
-  }
-
-  const pct = getProgress(project)
-  const color = project.color || C.blue
+// ── ProgramRow ────────────────────────────────────────────────────────────────
+function ProgramRow({ pgm, gruppo, onStato, onOperatore, onTempo, onRemove }) {
+  const [expanded, setExpanded] = useState(false)
+  const [editTempo, setEditTempo] = useState(pgm.tempoStimato || '')
+  const [editingT, setEditingT] = useState(false)
+  const sc = STATO_CFG[pgm.stato] || STATO_CFG.da_fare
+  const opClean = (pgm.tipoOp || '').replace(/[-–]\s*NESSUN TESTO\s*/gi, '').replace(/MISURAZIONE NEL PROCESSO[-–]?/gi, 'MISURA ').trim()
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, height: '100%', overflow: 'auto' }}>
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <button onClick={onBack} style={{ background: 'none', border: `1px solid ${C.border}`,
-          borderRadius: 6, padding: '4px 10px', cursor: 'pointer', color: C.sub, fontSize: 12 }}>
-          ← Indietro
-        </button>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 16, fontWeight: 800, color: C.text }}>{project.name}</div>
-          {project.description && <div style={{ fontSize: 12, color: C.muted }}>{project.description}</div>}
+    <div style={{ borderBottom: `1px solid ${T.border}`, background: pgm.stato === 'completato' ? '#f0fdf4' : pgm.stato === 'in_macchina' ? '#eff6ff' : T.surface, opacity: pgm.stato === 'completato' ? 0.75 : 1, transition: 'background 0.15s' }}>
+      <div style={{ display: 'flex', alignItems: 'center', minHeight: 38 }}>
+        {/* Stato badge — click avanza */}
+        <div onClick={() => onStato(STATO_NEXT[pgm.stato])} title={`→ ${STATO_CFG[STATO_NEXT[pgm.stato]].label}`}
+          style={{ flexShrink: 0, width: 110, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '0 10px', height: '100%', cursor: 'pointer', borderRight: `1px solid ${T.border}`, background: sc.bg, color: sc.color, fontWeight: 700, fontSize: 12, userSelect: 'none', alignSelf: 'stretch', transition: 'all 0.12s' }}>
+          <span style={{ fontSize: 14 }}>{sc.dot}</span>{sc.short}
         </div>
-        <div style={{ fontSize: 18, fontWeight: 900, color: pct === 100 ? C.green : color }}>{pct}%</div>
-      </div>
-      <ProgressBar value={pct} color={pct === 100 ? C.green : color} />
-
-      {/* Steps e task */}
-      {(project.steps || []).map(step => (
-        <div key={step.id} style={{ background: C.card, border: `1px solid ${C.border}`,
-          borderRadius: 8, overflow: 'hidden' }}>
-          {/* Step header */}
-          <div style={{ padding: '8px 14px', background: 'var(--bg-hover)',
-            borderBottom: `1px solid ${C.border}`, fontSize: 11, fontWeight: 700,
-            color: C.sub, letterSpacing: '0.06em' }}>
-            {step.title}
+        {/* PGM */}
+        <div style={{ flexShrink: 0, width: 52, textAlign: 'center', borderRight: `1px solid ${T.border}`, alignSelf: 'stretch', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <span style={{ fontSize: 13, fontWeight: 800, color: gruppo.color, fontFamily: 'monospace' }}>{pgm.numPgm}</span>
+        </div>
+        {/* Utensile */}
+        <div style={{ flexShrink: 0, width: 140, borderRight: `1px solid ${T.border}`, padding: '0 10px', alignSelf: 'stretch', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: T.text, fontFamily: 'monospace', lineHeight: 1.2 }}>{pgm.utensile || '—'}</span>
+          {pgm.diametro && <span style={{ fontSize: 10, color: T.textMuted }}>Ø {pgm.diametro}</span>}
+        </div>
+        {/* Operazione */}
+        <div style={{ flex: 1, padding: '0 10px', alignSelf: 'stretch', display: 'flex', alignItems: 'center', overflow: 'hidden' }}>
+          <span style={{ fontSize: 12, color: T.textSub, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{opClean || '—'}</span>
+        </div>
+        {/* Timestamps */}
+        {(pgm.tempoInizio || pgm.tempoFine) && (
+          <div style={{ flexShrink: 0, padding: '0 8px', borderLeft: `1px solid ${T.border}`, alignSelf: 'stretch', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+            {pgm.tempoInizio && <span style={{ fontSize: 10, color: '#1D5FAD', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>▶ {pgm.tempoInizio}</span>}
+            {pgm.tempoFine && <span style={{ fontSize: 10, color: '#166534', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>■ {pgm.tempoFine}</span>}
           </div>
-          {/* Task list */}
-          {(step.tasks || []).map(task => (
-            <div key={task.id} style={{ display: 'flex', alignItems: 'center', gap: 10,
-              padding: '9px 14px', borderBottom: `1px solid ${C.border}`,
-              opacity: task.done ? 0.6 : 1 }}>
-              <div
-                onClick={() => toggleTask(step.id, task.id)}
-                style={{ width: 18, height: 18, borderRadius: 4, flexShrink: 0,
-                  border: `2px solid ${task.done ? C.green : C.border}`,
-                  background: task.done ? C.green : 'transparent',
-                  cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                {task.done && <span style={{ color: 'white', fontSize: 11, fontWeight: 900 }}>✓</span>}
+        )}
+        <div onClick={() => setExpanded(v => !v)} style={{ flexShrink: 0, width: 32, borderLeft: `1px solid ${T.border}`, alignSelf: 'stretch', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: T.textMuted, fontSize: 11 }}>{expanded ? '▲' : '▼'}</div>
+      </div>
+      {expanded && (
+        <div style={{ padding: '12px 14px', background: T.surface2, borderTop: `1px solid ${T.border}`, display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'flex-start' }}>
+          <div>
+            <div style={{ fontSize: 10, color: T.textMuted, fontWeight: 700, letterSpacing: '0.06em', marginBottom: 4 }}>OPERATORE</div>
+            <select value={pgm.operatore || ''} onChange={e => onOperatore(e.target.value)} style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 6, color: pgm.operatore ? T.text : T.textMuted, fontSize: 12, padding: '4px 10px', outline: 'none', cursor: 'pointer' }}>
+              <option value=''>— Seleziona</option>
+              {OPERATORI.map(o => <option key={o} value={o}>{o}</option>)}
+            </select>
+          </div>
+          <div>
+            <div style={{ fontSize: 10, color: T.textMuted, fontWeight: 700, letterSpacing: '0.06em', marginBottom: 4 }}>TEMPO STIMATO</div>
+            {editingT ? (
+              <div style={{ display: 'flex', gap: 5 }}>
+                <input value={editTempo} onChange={e => setEditTempo(e.target.value)} placeholder='es. 2h30m' autoFocus
+                  style={{ width: 90, background: T.surface, border: `1.5px solid #1D5FAD44`, borderRadius: 6, padding: '4px 8px', color: T.text, fontSize: 12, outline: 'none' }}
+                  onKeyDown={e => { if (e.key === 'Enter') { onTempo(editTempo); setEditingT(false) } if (e.key === 'Escape') setEditingT(false) }} />
+                <button onClick={() => { onTempo(editTempo); setEditingT(false) }} style={{ background: '#1D5FAD', border: 'none', borderRadius: 5, color: '#fff', fontSize: 11, fontWeight: 700, padding: '4px 9px', cursor: 'pointer' }}>OK</button>
               </div>
-              <span style={{ flex: 1, fontSize: 13, color: C.text,
-                textDecoration: task.done ? 'line-through' : 'none' }}>
-                {task.text}
-              </span>
-              {task.doneAt && <span style={{ fontSize: 10, color: C.muted }}>{task.doneAt}</span>}
-              {/* Sottopannello MPF per task "fresatura" */}
-              {task.text?.trim().toLowerCase() === 'fresatura' && (task.programs || []).length > 0 && (
-                <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4,
-                  background: 'rgba(59,130,246,0.1)', color: C.blue }}>
-                  ⚙ {(task.programs||[]).filter(p=>p.stato==='completato').length}/{(task.programs||[]).length}
-                </span>
+            ) : (
+              <button onClick={() => setEditingT(true)} style={{ background: 'none', border: `1px dashed ${T.border}`, borderRadius: 6, color: pgm.tempoStimato ? T.text : T.textMuted, fontSize: 12, padding: '4px 10px', cursor: 'pointer' }}>⏱ {pgm.tempoStimato || 'Aggiungi'}</button>
+            )}
+          </div>
+          {pgm.dataPost && <div><div style={{ fontSize: 10, color: T.textMuted, fontWeight: 700, letterSpacing: '0.06em', marginBottom: 4 }}>DATA POST</div><div style={{ fontSize: 12, color: T.textSub, fontFamily: 'monospace' }}>{pgm.dataPost}</div></div>}
+          <div><div style={{ fontSize: 10, color: T.textMuted, fontWeight: 700, letterSpacing: '0.06em', marginBottom: 4 }}>FILE</div><div style={{ fontSize: 11, color: T.textMuted, fontFamily: 'monospace' }}>{pgm.filename}</div></div>
+          <div style={{ marginLeft: 'auto' }}>
+            <div style={{ fontSize: 10, color: T.textMuted, fontWeight: 700, letterSpacing: '0.06em', marginBottom: 4 }}>STATO</div>
+            <div style={{ display: 'flex', gap: 4 }}>
+              {Object.entries(STATO_CFG).map(([key, s]) => (
+                <button key={key} onClick={() => onStato(key)} style={{ background: pgm.stato === key ? s.bg : 'transparent', border: `1.5px solid ${pgm.stato === key ? s.border : T.border}`, borderRadius: 6, color: pgm.stato === key ? s.color : T.textMuted, fontSize: 11, fontWeight: 700, padding: '3px 10px', cursor: 'pointer' }}>{s.dot} {s.label}</button>
+              ))}
+              <button onClick={onRemove} style={{ marginLeft: 8, background: 'none', border: `1px solid ${T.red}44`, borderRadius: 6, color: T.red, fontSize: 11, padding: '3px 8px', cursor: 'pointer' }}>🗑 Rimuovi</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── FresaturaPanel ─────────────────────────────────────────────────────────────
+function FresaturaPanel({ task, onUpdateTask }) {
+  const fileInputRef = useRef(null)
+  const programs = Array.isArray(task.programs) ? task.programs : []
+  const [expanded, setExpanded] = useState(false)
+  const [collapsedGroups, setCollapsedGroups] = useState({ ipm: true, fresatura: true })
+  const ipmPrograms = programs.filter(p => p.tipoGruppo === 'ipm')
+  const fresPrograms = programs.filter(p => p.tipoGruppo !== 'ipm')
+  const doneTotal = programs.filter(p => p.stato === 'completato').length
+  const inMacchina = programs.filter(p => p.stato === 'in_macchina').length
+  const total = programs.length
+  const allDone = total > 0 && doneTotal === total
+
+  function updatePrograms(newPrograms) {
+    const allComplete = newPrograms.length > 0 && newPrograms.every(p => p.stato === 'completato')
+    onUpdateTask({ ...task, programs: newPrograms, done: allComplete, doneAt: allComplete ? new Date().toISOString().slice(0, 10) : task.doneAt })
+  }
+  async function handleFileUpload(e) {
+    const files = Array.from(e.target.files)
+    const parsed = []
+    for (const file of files) {
+      const text = await file.text()
+      const info = parseMpfFile(file.name, text)
+      if (!programs.find(p => p.filename === info.filename))
+        parsed.push({ id: uid(), ...info, stato: 'da_fare', operatore: '', tempoStimato: '', tempoInizio: null, tempoFine: null })
+    }
+    if (parsed.length > 0) {
+      const all = [...programs, ...parsed].sort((a, b) => {
+        if (a.tipoGruppo !== b.tipoGruppo) return a.tipoGruppo === 'ipm' ? -1 : 1
+        return a.numPgm.localeCompare(b.numPgm, undefined, { numeric: true })
+      })
+      updatePrograms(all)
+    }
+    e.target.value = ''
+  }
+  function updatePgm(id, patch) {
+    updatePrograms(programs.map(p => {
+      if (p.id !== id) return p
+      const next = { ...p, ...patch }
+      if (patch.stato === 'in_macchina' && !p.tempoInizio) next.tempoInizio = nowStr()
+      if (patch.stato === 'completato') next.tempoFine = nowStr()
+      return next
+    }))
+  }
+
+  const gruppi = [
+    { key: 'ipm', label: 'Tastatura (IPM)', icon: '📏', color: '#8B2FC9', bgColor: '#F3E8FF', list: ipmPrograms },
+    { key: 'fresatura', label: 'Fresatura', icon: '⚙️', color: '#1D5FAD', bgColor: '#E8F0FA', list: fresPrograms },
+  ].filter(g => g.list.length > 0)
+
+  return (
+    <div style={{ marginTop: 8, background: T.surface, border: '1.5px solid #1D5FAD33', borderRadius: 10, overflow: 'hidden' }}>
+      <div onClick={() => setExpanded(v => !v)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', cursor: 'pointer', background: '#E8F0FA', userSelect: 'none' }}>
+        <span style={{ fontSize: 15 }}>⚙️</span>
+        <span style={{ fontSize: 13, fontWeight: 800, color: '#1D5FAD', flex: 1 }}>PROGRAMMI FRESATURA</span>
+        {inMacchina > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: '#1D5FAD', background: '#fff', padding: '2px 9px', borderRadius: 20, border: '1px solid #1D5FAD44' }}>⚙ {inMacchina} in macchina</span>}
+        {total > 0 && <span style={{ fontSize: 12, fontWeight: 700, color: allDone ? '#166534' : '#1D5FAD', background: allDone ? '#dcfce7' : '#fff', padding: '2px 10px', borderRadius: 20, border: `1px solid ${allDone ? '#166534' : '#1D5FAD'}44` }}>{doneTotal}/{total} {allDone ? '✓' : 'completati'}</span>}
+        <span style={{ fontSize: 11, color: '#1D5FAD', fontWeight: 700 }}>{expanded ? '▲' : '▼'}</span>
+      </div>
+      {expanded && (
+        <div>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '10px 14px', borderBottom: `1px solid ${T.border}` }}>
+            <input ref={fileInputRef} type='file' accept='.mpf,.MPF' multiple style={{ display: 'none' }} onChange={handleFileUpload} />
+            <button onClick={() => fileInputRef.current.click()} style={{ background: '#1D5FAD', border: 'none', borderRadius: 7, color: '#fff', fontWeight: 700, fontSize: 13, padding: '7px 14px', cursor: 'pointer' }}>📂 Carica .mpf</button>
+            {total > 0 && <span style={{ fontSize: 12, color: T.textMuted }}>{ipmPrograms.length > 0 && `📏 ${ipmPrograms.length} IPM · `}⚙️ {fresPrograms.length} fresatura</span>}
+          </div>
+          {total === 0 && <div style={{ textAlign: 'center', padding: 24, color: T.textMuted, fontSize: 13 }}>Nessun programma · clicca "Carica .mpf"</div>}
+          {total > 0 && (
+            <div style={{ display: 'flex', background: T.surface2, borderBottom: `1px solid ${T.border}`, fontSize: 10, fontWeight: 700, color: T.textMuted, letterSpacing: '0.07em' }}>
+              <div style={{ width: 110, padding: '5px 10px', borderRight: `1px solid ${T.border}` }}>STATO</div>
+              <div style={{ width: 52, textAlign: 'center', padding: '5px 0', borderRight: `1px solid ${T.border}` }}>PGM</div>
+              <div style={{ width: 140, padding: '5px 10px', borderRight: `1px solid ${T.border}` }}>UTENSILE</div>
+              <div style={{ flex: 1, padding: '5px 10px' }}>OPERAZIONE</div>
+            </div>
+          )}
+          {gruppi.map(gruppo => (
+            <div key={gruppo.key}>
+              {gruppi.length > 1 && (
+                <div onClick={() => setCollapsedGroups(g => ({ ...g, [gruppo.key]: !g[gruppo.key] }))}
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 14px', background: gruppo.bgColor, cursor: 'pointer', userSelect: 'none', borderBottom: `1px solid ${T.border}` }}>
+                  <span style={{ fontSize: 12 }}>{gruppo.icon}</span>
+                  <span style={{ fontSize: 11, fontWeight: 800, color: gruppo.color, flex: 1, letterSpacing: '0.06em' }}>{gruppo.label.toUpperCase()}</span>
+                  <span style={{ fontSize: 11, color: gruppo.color }}>{gruppo.list.filter(p => p.stato === 'completato').length}/{gruppo.list.length}</span>
+                  <span style={{ fontSize: 10, color: gruppo.color }}>{collapsedGroups[gruppo.key] ? '▼' : '▲'}</span>
+                </div>
+              )}
+              {(gruppi.length === 1 || !collapsedGroups[gruppo.key]) && gruppo.list.map(pgm => (
+                <ProgramRow key={pgm.id} pgm={pgm} gruppo={gruppo}
+                  onStato={stato => updatePgm(pgm.id, { stato })}
+                  onOperatore={operatore => updatePgm(pgm.id, { operatore })}
+                  onTempo={tempoStimato => updatePgm(pgm.id, { tempoStimato })}
+                  onRemove={() => updatePrograms(programs.filter(p => p.id !== pgm.id))} />
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── TaskItem ───────────────────────────────────────────────────────────────────
+function TaskItem({ task, stepId, onToggle, onUpdateTask, onDelete, isNext }) {
+  const [hovered, setHovered] = useState(false)
+  const [addingNote, setAddingNote] = useState(false)
+  const [newNote, setNewNote] = useState('')
+  const [editingNote, setEditingNote] = useState(null)
+  const [editVal, setEditVal] = useState('')
+  const noteInputRef = useRef(null)
+  const notes = Array.isArray(task.notes) ? task.notes : []
+  const displayNotes = notes.length > 0 ? notes : (task.note ? [{ id: `legacy_${task.id}`, text: task.note, createdAt: '' }] : [])
+
+  function saveNewNote() {
+    if (!newNote.trim()) { setAddingNote(false); return }
+    const legacy = (!Array.isArray(task.notes) && task.note) ? [{ id: `legacy_${task.id}`, text: task.note, createdAt: '' }] : []
+    onUpdateTask({ ...task, notes: [...legacy, ...notes, { id: uid(), text: newNote.trim(), createdAt: nowStr() }], note: '' })
+    setNewNote(''); setAddingNote(false)
+  }
+
+  useEffect(() => { if (addingNote) noteInputRef.current?.focus() }, [addingNote])
+
+  return (
+    <div onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}
+      style={{ display: 'flex', flexDirection: 'column', background: isNext ? T.accentBg : hovered ? T.surface2 : 'transparent', border: isNext ? `1.5px solid ${T.accent}44` : `1px solid ${hovered ? T.border : 'transparent'}`, borderRadius: 8, padding: '8px 10px', marginBottom: 4, transition: 'all 0.12s' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        {isNext && <span style={{ fontSize: 13 }}>📍</span>}
+        <div onClick={() => onToggle(task.id)} style={{ width: 20, height: 20, borderRadius: 6, border: task.done ? 'none' : `2px solid ${T.borderStrong}`, background: task.done ? '#1A7A4A' : 'transparent', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }}>
+          {task.done && <span style={{ color: '#fff', fontSize: 13, fontWeight: 700 }}>✓</span>}
+        </div>
+        <span style={{ fontSize: 15, color: task.done ? T.textMuted : T.text, textDecoration: task.done ? 'line-through' : 'none', flex: 1, fontWeight: task.done ? 400 : 500 }}>{task.text}</span>
+        {task.done && task.doneAt && <span style={{ fontSize: 12, color: T.textMuted, fontFamily: 'monospace' }}>{task.doneAt}</span>}
+        <div style={{ display: 'flex', gap: 4, opacity: hovered ? 1 : 0, transition: 'opacity 0.15s' }}>
+          <button onClick={() => setAddingNote(true)} style={{ background: 'none', border: `1px solid ${T.border}`, borderRadius: 6, cursor: 'pointer', color: displayNotes.length > 0 ? T.accent : T.textMuted, fontSize: 12, padding: '2px 7px' }} title='Aggiungi commento'>💬{displayNotes.length > 0 ? ` ${displayNotes.length}` : ''}</button>
+          <button onClick={() => onDelete(task.id)} style={{ background: 'none', border: `1px solid ${T.border}`, borderRadius: 6, cursor: 'pointer', color: T.red, fontSize: 12, padding: '2px 7px' }}>🗑️</button>
+        </div>
+      </div>
+      {displayNotes.length > 0 && (
+        <div style={{ marginTop: 6, marginLeft: 30, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {displayNotes.map(note => (
+            <div key={note.id} style={{ background: T.accentBg, borderRadius: 6, borderLeft: `3px solid ${T.accent}`, padding: '5px 10px', display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+              {editingNote === note.id ? (
+                <>
+                  <input value={editVal} onChange={e => setEditVal(e.target.value)} autoFocus
+                    style={{ flex: 1, background: T.surface, border: `1.5px solid ${T.accent}`, borderRadius: 6, padding: '4px 8px', color: T.text, fontSize: 13, outline: 'none' }}
+                    onKeyDown={e => { if (e.key === 'Enter') { onUpdateTask({ ...task, notes: notes.map(n => n.id === note.id ? { ...n, text: editVal } : n), note: '' }); setEditingNote(null) } if (e.key === 'Escape') setEditingNote(null) }} />
+                  <button onClick={() => { onUpdateTask({ ...task, notes: notes.map(n => n.id === note.id ? { ...n, text: editVal } : n), note: '' }); setEditingNote(null) }} style={{ background: T.accent, border: 'none', borderRadius: 5, color: '#fff', fontSize: 12, fontWeight: 700, padding: '4px 10px', cursor: 'pointer' }}>OK</button>
+                </>
+              ) : (
+                <>
+                  <span style={{ flex: 1, fontSize: 13, color: T.accent, fontStyle: 'italic' }}>"{note.text}"</span>
+                  {note.createdAt && <span style={{ fontSize: 11, color: T.textMuted }}>{note.createdAt}</span>}
+                  <button onClick={() => { setEditingNote(note.id); setEditVal(note.text) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.textMuted, fontSize: 12 }}>✏️</button>
+                  <button onClick={() => onUpdateTask({ ...task, notes: notes.filter(n => n.id !== note.id), note: '' })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.red, fontSize: 12 }}>×</button>
+                </>
               )}
             </div>
           ))}
         </div>
-      ))}
+      )}
+      {addingNote && (
+        <div style={{ marginTop: 6, marginLeft: 30, display: 'flex', gap: 8 }}>
+          <input ref={noteInputRef} value={newNote} onChange={e => setNewNote(e.target.value)} placeholder='Aggiungi commento...'
+            style={{ flex: 1, background: T.surface2, border: `1.5px solid ${T.accent}44`, borderRadius: 8, padding: '7px 10px', color: T.text, fontSize: 13, outline: 'none' }}
+            onKeyDown={e => { if (e.key === 'Enter') saveNewNote(); if (e.key === 'Escape') { setAddingNote(false); setNewNote('') } }} />
+          <button onClick={saveNewNote} style={{ background: T.accent, border: 'none', borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 700, padding: '7px 14px', cursor: 'pointer' }}>+ Aggiungi</button>
+          <button onClick={() => { setAddingNote(false); setNewNote('') }} style={{ background: 'none', border: `1px solid ${T.border}`, borderRadius: 8, color: T.textSub, fontSize: 13, padding: '7px 10px', cursor: 'pointer' }}>✕</button>
+        </div>
+      )}
+      {task.text?.trim().toLowerCase() === 'fresatura' && (
+        <div style={{ marginTop: 8 }}>
+          <FresaturaPanel task={task} onUpdateTask={onUpdateTask} />
+        </div>
+      )}
     </div>
   )
 }
 
-// ── Nuovo progetto dialog ─────────────────────────────────────────────────────
-function NuovoProgettoDialog({ templates, onCrea, onClose }) {
-  const [name, setName] = useState('')
-  const [desc, setDesc] = useState('')
-  const [color, setColor] = useState('#3b82f6')
-  const [tmplId, setTmplId] = useState(templates[0]?.id || '')
-
-  const COLORS = ['#3b82f6','#22c55e','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#f97316']
-
-  const crea = () => {
-    if (!name.trim()) return
-    const tmpl = templates.find(t => t.id === tmplId)
-    const steps = tmpl
-      ? tmpl.steps.map(s => ({
-          ...s, id: uid(),
-          tasks: s.tasks.map(t => ({ ...t, id: uid(), done: false, doneAt: null, note: '' }))
-        }))
-      : []
-    onCrea({ id: uid(), name: name.trim(), description: desc.trim(),
-             color, steps, createdAt: new Date().toISOString().slice(0,10),
-             archived: false, pallet_assegnato: null, log: [] })
-  }
+// ── StepSection ────────────────────────────────────────────────────────────────
+function StepSection({ step, nextTaskId, onToggle, onUpdateTask, onAddTask, onDeleteTask, onDeleteStep, projectColor }) {
+  const [collapsed, setCollapsed] = useState(false)
+  const [adding, setAdding] = useState(false)
+  const [newTask, setNewTask] = useState('')
+  const [hovered, setHovered] = useState(false)
+  const done = (step.tasks || []).filter(t => t.done).length
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200 }}>
-      <div style={{ background: C.card, borderRadius: 12, padding: 24,
-        width: 420, border: `1px solid ${C.border}`, display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <div style={{ fontSize: 16, fontWeight: 700, color: C.text }}>Nuovo Progetto</div>
+    <div onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}
+      style={{ marginBottom: 12, background: T.surface, border: `1.5px solid ${T.border}`, borderLeft: `4px solid ${projectColor}`, borderRadius: 10, padding: '12px 16px', transition: 'box-shadow 0.15s', boxShadow: hovered ? '0 2px 12px rgba(0,0,0,0.08)' : 'none' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: collapsed ? 0 : 10 }}>
+        <span onClick={() => setCollapsed(!collapsed)} style={{ color: T.textMuted, fontSize: 12, cursor: 'pointer', userSelect: 'none' }}>{collapsed ? '▶' : '▼'}</span>
+        <span style={{ fontSize: 15, fontWeight: 700, color: T.text, flex: 1, cursor: 'pointer' }} onClick={() => setCollapsed(!collapsed)}>{step.title}</span>
+        <span style={{ fontSize: 13, color: T.textMuted, fontWeight: 500 }}>{done}/{(step.tasks||[]).length} completati</span>
+        <button onClick={() => onDeleteStep(step.id)} style={{ background: 'none', border: `1px solid ${T.border}`, borderRadius: 6, cursor: 'pointer', color: T.red, fontSize: 12, padding: '2px 8px', opacity: hovered ? 1 : 0, transition: 'opacity 0.15s' }}>🗑️</button>
+      </div>
+      {!collapsed && (
+        <>
+          {(step.tasks || []).map(task => (
+            <TaskItem key={task.id} task={task} stepId={step.id}
+              onToggle={onToggle} onUpdateTask={onUpdateTask}
+              onDelete={tid => onDeleteTask(step.id, tid)}
+              isNext={task.id === nextTaskId} />
+          ))}
+          {adding ? (
+            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+              <input autoFocus value={newTask} onChange={e => setNewTask(e.target.value)} placeholder='Descrivi il task...'
+                style={{ flex: 1, background: T.surface2, border: `1.5px solid ${T.border}`, borderRadius: 8, padding: '8px 12px', color: T.text, fontSize: 14, outline: 'none' }}
+                onKeyDown={e => { if (e.key === 'Enter' && newTask.trim()) { onAddTask(step.id, newTask.trim()); setNewTask(''); setAdding(false) } if (e.key === 'Escape') { setAdding(false); setNewTask('') } }} />
+              <button onClick={() => { if (newTask.trim()) onAddTask(step.id, newTask.trim()); setAdding(false); setNewTask('') }}
+                style={{ background: projectColor, border: 'none', borderRadius: 8, color: '#fff', fontSize: 14, fontWeight: 700, padding: '8px 16px', cursor: 'pointer' }}>Aggiungi</button>
+            </div>
+          ) : (
+            <button onClick={() => setAdding(true)} style={{ background: 'none', border: `1.5px dashed ${T.border}`, borderRadius: 8, color: T.textMuted, fontSize: 13, padding: '7px 16px', cursor: 'pointer', width: '100%', marginTop: 6 }}>+ Aggiungi task</button>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
 
-        <input value={name} onChange={e => setName(e.target.value)}
-          placeholder="Nome commessa / progetto"
-          style={{ padding: '8px 12px', borderRadius: 7, fontSize: 13,
-            background: 'var(--bg-base)', border: `1px solid ${C.border}`, color: C.text }}
-          onFocus={e => e.target.style.borderColor = C.accent}
-          onBlur={e => e.target.style.borderColor = C.border} />
+// ── ProjectDetail ──────────────────────────────────────────────────────────────
+function ProjectDetail({ project, onBack, onUpdate, onDelete, onArchive, templates, onSaveAsTemplate, onLanciaNC }) {
+  const [logText, setLogText] = useState('')
+  const [logUser, setLogUser] = useState('Tu')
+  const [activeTab, setActiveTab] = useState('tasks')
+  const [addingStep, setAddingStep] = useState(false)
+  const [newStepName, setNewStepName] = useState('')
+  const [confirm, setConfirm] = useState(null)
+  const [palletSel, setPalletSel] = useState(project.pallet_assegnato || '')
+  const logRef = useRef(null)
+  const next = getNextTask(project)
+  const progress = getProgress(project)
 
-        <input value={desc} onChange={e => setDesc(e.target.value)}
-          placeholder="Descrizione (opzionale)"
-          style={{ padding: '8px 12px', borderRadius: 7, fontSize: 13,
-            background: 'var(--bg-base)', border: `1px solid ${C.border}`, color: C.text }} />
+  function toggleTask(taskId) { onUpdate({ ...project, steps: project.steps.map(s => ({ ...s, tasks: s.tasks.map(t => t.id === taskId ? { ...t, done: !t.done, doneAt: !t.done ? new Date().toISOString().slice(0, 10) : null } : t) })) }) }
+  function updateTaskInProject(updatedTask) { onUpdate({ ...project, steps: project.steps.map(s => ({ ...s, tasks: s.tasks.map(t => t.id === updatedTask.id ? updatedTask : t) })) }) }
+  function addTask(stepId, text) { onUpdate({ ...project, steps: project.steps.map(s => s.id === stepId ? { ...s, tasks: [...s.tasks, { id: uid(), text, done: false, notes: [], note: '', doneAt: null }] } : s) }) }
+  function deleteTask(stepId, taskId) { onUpdate({ ...project, steps: project.steps.map(s => s.id === stepId ? { ...s, tasks: s.tasks.filter(t => t.id !== taskId) } : s) }) }
+  function deleteStep(stepId) { onUpdate({ ...project, steps: project.steps.filter(s => s.id !== stepId) }) }
+  function addStep() { if (!newStepName.trim()) return; onUpdate({ ...project, steps: [...project.steps, { id: uid(), title: newStepName.trim(), tasks: [] }] }); setNewStepName(''); setAddingStep(false) }
+  function addLog() { if (!logText.trim()) return; onUpdate({ ...project, log: [...(project.log||[]), { id: uid(), user: logUser, text: logText.trim(), time: nowStr() }] }); setLogText(''); setTimeout(() => logRef.current?.scrollTo({ top: 9999, behavior: 'smooth' }), 50) }
+  function setPallet(v) { setPalletSel(v); onUpdate({ ...project, pallet_assegnato: v ? Number(v) : null }) }
 
-        {/* Template */}
-        {templates.length > 0 && (
-          <div>
-            <div style={{ fontSize: 11, color: C.muted, marginBottom: 6 }}>TEMPLATE</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              {templates.map(t => (
-                <label key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 8,
-                  padding: '7px 10px', borderRadius: 6, cursor: 'pointer',
-                  background: tmplId === t.id ? 'rgba(0,225,255,0.06)' : 'var(--bg-base)',
-                  border: `1px solid ${tmplId === t.id ? C.accent : C.border}` }}>
-                  <input type="radio" name="tmpl" checked={tmplId===t.id}
-                    onChange={() => setTmplId(t.id)} style={{ accentColor: C.accent }} />
-                  <span style={{ fontSize: 12, color: C.text }}>{t.name}</span>
-                  <span style={{ fontSize: 10, color: C.muted }}>
-                    {t.steps?.length} fasi · {t.steps?.flatMap(s=>s.tasks||[]).length} task
-                  </span>
-                </label>
-              ))}
+  // Fresatura: lista MPF
+  const mpfList = project.steps.flatMap(s => s.tasks).filter(t => t.text?.trim().toLowerCase() === 'fresatura').flatMap(t => (t.programs || []).filter(p => p.tipoGruppo !== 'ipm'))
+
+  const Tab = ({ id, label }) => (
+    <button onClick={() => setActiveTab(id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: activeTab === id ? project.color : T.textSub, fontSize: 15, fontWeight: 700, padding: '10px 0', borderBottom: activeTab === id ? `3px solid ${project.color}` : '3px solid transparent', marginRight: 24, transition: 'all 0.15s' }}>{label}</button>
+  )
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: T.bg, fontFamily: "'DM Sans', system-ui, sans-serif" }}>
+      {/* Header */}
+      <div style={{ padding: '20px 28px 0', borderBottom: `1px solid ${T.border}`, flexShrink: 0, background: T.surface }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+          <button onClick={onBack} style={{ background: T.surface2, border: `1px solid ${T.border}`, borderRadius: 8, color: T.textSub, fontSize: 14, padding: '7px 14px', cursor: 'pointer', fontWeight: 600 }}>← Indietro</button>
+          <div style={{ width: 14, height: 14, borderRadius: '50%', background: project.color, flexShrink: 0 }} />
+          <div style={{ fontSize: 20, fontWeight: 800, color: T.text, flex: 1 }}>{project.name}</div>
+          <StatusBadge progress={progress} />
+          {/* Pallet */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 12, color: T.textMuted }}>Pallet:</span>
+            <select value={palletSel} onChange={e => setPallet(e.target.value)}
+              style={{ background: T.surface2, border: `1px solid ${T.border}`, borderRadius: 6, fontSize: 13, padding: '5px 8px', color: palletSel ? project.color : T.textMuted, fontWeight: 700, cursor: 'pointer', outline: 'none' }}>
+              <option value=''>—</option>
+              {[1,2,3,4,5,6].map(n => <option key={n} value={n}>P{n}</option>)}
+            </select>
+          </div>
+          {/* Lancia NC */}
+          {mpfList.length > 0 && (
+            <button onClick={() => onLanciaNC(project)} style={{ background: '#1D5FAD', border: 'none', borderRadius: 8, color: '#fff', fontWeight: 700, fontSize: 13, padding: '8px 16px', cursor: 'pointer' }}>
+              📄 Lancia {mpfList.length} file in NC →
+            </button>
+          )}
+          <button onClick={() => setConfirm('archive')} style={{ background: T.surface2, border: `1px solid ${T.border}`, borderRadius: 8, color: T.textSub, fontSize: 14, padding: '7px 14px', cursor: 'pointer', fontWeight: 600 }}>{project.archived ? '📤 Riattiva' : '📦 Archivia'}</button>
+          <button onClick={() => setConfirm('delete')} style={{ background: T.redBg, border: `1px solid ${T.red}44`, borderRadius: 8, color: T.red, fontSize: 14, padding: '7px 14px', cursor: 'pointer', fontWeight: 600 }}>🗑️ Elimina</button>
+        </div>
+
+        {/* Progress */}
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+            <span style={{ fontSize: 13, color: T.textSub, fontWeight: 600 }}>Avanzamento</span>
+            <span style={{ fontSize: 13, color: project.color, fontWeight: 700 }}>{progress}% — {project.steps.flatMap(s => s.tasks).filter(t => t.done).length} di {project.steps.flatMap(s => s.tasks).length} task completati</span>
+          </div>
+          <ProgressBar value={progress} color={project.color} />
+        </div>
+
+        {/* Prossimo step */}
+        {next && (
+          <div style={{ background: T.accentBg, border: `1.5px solid ${T.accent}44`, borderRadius: 10, padding: '12px 16px', marginBottom: 14, display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+            <span style={{ fontSize: 20, flexShrink: 0 }}>📍</span>
+            <div>
+              <div style={{ fontSize: 12, color: T.accent, fontWeight: 700, letterSpacing: '0.06em', marginBottom: 3 }}>RIPRENDI DA QUI</div>
+              <div style={{ fontSize: 15, color: T.text, fontWeight: 600 }}><span style={{ color: T.textSub, fontWeight: 400 }}>{next.step.title} › </span>{next.task.text}</div>
+              {next.task.text?.trim().toLowerCase() === 'fresatura' && Array.isArray(next.task.programs) && next.task.programs.length > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 5 }}>
+                  <span style={{ fontSize: 13, color: '#1D5FAD', fontWeight: 700 }}>⚙️ {next.task.programs.filter(p => p.stato === 'completato').length}/{next.task.programs.length} programmi completati</span>
+                  {next.task.programs.filter(p => p.stato === 'in_macchina').length > 0 && <span style={{ fontSize: 12, color: '#1D5FAD', background: '#E8F0FA', padding: '2px 10px', borderRadius: 10 }}>{next.task.programs.filter(p => p.stato === 'in_macchina').length} in macchina</span>}
+                </div>
+              )}
             </div>
           </div>
         )}
 
-        {/* Colore */}
-        <div>
-          <div style={{ fontSize: 11, color: C.muted, marginBottom: 6 }}>COLORE</div>
-          <div style={{ display: 'flex', gap: 6 }}>
-            {COLORS.map(c => (
-              <div key={c} onClick={() => setColor(c)}
-                style={{ width: 22, height: 22, borderRadius: '50%', background: c,
-                  cursor: 'pointer', border: `2px solid ${color===c ? 'white' : 'transparent'}`,
-                  outline: color===c ? `2px solid ${c}` : 'none' }} />
+        <div><Tab id='tasks' label='Task' /><Tab id='log' label={`Log (${(project.log||[]).length})`} /></div>
+      </div>
+
+      {/* Body */}
+      <div style={{ flex: 1, overflow: 'auto', padding: '20px 28px' }}>
+        {activeTab === 'tasks' && (
+          <div>
+            {project.steps.map(step => (
+              <StepSection key={step.id} step={step}
+                nextTaskId={next?.step.id === step.id ? next?.task.id : null}
+                onToggle={toggleTask} onUpdateTask={updateTaskInProject}
+                onAddTask={addTask} onDeleteTask={deleteTask}
+                onDeleteStep={deleteStep} projectColor={project.color} />
             ))}
+            {addingStep ? (
+              <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
+                <input autoFocus value={newStepName} onChange={e => setNewStepName(e.target.value)} placeholder='Nome della nuova fase...'
+                  style={{ flex: 1, background: T.surface, border: `1.5px solid ${T.border}`, borderRadius: 10, padding: '10px 14px', color: T.text, fontSize: 15, outline: 'none' }}
+                  onKeyDown={e => { if (e.key === 'Enter') addStep(); if (e.key === 'Escape') { setAddingStep(false); setNewStepName('') } }} />
+                <button onClick={addStep} style={{ background: project.color, border: 'none', borderRadius: 10, color: '#fff', fontWeight: 700, fontSize: 15, padding: '10px 20px', cursor: 'pointer' }}>Crea fase</button>
+              </div>
+            ) : (
+              <button onClick={() => setAddingStep(true)} style={{ background: 'none', border: `2px dashed ${T.border}`, borderRadius: 10, color: T.textMuted, fontSize: 14, padding: '12px', cursor: 'pointer', width: '100%', marginTop: 4 }}>+ Aggiungi fase</button>
+            )}
+          </div>
+        )}
+        {activeTab === 'log' && (
+          <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+            <div ref={logRef} style={{ flex: 1, overflowY: 'auto', marginBottom: 16 }}>
+              {!(project.log||[]).length && <div style={{ fontSize: 15, color: T.textMuted, textAlign: 'center', padding: '40px 0' }}>Nessun aggiornamento ancora.</div>}
+              {(project.log || []).map(entry => (
+                <div key={entry.id} style={{ background: T.surface, border: `1px solid ${T.border}`, borderLeft: `3px solid ${project.color}`, borderRadius: 8, padding: '10px 14px', marginBottom: 8 }}>
+                  <div style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: project.color }}>{entry.user}</span>
+                    <span style={{ fontSize: 12, color: T.textMuted }}>{entry.time}</span>
+                  </div>
+                  <p style={{ fontSize: 14, color: T.text, margin: 0 }}>{entry.text}</p>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 10, background: T.surface, padding: 14, borderRadius: 12, border: `1px solid ${T.border}` }}>
+              <input value={logUser} onChange={e => setLogUser(e.target.value)} style={{ width: 90, background: T.surface2, border: `1px solid ${T.border}`, borderRadius: 8, padding: '9px 10px', color: project.color, fontSize: 14, fontWeight: 700, outline: 'none' }} />
+              <input value={logText} onChange={e => setLogText(e.target.value)} placeholder='Scrivi un aggiornamento...'
+                style={{ flex: 1, background: T.surface2, border: `1px solid ${T.border}`, borderRadius: 8, padding: '9px 12px', color: T.text, fontSize: 15, outline: 'none' }}
+                onKeyDown={e => { if (e.key === 'Enter') addLog() }} />
+              <button onClick={addLog} style={{ background: project.color, border: 'none', borderRadius: 8, color: '#fff', fontWeight: 700, fontSize: 15, padding: '9px 18px', cursor: 'pointer' }}>→</button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {confirm === 'delete' && <ConfirmDialog message={`Eliminare "${project.name}"? L'operazione è irreversibile.`} onConfirm={() => { onDelete(project.id); setConfirm(null) }} onCancel={() => setConfirm(null)} />}
+      {confirm === 'archive' && <ConfirmDialog message={project.archived ? `Riportare "${project.name}" tra i progetti attivi?` : `Archiviare "${project.name}"?`} onConfirm={() => { onArchive(project.id); setConfirm(null) }} onCancel={() => setConfirm(null)} />}
+    </div>
+  )
+}
+
+// ── ProjectCard ────────────────────────────────────────────────────────────────
+function ProjectCard({ project, onClick, onDelete, onArchive }) {
+  const progress = getProgress(project)
+  const next = getNextTask(project)
+  const [hovered, setHovered] = useState(false)
+  const [confirm, setConfirm] = useState(null)
+  const mpfTot = project.steps.flatMap(s => s.tasks).filter(t => t.text?.trim().toLowerCase() === 'fresatura').flatMap(t => t.programs || []).filter(p => p.tipoGruppo !== 'ipm')
+  const mpfDone = mpfTot.filter(p => p.stato === 'completato').length
+
+  return (
+    <div onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}
+      style={{ background: T.surface, border: `1.5px solid ${hovered ? project.color + '88' : T.border}`, borderLeft: `4px solid ${project.color}`, borderRadius: 12, padding: '18px 20px', position: 'relative', transition: 'all 0.18s', boxShadow: hovered ? '0 4px 20px rgba(0,0,0,0.1)' : '0 1px 4px rgba(0,0,0,0.05)', cursor: 'pointer' }}>
+
+      {/* Azioni hover */}
+      <div style={{ position: 'absolute', top: 12, right: 12, display: 'flex', gap: 6, opacity: hovered ? 1 : 0, transition: 'opacity 0.15s' }}>
+        <button onClick={e => { e.stopPropagation(); setConfirm('archive') }} style={{ background: T.surface2, border: `1px solid ${T.border}`, borderRadius: 6, color: T.textSub, fontSize: 12, padding: '4px 9px', cursor: 'pointer', fontWeight: 600 }}>{project.archived ? '📤' : '📦'}</button>
+        <button onClick={e => { e.stopPropagation(); setConfirm('delete') }} style={{ background: T.redBg, border: `1px solid ${T.red}44`, borderRadius: 6, color: T.red, fontSize: 12, padding: '4px 9px', cursor: 'pointer', fontWeight: 600 }}>🗑️</button>
+      </div>
+
+      <div onClick={onClick}>
+        <div style={{ marginBottom: 10, paddingRight: 80 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ width: 10, height: 10, borderRadius: '50%', background: project.color, flexShrink: 0 }} />
+            <div style={{ fontSize: 17, fontWeight: 800, color: T.text }}>{project.name}</div>
+            {project.pallet_assegnato && <span style={{ fontSize: 11, fontWeight: 700, color: project.color, background: project.color + '18', padding: '1px 8px', borderRadius: 10 }}>P{project.pallet_assegnato}</span>}
+          </div>
+          {project.description && <div style={{ fontSize: 13, color: T.textSub, marginLeft: 18 }}>{project.description}</div>}
+        </div>
+
+        <ProgressBar value={progress} color={project.color} />
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, marginBottom: next ? 12 : 0 }}>
+          <span style={{ fontSize: 13, color: T.textSub, fontWeight: 500 }}>{project.steps.flatMap(s => s.tasks).filter(t => t.done).length} / {project.steps.flatMap(s => s.tasks).length} task</span>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            {mpfTot.length > 0 && <span style={{ fontSize: 11, color: '#1D5FAD', fontWeight: 700, background: '#E8F0FA', padding: '2px 8px', borderRadius: 10 }}>⚙ {mpfDone}/{mpfTot.length} MPF</span>}
+            <StatusBadge progress={progress} />
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
-          <button onClick={onClose} style={{ padding: '8px 16px', borderRadius: 7,
-            background: 'var(--bg-hover)', border: `1px solid ${C.border}`,
-            color: C.sub, cursor: 'pointer', fontSize: 12 }}>Annulla</button>
-          <button onClick={crea} disabled={!name.trim()}
-            style={{ padding: '8px 20px', borderRadius: 7,
-              background: name.trim() ? 'var(--navy-700)' : 'var(--bg-hover)',
-              border: 'none', color: name.trim() ? 'white' : C.muted,
-              cursor: name.trim() ? 'pointer' : 'not-allowed', fontSize: 12, fontWeight: 700 }}>
-            Crea Progetto
-          </button>
+        {next ? (
+          <div style={{ background: T.accentBg, borderRadius: 8, padding: '10px 12px', borderLeft: `3px solid ${T.accent}` }}>
+            <div style={{ fontSize: 11, color: T.accent, fontWeight: 700, letterSpacing: '0.06em', marginBottom: 3 }}>📍 PROSSIMO STEP</div>
+            <div style={{ fontSize: 14, color: T.text, fontWeight: 600 }}><span style={{ color: T.textSub, fontWeight: 400 }}>{next.step.title} › </span>{next.task.text}</div>
+          </div>
+        ) : (
+          <div style={{ fontSize: 14, color: T.green, fontWeight: 600 }}><span style={{ background: T.greenBg, border: `1px solid ${T.green}44`, borderRadius: 6, padding: '4px 10px' }}>✓ Progetto completato</span></div>
+        )}
+      </div>
+
+      {confirm === 'delete' && <ConfirmDialog message={`Eliminare "${project.name}"?`} onConfirm={() => { onDelete(project.id); setConfirm(null) }} onCancel={() => setConfirm(null)} />}
+      {confirm === 'archive' && <ConfirmDialog message={project.archived ? `Riportare "${project.name}" in Attivi?` : `Archiviare "${project.name}"?`} onConfirm={() => { onArchive(project.id); setConfirm(null) }} onCancel={() => setConfirm(null)} />}
+    </div>
+  )
+}
+
+// ── Dialog nuovo progetto ──────────────────────────────────────────────────────
+function NuovoProgettoDialog({ templates, onCrea, onClose }) {
+  const [name, setName] = useState('')
+  const [desc, setDesc] = useState('')
+  const [color, setColor] = useState('#D4700A')
+  const [tmplId, setTmplId] = useState(templates[0]?.id || '')
+  const COLORS = ['#D4700A', '#1D5FAD', '#1A7A4A', '#8B2FC9', '#C0392B', '#2980B9', '#16A085']
+
+  const crea = () => {
+    if (!name.trim()) return
+    const tmpl = templates.find(t => t.id === tmplId)
+    const steps = tmpl ? tmpl.steps.map(s => ({ ...s, id: uid(), tasks: (s.tasks||[]).map(t => ({ ...t, id: uid(), done: false, notes: [], note: '', doneAt: null })) })) : []
+    onCrea({ id: uid(), name: name.trim(), description: desc.trim(), color, steps, createdAt: new Date().toISOString().slice(0, 10), archived: false, pallet_assegnato: null, log: [] })
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200 }}>
+      <div style={{ background: T.surface, borderRadius: 16, padding: 28, width: 460, border: `1px solid ${T.border}`, boxShadow: '0 8px 40px rgba(0,0,0,0.2)', display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div style={{ fontSize: 20, fontWeight: 800, color: T.text }}>Nuovo Progetto</div>
+        <input value={name} onChange={e => setName(e.target.value)} placeholder='Nome commessa / progetto'
+          style={{ background: T.surface2, border: `1px solid ${T.border}`, borderRadius: 10, padding: '12px 16px', color: T.text, fontSize: 15, outline: 'none' }}
+          onFocus={e => e.target.style.borderColor = T.accent} onBlur={e => e.target.style.borderColor = T.border} />
+        <input value={desc} onChange={e => setDesc(e.target.value)} placeholder='Descrizione (opzionale)'
+          style={{ background: T.surface2, border: `1px solid ${T.border}`, borderRadius: 10, padding: '12px 16px', color: T.text, fontSize: 14, outline: 'none' }} />
+        {templates.length > 0 && (
+          <div>
+            <div style={{ fontSize: 12, color: T.textMuted, fontWeight: 700, marginBottom: 8 }}>TEMPLATE</div>
+            {[{ id: '', name: 'Nessun template (vuoto)', steps: [] }, ...templates].map(t => (
+              <label key={t.id || '__none'} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 8, cursor: 'pointer', marginBottom: 4, background: tmplId === t.id ? T.accentBg : T.surface2, border: `1px solid ${tmplId === t.id ? T.accent : T.border}` }}>
+                <input type='radio' checked={tmplId === t.id} onChange={() => setTmplId(t.id)} style={{ accentColor: T.accent }} />
+                <span style={{ fontSize: 14, color: T.text, fontWeight: 500 }}>{t.name}</span>
+                {t.steps?.length > 0 && <span style={{ fontSize: 12, color: T.textMuted }}>{t.steps.length} fasi · {t.steps.flatMap(s => s.tasks||[]).length} task</span>}
+              </label>
+            ))}
+          </div>
+        )}
+        <div>
+          <div style={{ fontSize: 12, color: T.textMuted, fontWeight: 700, marginBottom: 8 }}>COLORE</div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {COLORS.map(c => (
+              <div key={c} onClick={() => setColor(c)} style={{ width: 24, height: 24, borderRadius: '50%', background: c, cursor: 'pointer', border: `3px solid ${color === c ? 'white' : 'transparent'}`, outline: color === c ? `2px solid ${c}` : 'none' }} />
+            ))}
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 4 }}>
+          <button onClick={onClose} style={{ background: T.surface2, border: `1px solid ${T.border}`, borderRadius: 10, color: T.textSub, fontSize: 14, padding: '10px 22px', cursor: 'pointer', fontWeight: 600 }}>Annulla</button>
+          <button onClick={crea} disabled={!name.trim()} style={{ background: name.trim() ? color : T.surface2, border: 'none', borderRadius: 10, color: name.trim() ? '#fff' : T.textMuted, fontWeight: 800, fontSize: 15, padding: '10px 26px', cursor: name.trim() ? 'pointer' : 'not-allowed' }}>Crea Progetto</button>
         </div>
       </div>
     </div>
   )
 }
 
-// ── App principale ────────────────────────────────────────────────────────────
+// ── App principale ─────────────────────────────────────────────────────────────
 export default function Progetti() {
   const navigate = useNavigate()
-  const [projects, setProjects]     = useState([])
-  const [templates, setTemplates]   = useState([])
-  const [loading, setLoading]       = useState(true)
-  const [error, setError]           = useState(null)
-  const [selected, setSelected]     = useState(null)   // id progetto aperto
-  const [showNuovo, setShowNuovo]   = useState(false)
-  const [search, setSearch]         = useState('')
-  const [lanciaMsg, setLanciaMsg]   = useState(null)
+  const [projects, setProjects]   = useState([])
+  const [templates, setTemplates] = useState([])
+  const [loading, setLoading]     = useState(true)
+  const [error, setError]         = useState(null)
+  const [page, setPage]           = useState('projects')  // projects | archived
+  const [selectedId, setSelectedId] = useState(null)
+  const [showNuovo, setShowNuovo] = useState(false)
+  const [search, setSearch]       = useState('')
+  const [lanciaMsg, setLanciaMsg] = useState(null)
   const saveTimer = useRef(null)
 
-  // ── Carica dati ─────────────────────────────────────────────────────────────
+  // ── Carica ──────────────────────────────────────────────────────────────────
   const load = useCallback(async () => {
     try {
       const r = await fetch(API + '/')
-      if (!r.ok) throw new Error('Errore server')
+      if (!r.ok) throw new Error(`Server error ${r.status}`)
       const d = await r.json()
       setProjects(d.projects || [])
       setTemplates(d.templates || [])
       setError(null)
-    } catch (e) {
-      setError(e.message)
-    } finally {
-      setLoading(false)
-    }
+    } catch (e) { setError(e.message) }
+    finally { setLoading(false) }
   }, [])
-
   useEffect(() => { load() }, [load])
 
   // ── Salva progetto (debounced) ───────────────────────────────────────────────
@@ -339,154 +673,132 @@ export default function Progetti() {
     setProjects(prev => prev.map(p => p.id === project.id ? project : p))
     clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(async () => {
-      try {
-        await fetch(`${API}/${project.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ data: project })
-        })
-      } catch {}
-    }, 800)
+      try { await fetch(`${API}/${project.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ data: project }) }) } catch {}
+    }, 600)
   }, [])
 
-  // ── Crea progetto ────────────────────────────────────────────────────────────
   const creaProgetto = async (project) => {
     setProjects(prev => [...prev, project])
     setShowNuovo(false)
-    setSelected(project.id)
-    try {
-      await fetch(`${API}/${project.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ data: project })
-      })
-    } catch {}
+    setSelectedId(project.id)
+    try { await fetch(`${API}/${project.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ data: project }) }) } catch {}
   }
 
-  // ── Elimina progetto ─────────────────────────────────────────────────────────
   const eliminaProgetto = async (id) => {
     setProjects(prev => prev.filter(p => p.id !== id))
-    setSelected(null)
+    setSelectedId(null)
     try { await fetch(`${API}/${id}`, { method: 'DELETE' }) } catch {}
   }
 
-  // ── Imposta pallet ───────────────────────────────────────────────────────────
-  const setPallet = async (projectId, pallet) => {
-    setProjects(prev => prev.map(p => p.id === projectId ? { ...p, pallet_assegnato: pallet } : p))
-    try {
-      await fetch(`${API}/${projectId}/pallet`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pallet })
-      })
-    } catch {}
+  const archiviaProgetto = async (id) => {
+    setProjects(prev => prev.map(p => p.id === id ? { ...p, archived: !p.archived } : p))
+    setSelectedId(null)
+    const p = projects.find(x => x.id === id)
+    if (p) try { await fetch(`${API}/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ data: { ...p, archived: !p.archived } }) }) } catch {}
   }
 
-  // ── Lancia in Analisi NC ─────────────────────────────────────────────────────
-  const lanciaInNC = (project) => {
-    const mpf = getMpfList(project)
+  // ── Lancia in NC ────────────────────────────────────────────────────────────
+  const lanciaNC = (project) => {
+    const mpf = project.steps.flatMap(s => s.tasks).filter(t => t.text?.trim().toLowerCase() === 'fresatura').flatMap(t => (t.programs||[]).filter(p => p.tipoGruppo !== 'ipm'))
     if (!mpf.length) return
-    // Passa i nomi file via sessionStorage — AnalisiNC li intercetta
     sessionStorage.setItem('dmgdesk_lancio_nc', JSON.stringify({
-      projectId: project.id,
-      projectName: project.name,
-      nomeCartella: project.name.replace(/[^a-zA-Z0-9_-]/g, '_').toUpperCase(),
+      projectId: project.id, projectName: project.name,
+      nomeCartella: project.name.replace(/[^a-zA-Z0-9_-]/g, '_').toUpperCase().slice(0, 20),
       mpfFiles: mpf.map(p => p.filename),
     }))
     setLanciaMsg(`✓ ${mpf.length} file pronti — apertura Analisi NC...`)
-    setTimeout(() => { navigate('/analisi-nc') }, 1200)
+    setTimeout(() => navigate('/analisi-nc'), 1200)
   }
 
-  const selectedProject = projects.find(p => p.id === selected)
-  const filtered = projects.filter(p =>
-    !p.archived &&
-    (search === '' || p.name.toLowerCase().includes(search.toLowerCase()))
+  // ── Rendering ───────────────────────────────────────────────────────────────
+  const selectedProject = projects.find(p => p.id === selectedId)
+  const activeProjects = projects.filter(p => !p.archived && (search === '' || p.name.toLowerCase().includes(search.toLowerCase()) || (p.description||'').toLowerCase().includes(search.toLowerCase())))
+  const archivedProjects = projects.filter(p => p.archived)
+  const inProgress = activeProjects.filter(p => getProgress(p) < 100)
+  const completed = activeProjects.filter(p => getProgress(p) === 100)
+
+  const NavBtn = ({ id, label, badge }) => (
+    <button onClick={() => { setPage(id); setSelectedId(null) }}
+      style={{ background: 'none', border: 'none', cursor: 'pointer', color: page === id && !selectedProject ? T.accent : T.textSub, fontSize: 15, fontWeight: 700, padding: '16px 0', borderBottom: page === id && !selectedProject ? `3px solid ${T.accent}` : '3px solid transparent', marginRight: 24, transition: 'all 0.15s', display: 'flex', alignItems: 'center', gap: 7 }}>
+      {label}
+      {badge > 0 && <span style={{ background: T.surface2, border: `1px solid ${T.border}`, color: T.textSub, borderRadius: 20, fontSize: 12, padding: '1px 8px', fontWeight: 700 }}>{badge}</span>}
+    </button>
   )
 
-  if (loading) return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: C.muted }}>
-      Caricamento progetti...
-    </div>
-  )
+  if (loading) return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: T.textMuted, background: T.bg, fontFamily: "'DM Sans', system-ui" }}>Caricamento...</div>
 
   return (
-    <div style={{ height: '100%', display: 'flex', gap: 12 }}>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: T.bg, fontFamily: "'DM Sans', system-ui, sans-serif", color: T.text }}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap'); * { box-sizing: border-box; }`}</style>
 
-      {/* ── Lista progetti (sinistra) ── */}
-      <div style={{ width: 320, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
-
-        {/* Toolbar */}
-        <div style={{ display: 'flex', gap: 6 }}>
-          <input value={search} onChange={e => setSearch(e.target.value)}
-            placeholder="Cerca progetto..."
-            style={{ flex: 1, padding: '7px 10px', borderRadius: 7, fontSize: 12,
-              background: 'var(--bg-card)', border: `1px solid ${C.border}`, color: C.text }} />
-          <button onClick={() => setShowNuovo(true)}
-            style={{ padding: '7px 14px', borderRadius: 7, fontSize: 12, fontWeight: 700,
-              background: 'var(--navy-700)', border: 'none', color: 'white', cursor: 'pointer' }}>
-            + Nuovo
-          </button>
-        </div>
-
-        {/* Messaggio lancio NC */}
-        {lanciaMsg && (
-          <div style={{ padding: '8px 12px', borderRadius: 7, fontSize: 12,
-            background: 'rgba(22,163,74,0.1)', border: '1px solid rgba(22,163,74,0.2)',
-            color: '#15803d' }}>{lanciaMsg}</div>
-        )}
-
-        {error && (
-          <div style={{ padding: '8px 12px', borderRadius: 7, fontSize: 12,
-            background: 'rgba(239,68,68,0.1)', color: '#ef4444' }}>
-            ⚠ {error} — <span style={{ cursor: 'pointer', textDecoration: 'underline' }} onClick={load}>Riprova</span>
+      {/* TOP BAR */}
+      {!selectedProject && (
+        <div style={{ borderBottom: `1px solid ${T.border}`, padding: '0 28px', display: 'flex', alignItems: 'center', gap: 24, flexShrink: 0, background: T.surface, boxShadow: '0 1px 0 rgba(0,0,0,0.06)' }}>
+          <div style={{ fontSize: 20, fontWeight: 800, color: T.text, letterSpacing: '-0.02em', paddingRight: 16, borderRight: `1px solid ${T.border}`, padding: '16px 16px 16px 0' }}>
+            <span style={{ color: T.accent }}>◈</span> WorkTrack
           </div>
-        )}
-
-        {/* Lista */}
-        <div style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {filtered.length === 0 && (
-            <div style={{ padding: '40px 20px', textAlign: 'center', color: C.muted, fontSize: 13 }}>
-              {search ? 'Nessun progetto trovato' : 'Nessun progetto — crea il primo'}
+          <NavBtn id='projects' label='Progetti' />
+          <NavBtn id='archived' label='Archivio' badge={archivedProjects.length} />
+          {page === 'projects' && (
+            <div style={{ marginLeft: 'auto', display: 'flex', gap: 12, alignItems: 'center' }}>
+              <input value={search} onChange={e => setSearch(e.target.value)} placeholder='Cerca progetto...'
+                style={{ background: T.surface2, border: `1px solid ${T.border}`, borderRadius: 8, padding: '8px 14px', color: T.text, fontSize: 14, outline: 'none', width: 200 }} />
+              {lanciaMsg && <span style={{ fontSize: 12, color: T.green, fontWeight: 700 }}>{lanciaMsg}</span>}
+              {error && <span style={{ fontSize: 12, color: T.red }}>⚠ {error}</span>}
+              <span style={{ fontSize: 14, color: T.textSub, fontWeight: 600 }}>{inProgress.length} attivi</span>
+              <button onClick={() => setShowNuovo(true)} style={{ background: T.accent, border: 'none', borderRadius: 8, color: '#fff', fontWeight: 700, fontSize: 14, padding: '9px 20px', cursor: 'pointer' }}>+ Nuovo Progetto</button>
             </div>
           )}
-          {filtered.map(p => (
-            <ProgettoCard key={p.id}
-              project={p}
-              onSelect={id => setSelected(id === selected ? null : id)}
-              onPalletChange={setPallet}
-              onLanciaNC={lanciaInNC}
-            />
-          ))}
         </div>
-      </div>
+      )}
 
-      {/* ── Dettaglio progetto (destra) ── */}
-      <div style={{ flex: 1, background: 'var(--bg-card)', border: `1px solid ${C.border}`,
-        borderRadius: 10, padding: 16, overflow: 'auto' }}>
+      {/* CONTENT */}
+      <div style={{ flex: 1, overflow: 'auto', padding: selectedProject ? 0 : '24px 28px' }}>
         {selectedProject ? (
-          <ProgettoDetail
-            project={selectedProject}
-            onUpdate={saveProject}
-            onBack={() => setSelected(null)}
-          />
+          <ProjectDetail project={selectedProject} onBack={() => setSelectedId(null)}
+            onUpdate={saveProject} onDelete={eliminaProgetto} onArchive={archiviaProgetto}
+            templates={templates} onSaveAsTemplate={() => {}} onLanciaNC={lanciaNC} />
+        ) : page === 'archived' ? (
+          <div>
+            <div style={{ fontSize: 20, fontWeight: 800, color: T.text, marginBottom: 20 }}>📦 Archivio</div>
+            {archivedProjects.length === 0
+              ? <div style={{ fontSize: 15, color: T.textMuted, textAlign: 'center', padding: '60px 0' }}>Nessun progetto archiviato</div>
+              : <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 16 }}>
+                  {archivedProjects.map(p => <ProjectCard key={p.id} project={p} onClick={() => setSelectedId(p.id)} onDelete={eliminaProgetto} onArchive={archiviaProgetto} />)}
+                </div>
+            }
+          </div>
         ) : (
-          <div style={{ height: '100%', display: 'flex', flexDirection: 'column',
-            alignItems: 'center', justifyContent: 'center', gap: 8, color: C.muted }}>
-            <div style={{ fontSize: 32 }}>📋</div>
-            <div style={{ fontSize: 14 }}>Seleziona un progetto per vedere i dettagli</div>
-            <div style={{ fontSize: 12 }}>o crea un nuovo progetto con il pulsante +</div>
+          <div>
+            {inProgress.length > 0 && (
+              <>
+                <div style={{ fontSize: 13, fontWeight: 700, color: T.textMuted, letterSpacing: '0.08em', marginBottom: 12 }}>IN CORSO — {inProgress.length}</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 16, marginBottom: 32 }}>
+                  {inProgress.map(p => <ProjectCard key={p.id} project={p} onClick={() => setSelectedId(p.id)} onDelete={eliminaProgetto} onArchive={archiviaProgetto} />)}
+                </div>
+              </>
+            )}
+            {completed.length > 0 && (
+              <>
+                <div style={{ fontSize: 13, fontWeight: 700, color: T.textMuted, letterSpacing: '0.08em', marginBottom: 12 }}>COMPLETATI — {completed.length}</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 16 }}>
+                  {completed.map(p => <ProjectCard key={p.id} project={p} onClick={() => setSelectedId(p.id)} onDelete={eliminaProgetto} onArchive={archiviaProgetto} />)}
+                </div>
+              </>
+            )}
+            {activeProjects.length === 0 && !loading && (
+              <div style={{ textAlign: 'center', padding: '80px 20px', color: T.textMuted }}>
+                <div style={{ fontSize: 48, marginBottom: 16 }}>📋</div>
+                <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>Nessun progetto ancora</div>
+                <div style={{ fontSize: 14, marginBottom: 24 }}>Crea il tuo primo progetto per iniziare a tracciare il lavoro</div>
+                <button onClick={() => setShowNuovo(true)} style={{ background: T.accent, border: 'none', borderRadius: 10, color: '#fff', fontWeight: 700, fontSize: 15, padding: '12px 28px', cursor: 'pointer' }}>+ Crea il primo progetto</button>
+              </div>
+            )}
           </div>
         )}
       </div>
 
-      {/* ── Dialog nuovo progetto ── */}
-      {showNuovo && (
-        <NuovoProgettoDialog
-          templates={templates}
-          onCrea={creaProgetto}
-          onClose={() => setShowNuovo(false)}
-        />
-      )}
+      {showNuovo && <NuovoProgettoDialog templates={templates} onCrea={creaProgetto} onClose={() => setShowNuovo(false)} />}
     </div>
   )
 }

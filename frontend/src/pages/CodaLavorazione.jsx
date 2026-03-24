@@ -148,11 +148,9 @@ export default function CodaLavorazione() {
                   transition: "box-shadow 0.2s",
                   userSelect: "none",
                 }}
-                onClick={() => {
-                  if (isLav) return;
-                  const idx  = STATI_ORDER.indexOf(p.stato);
-                  const next = STATI_ORDER[(idx + 1) % STATI_ORDER.length];
-                  setPalletStato(p.id, next);
+                onClick={(e) => {
+                  if (isLav) return; // IN LAVORAZIONE = solo dal PLC
+                  setPalletMenu({ id: p.id, x: e.clientX, y: e.clientY });
                 }}
               >
                 {/* Numero + indicatore pulsante */}
@@ -338,6 +336,44 @@ export default function CodaLavorazione() {
             ⚠️ {error}
           </div>
         )}
+
+      {/* Menu selezione stato pallet manuale */}
+      {palletMenu && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 100 }}
+          onClick={() => setPalletMenu(null)}>
+          <div style={{
+            position: 'fixed', left: palletMenu.x, top: palletMenu.y,
+            background: 'var(--bg-card)', border: '1px solid var(--border)',
+            borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
+            zIndex: 101, minWidth: 140, overflow: 'hidden',
+          }} onClick={e => e.stopPropagation()}>
+            <div style={{ padding: '6px 12px', fontSize: 10, fontWeight: 700,
+              color: 'var(--text-dim)', borderBottom: '1px solid var(--border)',
+              letterSpacing: '0.08em', fontFamily: 'monospace' }}>
+              P{palletMenu.id} — imposta stato
+            </div>
+            {['GREZZO', 'VUOTO'].map(s => {
+              const pal = pallets.find(p => p.id === palletMenu.id);
+              const sel = pal?.stato === s;
+              return (
+                <div key={s}
+                  onClick={() => { setPalletStato(palletMenu.id, s); setPalletMenu(null); }}
+                  style={{ padding: '10px 16px', cursor: 'pointer', fontSize: 13,
+                    fontWeight: sel ? 700 : 400,
+                    color: sel ? '#0ea5e9' : '#374151',
+                    background: sel ? 'rgba(14,165,233,0.06)' : 'transparent',
+                    display: 'flex', alignItems: 'center', gap: 8 }}
+                  onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
+                  onMouseLeave={e => e.currentTarget.style.background = sel ? 'rgba(14,165,233,0.06)' : 'transparent'}>
+                  <span>{s === 'GREZZO' ? '🔵' : '⬜'}</span>
+                  {s}
+                  {sel && <span style={{ marginLeft: 'auto' }}>✓</span>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       </div>
     </div>

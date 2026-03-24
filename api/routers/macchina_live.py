@@ -130,12 +130,26 @@ def _normalizza(raw: dict) -> dict:
     except (ValueError, TypeError):
         out["numero_utensile"] = None
 
-    # pallet_attivo → int (1-6) oppure None
+    # pallet_attivo → int (1-6)
+    # Prima cerca DB0.DBB67 (metodo diretto)
+    # Poi estrai da workPandProgName: /_N_WKS_DIR/_N_PALLET_WPD/_N_PALLET4_MPF → 4
+    pallet = None
     try:
         v = int(raw.get("pallet_attivo", 0))
-        out["pallet_attivo"] = v if 1 <= v <= 6 else None
+        if 1 <= v <= 6:
+            pallet = v
     except (ValueError, TypeError):
-        out["pallet_attivo"] = None
+        pass
+    if pallet is None:
+        prog = raw.get("programma_attivo", "") or ""
+        import re as _re
+        # Cerca _N_PALLETx_MPF dove x è il numero pallet
+        m = _re.search(r"_N_PALLET(\d)_MPF", prog, _re.IGNORECASE)
+        if m:
+            v = int(m.group(1))
+            if 1 <= v <= 6:
+                pallet = v
+    out["pallet_attivo"] = pallet
 
     # programma_attivo — pulisci path lungo
     prog = raw.get("programma_attivo", "")

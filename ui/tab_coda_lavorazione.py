@@ -129,11 +129,23 @@ def _normalizza(raw: dict) -> dict:
         out["numero_utensile"] = int(raw.get("numero_utensile", 0))
     except Exception:
         out["numero_utensile"] = None
+    # Priorità: $A_DBB[67] (DB0.DBB67) — variabile PLC ufficiale
+    # Fallback: estrai da workPandProgName es. _N_PALLET4_MPF → 4
+    pallet = None
     try:
         v = int(raw.get("pallet_attivo", 0))
-        out["pallet_attivo"] = v if 1 <= v <= 6 else None
+        if 1 <= v <= 6:
+            pallet = v
     except Exception:
-        out["pallet_attivo"] = None
+        pass
+    if pallet is None:
+        prog = raw.get("programma_attivo", "") or ""
+        m = re.search(r"_N_PALLET(\d)_MPF", prog, re.IGNORECASE)
+        if m:
+            v = int(m.group(1))
+            if 1 <= v <= 6:
+                pallet = v
+    out["pallet_attivo"] = pallet
     prog = raw.get("programma_attivo", "")
     out["programma_attivo"] = prog if prog and prog != "0" else None
     ut = raw.get("utensile_attivo", "")
@@ -519,40 +531,54 @@ class TabCodaLavorazione:
             return
         stato = pallet.get("stato", "VUOTO")
         if stato == "IN LAVORAZIONE":
-            return  # gestito automaticamente
+            return  # gestito solo dal log PLC — non modificabile manualmente
 
-        # Cicla tra stati manuali
-        idx  = STATI_ORDER.index(stato) if stato in STATI_ORDER else 0
-        next_stato = STATI_ORDER[(idx + 1) % len(STATI_ORDER)]
+        # Menu popup: solo GREZZO e VUOTO come stati manuali
+        import tkinter as _tk
+        menu = _tk.Menu(self.parent, tearoff=0)
 
-        def _save():
-            config = _carica_config()
-            path = _pallet_path(config)
-            if not path:
-                return
-            try:
-                if path.exists():
-                    data = json.loads(path.read_text(encoding="utf-8"))
-                else:
-                    data = {"pallet": [
-                        {"numero": i+1, "stato": "vuoto", "programma": None,
-                         "main": None, "commessa": None, "aggiornato": None}
-                        for i in range(6)
-                    ]}
-                for p in data.get("pallet", []):
-                    if p.get("numero") == pid:
-                        p["stato"]     = next_stato.lower().replace(" ", "_")
-                        p["aggiornato"] = datetime.now().isoformat()
-                        break
-                data["ultimo_aggiornamento"] = datetime.now().isoformat()
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text(json.dumps(data, ensure_ascii=False, indent=2),
-                                encoding="utf-8")
-            except Exception as e:
-                pass
-            self.parent.after(0, self._fetch_data)
+        def _set(nuovo_stato):
+            def _save():
+                config = _carica_config()
+                path = _pallet_path(config)
+                if not path:
+                    return
+                try:
+                    if path.exists():
+                        data = json.loads(path.read_text(encoding="utf-8"))
+                    else:
+                        data = {"pallet": [
+                            {"numero": i+1, "stato": "vuoto", "programma": None,
+                             "main": None, "commessa": None, "aggiornato": None}
+                            for i in range(6)
+                        ]}
+                    for p in data.get("pallet", []):
+                        if p.get("numero") == pid:
+                            p["stato"]      = nuovo_stato.lower().replace(" ", "_")
+                            p["aggiornato"] = datetime.now().isoformat()
+                            break
+                    data["ultimo_aggiornamento"] = datetime.now().isoformat()
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_text(json.dumps(data, ensure_ascii=False, indent=2),
+                                    encoding="utf-8")
+                except Exception:
+                    pass
+                self.parent.after(0, self._fetch_data)
+            threading.Thread(target=_save, daemon=True).start()
 
-        threading.Thread(target=_save, daemon=True).start()
+        # Solo gli stati manuali — IN LAVORAZIONE viene dal PLC
+        for s in ["GREZZO", "VUOTO"]:
+            label = f"{'✓ ' if s == stato else '   '}{s}"
+            menu.add_command(label=label, command=lambda ns=s: _set(ns))
+
+        # Posizione del menu sotto la card cliccata
+        try:
+            f = self._pallet_frames[pid]["frame"]
+            menu.tk_popup(f.winfo_rootx(), f.winfo_rooty() + f.winfo_height())
+        except Exception:
+            pass
+        finally:
+            menu.grab_release()
 
     def refresh(self):
         if self._after_id:

@@ -310,7 +310,7 @@ class TabMacchina:
                       corner_radius=6).pack(side="right", padx=3)
 
         self.btn_setup = ctk.CTkButton(
-            toolbar_right,
+            toolbar,
             text="🔧 Analisi Setup",
             command=self._analisi_setup,
             fg_color="transparent",

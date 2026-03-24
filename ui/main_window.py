@@ -62,28 +62,7 @@ class MainWindow(ctk.CTk):
             text_color="white"
         ).pack(side="left", padx=20)
         
-        # Pulsanti header - Chiari su blu
-        btn_frame = ctk.CTkFrame(header, fg_color="transparent")
-        btn_frame.pack(side="right", padx=20)
-        
-        # Bottoni header con stile chiaro su blu
-        for text, cmd in [
-            ("📁 DATABASE", self._seleziona_database),
-            ("📊 ANALIZZA NC", self._analizza_nc),
-            ("🔄 RICARICA", self._load_all_data)
-        ]:
-            ctk.CTkButton(
-                btn_frame,
-                text=text,
-                command=cmd,
-                fg_color="white",              # Bianco
-                hover_color="#E3F2FD",         # Azzurro chiaro
-                text_color=COLOR_PRIMARY,      # Testo blu
-                width=140,
-                height=36,
-                font=(FONT_FAMILY, 11, "bold"),
-                corner_radius=6
-            ).pack(side="left", padx=5)
+
         
         # Status bar
         self.status_label = ctk.CTkLabel(
@@ -236,15 +215,27 @@ class MainWindow(ctk.CTk):
     
     def _update_status(self):
         """Aggiorna status bar."""
-        n_macchina = len(self.df[self.df['Stato_Utensile'] == STATO_IN_MACCHINA])
+        # In Macchina: da tools_machine.json (TOA/MPF sync)
+        n_macchina = 0
+        try:
+            import json as _j
+            from pathlib import Path as _P
+            from ui.tab_macchina import _get_tools_db_path
+            tdb = _get_tools_db_path()
+            if tdb.exists():
+                data = _j.loads(tdb.read_text(encoding="utf-8"))
+                n_macchina = len(data.get("tools", {}))
+        except Exception:
+            n_macchina = len(self.df[self.df['Stato_Utensile'] == STATO_IN_MACCHINA])
+
+        # Scaffale/Smontati/Holder/Bussole: da CSV
         n_scaffale = len(self.df[self.df['Stato_Utensile'] == STATO_SCAFFALE])
         n_smontati = len(self.df_utensili_smontati)
-        n_holder = len(self.df_holder_smontati)
-        n_bussole = len(self.df_bussole_idraulico)
-        
-        status = f"📊 In Macchina: {n_macchina} | Scaffale: {n_scaffale} | "
+        n_holder   = len(self.df_holder_smontati)
+        n_bussole  = len(self.df_bussole_idraulico)
+
+        status = f"In Macchina: {n_macchina} | Scaffale: {n_scaffale} | "
         status += f"Smontati: {n_smontati} | Holder: {n_holder} | Bussole: {n_bussole}"
-        
         self.status_label.configure(text=status)
     
     def _analizza_nc(self):

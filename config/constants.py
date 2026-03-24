@@ -88,5 +88,5 @@ PATTERN_T_COMMAND = r'T(\d+)'
 
 # APP INFO
 APP_VERSION = "16.0"
-APP_TITLE = f"🔧 Gestore Utensili CNC v{APP_VERSION}"
+APP_TITLE = "DMGDesk"
 APP_SUBTITLE = "Modulare - Tab Separati"

@@ -703,12 +703,6 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
   function updateLog(logId,newText){onUpdate({...project,log:(project.log||[]).map(e=>e.id===logId?{...e,text:newText,editedAt:nowStr()}:e)})}
   function deleteLog(logId){onUpdate({...project,log:(project.log||[]).filter(e=>e.id!==logId)})}
 
-  // Estrai alias utensili da tutti i programmi MPF del progetto
-  const aliasUsati=new Set((project.steps||[]).flatMap(s=>s.tasks||[])
-    .filter(t=>t.text?.trim().toLowerCase()==='fresatura')
-    .flatMap(t=>(t.programs||[]).filter(p=>p.tipoGruppo!=='ipm'&&p.utensile)
-    .map(p=>p.utensile)))
-
   const Tab=({id,label})=>(<button onClick={()=>setActiveTab(id)} style={{background:'none',border:'none',cursor:'pointer',color:activeTab===id?project.color:T.textSub,fontSize:15,fontWeight:700,padding:'10px 0',borderBottom:activeTab===id?`3px solid ${project.color}`:'3px solid transparent',marginRight:24,transition:'all 0.15s'}}>{label}</button>)
 
   return(
@@ -754,7 +748,6 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
         {activeTab==='tasks'&&(
           <div>
             <div style={{fontSize:12,color:T.textMuted,marginBottom:12,display:'flex',alignItems:'center',gap:6}}><span>⣿</span> Trascina per riordinare fasi e task</div>
-            {aliasUsati.size>0&&<UtensiliProgetto projectId={project.id}/>}
 
             {project.steps.map((step,sIdx)=>(
               <StepSection key={step.id} step={step} stepIdx={sIdx}

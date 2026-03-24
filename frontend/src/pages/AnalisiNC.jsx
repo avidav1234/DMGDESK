@@ -264,14 +264,7 @@ export default function AnalisiNC() {
           onFocus={e => e.target.style.borderColor = 'var(--cyan)'}
           onBlur={e => e.target.style.borderColor = 'var(--border)'} />
 
-        {/* 3. Fase opzionale */}
-        <input value={fase} onChange={e => { setFase(e.target.value); setMainError(null) }}
-          placeholder="Fase (opz.)"
-          style={{ ...inputStyle, width: 90, fontSize: 11 }}
-          onFocus={e => e.target.style.borderColor = 'var(--cyan)'}
-          onBlur={e => e.target.style.borderColor = 'var(--border)'} />
-
-        {/* 4. Genera MAIN */}
+        {/* 3. Genera MAIN */}
         <button onClick={handleGeneraMain}
           disabled={mainBusy || !done.length || !nomeCartella.trim() || !percorso}
           style={{ padding: '7px 14px', borderRadius: 7, fontSize: 12, fontWeight: 700,
@@ -445,22 +438,20 @@ export default function AnalisiNC() {
         {/* ── Colonna destra: nome + percorso + MAIN + invio ── */}
         <div style={{ width: 300, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
 
-          {/* Cartella macchina */}
-          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, padding: '12px 14px' }}>
-            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', letterSpacing: '0.08em', marginBottom: 8 }}>
-              NOME CARTELLA MACCHINA
-            </div>
-            <input value={nomeCartella} onChange={e => { setNomeCartella(e.target.value); setMainError(null) }}
-              placeholder="es. Fase-3"
-              style={{ ...inputStyle, width: '100%', fontWeight: 700, fontSize: 13 }}
-              onFocus={e => e.target.style.borderColor = 'var(--cyan)'}
-              onBlur={e => e.target.style.borderColor = 'var(--border)'} />
-            {progetto && (
-              <div style={{ marginTop: 6, fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
-                WPD: <span style={{ color: 'var(--cyan)' }}>{progetto}</span>
+          {/* Riepilogo cartella macchina (solo lettura) */}
+          {nomeCartella && (
+            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 14px' }}>
+              <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', letterSpacing: '0.08em', marginBottom: 4 }}>
+                CARTELLA MACCHINA (WPD · EXTCALL)
               </div>
-            )}
-          </div>
+              <div style={{ fontSize: 13, fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--cyan)' }}>
+                {nomeCartella}
+              </div>
+              <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginTop: 3 }}>
+                /_N_WKS_DIR/_N_{nomeCartella.toUpperCase()}_WPD/...
+              </div>
+            </div>
+          )}
 
           {/* Percorso salvataggio */}
           <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -472,6 +463,13 @@ export default function AnalisiNC() {
                 style={{ ...inputStyle, width: '50%', fontWeight: 700 }} />
               <input value={posizione} onChange={e => setPosizione(e.target.value.replace(/[^a-zA-Z0-9_-]/g,''))} placeholder="0221"
                 style={{ ...inputStyle, width: '50%', fontWeight: 700 }} />
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input value={fase} onChange={e => { setFase(e.target.value); setMainError(null) }}
+                placeholder="Sottocartella (opz.) — solo percorso Windows"
+                style={{ ...inputStyle, width: '100%', fontSize: 10, color: 'var(--text-dim)' }}
+                onFocus={e => e.target.style.borderColor = 'var(--cyan)'}
+                onBlur={e => e.target.style.borderColor = 'var(--border)'} />
             </div>
             {/* Recenti */}
             {cartelleRecenti.length > 0 && (

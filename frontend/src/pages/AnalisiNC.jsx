@@ -177,6 +177,22 @@ export default function AnalisiNC() {
       setMainGeneratoFile(new File([blob], res.nome_file, { type: 'text/plain' }))
       api.cartelleRecenti().then(r => setCartelleRecenti(r.cartelle || [])).catch(() => {})
       setCheckResult(null); setInvioResults([])
+
+      // Aggiorna stato programmi → in_macchina nel progetto di origine
+      try {
+        const lancio = sessionStorage.getItem('dmgdesk_lancio_nc')
+        if (lancio) {
+          const { projectId, mpfFiles } = JSON.parse(lancio)
+          if (projectId && mpfFiles?.length) {
+            await fetch(`/api/progetti/${projectId}/segna-in-macchina`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ filenames: done.map(e => e.file.name) })
+            })
+          }
+        }
+      } catch {}
+
     } catch (e) { setMainError(e.message) }
     finally { setMainBusy(false) }
   }

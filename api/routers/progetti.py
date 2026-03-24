@@ -595,3 +595,49 @@ async def get_analisi_setup():
         "fin_vita":       sorted(fin_vita, key=lambda x: x.get("life_percent") or 0),
         "sync_time":      sync_time,
     }
+
+
+# ── Segna programmi in_macchina ────────────────────────────────────────────
+
+@router.post("/{project_id}/segna-in-macchina")
+async def segna_in_macchina(project_id: str, body: dict):
+    """
+    Quando si genera il MAIN, i programmi inclusi passano a stato 'in_macchina'.
+    Body: { filenames: ["file1.MPF", "file2.MPF", ...] }
+    """
+    config   = carica_configurazione()
+    data     = _load_progetti(config)
+    projects = data.get("projects", [])
+    project  = next((p for p in projects if p.get("id") == project_id), None)
+    if not project:
+        raise HTTPException(404, f"Progetto {project_id} non trovato")
+
+    filenames = {f.upper() for f in body.get("filenames", [])}
+    if not filenames:
+        return {"aggiornati": 0}
+
+    now = datetime.now().isoformat()
+    aggiornati = 0
+
+    for step in project.get("steps", []):
+        for task in step.get("tasks", []):
+            if task.get("text", "").strip().lower() != "fresatura":
+                continue
+            for pgm in task.get("programs", []):
+                if pgm.get("filename", "").upper() in filenames:
+                    if pgm.get("stato") == "da_fare":
+                        pgm["stato"] = "in_macchina"
+                        pgm["tempoInizio"] = now
+                        aggiornati += 1
+
+    if aggiornati > 0:
+        # Salva
+        tools_folder = (config.get("tools_toa_folder") or "").strip()
+        if tools_folder:
+            path = Path(tools_folder) / "worktrack_projects.json"
+        else:
+            path = Path("worktrack_projects.json")
+        data_to_save = {"projects": projects, "ultimo_aggiornamento": now}
+        path.write_text(json.dumps(data_to_save, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    return {"aggiornati": aggiornati, "project_id": project_id}

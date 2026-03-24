@@ -185,12 +185,14 @@ function ProgramRow({pgm,gruppo,onStato,onOperatore,onTempo,onRemove,toolStatus}
 
 
 // ── Classifica utensile rispetto a tools_machine ──────────────────────────────
+// Ritorna: null (nessun alias/db), 'ok', 'fin_vita', 'disabilitato', 'mancante'
+// SOLO chiamare per programmi in stato 'in_macchina'
 function classifyTool(alias, toolsDB){
-  if(!alias) return null
-  if(!toolsDB) return null  // non ancora caricato
-  const t = toolsDB[alias.toUpperCase().trim()]
+  if(!alias || !toolsDB) return null
+  const key = alias.toUpperCase().trim()
+  const t = toolsDB[key]
   if(!t) return 'mancante'
-  if(!t.is_enabled || t.is_worn) return 'disabilitato'
+  if(t.is_worn === true || t.is_enabled === false) return 'disabilitato'
   if(t.life_percent != null && t.life_percent < 15) return 'fin_vita'
   return 'ok'
 }
@@ -254,7 +256,7 @@ function FresaturaPanel({task,onUpdateTask,toolsDB}){
         <span style={{fontSize:15}}>⚙️</span>
         <span style={{fontSize:13,fontWeight:800,color:'#1D5FAD',flex:1}}>PROGRAMMI FRESATURA</span>
         {toolsDB&&(()=>{
-          const issues=programs.filter(p=>p.utensile&&p.tipoGruppo!=='ipm'&&['mancante','fin_vita','disabilitato'].includes(classifyTool(p.utensile,toolsDB)))
+          const issues=programs.filter(p=>p.stato==='in_macchina'&&p.utensile&&p.tipoGruppo!=='ipm'&&['mancante','fin_vita','disabilitato'].includes(classifyTool(p.utensile,toolsDB)))
           return issues.length>0?(
             <span style={{fontSize:11,fontWeight:700,color:'#C0392B',background:'#FDECEA',padding:'2px 8px',borderRadius:20,border:'1px solid #C0392B44'}}>
               ⚠ {issues.length} utensil{issues.length===1?'e':'i'} problematic{issues.length===1?'o':'i'}
@@ -298,7 +300,7 @@ function FresaturaPanel({task,onUpdateTask,toolsDB}){
                   onOperatore={operatore=>updatePgm(pgm.id,{operatore})}
                   onTempo={tempoStimato=>updatePgm(pgm.id,{tempoStimato})}
                   onRemove={()=>updatePrograms(programs.filter(p=>p.id!==pgm.id))}
-                  toolStatus={classifyTool(pgm.utensile,toolsDB)}/>
+                  toolStatus={pgm.stato==='in_macchina'?classifyTool(pgm.utensile,toolsDB):null}/>
               ))}
             </div>
           ))}

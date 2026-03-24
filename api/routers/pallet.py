@@ -97,7 +97,6 @@ async def get_pallet():
     """Restituisce lo stato attuale di tutti i pallet."""
     config = carica_configurazione()
     path = _pallet_path(config)
-    log.info(f"pallet_state.json cercato in: {path} (exists={path.exists()})")
     state = _load(config)
     return state
 

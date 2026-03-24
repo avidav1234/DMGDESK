@@ -351,8 +351,10 @@ async def check_tools(file: UploadFile = File(...)):
 
     alias_richiesti = {alias for alias, _, _ in utensili_file}
 
+    # Solo utensili con posizione nel magazzino (magazine != None)
     alias_in_macchina = {
-        t["name"].upper() for t in tools_db.values() if t.get("name")
+        t["name"].upper() for t in tools_db.values()
+        if t.get("name") and t.get("magazine") is not None
     }
     alias_abilitati = {
         t["name"].upper() for t in tools_db.values()
@@ -405,8 +407,10 @@ async def check_tools_text(body: dict):
         )
 
     alias_richiesti = {alias for alias, _, _ in utensili_file}
+    # Solo utensili con posizione nel magazzino (magazine != None)
     alias_in_macchina = {
-        t["name"].upper() for t in tools_db.values() if t.get("name")
+        t["name"].upper() for t in tools_db.values()
+        if t.get("name") and t.get("magazine") is not None
     }
     alias_abilitati = {
         t["name"].upper() for t in tools_db.values()

@@ -132,7 +132,11 @@ async def analizza_file_nc(file: UploadFile = File(..., description="File NC (.M
         fonte_db     = ""
 
         if tools_db:
-            alias_in_macchina = {t["name"].upper() for t in tools_db.values() if t.get("name")}
+            # Solo utensili con posizione nel magazzino M1
+            alias_in_macchina = {
+                t["name"].upper() for t in tools_db.values()
+                if t.get("name") and t.get("magazine") is not None
+            }
             alias_abilitati   = {
                 t["name"].upper() for t in tools_db.values()
                 if t.get("name") and t.get("is_enabled", True) and not t.get("is_worn", False)

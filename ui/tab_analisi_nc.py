@@ -355,7 +355,11 @@ class TabAnalisiNC:
             for alias, _, _ in estrai_tutti_utensili_da_file(fp):
                 alias_richiesti.add(alias.upper().strip())
 
-        alias_in_macchina = {t["name"].upper() for t in tools_db.values() if t.get("name")}
+        # Solo utensili con posizione nel magazzino M1
+        alias_in_macchina = {
+            t["name"].upper() for t in tools_db.values()
+            if t.get("name") and t.get("magazine") is not None
+        }
         alias_abilitati   = {
             t["name"].upper() for t in tools_db.values()
             if t.get("name") and t.get("is_enabled", True) and not t.get("is_worn", False)

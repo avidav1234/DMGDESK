@@ -400,10 +400,11 @@ class TabMacchina:
             self.tree_sync.heading(col, text=label, anchor="w")
             self.tree_sync.column(col, width=w, minwidth=40, anchor="w")
 
-        self.tree_sync.tag_configure("ok",       background="#F1F8E9")
-        self.tree_sync.tag_configure("worn",     background="#EDE7F6")
-        self.tree_sync.tag_configure("disabled", background="#FFEBEE")
-        self.tree_sync.tag_configure("highlight",background="#FFF9C4")
+        self.tree_sync.tag_configure("ok",        background="#F1F8E9")
+        self.tree_sync.tag_configure("worn",      background="#EDE7F6")
+        self.tree_sync.tag_configure("disabled",  background="#FFEBEE")
+        self.tree_sync.tag_configure("highlight", background="#FFF9C4")
+        self.tree_sync.tag_configure("empty",     background="#F5F5F5", foreground="#9E9E9E")
 
         sb2 = ttk.Scrollbar(tbl, orient="vertical", command=self.tree_sync.yview)
         self.tree_sync.configure(yscrollcommand=sb2.set)

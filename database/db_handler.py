@@ -93,6 +93,78 @@ def get_db_paths(db_principale):
         'bussole_idraulico': os.path.join(base_dir, f"{base_name}_bussole_idraulico.csv")  # 🆕 V12.3
     }
 
+def auto_find_db_paths(config: dict = None) -> dict:
+    """
+    Trova automaticamente i percorsi DB nella stessa cartella di tools_toa_folder.
+    Nomi standard: DMGDesk_principale.csv, DMGDesk_smontati.csv, ecc.
+    Se non esistono li crea vuoti.
+    
+    Priorità:
+    1. database_path già configurato (compatibilità)
+    2. tools_toa_folder (stessa cartella di TOA/MPF)
+    3. percorso_nc_base (risale di 2 livelli)
+    """
+    if config is None:
+        config = carica_configurazione()
+
+    BASE_NAME = "DMGDesk"
+
+    # 1. database_path già configurato e valido
+    db_path = (config.get("database_path") or "").strip()
+    if db_path and os.path.exists(db_path):
+        return get_db_paths(db_path)
+
+    # 2. Trova cartella da tools_toa_folder o percorso_nc_base
+    folder = (config.get("tools_toa_folder") or "").strip()
+    if not folder:
+        percorso_nc = (config.get("percorso_nc_base") or "").strip()
+        if percorso_nc:
+            from pathlib import Path as _P
+            parts = _P(percorso_nc).parts
+            if len(parts) >= 2:
+                folder = str(_P(parts[0]) / parts[1])
+
+    if not folder:
+        return get_db_paths(None)
+
+    # Costruisci percorsi standard
+    principale    = os.path.join(folder, f"{BASE_NAME}_principale.csv")
+    smontati      = os.path.join(folder, f"{BASE_NAME}_smontati.csv")
+    holder        = os.path.join(folder, f"{BASE_NAME}_holder.csv")
+    bussole       = os.path.join(folder, f"{BASE_NAME}_bussole.csv")
+
+    # Crea i file vuoti se non esistono (primo avvio)
+    _ensure_csv(principale, COLONNE_V2)
+    _ensure_csv(smontati,   COLONNE_UTENSILI_SMONTATI)
+    _ensure_csv(holder,     COLONNE_HOLDER_SMONTATI)
+    _ensure_csv(bussole,    COLONNE_BUSSOLE_IDRAULICO)
+
+    # Salva database_path in config
+    try:
+        config["database_path"] = principale
+        salva_configurazione(config)
+    except Exception:
+        pass
+
+    return {
+        "principale":       principale,
+        "utensili_smontati": smontati,
+        "holder_smontati":  holder,
+        "bussole_idraulico": bussole,
+    }
+
+
+def _ensure_csv(path: str, columns: list):
+    """Crea un CSV vuoto con le colonne corrette se non esiste."""
+    if not path or os.path.exists(path):
+        return
+    try:
+        import pandas as _pd
+        _pd.DataFrame(columns=columns).to_csv(path, sep="	", index=False)
+    except Exception:
+        pass
+
+
 # --- LOGICA DATABASE PRINCIPALE ---
 
 def carica_database(db_path):

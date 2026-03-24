@@ -596,6 +596,12 @@ class TabMacchina:
         self._load_existing_db()
         if self._mpf_files:
             self._esegui_confronto()
+        # Ricarica anche i DB CSV (scaffale/smontati/holder) se main_window disponibile
+        try:
+            if hasattr(self, 'main') and hasattr(self.main, '_load_all_data'):
+                self.parent.after(100, self.main._load_all_data)
+        except Exception:
+            pass
         lines = [f"{n_tools} utensili", f"{n_pos} posizioni mappate"]
         if fmt_used:
             lines.append(f"Formato: {fmt_used.upper()}")
@@ -610,6 +616,13 @@ class TabMacchina:
         messagebox.showerror("Errore sync", msg)
 
     def _load_existing_db(self):
+        # Aggiorna db_path in config se tools_toa_folder è stato appena impostato
+        try:
+            from database.db_handler import auto_find_db_paths
+            cfg = _carica_config()
+            auto_find_db_paths(cfg)  # crea i CSV vuoti se mancano
+        except Exception:
+            pass
         self._tools_data, self._sync_time = _load_tools_db()
         if self._sync_time:
             dt = datetime.fromisoformat(self._sync_time)

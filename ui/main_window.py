@@ -30,10 +30,10 @@ class MainWindow(ctk.CTk):
         self.title(APP_TITLE)
         self.geometry(f"{WINDOW_WIDTH}x{WINDOW_HEIGHT}")
         
-        # Database
+        # Database — auto-discovery dalla cartella TOA/MPF
         self.config = carica_configurazione()
-        self.db_path = self.config.get('database_path')
-        self.db_paths = {}
+        self.db_paths = auto_find_db_paths(self.config)
+        self.db_path = self.db_paths.get('principale')
         
         # DataFrames
         self.df = pd.DataFrame(columns=DB_COLUMNS_PRINCIPALE)
@@ -44,9 +44,8 @@ class MainWindow(ctk.CTk):
         # Crea UI
         self._create_ui()
         
-        # Carica dati iniziali
-        if self.db_path:
-            self._load_all_data()
+        # Carica sempre — auto_find_db_paths crea i file vuoti se mancano
+        self._load_all_data()
     
     def _create_ui(self):
         """Crea interfaccia utente."""
@@ -145,62 +144,39 @@ class MainWindow(ctk.CTk):
         self.tabview.set("⬡ Coda")
     
     def _seleziona_database(self):
-        """Apre dialog selezione database."""
-        from tkinter import filedialog
-        
-        path = filedialog.askopenfilename(
-            title="Seleziona Database Principale",
-            filetypes=[("CSV", "*.csv"), ("Tutti", "*.*")]
-        )
-        
-        if path:
-            self.db_path = path
-            config = {"database_path": path}
-            salva_configurazione(config)
-            self._load_all_data()
+        """Obsoleto — i DB vengono trovati automaticamente dalla cartella TOA."""
+        pass
     
     def _load_all_data(self):
-        """Carica tutti i database."""
-        print("\n=== _LOAD_ALL_DATA ===")
-        
+        """Carica tutti i database dalla cartella condivisa (TOA/MPF)."""
+        # Ri-esegue auto-discovery per aggiornare i path
+        self.config  = carica_configurazione()
+        self.db_paths = auto_find_db_paths(self.config)
+        self.db_path  = self.db_paths.get('principale')
+
         if not self.db_path:
-            print("ERRORE: db_path è None!")
+            # tools_toa_folder non ancora configurato — UI vuota, nessun errore
+            self.refresh_all_tabs()
+            self._update_status()
             return
-        
-        print(f"db_path: {self.db_path}")
-        
-        # Ottieni paths
-        self.db_paths = get_db_paths(self.db_path)
-        print(f"db_paths generati:")
-        for k, v in self.db_paths.items():
-            print(f"  {k}: {v}")
-        
+
         # Carica principale
         self.df, err = carica_database(self.db_path)
-        if err:
-            messagebox.showerror("Errore", err)
-            return
-        
-        print(f"DB principale caricato: {len(self.df)} righe")
-        
-        # Carica smontati
+        if err and not self.df.empty:
+            messagebox.showerror("Errore DB", err)
+
+        # Carica utensili smontati
         self.df_utensili_smontati, _ = carica_database_utensili_smontati(
-            self.db_paths.get('utensili_smontati', '')
-        )
-        
-        print(f"DB utensili_smontati caricato: {len(self.df_utensili_smontati)} righe")
-        
+            self.db_paths.get('utensili_smontati', ''))
+
         # Carica holder
         self.df_holder_smontati, _ = carica_database_holder_smontati(
-            self.db_paths.get('holder_smontati', '')
-        )
-        
+            self.db_paths.get('holder_smontati', ''))
+
         # Carica bussole
         self.df_bussole_idraulico, _ = carica_database_bussole_idraulico(
-            self.db_paths.get('bussole_idraulico', '')
-        )
-        
-        # Aggiorna UI
+            self.db_paths.get('bussole_idraulico', ''))
+
         self.refresh_all_tabs()
         self._update_status()
     

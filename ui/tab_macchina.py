@@ -682,12 +682,16 @@ class TabMacchina:
                     {"alias": n, **{k: t.get(k) for k in ["magazine","position","life_percent"]}}
                     for n, t in in_macchina.items() if n not in alias_attivi
                 ]
-                da_montare = [
-                    {"alias": a, "provenienza": "scaffale" if a in scaffale_alias
-                                               else "smontato" if a in smontati_alias
-                                               else "mancante"}
-                    for a in sorted(alias_attivi - set(in_macchina.keys()))
-                ]
+                da_montare = []
+                for a in sorted(alias_attivi - set(in_macchina.keys())):
+                    prov = ("scaffale" if a in scaffale_alias
+                            else "smontato" if a in smontati_alias
+                            else "mancante")
+                    refs = alias_map.get(a, [])
+                    da_montare.append({
+                        "alias": a, "provenienza": prov,
+                        "progetti": [{"progetto": r[0], "file": r[1]} for r in refs[:3]]
+                    })
                 fin_vita = [
                     {"alias": n, **{k: t.get(k) for k in ["magazine","position","life_percent"]}}
                     for n, t in in_macchina.items()
@@ -739,8 +743,14 @@ class TabMacchina:
                 render_fn(row, item)
 
         def _render_da_montare(row, item):
-            tk.Label(row, text=item["alias"], font=("Consolas",11,"bold"),
-                     fg="#1A1814", bg=bg_dm).pack(side="left", padx=10, pady=5)
+            left = tk.Frame(row, bg=bg_dm)
+            left.pack(side="left", fill="both", expand=True, padx=10, pady=4)
+            tk.Label(left, text=item["alias"], font=("Consolas",11,"bold"),
+                     fg="#1A1814", bg=bg_dm).pack(anchor="w")
+            for ref in item.get("progetti", [])[:2]:
+                tk.Label(left,
+                         text=f"{ref.get('progetto','?')} · {ref.get('file','')}",
+                         font=("DM Sans",9), fg="#9A978E", bg=bg_dm).pack(anchor="w")
             prov_cfg = {"scaffale":("🏠 A scaffale","#1D5FAD","#dbeafe"),
                         "smontato": ("📦 Smontato", "#C2720A","#FFF0DC"),
                         "mancante": ("✗ Non trovato","#C0392B","#FDECEA")}

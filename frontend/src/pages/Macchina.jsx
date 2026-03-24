@@ -33,7 +33,7 @@ export default function Macchina() {
   const [setupLoading, setSetupLoading] = useState(false)
 
   // ── Popup Analisi Setup (componente interno) ──────────────────────────────
-  const SetupPopup = () => {
+  const SetupPannel = () => {
     if (!setupPopup || !setupData) return null
     const {non_utilizzati, da_montare, fin_vita} = setupData
 
@@ -55,12 +55,8 @@ export default function Macchina() {
     )
 
     return (
-      <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',
-        display:'flex',alignItems:'center',justifyContent:'center',zIndex:500}}>
-        <div style={{background:'#FFFFFF',borderRadius:14,
-          width:580,maxWidth:'92vw',maxHeight:'85vh',
-          display:'flex',flexDirection:'column',
-          border:'1px solid #D8D5CC',boxShadow:'0 12px 48px rgba(0,0,0,0.2)'}}>
+      <div style={{marginTop:12,border:'1px solid #D8D5CC',borderRadius:12,overflow:'hidden',background:'#FFFFFF'}}>
+        <div style={{display:'flex',flexDirection:'column'}}>
           <div style={{padding:'18px 24px',borderBottom:'1px solid #D8D5CC',
             display:'flex',alignItems:'center',gap:10}}>
             <span style={{fontSize:20}}>🔧</span>
@@ -83,11 +79,18 @@ export default function Macchina() {
               items={da_montare} c='#C0392B' bg='#FDECEA'
               renderItem={item=><>
                 <span style={{flex:1,fontSize:13,fontFamily:'monospace',fontWeight:700,color:'#1A1814'}}>{item.alias}</span>
-                <span style={{fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:12,
-                  color:item.provenienza==='mancante'?'#C0392B':item.provenienza==='scaffale'?'#1D5FAD':'#C2720A',
-                  background:item.provenienza==='mancante'?'#FDECEA':item.provenienza==='scaffale'?'#dbeafe':'#FFF0DC'}}>
-                  {item.provenienza==='scaffale'?'🏠 A scaffale':item.provenienza==='smontato'?'📦 Smontato':'✗ Non trovato'}
-                </span>
+                <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:2}}>
+                  <span style={{fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:12,
+                    color:item.provenienza==='mancante'?'#C0392B':item.provenienza==='scaffale'?'#1D5FAD':'#C2720A',
+                    background:item.provenienza==='mancante'?'#FDECEA':item.provenienza==='scaffale'?'#dbeafe':'#FFF0DC'}}>
+                    {item.provenienza==='scaffale'?'🏠 A scaffale':item.provenienza==='smontato'?'📦 Smontato':'✗ Non trovato'}
+                  </span>
+                  {(item.progetti||[]).map((r,i)=>(
+                    <span key={i} style={{fontSize:10,color:'#9A978E',fontFamily:'monospace'}}>
+                      {r.progetto} · {r.file}
+                    </span>
+                  ))}
+                </div>
               </>}
             />
             <Section title={`⚠ FINE VITA (<15%) — ${fin_vita.length}`}
@@ -239,6 +242,16 @@ export default function Macchina() {
               ? `Sync: ${new Date(syncStatus.last_sync).toLocaleString('it-IT')} — ${syncStatus.tool_count} ut.${syncStatus.format_used ? ' · ' + syncStatus.format_used.toUpperCase() : ''}`
               : 'Nessun sync'}
           </span>
+          <button
+            onClick={()=>{ if(!setupData) loadSetupAnalisi(); else setSetupPopup(v=>!v) }}
+            style={{
+              padding:'8px 14px', borderRadius:8, fontSize:13, cursor:'pointer',
+              background: setupPopup ? 'var(--navy-700)' : 'transparent',
+              color: setupPopup ? 'white' : 'var(--text-secondary)',
+              border:'1px solid var(--border)', fontWeight:600,
+            }}>
+            {setupLoading ? '⏳ Analisi...' : `🔧 Setup${setupData ? ` (${(setupData.da_montare||[]).length + (setupData.fin_vita||[]).length})` : ''}`}
+          </button>
           <button onClick={handleSync} disabled={syncing} style={{
             ...btn_small,
             animation: syncing ? 'spin 1s linear infinite' : 'none',
@@ -336,7 +349,9 @@ export default function Macchina() {
         </span>
       </div>
 
-      {/* Tabella utensili */}
+            {setupPopup && <SetupPannel />}
+
+{/* Tabella utensili */}
       {loading ? <Loader /> : tools.length === 0 ? null : (
         <div style={{ flex: 1, overflow: 'auto', background: 'var(--bg-surface)',
           borderRadius: 10, border: '1px solid var(--border)' }}>
@@ -397,7 +412,6 @@ export default function Macchina() {
       )}
       <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
     </div>
-    <SetupPopup />
     </>
   )
 }

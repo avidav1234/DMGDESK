@@ -6,6 +6,7 @@ Porting fedele completo: tutti i componenti della versione web inclusi.
 import customtkinter as ctk
 import tkinter as tk
 import tkinter.ttk as ttk
+import tkinter.simpledialog
 import tkinter.messagebox as mb
 import tkinter.filedialog as fd
 import json, threading, os, sys, re
@@ -558,28 +559,15 @@ class TabProgetti:
         nome_lbl.pack(side="left", padx=(8,2))
 
         def _rinomina():
-            win2 = tk.Toplevel(self.parent)
-            win2.title("Rinomina progetto")
-            win2.geometry("380x140")
-            win2.grab_set()
-            win2.configure(bg=TC["bg"])
-            tk.Label(win2, text="Nuovo nome progetto:",
-                     font=("DM Sans",11), fg=TC["sub"], bg=TC["bg"]).pack(anchor="w", padx=20, pady=(16,4))
-            entry = ctk.CTkEntry(win2, width=320, height=34, corner_radius=6)
-            entry.pack(padx=20)
-            entry.insert(0, project.get("name",""))
-            entry.select_range(0, "end")
-            entry.focus()
-            def _salva(e=None):
-                nuovo = entry.get().strip()
-                if nuovo and nuovo != project.get("name"):
-                    project["name"] = nuovo
-                    self._save_project(project)
-                win2.destroy()
-            entry.bind("<Return>", _salva)
-            ctk.CTkButton(win2, text="✓ Salva", command=_salva,
-                          fg_color=project.get("color", TC["accent"]),
-                          font=("DM Sans",11,"bold"), height=32, corner_radius=6).pack(pady=10)
+            nuovo_nome = tk.simpledialog.askstring(
+                "Rinomina progetto",
+                f"Nuovo nome per '{project.get('name','')}':",
+                initialvalue=project.get("name",""),
+                parent=self.parent
+            )
+            if nuovo_nome and nuovo_nome.strip() and nuovo_nome.strip() != project.get("name"):
+                project["name"] = nuovo_nome.strip()
+                self._save_project(project)
 
         tk.Button(r1, text="✏️", command=_rinomina,
                   font=("DM Sans",10), fg=TC["muted"], bg=TC["surface"],

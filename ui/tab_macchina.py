@@ -664,18 +664,26 @@ class TabMacchina:
                         smontati_alias = set(df_s["Alias_Utensile"].str.upper().str.strip())
                 except Exception: pass
 
-                # Carica alias richiesti da progetti attivi
-                from api.routers.progetti import _load_progetti
-                data = _load_progetti(cfg)
-                alias_attivi = set()
-                for p in data.get("projects", []):
-                    if p.get("archived"): continue
-                    for step in p.get("steps", []):
-                        for task in step.get("tasks", []):
-                            if task.get("text","").strip().lower() == "fresatura":
-                                for pgm in task.get("programs", []):
-                                    if pgm.get("tipoGruppo") != "ipm" and pgm.get("utensile"):
-                                        alias_attivi.add(pgm["utensile"].upper().strip())
+                # Carica alias richiesti da progetti attivi (con lettura disco)
+                try:
+                    from api.routers.progetti_utensili import estrai_alias_da_progetti as _eap
+                    alias_map = _eap(cfg)
+                    alias_attivi = set(alias_map.keys())
+                except Exception:
+                    alias_map = {}
+                    from api.routers.progetti import _load_progetti
+                    data = _load_progetti(cfg)
+                    alias_attivi = set()
+                    for p in data.get("projects", []):
+                        if p.get("archived"): continue
+                        for step in p.get("steps", []):
+                            for task in step.get("tasks", []):
+                                if task.get("text","").strip().lower() == "fresatura":
+                                    for pgm in task.get("programs", []):
+                                        if pgm.get("tipoGruppo") != "ipm" and pgm.get("utensile"):
+                                            a = pgm["utensile"].upper().strip()
+                                            alias_attivi.add(a)
+                                            alias_map.setdefault(a, [])
 
                 # Calcola liste
                 non_utilizzati = [

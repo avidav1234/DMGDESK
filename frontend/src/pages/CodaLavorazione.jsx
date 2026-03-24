@@ -78,7 +78,7 @@ export default function CodaLavorazione() {
       await fetch(`/api/pallet/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ stato }),
+        body: JSON.stringify({ stato: stato.toLowerCase() }),
       });
       await fetchAll();
     } catch {

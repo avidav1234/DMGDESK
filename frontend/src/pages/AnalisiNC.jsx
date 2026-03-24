@@ -224,7 +224,8 @@ export default function AnalisiNC() {
   // ── Derivati ───────────────────────────────────────────
   const done        = entries.filter(e => e.status === 'done')
   const conMancanti = done.filter(e => (e.result?.totale_mancanti ?? 0) > 0)
-  const allMancanti = [...new Set(done.flatMap(e => e.result?.mancanti ?? []))]
+  const allMancanti  = [...new Set(done.flatMap(e => e.result?.mancanti ?? []))]
+  const allDisabilitati = [...new Set(done.flatMap(e => e.result?.disabilitati ?? []))]
   const hasPending  = entries.some(e => e.status === 'pending' || e.status === 'error')
   const isRunning   = entries.some(e => e.status === 'analyzing')
 
@@ -292,16 +293,36 @@ export default function AnalisiNC() {
       {done.length > 0 && (
         <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {/* Sommario */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 16px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius)' }}>
-            <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-              <span className="mono" style={{ color: 'var(--cyan)', fontWeight: 700 }}>{done.length}</span> file ·{' '}
-              <span className="mono" style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{done.reduce((s, e) => s + (e.result?.totale_file ?? 0), 0)}</span> utensili ·{' '}
-            </span>
-            {allMancanti.length === 0
-              ? <span style={{ color: 'var(--green)', fontWeight: 700, fontSize: 13 }}>✓ Tutti presenti in macchina</span>
-              : <span style={{ color: 'var(--red)', fontWeight: 700, fontSize: 13 }}>⚠ {allMancanti.length} mancant{allMancanti.length === 1 ? 'e' : 'i'}</span>
-            }
-          </div>
+          {(() => {
+            const fonteDb = done[0]?.result?.fonte_db || ''
+            const totMancanti = done.reduce((s,e) => s + (e.result?.mancanti?.length ?? 0), 0)
+            const totDisab    = done.reduce((s,e) => s + (e.result?.disabilitati?.length ?? 0), 0)
+            const totUtensili = done.reduce((s,e) => s + (e.result?.totale_file ?? 0), 0)
+            const tutto_ok    = totMancanti === 0 && totDisab === 0
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '12px 16px', background: tutto_ok ? 'rgba(0,255,136,0.06)' : 'rgba(255,68,85,0.06)', border: `1px solid ${tutto_ok ? 'rgba(0,255,136,0.2)' : 'rgba(255,68,85,0.2)'}`, borderRadius: 'var(--radius)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                  <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                    <span className="mono" style={{ color: 'var(--cyan)', fontWeight: 700 }}>{done.length}</span> file ·{' '}
+                    <span className="mono" style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{totUtensili}</span> utensili
+                  </span>
+                  {tutto_ok
+                    ? <span style={{ color: 'var(--green)', fontWeight: 700, fontSize: 13 }}>✅ Tutti presenti in macchina</span>
+                    : <span style={{ color: 'var(--red)', fontWeight: 700, fontSize: 13 }}>
+                        {totMancanti > 0 && `❌ ${totMancanti} mancanti`}
+                        {totMancanti > 0 && totDisab > 0 && '  '}
+                        {totDisab > 0 && `⚠ ${totDisab} disabilitati`}
+                      </span>
+                  }
+                </div>
+                {fonteDb && (
+                  <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: '0.04em' }}>
+                    Confronto da: {fonteDb}
+                  </div>
+                )}
+              </div>
+            )
+          })()}
 
           {/* Mancanti */}
           {allMancanti.length > 0 && (

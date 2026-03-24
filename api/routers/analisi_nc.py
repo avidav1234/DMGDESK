@@ -113,30 +113,65 @@ async def analizza_file_nc(file: UploadFile = File(..., description="File NC (.M
         tmp_path = tmp.name
 
     try:
-        df, _ = get_db_principale()
         utensili_raw = estrai_tutti_utensili_da_file(tmp_path)
-        richiesti_set, mancanti_report = confronta_utensili_logica(df, [tmp_path])
-
-        # Alias presenti nel database macchina (IN_MACCHINA)
-        alias_macchina = set(df[df["Stato_Utensile"] == "IN_MACCHINA"]["Alias"].str.upper())
-        richiesti_upper = {a.upper() for a in richiesti_set}
-
-        presenti = sorted(richiesti_upper & alias_macchina)
-        mancanti = sorted(richiesti_upper - alias_macchina)
+        richiesti_upper = {a.upper().strip() for a, _, _ in utensili_raw}
 
         utensili_nc = [
             UtensileNC(alias=alias, riga=riga_num, testo_riga=testo)
             for alias, riga_num, testo in utensili_raw
         ]
 
-        log.info(f"Analisi NC: {file.filename} — {len(utensili_nc)} utensili, {len(mancanti)} mancanti")
+        # ── Confronto con tools_machine.json (TOA/MPF sync) ──────────────
+        from pathlib import Path as _Path
+        from api.routers.tools import _load_tools_db, _get_tools_db_path
+        tools_db, sync_time, fmt_used = _load_tools_db()
+
+        presenti     = []
+        mancanti     = []
+        disabilitati = []
+        fonte_db     = ""
+
+        if tools_db:
+            alias_in_macchina = {t["name"].upper() for t in tools_db.values() if t.get("name")}
+            alias_abilitati   = {
+                t["name"].upper() for t in tools_db.values()
+                if t.get("name") and t.get("is_enabled", True) and not t.get("is_worn", False)
+            }
+            mancanti     = sorted(richiesti_upper - alias_in_macchina)
+            disabilitati = sorted(richiesti_upper & (alias_in_macchina - alias_abilitati))
+            presenti     = sorted(richiesti_upper - set(mancanti) - set(disabilitati))
+            dt_str = ""
+            if sync_time:
+                try:
+                    from datetime import datetime
+                    dt_str = datetime.fromisoformat(sync_time).strftime("%d/%m %H:%M")
+                except Exception:
+                    dt_str = sync_time[:16]
+            fonte_db = f"tools_machine.json ({(fmt_used or 'TOA/MPF').upper()} — {dt_str})"
+        else:
+            # Fallback al database CSV
+            df, _ = get_db_principale()
+            if not df.empty:
+                alias_macchina = set(df[df["Stato_Utensile"] == "IN_MACCHINA"]["Alias"].str.upper())
+                mancanti = sorted(richiesti_upper - alias_macchina)
+                presenti = sorted(richiesti_upper & alias_macchina)
+                fonte_db = "database CSV principale (sync TOA non disponibile)"
+            else:
+                mancanti = sorted(richiesti_upper)
+                fonte_db = "nessun DB disponibile — eseguire Sync in Macchina"
+
+        n_mancanti = len(mancanti) + len(disabilitati)
+        log.info(f"Analisi NC: {file.filename} — {len(utensili_nc)} utensili, "
+                 f"{len(mancanti)} mancanti, {len(disabilitati)} disabilitati — fonte: {fonte_db}")
 
         return RisultatoAnalisi(
             utensili_nel_file=utensili_nc,
             presenti_in_macchina=presenti,
             mancanti=mancanti,
+            disabilitati=disabilitati,
             totale_file=len(utensili_nc),
-            totale_mancanti=len(mancanti),
+            totale_mancanti=n_mancanti,
+            fonte_db=fonte_db,
         )
 
     finally:

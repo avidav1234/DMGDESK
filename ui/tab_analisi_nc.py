@@ -58,6 +58,11 @@ class TabAnalisiNC:
                                                 placeholder_text="Nome")
         self.entry_nome_cartella.pack(side="right", padx=5)
         
+        ctk.CTkButton(toolbar, text="⚙ Calibra Only",
+                     command=self._apri_calibra_settings,
+                     fg_color="#7B1FA2", hover_color="#6A1B9A",
+                     font=get_font("small"), height=35, width=110).pack(side="right", padx=3)
+
         ctk.CTkButton(toolbar, text="📄 GENERA MAIN",
                      command=self._genera_main,
                      **get_button_style("accent", "large")).pack(side="right", padx=5)
@@ -76,6 +81,18 @@ class TabAnalisiNC:
                      state="disabled")
         self.btn_invia_tutto.pack(side="right", padx=3)
         
+        # Banner stato confronto
+        self.frame_stato = ctk.CTkFrame(self.parent, fg_color="transparent")
+        self.frame_stato.pack(fill="x", padx=20, pady=(4, 0))
+        self.lbl_stato_confronto = ctk.CTkLabel(
+            self.frame_stato, text="",
+            font=get_font("medium", bold=True), anchor="w")
+        self.lbl_stato_confronto.pack(side="left", padx=4)
+        self.lbl_fonte_db = ctk.CTkLabel(
+            self.frame_stato, text="",
+            font=get_font("small"), text_color=COLOR_TEXT_SECONDARY, anchor="w")
+        self.lbl_fonte_db.pack(side="left", padx=8)
+
         # Lista file selezionati
         list_frame = ctk.CTkFrame(self.parent, fg_color=COLOR_SURFACE, corner_radius=int(10))
         list_frame.pack(fill="both", expand=True, padx=20, pady=10)
@@ -144,45 +161,114 @@ class TabAnalisiNC:
             self.list_files.insert("end", f"{i}. {os.path.basename(fp)}\n")
     
     def _confronta(self, show_message=False):
-        """Confronta utensili richiesti con database."""
+        """Confronta utensili richiesti con il DB In Macchina (tools_machine.json)."""
         if not self.file_paths:
             if show_message:
                 return messagebox.showwarning("Attenzione", "Seleziona almeno un file")
             return
-        
-        if self.main.df.empty:
-            if show_message:
-                return messagebox.showwarning("Attenzione", "Carica database prima")
+
+        # ── Carica utensili da tools_machine.json (TOA/MPF sync) ──
+        import json as _json
+        from pathlib import Path as _Path
+
+        tools_db = {}
+        fonte = ""
+        try:
+            cfg = _carica_config()
+            folder = (cfg.get("tools_toa_folder") or "").strip()
+            if not folder:
+                db_path_raw = (cfg.get("database_path") or "")
+                if db_path_raw:
+                    folder = str(_Path(db_path_raw).parent)
+            if folder:
+                tdb_path = _Path(folder) / "tools_machine.json"
+                if tdb_path.exists():
+                    data = _json.loads(tdb_path.read_text(encoding="utf-8"))
+                    tools_db = data.get("tools", {})
+                    fmt = data.get("format_used", "")
+                    sync_time = data.get("sync_time", "")
+                    dt_str = ""
+                    if sync_time:
+                        try:
+                            from datetime import datetime
+                            dt_str = datetime.fromisoformat(sync_time).strftime("%d/%m %H:%M")
+                        except Exception:
+                            dt_str = sync_time[:16]
+                    fmt_label = fmt.upper() if fmt else "TOA/MPF"
+                    fonte = f"DB: tools_machine.json ({fmt_label} — {dt_str})"
+        except Exception as e:
+            fonte = f"Errore lettura DB: {e}"
+
+        # ── Fallback al database CSV principale ──
+        usa_csv = False
+        if not tools_db and not self.main.df.empty:
+            usa_csv = True
+            fonte = "DB: database CSV principale (tools_machine.json non trovato)"
+
+        # ── Estrai utensili dai file NC ──
+        from logic.nc_analyzer import estrai_tutti_utensili_da_file
+        alias_richiesti = set()
+        for fp in self.file_paths:
+            for alias, _, _ in estrai_tutti_utensili_da_file(fp):
+                alias_richiesti.add(alias.upper().strip())
+
+        # ── Confronto ──
+        if tools_db:
+            alias_in_macchina = {t["name"].upper() for t in tools_db.values() if t.get("name")}
+            alias_abilitati = {
+                t["name"].upper() for t in tools_db.values()
+                if t.get("name") and t.get("is_enabled", True) and not t.get("is_worn", False)
+            }
+            mancanti    = alias_richiesti - alias_in_macchina
+            disabilitati = alias_richiesti & (alias_in_macchina - alias_abilitati)
+            presenti    = alias_richiesti - mancanti - disabilitati
+        elif usa_csv:
+            utensili_richiesti, mancanti_report = confronta_utensili_logica(
+                self.main.df, self.file_paths)
+            mancanti     = {a for a, _, _ in mancanti_report}
+            disabilitati = set()
+            presenti     = alias_richiesti - mancanti
+        else:
+            self.lbl_stato_confronto.configure(
+                text="⚠  Nessun DB disponibile — esegui prima Sync in 'In Macchina'",
+                text_color="#F57C00")
+            self.lbl_fonte_db.configure(text="")
             return
-        
-        # Confronto
-        utensili_richiesti, utensili_mancanti_report = confronta_utensili_logica(
-            self.main.df, self.file_paths
-        )
-        
-        # Pulisci tree
+
+        # ── Aggiorna tree ──
         self.tree.delete(*self.tree.get_children())
-        
-        # Aggiungi risultati
-        if not utensili_mancanti_report:
+        n_mancanti = len(mancanti) + len(disabilitati)
+
+        if n_mancanti == 0:
             self.tree.insert("", "end", values=("✅ OK", "Tutti gli utensili presenti", "-", "-"))
         else:
-            for alias, file_name, riga_esempio in utensili_mancanti_report:
-                # Estrai numero riga
-                match = re.search(r'(\d+)', str(riga_esempio))
-                riga_num = match.group(1) if match else "-"
-                
-                self.tree.insert("", "end", values=("❌ MANCA", alias, file_name, riga_num))
-        
-        # Abilita pulsante invio se ci sono file
+            for alias in sorted(mancanti):
+                self.tree.insert("", "end", values=("❌ MANCA", alias, "—", "—"))
+            for alias in sorted(disabilitati):
+                self.tree.insert("", "end", values=("⚠ DISAB.", alias, "—", "—"))
+            for alias in sorted(presenti):
+                self.tree.insert("", "end", values=("✅ OK", alias, "—", "—"))
+
+        # ── Banner stato ──
+        if n_mancanti == 0:
+            self.lbl_stato_confronto.configure(
+                text=f"✅  Tutti i {len(alias_richiesti)} utensili presenti in macchina",
+                text_color=COLOR_SUCCESS)
+        else:
+            self.lbl_stato_confronto.configure(
+                text=f"❌  {len(mancanti)} mancanti  |  ⚠ {len(disabilitati)} disabilitati  |  {len(alias_richiesti)} totali",
+                text_color="#C62828")
+        self.lbl_fonte_db.configure(text=fonte)
+
+        # ── Abilita invio ──
         if self.file_paths:
             self.btn_invia_tutto.configure(state="normal")
-        
-        # Mostra messaggio solo se richiesto (confronto manuale)
+
         if show_message:
             messagebox.showinfo("Confronto completato",
-                               f"Utensili richiesti: {len(utensili_richiesti)}\n"
-                               f"Mancanti: {len(utensili_mancanti_report)}")
+                               f"Utensili richiesti: {len(alias_richiesti)}\n"
+                               f"Mancanti: {len(mancanti)}\n"
+                               f"Disabilitati: {len(disabilitati)}")
     
     def _on_double_click(self, event):
         """Doppio click su utensile mancante per aggiungerlo."""
@@ -365,6 +451,14 @@ class TabAnalisiNC:
             messagebox.showerror("Errore", f"Errore aggiunta utensile:\n{e}")
     
     
+    def _apri_calibra_settings(self):
+        """Apre il dialog impostazioni CALIBRA ONLY."""
+        try:
+            from ui.calibra_only_settings_dialog import show_calibra_settings
+            show_calibra_settings(self.parent)
+        except Exception as e:
+            messagebox.showerror("Errore", f"Errore apertura impostazioni:\n{e}")
+
     def _invia_tutto(self):
         """Invia tutti i file analizzati alla macchina."""
         if not self.file_paths:

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useNavigate } from 'react-router-dom';
 
 // ── Colori stati pallet ──────────────────────────────────────────
 const STATI = {
@@ -32,12 +33,40 @@ export default function CodaLavorazione() {
   const [error, setError]           = useState(null);
   const [palletMenu, setPalletMenu]  = useState(null);
   const [liveCtx, setLiveCtx]        = useState(null);
+  const [progettiPallet, setProgettiPallet] = useState({});  // {palletNum: {id,nome,colore,pct,...}}
+  const [modalAssegna, setModalAssegna]     = useState(null); // {palletId}
 
   const fetchLiveContext = async () => {
     try {
       const r = await fetch('/api/macchina-live/live-context')
       if (r.ok) setLiveCtx(await r.json())
     } catch {}
+  }
+
+  const navigate = typeof useNavigate === 'function' ? useNavigate() : null;
+
+  async function assegnaProgetto(palletNum, progettoId, progettoNome, progettoColore) {
+    // Scrivi sul pallet
+    await fetch(`/api/pallet/${palletNum}/assegna-progetto`, {
+      method: 'PATCH',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({progetto_id: progettoId, progetto_nome: progettoNome, progetto_colore: progettoColore})
+    });
+    // Scrivi anche sul progetto (pallet_assegnato)
+    if (progettoId) {
+      await fetch(`/api/progetti/${progettoId}`, {
+        method: 'PATCH',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({pallet_assegnato: palletNum})
+      });
+    }
+    fetchAll();
+  }
+
+  function avviaProgetto(palletNum) {
+    // Naviga a Progetti con il pallet preselezionato nel sessionStorage
+    sessionStorage.setItem('dmgdesk_avvia_pallet', JSON.stringify({palletNum}));
+    window.location.href = '/progetti';
   }
 
   const fetchAll = useCallback(async () => {
@@ -110,6 +139,83 @@ export default function CodaLavorazione() {
   const utensile      = macchina?.utensile_attivo || null;
   const tNum          = macchina?.numero_utensile   || null;
   const alarm         = macchina?.allarme?.replace(/^\|[^|]*\|[^|]*\| ?/, "") || null;
+
+  // Carica lista progetti per il modal
+  const [listaProgetti, setListaProgetti] = useState([]);
+  useEffect(()=>{
+    fetch('/api/progetti/').then(r=>r.ok?r.json():[]).then(d=>{
+      setListaProgetti((d.projects||d||[]).filter(p=>!p.archived))
+    }).catch(()=>{})
+  },[])
+
+  const ModalAssegna = () => {
+    if(!modalAssegna) return null;
+    const pid = modalAssegna.palletId;
+    return(
+      <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',
+        display:'flex',alignItems:'center',justifyContent:'center',zIndex:500}}
+        onClick={()=>setModalAssegna(null)}>
+        <div style={{background:'#fff',borderRadius:14,width:480,maxWidth:'92vw',
+          maxHeight:'80vh',display:'flex',flexDirection:'column',
+          border:'1px solid #D8D5CC',boxShadow:'0 16px 48px rgba(0,0,0,0.2)'}}
+          onClick={e=>e.stopPropagation()}>
+          <div style={{padding:'16px 20px 12px',borderBottom:'1px solid #E8E6E0',
+            display:'flex',alignItems:'center',gap:8}}>
+            <span style={{fontSize:16,fontWeight:800,color:'#1A1814',flex:1}}>
+              Assegna progetto — Pallet {pid}
+            </span>
+            <button onClick={()=>setModalAssegna(null)}
+              style={{background:'none',border:'1px solid #D8D5CC',borderRadius:6,
+                color:'#5A5750',fontSize:12,padding:'4px 10px',cursor:'pointer'}}>✕</button>
+          </div>
+          <div style={{flex:1,overflowY:'auto',padding:'8px 0'}}>
+            {/* Opzione rimuovi */}
+            {progettiPallet[pid] && (
+              <div onClick={()=>{assegnaProgetto(pid,null,null,null);setModalAssegna(null)}}
+                style={{padding:'10px 20px',cursor:'pointer',display:'flex',alignItems:'center',
+                  gap:8,borderBottom:'1px solid #F0EEE8'}}>
+                <span style={{fontSize:13,color:'#DC2626',fontWeight:600}}>✕ Rimuovi assegnazione</span>
+              </div>
+            )}
+            {listaProgetti.map(p=>(
+              <div key={p.id}
+                onClick={()=>{assegnaProgetto(pid,p.id,p.name,p.color||'#1D5FAD');setModalAssegna(null)}}
+                style={{padding:'10px 20px',cursor:'pointer',
+                  background:progettiPallet[pid]?.id===p.id?'#EFF6FF':'transparent',
+                  borderBottom:'1px solid #F5F4F0',
+                  display:'flex',alignItems:'center',gap:10,
+                  transition:'background 0.1s'}}>
+                <div style={{width:10,height:10,borderRadius:'50%',
+                  background:p.color||'#1D5FAD',flexShrink:0}}/>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:13,fontWeight:700,color:'#1A1814'}}>{p.name}</div>
+                  {(() => {
+                    const pgms = (p.steps||[]).flatMap(s=>s.tasks||[])
+                      .filter(t=>t.text?.trim().toLowerCase()==='fresatura')
+                      .flatMap(t=>t.programs||[]).filter(pg=>pg.tipoGruppo!=='ipm');
+                    const done = pgms.filter(pg=>pg.stato==='completato').length;
+                    return pgms.length > 0 ? (
+                      <div style={{fontSize:11,color:'#9A978E',marginTop:1}}>
+                        {done}/{pgms.length} programmi completati
+                      </div>
+                    ) : null;
+                  })()}
+                </div>
+                {progettiPallet[pid]?.id===p.id && (
+                  <span style={{fontSize:11,color:'#1D5FAD',fontWeight:700}}>● assegnato</span>
+                )}
+              </div>
+            ))}
+            {listaProgetti.length===0 && (
+              <div style={{padding:24,textAlign:'center',color:'#9A978E',fontSize:13}}>
+                Nessun progetto attivo
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div style={{
@@ -246,30 +352,43 @@ export default function CodaLavorazione() {
                   )}
                 </div>
 
-                {/* Stato + programma */}
-                <div>
-                  <div style={{
-                    fontSize: 9,
-                    fontWeight: 700,
-                    color: s.fg,
-                    opacity: 0.9,
-                    letterSpacing: 1,
-                    textTransform: "uppercase",
-                  }}>
+                {/* Stato + programma + progetto */}
+                <div style={{flex:1,minHeight:0,display:'flex',flexDirection:'column',justifyContent:'flex-end',gap:2}}>
+                  <div style={{fontSize:9,fontWeight:700,color:s.fg,opacity:0.9,letterSpacing:1,textTransform:'uppercase'}}>
                     {p.stato}
                   </div>
-                  {p.programma && (
-                    <div style={{
-                      fontSize: 9,
-                      color: s.fg,
-                      opacity: 0.55,
-                      marginTop: 2,
-                      whiteSpace: "nowrap",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                    }}>
-                      {p.programma}
+                  {/* Progetto assegnato */}
+                  {progettiPallet[p.id] ? (
+                    <div style={{marginTop:2}}>
+                      <div style={{display:'flex',alignItems:'center',gap:3}}>
+                        <div style={{width:6,height:6,borderRadius:'50%',background:progettiPallet[p.id].colore,flexShrink:0}}/>
+                        <span style={{fontSize:9,fontWeight:700,color:progettiPallet[p.id].colore,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:110}}>
+                          {progettiPallet[p.id].nome}
+                        </span>
+                      </div>
+                      <div style={{marginTop:3,height:3,background:'rgba(0,0,0,0.1)',borderRadius:2,overflow:'hidden'}}>
+                        <div style={{height:'100%',background:progettiPallet[p.id].colore,width:`${progettiPallet[p.id].pct}%`,borderRadius:2}}/>
+                      </div>
+                      <div style={{display:'flex',justifyContent:'space-between',marginTop:1}}>
+                        <span style={{fontSize:8,color:s.fg,opacity:0.6}}>{progettiPallet[p.id].completati}/{progettiPallet[p.id].totale} pgm</span>
+                        <span style={{fontSize:8,fontWeight:700,color:s.fg,opacity:0.8}}>{progettiPallet[p.id].pct}%</span>
+                      </div>
+                      {/* Bottone Avvia */}
+                      {progettiPallet[p.id].da_fare > 0 && (
+                        <button onClick={e=>{e.stopPropagation();avviaProgetto(p.id)}}
+                          style={{marginTop:4,width:'100%',background:'#1D5FAD',border:'none',borderRadius:4,
+                            color:'#fff',fontWeight:700,fontSize:8,padding:'3px 0',cursor:'pointer'}}>
+                          ▶ Avvia ({progettiPallet[p.id].da_fare})
+                        </button>
+                      )}
                     </div>
+                  ) : (
+                    <button onClick={e=>{e.stopPropagation();setModalAssegna({palletId:p.id})}}
+                      style={{marginTop:4,width:'100%',background:'transparent',
+                        border:'1px dashed rgba(0,0,0,0.2)',borderRadius:4,
+                        color:s.fg,opacity:0.5,fontWeight:600,fontSize:8,padding:'3px 0',cursor:'pointer'}}>
+                      + Assegna progetto
+                    </button>
                   )}
                 </div>
               </div>
@@ -277,7 +396,8 @@ export default function CodaLavorazione() {
           })}
         </div>
 
-        <style>{`
+        <ModalAssegna/>
+      <style>{`
           @keyframes blink {
             0%, 100% { opacity: 1; }
             50%       { opacity: 0.3; }

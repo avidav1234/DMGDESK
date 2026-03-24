@@ -514,6 +514,29 @@ async def debug_utensili(project_id: str):
     return {"project_id": project_id, "programs": result}
 
 
+
+@router.patch("/{project_id}")
+async def patch_project(project_id: str, body: dict):
+    """Aggiorna campi semplici di un progetto (es. pallet_assegnato)."""
+    config   = carica_configurazione()
+    data     = _load_progetti(config)
+    projects = data.get("projects", [])
+    project  = next((p for p in projects if p.get("id") == project_id), None)
+    if not project:
+        raise HTTPException(404, "Progetto non trovato")
+
+    ALLOWED = {"pallet_assegnato", "color", "description"}
+    for k, v in body.items():
+        if k in ALLOWED:
+            project[k] = v
+
+    now  = datetime.now().isoformat()
+    path = _progetti_path(config)
+    path.write_text(json.dumps({"projects": projects, "ultimo_aggiornamento": now},
+                               ensure_ascii=False, indent=2), encoding="utf-8")
+    return {"ok": True, "project_id": project_id}
+
+
 @router.get("/debug-setup")
 async def debug_setup():
     """Debug: mostra cosa vede analisi setup."""

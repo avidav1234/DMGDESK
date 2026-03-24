@@ -42,12 +42,16 @@ def _default_state() -> dict:
     return {
         "pallet": [
             {
-                "numero":    i + 1,
-                "stato":     "vuoto",
-                "programma": None,
-                "main":      None,
-                "commessa":  None,
-                "aggiornato": None,
+                "numero":          i + 1,
+                "stato":           "vuoto",
+                "programma":       None,
+                "main":            None,
+                "commessa":        None,
+                "aggiornato":      None,
+                "progetto_id":     None,
+                "progetto_nome":   None,
+                "progetto_colore": None,
+                "pct_avanzamento": None,
             }
             for i in range(N_PALLET)
         ],
@@ -189,3 +193,71 @@ async def invia_programma(numero: int, body: SetStatoBody):
 
     _save(config, state)
     return {"ok": True, "pallet": numero, "stato": "grezzo"}
+
+# ── Assegna progetto a pallet ──────────────────────────────────────────────
+
+class AssegnaProgettoBody(BaseModel):
+    progetto_id:     str | None = None
+    progetto_nome:   str | None = None
+    progetto_colore: str | None = None
+
+@router.patch("/{numero}/assegna-progetto")
+async def assegna_progetto(numero: int, body: AssegnaProgettoBody):
+    """Assegna o rimuove il progetto da un pallet."""
+    config = carica_configurazione()
+    state  = _load(config)
+    for p in state["pallet"]:
+        if p["numero"] == numero:
+            p["progetto_id"]     = body.progetto_id
+            p["progetto_nome"]   = body.progetto_nome
+            p["progetto_colore"] = body.progetto_colore
+            p["aggiornato"]      = datetime.now().isoformat()
+            _save(config, state)
+            return {"ok": True, "pallet": numero, "progetto_id": body.progetto_id}
+    raise HTTPException(404, f"Pallet {numero} non trovato")
+
+
+@router.get("/{numero}/progetto-info")
+async def get_progetto_info(numero: int):
+    """Ritorna info progetto + avanzamento per un pallet."""
+    from api.routers.progetti import _load_progetti
+    config = carica_configurazione()
+    state  = _load(config)
+    pallet = next((p for p in state["pallet"] if p["numero"] == numero), None)
+    if not pallet:
+        raise HTTPException(404, "Pallet non trovato")
+
+    pid = pallet.get("progetto_id")
+    if not pid:
+        return {"pallet": numero, "progetto": None}
+
+    data    = _load_progetti(config)
+    project = next((p for p in data.get("projects", []) if p.get("id") == pid), None)
+    if not project:
+        return {"pallet": numero, "progetto": None}
+
+    all_pgm = [pgm
+               for step in project.get("steps", [])
+               for task in step.get("tasks", [])
+               if task.get("text","").strip().lower() == "fresatura"
+               for pgm in task.get("programs", [])
+               if pgm.get("tipoGruppo") != "ipm"]
+
+    totale     = len(all_pgm)
+    completati = sum(1 for p in all_pgm if p.get("stato") == "completato")
+    in_mac     = sum(1 for p in all_pgm if p.get("stato") == "in_macchina")
+    pct        = round(completati / totale * 100, 1) if totale else 0
+
+    return {
+        "pallet": numero,
+        "progetto": {
+            "id":          project.get("id"),
+            "nome":        project.get("name"),
+            "colore":      project.get("color", "#1D5FAD"),
+            "totale":      totale,
+            "completati":  completati,
+            "in_macchina": in_mac,
+            "pct":         pct,
+            "da_fare":     sum(1 for p in all_pgm if p.get("stato") == "da_fare"),
+        }
+    }

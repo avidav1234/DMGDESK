@@ -343,8 +343,8 @@ export default function CodaLavorazione() {
 
         <div style={{
           display: "grid",
-          gridTemplateColumns: "repeat(2, 155px)",
-          gridTemplateRows: "repeat(3, 115px)",
+          gridTemplateColumns: "repeat(2, 200px)",
+          gridTemplateRows: "repeat(3, 155px)",
           gap: 10,
         }}>
           {pallets.map(p => {
@@ -379,7 +379,7 @@ export default function CodaLavorazione() {
               >
                 {/* Numero + indicatore pulsante */}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                  <span style={{ fontSize: 24, fontWeight: 900, color: s.fg, lineHeight: 1 }}>
+                  <span style={{ fontSize: 36, fontWeight: 900, color: s.fg, lineHeight: 1 }}>
                     P{p.id}
                   </span>
                   {isActive && (
@@ -395,7 +395,7 @@ export default function CodaLavorazione() {
 
                 {/* Stato + programma + progetto */}
                 <div style={{flex:1,minHeight:0,display:'flex',flexDirection:'column',justifyContent:'flex-end',gap:2}}>
-                  <div style={{fontSize:9,fontWeight:700,color:s.fg,opacity:0.9,letterSpacing:1,textTransform:'uppercase'}}>
+                  <div style={{fontSize:11,fontWeight:700,color:s.fg,opacity:0.9,letterSpacing:1,textTransform:'uppercase'}}>
                     {p.stato}
                   </div>
                   {/* Progetto assegnato */}
@@ -407,12 +407,12 @@ export default function CodaLavorazione() {
                           {progettiPallet[p.id].nome}
                         </span>
                       </div>
-                      <div style={{marginTop:3,height:3,background:'rgba(0,0,0,0.1)',borderRadius:2,overflow:'hidden'}}>
+                      <div style={{marginTop:4,height:5,background:'rgba(0,0,0,0.1)',borderRadius:3,overflow:'hidden'}}>
                         <div style={{height:'100%',background:progettiPallet[p.id].colore,width:`${progettiPallet[p.id].pct}%`,borderRadius:2}}/>
                       </div>
                       <div style={{display:'flex',justifyContent:'space-between',marginTop:1}}>
-                        <span style={{fontSize:8,color:s.fg,opacity:0.6}}>{progettiPallet[p.id].completati}/{progettiPallet[p.id].totale} pgm</span>
-                        <span style={{fontSize:8,fontWeight:700,color:s.fg,opacity:0.8}}>{progettiPallet[p.id].pct}%</span>
+                        <span style={{fontSize:10,color:s.fg,opacity:0.7}}>{progettiPallet[p.id].completati}/{progettiPallet[p.id].totale} pgm</span>
+                        <span style={{fontSize:10,fontWeight:700,color:s.fg,opacity:0.9}}>{progettiPallet[p.id].pct}%</span>
                       </div>
                       {/* Bottone Avvia */}
                       {progettiPallet[p.id].da_fare > 0 && (
@@ -454,104 +454,113 @@ export default function CodaLavorazione() {
       </div>
 
       {/* ── Pannello destro ─────────────────────────────────────── */}
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 12, minWidth: 0 }}>
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 10, minWidth: 0 }}>
 
-        {/* Stato macchina */}
+        {/* Stato macchina + programma + utensile — tutto in un blocco compatto */}
         <div style={{
-          background:   inLavorazione ? "#0d2d5e" : "#f8fafc",
+          background:   inLavorazione ? "#0d2d5e" : "#ffffff",
           border:       `1px solid ${inLavorazione ? "#1a4080" : "#e2e8f0"}`,
           borderRadius: 12,
           padding:      "14px 18px",
           display:      "flex",
-          alignItems:   "center",
-          gap:          12,
+          flexDirection: "column",
+          gap:          10,
         }}>
-          <div style={{
-            width:     11,
-            height:    11,
-            borderRadius: "50%",
-            flexShrink:   0,
-            background:   inLavorazione ? "#22c55e" : "#94a3b8",
-            boxShadow:    inLavorazione ? "0 0 6px #22c55e" : "none",
-          }} />
-          <div>
+          {/* Riga stato */}
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <div style={{
-              fontSize:   13,
-              fontWeight: 700,
-              color:      inLavorazione ? "#ffffff" : "#374151",
-            }}>
+              width: 12, height: 12, borderRadius: "50%", flexShrink: 0,
+              background:   inLavorazione ? "#22c55e" : "#94a3b8",
+              boxShadow:    inLavorazione ? "0 0 8px #22c55e" : "none",
+            }} />
+            <span style={{ fontSize: 14, fontWeight: 800,
+              color: inLavorazione ? "#ffffff" : "#374151" }}>
               {inLavorazione ? "IN LAVORAZIONE" : "FERMA"}
-            </div>
+            </span>
             {macchina?.pallet_attivo > 0 && (
-              <div style={{
-                fontSize: 10,
-                color:    inLavorazione ? "#93c5fd" : "#94a3b8",
-                marginTop: 2,
-              }}>
-                Pallet {macchina.palletAttivo} in macchina
-              </div>
+              <span style={{ fontSize: 11, color: inLavorazione ? "#93c5fd" : "#94a3b8" }}>
+                · Pallet {macchina.pallet_attivo}
+              </span>
             )}
           </div>
-        </div>
 
-        {/* Programma in esecuzione */}
-        <div style={{
-          background:   "#ffffff",
-          border:       "1px solid #e2e8f0",
-          borderRadius: 12,
-          padding:      "14px 18px",
-          flex:         "0 0 auto",
-        }}>
-          <div style={{ fontSize: 10, color: "#94a3b8", letterSpacing: 1, marginBottom: 8 }}>
-            PROGRAMMA
-          </div>
-          {prog ? (
-            <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
-              {prog.commessa && (
-                <div>
-                  <div style={{ fontSize: 9, color: "#94a3b8" }}>COMMESSA</div>
-                  <div style={{ fontSize: 16, fontWeight: 800, color: "#0d2d5e" }}>{prog.commessa}</div>
-                </div>
-              )}
-              {prog.posizione && (
-                <div>
-                  <div style={{ fontSize: 9, color: "#94a3b8" }}>POSIZIONE</div>
-                  <div style={{ fontSize: 16, fontWeight: 800, color: "#0d2d5e" }}>{prog.posizione}</div>
-                </div>
-              )}
-              {prog.fase && (
-                <div>
-                  <div style={{ fontSize: 9, color: "#94a3b8" }}>FASE</div>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: "#475569" }}>{prog.fase}</div>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div style={{ fontSize: 12, color: "#94a3b8" }}>—</div>
-          )}
-        </div>
-
-        {/* Utensile attivo */}
-        <div style={{
-          background:   "#ffffff",
-          border:       "1px solid #e2e8f0",
-          borderRadius: 12,
-          padding:      "14px 18px",
-        }}>
-          <div style={{ fontSize: 10, color: "#94a3b8", letterSpacing: 1, marginBottom: 6 }}>
-            UTENSILE ATTIVO
-          </div>
-          {utensile ? (
+          {/* Programma + utensile sulla stessa riga */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <div>
-              <div style={{ fontSize: 17, fontWeight: 700, color: "#0d2d5e" }}>{utensile}</div>
-              {tNum > 0 && (
-                <div style={{ fontSize: 10, color: "#64748b", marginTop: 2 }}>T{tNum}</div>
+              <div style={{ fontSize: 10, letterSpacing: 1, marginBottom: 4,
+                color: inLavorazione ? "#93c5fd" : "#94a3b8" }}>PROGRAMMA</div>
+              {prog ? (
+                <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                  {(prog.commessa || prog.posizione) && (
+                    <div style={{ fontSize: 18, fontWeight: 800,
+                      color: inLavorazione ? "#ffffff" : "#0d2d5e" }}>
+                      {prog.commessa}{prog.posizione ? `_${prog.posizione}` : ""}
+                    </div>
+                  )}
+                  {prog.fase && (
+                    <div style={{ fontSize: 11, color: inLavorazione ? "#93c5fd" : "#64748b" }}>
+                      {prog.fase}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <span style={{ fontSize: 13, color: inLavorazione ? "#4e7aad" : "#94a3b8" }}>—</span>
               )}
             </div>
-          ) : (
-            <div style={{ fontSize: 12, color: "#94a3b8" }}>—</div>
-          )}
+            <div>
+              <div style={{ fontSize: 10, letterSpacing: 1, marginBottom: 4,
+                color: inLavorazione ? "#93c5fd" : "#94a3b8" }}>UTENSILE</div>
+              {utensile ? (
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 700,
+                    color: inLavorazione ? "#ffffff" : "#0d2d5e" }}>{utensile}</div>
+                  {tNum > 0 && (
+                    <div style={{ fontSize: 10, color: inLavorazione ? "#93c5fd" : "#64748b", marginTop: 2 }}>
+                      T{tNum}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <span style={{ fontSize: 13, color: inLavorazione ? "#4e7aad" : "#94a3b8" }}>—</span>
+              )}
+            </div>
+          </div>
         </div>
+
+        {/* Progetti attivi sui pallet — riepilogo */}
+        {Object.keys(progettiPallet).length > 0 && (
+          <div style={{ background: "#ffffff", border: "1px solid #e2e8f0",
+            borderRadius: 12, padding: "14px 18px" }}>
+            <div style={{ fontSize: 10, color: "#94a3b8", letterSpacing: 1, marginBottom: 10 }}>
+              PROGETTI IN CORSO
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {Object.entries(progettiPallet).map(([palletNum, proj]) => (
+                <div key={palletNum} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b", minWidth: 24 }}>
+                    P{palletNum}
+                  </span>
+                  <div style={{ width: 8, height: 8, borderRadius: "50%",
+                    background: proj.colore, flexShrink: 0 }}/>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: "#0d2d5e", flex: 1,
+                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {proj.nome}
+                  </span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <div style={{ width: 60, height: 5, background: "#e2e8f0",
+                      borderRadius: 3, overflow: "hidden" }}>
+                      <div style={{ height: "100%", background: proj.colore,
+                        width: `${proj.pct}%`, borderRadius: 3 }}/>
+                    </div>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: "#374151", minWidth: 32 }}>
+                      {proj.pct}%
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Allarmi */}
         {alarm && (

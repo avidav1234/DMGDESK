@@ -38,12 +38,17 @@ export default function AnalisiNC() {
 
   // ── Nome cartella (condiviso tra MAIN e invio) ───────────────────────────
   const [nomeCartella, setNomeCartella] = useState('')
+  const [fase, setFase]                   = useState('')
 
   // ── Percorso salvataggio MAIN ─────────────────────────────────────────────
   const [radiceNcInput, setRadiceNcInput] = useState('')
   const [commessa, setCommessa]     = useState('')
   const [posizione, setPosizione]   = useState('')
   const [cartelleRecenti, setCartelleRecenti] = useState([])
+
+  const nomeCompleto = nomeCartella.trim() && fase.trim()
+    ? `${nomeCartella.trim()}_${fase.trim()}`
+    : nomeCartella.trim()
 
   const percorso = radiceNcInput.trim() && commessa.trim() && posizione.trim()
     ? [radiceNcInput.trim().replace(/[\\/]+$/, ''), commessa.trim(), posizione.trim()].join('\\')
@@ -112,7 +117,7 @@ export default function AnalisiNC() {
   const clearAll = () => {
     setEntries([]); setCheckResult(null); setInvioResults([])
     setMainGeneratoFile(null); setMainPreview(null); setShowPreview(false)
-    setFonteDb(''); setGlobalSuccess(null)
+    setFonteDb(''); setGlobalSuccess(null); setFase('')
   }
 
   // ── Dati aggregati ────────────────────────────────────────────────────────
@@ -164,7 +169,7 @@ export default function AnalisiNC() {
     }))
     setMainBusy(true); setMainError(null)
     try {
-      const res = await api.salvaMain({ nome_cartella: nomeCartella, percorso_cartella: percorso, programmi })
+      const res = await api.salvaMain({ nome_cartella: nomeCompleto, percorso_cartella: percorso, programmi })
       setGlobalSuccess(`✓ ${res.nome_file} salvato`)
       const blob = new Blob([''], { type: 'text/plain' })
       setMainGeneratoFile(new File([blob], res.nome_file, { type: 'text/plain' }))
@@ -230,72 +235,102 @@ export default function AnalisiNC() {
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 0 }}>
 
-      {/* ── Top bar ── */}
+      {/* ── Top bar: ordine flow ── */}
+      {/* SX: Aggiungi | Nome | Fase(opz.) | Genera MAIN | Reset | banner stato */}
+      {/* DX: Verifica | Invia tutto | Solo MAIN */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 0 8px', flexShrink: 0 }}>
 
-        {/* Drop zone compatta */}
+        {/* 1. Aggiungi file */}
         <div onClick={() => inputRef.current?.click()}
           onDragOver={e => { e.preventDefault(); setDragging(true) }}
           onDragLeave={() => setDragging(false)}
           onDrop={e => { e.preventDefault(); setDragging(false); addFiles(e.dataTransfer.files) }}
-          style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 16px',
+          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px',
             border: `1.5px dashed ${dragging ? 'var(--cyan)' : 'var(--border-bright)'}`,
-            borderRadius: 8, cursor: 'pointer', background: dragging ? 'var(--cyan-glow)' : 'var(--bg-card)',
+            borderRadius: 7, cursor: 'pointer',
+            background: dragging ? 'var(--cyan-glow)' : 'var(--navy-700)',
             transition: 'all 0.15s', flexShrink: 0 }}>
           <input ref={inputRef} type="file" accept=".mpf,.nc,.spf" multiple style={{ display: 'none' }}
             onChange={e => { addFiles(e.target.files); e.target.value = '' }} />
-          <span style={{ fontSize: 14 }}>+</span>
-          <span style={{ fontSize: 12, fontWeight: 600 }}>Aggiungi file</span>
-          <span style={{ fontSize: 10, color: 'var(--text-dim)' }}>MPF · NC · SPF</span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: 'white' }}>+ Aggiungi file</span>
         </div>
 
+        {/* 2. Nome cartella */}
+        <input value={nomeCartella} onChange={e => { setNomeCartella(e.target.value); setMainError(null) }}
+          placeholder="Nome cartella"
+          style={{ ...inputStyle, width: 120, fontWeight: 600, fontSize: 12 }}
+          onFocus={e => e.target.style.borderColor = 'var(--cyan)'}
+          onBlur={e => e.target.style.borderColor = 'var(--border)'} />
+
+        {/* 3. Fase opzionale */}
+        <input value={fase} onChange={e => { setFase(e.target.value); setMainError(null) }}
+          placeholder="Fase (opz.)"
+          style={{ ...inputStyle, width: 90, fontSize: 11 }}
+          onFocus={e => e.target.style.borderColor = 'var(--cyan)'}
+          onBlur={e => e.target.style.borderColor = 'var(--border)'} />
+
+        {/* 4. Genera MAIN */}
+        <button onClick={handleGeneraMain}
+          disabled={mainBusy || !done.length || !nomeCartella.trim() || !percorso}
+          style={{ padding: '7px 14px', borderRadius: 7, fontSize: 12, fontWeight: 700,
+            cursor: (mainBusy || !done.length || !nomeCartella.trim() || !percorso) ? 'not-allowed' : 'pointer',
+            background: (!done.length || !nomeCartella.trim() || !percorso) ? 'var(--bg-hover)' : 'var(--navy-700)',
+            border: 'none', color: (!done.length || !nomeCartella.trim() || !percorso) ? 'var(--text-dim)' : 'white',
+            flexShrink: 0 }}>
+          {mainBusy ? '⏳ ...' : '📄 Genera MAIN'}
+        </button>
+
+        {/* 5. Reset */}
         {entries.length > 0 && (
-          <button onClick={clearAll} style={btnGhost}>Reset</button>
+          <button onClick={clearAll} style={{ ...btnGhost, fontSize: 12 }}>Reset</button>
         )}
 
-        {/* Spinner analisi */}
-        {analyzing && <span style={{ fontSize: 12, color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: 6 }}><Spinner small /> Analisi...</span>}
+        {/* Spinner */}
+        {analyzing && <span style={{ fontSize: 11, color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}><Spinner small /> Analisi...</span>}
 
-        {/* Banner stato aggregato */}
+        {/* Banner stato */}
         {done.length > 0 && !analyzing && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 4 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
             {tuttoOk
-              ? <span style={{ fontSize: 12, fontWeight: 700, color: '#15803d' }}>✅ Tutti i {totUtensili} utensili presenti</span>
-              : <span style={{ fontSize: 12, fontWeight: 700, color: '#dc2626' }}>
+              ? <span style={{ fontSize: 11, fontWeight: 700, color: '#15803d' }}>✅ Tutti i {totUtensili} utensili OK</span>
+              : <span style={{ fontSize: 11, fontWeight: 700, color: '#dc2626' }}>
                   {allMancanti.length > 0 && `✕ ${allMancanti.length} mancanti`}
                   {allMancanti.length > 0 && allDisab.length > 0 && '  '}
-                  {allDisab.length > 0 && `⚠ ${allDisab.length} disabilitati`}
-                  <span style={{ color: 'var(--text-dim)', fontWeight: 400, marginLeft: 8 }}>di {totUtensili}</span>
+                  {allDisab.length > 0 && `⚠ ${allDisab.length} disab.`}
+                  <span style={{ color: 'var(--text-dim)', fontWeight: 400, marginLeft: 6 }}>/ {totUtensili}</span>
                 </span>
             }
-            {fonteDb && <span style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>· {fonteDb}</span>}
+            {fonteDb && <span style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>{fonteDb}</span>}
           </div>
+        )}
+        {mainGeneratoFile && (
+          <span style={{ fontSize: 10, color: '#15803d', fontFamily: 'var(--font-mono)', flexShrink: 0 }}>✓ {mainGeneratoFile.name}</span>
         )}
 
         {/* Spazio */}
         <div style={{ flex: 1 }} />
 
-        {/* Invia tutto */}
+        {/* DESTRA: invio */}
         <button onClick={doCheck} disabled={checking || sending || !fileDaInviare.length || !progetto}
-          style={{ ...btnGhost, fontSize: 12 }}>
+          style={{ padding: '7px 12px', borderRadius: 7, fontSize: 12, fontWeight: 600,
+            cursor: (checking || !fileDaInviare.length || !progetto) ? 'not-allowed' : 'pointer',
+            background: 'var(--bg-hover)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>
           {checking ? '⏳' : '🔍'} Verifica
         </button>
         <button onClick={() => doSend(false)}
           disabled={!checkResult?.reachable || sending || !fileDaInviare.length || !progetto}
-          style={{ padding: '7px 14px', borderRadius: 6, fontSize: 12, fontWeight: 700,
+          style={{ padding: '7px 14px', borderRadius: 7, fontSize: 12, fontWeight: 700,
             cursor: (!checkResult?.reachable || sending) ? 'not-allowed' : 'pointer',
-            background: checkResult?.reachable ? 'rgba(22,163,74,0.12)' : 'var(--bg-hover)',
-            border: `1px solid ${checkResult?.reachable ? 'rgba(22,163,74,0.35)' : 'var(--border)'}`,
-            color: checkResult?.reachable ? '#15803d' : 'var(--text-dim)' }}>
+            background: checkResult?.reachable && !sending ? 'var(--navy-700)' : 'var(--bg-hover)',
+            border: 'none', color: checkResult?.reachable && !sending ? 'white' : 'var(--text-dim)' }}>
           {sending ? '⏳' : '📤'} Invia tutto
         </button>
         {mainGeneratoFile && (
           <button onClick={() => doSend(true)} disabled={!checkResult?.reachable || sending || !progetto}
-            style={{ padding: '7px 14px', borderRadius: 6, fontSize: 12, fontWeight: 700,
+            style={{ padding: '7px 14px', borderRadius: 7, fontSize: 12, fontWeight: 700,
               cursor: (!checkResult?.reachable || sending) ? 'not-allowed' : 'pointer',
-              background: checkResult?.reachable ? 'rgba(59,130,246,0.10)' : 'var(--bg-hover)',
-              border: `1px solid ${checkResult?.reachable ? 'rgba(59,130,246,0.35)' : 'var(--border)'}`,
-              color: checkResult?.reachable ? '#1d4ed8' : 'var(--text-dim)' }}>
+              background: checkResult?.reachable && !sending ? 'var(--navy-700)' : 'var(--bg-hover)',
+              border: 'none', color: checkResult?.reachable && !sending ? 'white' : 'var(--text-dim)' }}>
             📤 Solo MAIN
           </button>
         )}
@@ -453,9 +488,9 @@ export default function AnalisiNC() {
                 })}
               </div>
             )}
-            {percorso && nomeCartella && (
+            {percorso && nomeCompleto && (
               <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: '#15803d', marginTop: 2 }}>
-                → {percorso}\0_MAIN_{nomeCartella.toUpperCase()}.MPF
+                → {percorso}\0_MAIN_{nomeCompleto.toUpperCase()}.MPF
               </div>
             )}
           </div>

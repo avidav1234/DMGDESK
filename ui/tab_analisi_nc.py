@@ -72,35 +72,70 @@ class TabAnalisiNC:
     # ── UI ────────────────────────────────────────────────────────────────────
 
     def _create_ui(self):
-        # ── Zona azioni (top bar compatta) ────────────────────────────────
+        # ── Top bar: ordine flow ─────────────────────────────────────────
+        # SINISTRA: + Aggiungi | Nome | Fase(opz.) | Genera MAIN | Reset
+        # CENTRO:   Banner stato
+        # DESTRA:   Invia tutto | Solo MAIN | ⚙
+
         top = ctk.CTkFrame(self.parent, fg_color="white",
-                           corner_radius=0, height=56,
-                           border_width=0)
+                           corner_radius=0, height=58, border_width=0)
         top.pack(fill="x")
         top.pack_propagate(False)
 
-        # Sinistra: azioni primarie
-        left = ctk.CTkFrame(top, fg_color="transparent")
-        left.pack(side="left", padx=12, pady=8)
+        BTN_COLOR = COLOR_PRIMARY   # unico colore per tutti i pulsanti primari
+        BTN_HOVER  = "#1565C0"
+        BTN_H      = 36
 
-        self.btn_seleziona = ctk.CTkButton(
+        # ── SINISTRA ──────────────────────────────────────────────────────
+        left = ctk.CTkFrame(top, fg_color="transparent")
+        left.pack(side="left", padx=10, pady=10)
+
+        # 1. Aggiungi file
+        ctk.CTkButton(
             left, text="+ Aggiungi file",
             command=self._seleziona_files,
-            fg_color=COLOR_PRIMARY, hover_color="#1565C0",
-            font=get_font("medium", bold=True), height=38, width=130, corner_radius=8)
-        self.btn_seleziona.pack(side="left", padx=(0, 6))
+            fg_color=BTN_COLOR, hover_color=BTN_HOVER,
+            font=get_font("medium", bold=True), height=BTN_H, width=120, corner_radius=6
+        ).pack(side="left", padx=(0, 6))
 
-        self.btn_reset = ctk.CTkButton(
+        # 2. Nome cartella
+        ctk.CTkLabel(left, text="Nome:", font=get_font("small"),
+                     text_color="#90A4AE").pack(side="left", padx=(0, 3))
+        self.entry_nome = ctk.CTkEntry(
+            left, width=100, height=BTN_H,
+            placeholder_text="es. Fase-3",
+            font=get_font("body"), corner_radius=6)
+        self.entry_nome.pack(side="left", padx=(0, 6))
+
+        # 3. Fase opzionale
+        ctk.CTkLabel(left, text="Fase:", font=get_font("small"),
+                     text_color="#90A4AE").pack(side="left", padx=(0, 3))
+        self.entry_fase = ctk.CTkEntry(
+            left, width=70, height=BTN_H,
+            placeholder_text="opz.",
+            font=get_font("body"), corner_radius=6)
+        self.entry_fase.pack(side="left", padx=(0, 6))
+
+        # 4. Genera MAIN
+        self.btn_genera = ctk.CTkButton(
+            left, text="📄 Genera MAIN",
+            command=self._genera_main,
+            fg_color=BTN_COLOR, hover_color=BTN_HOVER,
+            font=get_font("medium", bold=True), height=BTN_H, width=125, corner_radius=6)
+        self.btn_genera.pack(side="left", padx=(0, 4))
+
+        # 5. Reset
+        ctk.CTkButton(
             left, text="Reset",
             command=self._pulisci_lista,
             fg_color="#ECEFF1", hover_color="#CFD8DC",
             text_color="#546E7A",
-            font=get_font("medium"), height=38, width=70, corner_radius=8)
-        self.btn_reset.pack(side="left")
+            font=get_font("medium"), height=BTN_H, width=60, corner_radius=6
+        ).pack(side="left")
 
-        # Centro: banner stato (appare dopo analisi)
+        # ── CENTRO: banner stato ──────────────────────────────────────────
         self.frame_stato = ctk.CTkFrame(top, fg_color="transparent")
-        self.frame_stato.pack(side="left", padx=16, fill="y")
+        self.frame_stato.pack(side="left", padx=14, fill="y")
         self.lbl_stato = ctk.CTkLabel(
             self.frame_stato, text="",
             font=get_font("medium", bold=True), anchor="w")
@@ -110,52 +145,34 @@ class TabAnalisiNC:
             font=get_font("small"), text_color="#90A4AE", anchor="w")
         self.lbl_fonte.pack(anchor="w")
 
-        # Destra: invio + MAIN
+        # ── DESTRA: invio ─────────────────────────────────────────────────
         right = ctk.CTkFrame(top, fg_color="transparent")
-        right.pack(side="right", padx=12, pady=8)
+        right.pack(side="right", padx=10, pady=10)
 
-        # ⚙ Calibra (piccolo, discreto)
+        # ⚙ Calibra
         ctk.CTkButton(
             right, text="⚙",
             command=self._apri_calibra_settings,
             fg_color="transparent", hover_color="#ECEFF1",
             text_color="#B0BEC5", border_width=1, border_color="#CFD8DC",
-            font=get_font("small"), height=30, width=30, corner_radius=6
+            font=get_font("small"), height=28, width=28, corner_radius=6
         ).pack(side="right", padx=(4, 0))
 
-        # Campo nome progetto
-        self.entry_nome = ctk.CTkEntry(
-            right, width=110, height=38,
-            placeholder_text="Nome progetto",
-            font=get_font("body"), corner_radius=8)
-        self.entry_nome.pack(side="right", padx=6)
-
-        ctk.CTkLabel(right, text="Progetto:", font=get_font("small"),
-                     text_color="#90A4AE").pack(side="right", padx=(0, 2))
-
-        # Genera MAIN
-        self.btn_genera = ctk.CTkButton(
-            right, text="📄  Genera MAIN",
-            command=self._genera_main,
-            fg_color="#5C6BC0", hover_color="#3949AB",
-            font=get_font("medium", bold=True), height=38, width=130, corner_radius=8)
-        self.btn_genera.pack(side="right", padx=6)
-
-        # Solo MAIN (blu, disabilitato finché MAIN non generato)
+        # Solo MAIN
         self.btn_solo_main = ctk.CTkButton(
-            right, text="📤  Solo MAIN",
+            right, text="📤 Solo MAIN",
             command=self._invia_solo_main,
-            fg_color="#1E88E5", hover_color="#1565C0",
-            font=get_font("medium"), height=38, width=115, corner_radius=8,
+            fg_color=BTN_COLOR, hover_color=BTN_HOVER,
+            font=get_font("medium"), height=BTN_H, width=110, corner_radius=6,
             state="disabled")
         self.btn_solo_main.pack(side="right", padx=3)
 
-        # Invia tutto (verde, disabilitato finché no file)
+        # Invia tutto
         self.btn_invia = ctk.CTkButton(
-            right, text="📤  Invia tutto",
+            right, text="📤 Invia tutto",
             command=self._invia_tutto,
-            fg_color="#43A047", hover_color="#2E7D32",
-            font=get_font("medium"), height=38, width=115, corner_radius=8,
+            fg_color=BTN_COLOR, hover_color=BTN_HOVER,
+            font=get_font("medium"), height=BTN_H, width=110, corner_radius=6,
             state="disabled")
         self.btn_invia.pack(side="right", padx=3)
 
@@ -311,6 +328,9 @@ class TabAnalisiNC:
         self.lbl_fonte.configure(text="")
         self.btn_invia.configure(state="disabled")
         self.btn_solo_main.configure(state="disabled")
+        self.entry_nome.delete(0, "end")
+        if hasattr(self, 'entry_fase'):
+            self.entry_fase.delete(0, "end")
         self._show_placeholder()
 
     def _aggiorna_lista(self):
@@ -530,10 +550,12 @@ class TabAnalisiNC:
             return messagebox.showwarning("Attenzione", "Seleziona almeno un file")
         nome = self.entry_nome.get().strip()
         if not nome:
-            return messagebox.showwarning("Attenzione", "Inserisci il nome progetto")
+            return messagebox.showwarning("Attenzione", "Inserisci il nome cartella")
+        fase = self.entry_fase.get().strip() if hasattr(self, 'entry_fase') else ""
+        nome_completo = f"{nome}_{fase}" if fase else nome
         try:
             from logic.nc_analyzer import genera_programma_main_gcode
-            gcode, filename = genera_programma_main_gcode(self.file_paths, nome)
+            gcode, filename = genera_programma_main_gcode(self.file_paths, nome_completo)
             save_path = filedialog.asksaveasfilename(
                 title="Salva MAIN", initialfile=filename,
                 defaultextension=".MPF",

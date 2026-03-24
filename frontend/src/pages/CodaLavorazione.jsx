@@ -30,6 +30,7 @@ export default function CodaLavorazione() {
   const [macchina, setMacchina]     = useState(null);
   const [lastUpdate, setLastUpdate] = useState(null);
   const [error, setError]           = useState(null);
+  const [palletMenu, setPalletMenu]  = useState(null);
 
   const fetchAll = useCallback(async () => {
     try {

@@ -24,7 +24,17 @@ N_PALLET       = 6
 
 
 def _pallet_path(config: dict) -> Path:
-    base = config.get("percorso_nc_base", ".")
+    """Salva pallet_state.json nella stessa cartella di tools_machine.json."""
+    base = (config.get("tools_toa_folder") or "").strip()
+    if not base:
+        # fallback: radice da percorso_nc_base
+        nc = (config.get("percorso_nc_base") or "").strip()
+        if nc:
+            from pathlib import PurePath
+            parts = PurePath(nc).parts
+            base = str(Path(parts[0]) / parts[1]) if len(parts) >= 2 else nc
+    if not base:
+        base = "."
     return Path(base) / "pallet_state.json"
 
 

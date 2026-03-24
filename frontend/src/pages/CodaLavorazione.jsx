@@ -73,16 +73,23 @@ export default function CodaLavorazione() {
   }, [fetchAll]);
 
   const setPalletStato = async (id, stato) => {
-    if (stato === "IN LAVORAZIONE") return; // gestito automaticamente
+    if (stato === "IN LAVORAZIONE") return;
+    // Aggiornamento ottimistico immediato
+    setPallets(prev => prev.map(p => p.id === id ? { ...p, stato } : p));
     try {
-      await fetch(`/api/pallet/${id}`, {
+      const res = await fetch(`/api/pallet/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ stato: stato.toLowerCase() }),
       });
-      await fetchAll();
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        setError(`Errore: ${err.detail || res.status}`);
+        await fetchAll(); // ripristina stato reale
+      }
     } catch {
       setError("Errore aggiornamento");
+      await fetchAll();
     }
   };
 

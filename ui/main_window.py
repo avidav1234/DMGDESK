@@ -104,6 +104,7 @@ class MainWindow(ctk.CTk):
         self.tabview.add("🏠 Scaffale")
         self.tabview.add("📦 Smontati")
         self.tabview.add("🔩 Holder & Bussole")
+        self.tabview.add("📋 Progetti")
         
         # Inizializza tabs
         self.tab_analisi_nc = TabAnalisiNC(
@@ -142,7 +143,7 @@ class MainWindow(ctk.CTk):
         )
 
         self.tab_progetti = TabProgetti(
-            self.tabview.tab("Progetti"), self
+            self.tabview.tab("📋 Progetti"), self
         )
         
         # Imposta tab Analisi NC come default

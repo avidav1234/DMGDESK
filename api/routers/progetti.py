@@ -89,8 +89,9 @@ async def get_progetti():
                 proj["pallet_assegnato"] = pallet_map[pid]
             elif "pallet_assegnato" not in proj:
                 proj["pallet_assegnato"] = None
-    except Exception:
-        pass
+    except Exception as _e:
+        import traceback; traceback.print_exc()
+        print(f'[get_progetti] errore pallet_state: {_e}')
 
     return {
         "projects":  projects,

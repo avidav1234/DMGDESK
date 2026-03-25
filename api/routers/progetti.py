@@ -97,6 +97,110 @@ async def get_progetti():
         "path":      str(_progetti_path(config)),
     }
 
+# ── Route statiche (DEVONO stare prima di /{project_id}) ─────────────────────
+
+@router.get("/deliveries")
+async def get_deliveries():
+    """Tutte le scadenze di consegna."""
+    config = carica_configurazione()
+    return _load_deliveries(config)
+
+
+@router.put("/deliveries")
+async def save_deliveries(body: Any = Body(...)):
+    """Salva l'intera lista deliveries (sostituisce tutto)."""
+    config = carica_configurazione()
+    deliveries = body if isinstance(body, list) else []
+    _save_deliveries(config, deliveries)
+    return {"ok": True, "count": len(deliveries)}
+
+
+@router.get("/export")
+async def export_backup():
+    """Esporta tutti i dati come backup JSON (compatibile con WorkTrack)."""
+    from fastapi.responses import JSONResponse
+    from datetime import datetime
+    config = carica_configurazione()
+    data = _load_progetti(config)
+    templates = _load_templates(config)
+    payload = {
+        "_worktrack": True,
+        "version": 2,
+        "exportedAt": datetime.now().isoformat(),
+        "label": f"Backup DMGDesk {datetime.now().strftime('%Y-%m-%d')}",
+        "projects": data.get("projects", []),
+        "templates": templates,
+    }
+    return JSONResponse(content=payload, headers={
+        "Content-Disposition": f"attachment; filename=worktrack_backup_{datetime.now().strftime('%Y-%m-%d')}.json"
+    })
+
+
+@router.get("/debug-stato")
+async def debug_stato():
+    """Debug: mostra pallet_state, deliveries e config in un colpo solo."""
+    import traceback
+    config = carica_configurazione()
+    result = {
+        "tools_toa_folder": config.get("tools_toa_folder"),
+        "pallet_state": None,
+        "pallet_state_error": None,
+        "pallet_state_path": None,
+        "deliveries": None,
+        "deliveries_error": None,
+        "deliveries_path": None,
+        "progetti_count": 0,
+        "progetti_con_pallet": [],
+    }
+    try:
+        from api.routers.pallet import _load as _load_pallet, _pallet_path
+        pp = _pallet_path(config)
+        result["pallet_state_path"] = str(pp)
+        result["pallet_state_exists"] = pp.exists()
+        ps = _load_pallet(config)
+        result["pallet_state"] = [
+            {"numero": p["numero"], "stato": p.get("stato"), "progetto_id": p.get("progetto_id"), "progetto_nome": p.get("progetto_nome")}
+            for p in ps.get("pallet", [])
+        ]
+    except Exception as e:
+        result["pallet_state_error"] = f"{e}\n{traceback.format_exc()}"
+    try:
+        dp = _deliveries_path(config)
+        result["deliveries_path"] = str(dp)
+        result["deliveries_exists"] = dp.exists()
+        result["deliveries"] = _load_deliveries(config)
+    except Exception as e:
+        result["deliveries_error"] = f"{e}\n{traceback.format_exc()}"
+    try:
+        data = _load_progetti(config)
+        projs = data.get("projects", [])
+        result["progetti_count"] = len(projs)
+        pallet_map = {}
+        if result["pallet_state"]:
+            pallet_map = {p["progetto_id"]: p["numero"] for p in result["pallet_state"] if p.get("progetto_id")}
+        result["progetti_con_pallet"] = [
+            {"id": p.get("id"), "name": p.get("name"), "pallet": pallet_map.get(p.get("id"))}
+            for p in projs if pallet_map.get(p.get("id"))
+        ]
+    except Exception as e:
+        result["progetti_error"] = str(e)
+    return result
+
+
+@router.get("/debug-setup")
+async def debug_setup():
+    """Debug: mostra cosa vede analisi setup."""
+    from api.routers.progetti_utensili import estrai_alias_da_progetti
+    config = carica_configurazione()
+    alias_map = estrai_alias_da_progetti(config)
+    return {
+        "nc_base": config.get("percorso_nc_base"),
+        "tools_folder": config.get("tools_toa_folder"),
+        "n_alias": len(alias_map),
+        "alias_sample": {k: v[:2] for k, v in list(alias_map.items())[:10]},
+    }
+
+
 @router.put("/{project_id}")
 async def update_progetto(project_id: str, body: ProgettoUpdate):
     """Salva un progetto (crea o aggiorna)."""
@@ -219,27 +323,6 @@ async def import_backup(body: ImportBody):
         "templates": len(body.templates),
         "mode": body.mode,
     }
-
-
-@router.get("/export")
-async def export_backup():
-    """Esporta tutti i dati come backup JSON (compatibile con WorkTrack)."""
-    from fastapi.responses import JSONResponse
-    from datetime import datetime
-    config = carica_configurazione()
-    data = _load_progetti(config)
-    templates = _load_templates(config)
-    payload = {
-        "_worktrack": True,
-        "version": 2,
-        "exportedAt": datetime.now().isoformat(),
-        "label": f"Backup DMGDesk {datetime.now().strftime('%Y-%m-%d')}",
-        "projects": data.get("projects", []),
-        "templates": templates,
-    }
-    return JSONResponse(content=payload, headers={
-        "Content-Disposition": f"attachment; filename=worktrack_backup_{datetime.now().strftime('%Y-%m-%d')}.json"
-    })
 
 
 # ── Utensili check ──────────────────────────────────────────────────────────
@@ -586,92 +669,6 @@ def _save_deliveries(config: dict, deliveries: list):
     path = _deliveries_path(config)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(deliveries, ensure_ascii=False, indent=2), encoding="utf-8")
-
-
-@router.get("/deliveries")
-async def get_deliveries():
-    """Tutte le scadenze di consegna."""
-    config = carica_configurazione()
-    return _load_deliveries(config)
-
-
-@router.put("/deliveries")
-async def save_deliveries(body: Any = Body(...)):
-    """Salva l'intera lista deliveries (sostituisce tutto)."""
-    config = carica_configurazione()
-    deliveries = body if isinstance(body, list) else []
-    _save_deliveries(config, deliveries)
-    return {"ok": True, "count": len(deliveries)}
-
-
-
-@router.get("/debug-stato")
-async def debug_stato():
-    """Debug: mostra pallet_state, deliveries e config in un colpo solo."""
-    import traceback
-    config = carica_configurazione()
-    result = {
-        "tools_toa_folder": config.get("tools_toa_folder"),
-        "pallet_state": None,
-        "pallet_state_error": None,
-        "pallet_state_path": None,
-        "deliveries": None,
-        "deliveries_error": None,
-        "deliveries_path": None,
-        "progetti_count": 0,
-        "progetti_con_pallet": [],
-    }
-    # pallet_state
-    try:
-        from api.routers.pallet import _load as _load_pallet, _pallet_path
-        pp = _pallet_path(config)
-        result["pallet_state_path"] = str(pp)
-        result["pallet_state_exists"] = pp.exists()
-        ps = _load_pallet(config)
-        result["pallet_state"] = [
-            {"numero": p["numero"], "stato": p.get("stato"), "progetto_id": p.get("progetto_id"), "progetto_nome": p.get("progetto_nome")}
-            for p in ps.get("pallet", [])
-        ]
-    except Exception as e:
-        result["pallet_state_error"] = f"{e}\n{traceback.format_exc()}"
-    # deliveries
-    try:
-        dp = _deliveries_path(config)
-        result["deliveries_path"] = str(dp)
-        result["deliveries_exists"] = dp.exists()
-        result["deliveries"] = _load_deliveries(config)
-    except Exception as e:
-        result["deliveries_error"] = f"{e}\n{traceback.format_exc()}"
-    # progetti
-    try:
-        data = _load_progetti(config)
-        projs = data.get("projects", [])
-        result["progetti_count"] = len(projs)
-        # pallet_map
-        pallet_map = {}
-        if result["pallet_state"]:
-            pallet_map = {p["progetto_id"]: p["numero"] for p in result["pallet_state"] if p.get("progetto_id")}
-        result["progetti_con_pallet"] = [
-            {"id": p.get("id"), "name": p.get("name"), "pallet": pallet_map.get(p.get("id"))}
-            for p in projs if pallet_map.get(p.get("id"))
-        ]
-    except Exception as e:
-        result["progetti_error"] = str(e)
-    return result
-
-
-@router.get("/debug-setup")
-async def debug_setup():
-    """Debug: mostra cosa vede analisi setup."""
-    from api.routers.progetti_utensili import estrai_alias_da_progetti
-    config = carica_configurazione()
-    alias_map = estrai_alias_da_progetti(config)
-    return {
-        "nc_base": config.get("percorso_nc_base"),
-        "tools_folder": config.get("tools_toa_folder"),
-        "n_alias": len(alias_map),
-        "alias_sample": {k: v[:2] for k, v in list(alias_map.items())[:10]},
-    }
 
 
 @router.post("/{project_id}/riparsing-utensili")

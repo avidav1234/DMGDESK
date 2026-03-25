@@ -458,35 +458,48 @@ class TabProgetti:
     # ══════════════════════════════════════════════════════════════════════════
 
     def _render_home(self):
-        self._render_home_in(self._body)
+        """Mostra la home caricando i dati API in background per non bloccare il thread UI."""
+        # Mostra subito quello che abbiamo già in memoria (senza fetch)
+        self._render_home_in(self._body,
+                             pallet_list=getattr(self, '_pallet_list_cache', []),
+                             setup_data=getattr(self, '_setup_data_cache', {}))
+        # Poi aggiorna in background
+        import threading
+        def _bg():
+            import urllib.request as _ur, json as _jj
+            pl, sd = [], {}
+            try:
+                r = _ur.urlopen("http://localhost:8000/api/pallet/", timeout=2)
+                pl = _jj.loads(r.read()).get("pallet", [])
+            except Exception:
+                pass
+            try:
+                r = _ur.urlopen("http://localhost:8000/api/progetti/analisi-setup/non-utilizzati", timeout=2)
+                sd = _jj.loads(r.read())
+            except Exception:
+                pass
+            self._pallet_list_cache = pl
+            self._setup_data_cache = sd
+            # Ricostruisce solo se siamo ancora sulla home
+            if self._page == "home" and not self._selected_id:
+                self.parent.after(0, lambda: self._render_home_in(self._body, pl, sd))
+        threading.Thread(target=_bg, daemon=True).start()
 
     def _render_home_in(self, body, pallet_list=None, setup_data=None):
         from datetime import datetime as _dt
-        import urllib.request as _ur
-        import json as _jj
 
         # Pulisce il parent se chiamato dall'esterno
         if body is not self._body:
             for w in body.winfo_children():
                 w.destroy()
 
-        # Carica dati se non passati
         if pallet_list is None:
-            try:
-                r = _ur.urlopen("http://localhost:8000/api/pallet/", timeout=2)
-                pallet_list = _jj.loads(r.read()).get("pallet", [])
-            except Exception:
-                pallet_list = []
+            pallet_list = []
         if setup_data is None:
-            try:
-                r = _ur.urlopen("http://localhost:8000/api/progetti/analisi-setup/non-utilizzati", timeout=2)
-                setup_data = _jj.loads(r.read())
-            except Exception:
-                setup_data = {}
-        today = _dt.now().strftime("%Y-%m-%d")
-        now_label = _dt.now().strftime("%A %d %B %Y").capitalize()
+            setup_data = {}
 
         today = _dt.now().strftime("%Y-%m-%d")
+        now_label = _dt.now().strftime("%A %d %B %Y").capitalize()
 
         in_progress = [p for p in self._projects if not p.get("archived") and get_progress(p) < 100]
         all_pgm = [pr for p in in_progress

@@ -431,27 +431,36 @@ class TabProgetti:
 
     def _refresh(self):
         self._clear_body()
-        if self._editing_template:
-            self._render_template_editor(self._editing_template)
-        elif self._selected_id:
-            p = next((x for x in self._projects if x.get("id") == self._selected_id), None)
-            if p:
-                self._render_detail(p)
+        try:
+            if self._editing_template:
+                self._render_template_editor(self._editing_template)
+            elif self._selected_id:
+                p = next((x for x in self._projects if x.get("id") == self._selected_id), None)
+                if p:
+                    self._render_detail(p)
+                else:
+                    self._selected_id = None
+                    self._render_lista()
+            elif self._page == "home":
+                self._render_home()
+            elif self._page == "archived":
+                self._render_lista(archived=True)
+            elif self._page == "templates":
+                self._render_templates()
+            elif self._page == "deliveries":
+                self._render_deliveries()
+            elif self._page == "backup":
+                self._render_backup()
             else:
-                self._selected_id = None
                 self._render_lista()
-        elif self._page == "home":
-            self._render_home()
-        elif self._page == "archived":
-            self._render_lista(archived=True)
-        elif self._page == "templates":
-            self._render_templates()
-        elif self._page == "deliveries":
-            self._render_deliveries()
-        elif self._page == "backup":
-            self._render_backup()
-        else:
-            self._render_lista()
+        except Exception as e:
+            import traceback
+            err = traceback.format_exc()
+            print(f"\n[REFRESH ERROR] pagina={self._page}\n{err}")
+            import tkinter as _tk
+            lbl = _tk.Label(self._body, text=f"Errore rendering:\n{e}\n\nVedi terminale per dettagli.",
+                           font=("Consolas",10), fg="#C0392B", bg="#FFF", justify="left", wraplength=600)
+            lbl.pack(padx=20, pady=20, anchor="w")
 
     # ══════════════════════════════════════════════════════════════════════════
     # Home — Dashboard turno

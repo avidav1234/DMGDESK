@@ -57,6 +57,20 @@ def _load_json(path) -> list:
             pass
     return []
 
+def _get_pallet_assegnato(project_id: str) -> int | None:
+    """Legge pallet_assegnato da pallet_state.json (fonte di verità)."""
+    try:
+        import urllib.request, json as _j
+        r = urllib.request.urlopen("http://localhost:8000/api/pallet/", timeout=2)
+        data = _j.loads(r.read())
+        for p in data.get("pallet", []):
+            if p.get("progetto_id") == project_id:
+                return p.get("numero")
+    except Exception:
+        pass
+    return None
+
+
 def _load_progetti():
     path = _progetti_path()
     if path and path.exists():
@@ -578,9 +592,9 @@ class TabProgetti:
                   font=("DM Sans",10), fg=TC["muted"], bg=TC["surface"],
                   relief="flat", cursor="hand2").pack(side="left")
 
-        # Pallet
+        # Pallet — legge da pallet_state (fonte di verità)
         tk.Label(r1, text="Pallet:", font=("DM Sans",10), fg=TC["muted"], bg=TC["surface"]).pack(side="left", padx=(16,3))
-        _pv = project.get("pallet_assegnato")
+        _pv = _get_pallet_assegnato(project.get("id")) or project.get("pallet_assegnato")
         pallet_var = tk.StringVar(value=str(_pv) if _pv is not None else "—")
         _combo_pallet = ttk.Combobox(r1, textvariable=pallet_var,
                      values=["—","1","2","3","4","5","6"],

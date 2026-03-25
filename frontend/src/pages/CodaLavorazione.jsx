@@ -620,30 +620,90 @@ export default function CodaLavorazione() {
             borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
             zIndex: 101, minWidth: 140, overflow: 'hidden',
           }} onClick={e => e.stopPropagation()}>
-            <div style={{ padding: '6px 12px', fontSize: 10, fontWeight: 700,
-              color: 'var(--text-dim)', borderBottom: '1px solid var(--border)',
-              letterSpacing: '0.08em', fontFamily: 'monospace' }}>
-              P{palletMenu.id} — imposta stato
-            </div>
-            {['GREZZO', 'VUOTO'].map(s => {
-              const pal = pallets.find(p => p.id === palletMenu.id);
-              const sel = pal?.stato === s;
-              return (
-                <div key={s}
-                  onClick={() => { setPalletStato(palletMenu.id, s); setPalletMenu(null); }}
-                  style={{ padding: '10px 16px', cursor: 'pointer', fontSize: 13,
-                    fontWeight: sel ? 700 : 400,
-                    color: sel ? '#0ea5e9' : '#374151',
-                    background: sel ? 'rgba(14,165,233,0.06)' : 'transparent',
-                    display: 'flex', alignItems: 'center', gap: 8 }}
-                  onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
-                  onMouseLeave={e => e.currentTarget.style.background = sel ? 'rgba(14,165,233,0.06)' : 'transparent'}>
-                  <span>{s === 'GREZZO' ? '🔵' : '⬜'}</span>
-                  {s}
-                  {sel && <span style={{ marginLeft: 'auto' }}>✓</span>}
+            {/* Header menu */}
+            {(()=>{
+              const pal = pallets.find(p => p.id === palletMenu.id)
+              const proj = progettiPallet[palletMenu.id]
+              const STATI_MENU = [
+                { s:'GREZZO',  icon:'🔵', color:'#1D5FAD' },
+                { s:'FINITO',  icon:'✅', color:'#166534' },
+                { s:'GUASTO',  icon:'🔴', color:'#DC2626' },
+                { s:'VUOTO',   icon:'⬜', color:'#64748b' },
+              ]
+              return(<>
+                <div style={{ padding:'8px 14px', fontSize:11, fontWeight:700,
+                  color:'#0d2d5e', borderBottom:'1px solid #E8E6E0',
+                  letterSpacing:'0.06em', display:'flex', alignItems:'center', gap:6 }}>
+                  <span style={{fontWeight:900}}>P{palletMenu.id}</span>
+                  {proj && <span style={{fontWeight:400,color:'#64748b',overflow:'hidden',
+                    textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:100}}>· {proj.nome}</span>}
                 </div>
-              );
-            })}
+
+                {/* Link al progetto */}
+                {proj && (
+                  <>
+                    <div onClick={()=>{
+                        sessionStorage.setItem('dmgdesk_apri_progetto_id', progettiPallet[palletMenu.id]?.id||'')
+                        setPalletMenu(null)
+                        window.location.href='/progetti'
+                      }}
+                      style={{padding:'9px 14px',cursor:'pointer',fontSize:12,fontWeight:700,
+                        color:'#1D5FAD',display:'flex',alignItems:'center',gap:8,
+                        borderBottom:'1px solid #F0EEE8'}}
+                      onMouseEnter={e=>e.currentTarget.style.background='#EFF6FF'}
+                      onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                      <span>📋</span>
+                      <span>Apri progetto</span>
+                      <span style={{marginLeft:'auto',fontSize:10,color:'#9A978E'}}>→</span>
+                    </div>
+                    <div onClick={()=>{ setModalAssegna({palletId:palletMenu.id}); setPalletMenu(null) }}
+                      style={{padding:'9px 14px',cursor:'pointer',fontSize:12,
+                        color:'#5A5750',display:'flex',alignItems:'center',gap:8,
+                        borderBottom:'1px solid #F0EEE8'}}
+                      onMouseEnter={e=>e.currentTarget.style.background='#F5F4F0'}
+                      onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                      <span>🔄</span>
+                      <span>Cambia progetto</span>
+                    </div>
+                  </>
+                )}
+                {!proj && (
+                  <div onClick={()=>{ setModalAssegna({palletId:palletMenu.id}); setPalletMenu(null) }}
+                    style={{padding:'9px 14px',cursor:'pointer',fontSize:12,fontWeight:600,
+                      color:'#1D5FAD',display:'flex',alignItems:'center',gap:8,
+                      borderBottom:'1px solid #F0EEE8'}}
+                    onMouseEnter={e=>e.currentTarget.style.background='#EFF6FF'}
+                    onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                    <span>📋</span>
+                    <span>Assegna progetto</span>
+                  </div>
+                )}
+
+                {/* Separatore stati */}
+                <div style={{padding:'5px 14px 3px',fontSize:9,fontWeight:700,
+                  color:'#9A978E',letterSpacing:'0.08em'}}>STATO</div>
+
+                {/* Voci stato */}
+                {STATI_MENU.map(({s, icon, color}) => {
+                  const sel = pal?.stato === s
+                  return (
+                    <div key={s}
+                      onClick={() => { setPalletStato(palletMenu.id, s); setPalletMenu(null) }}
+                      style={{ padding:'9px 14px', cursor:'pointer', fontSize:13,
+                        fontWeight: sel ? 700 : 400,
+                        color: sel ? color : '#374151',
+                        background: sel ? `${color}12` : 'transparent',
+                        display:'flex', alignItems:'center', gap:8 }}
+                      onMouseEnter={e => e.currentTarget.style.background = sel ? `${color}20` : '#f1f5f9'}
+                      onMouseLeave={e => e.currentTarget.style.background = sel ? `${color}12` : 'transparent'}>
+                      <span>{icon}</span>
+                      <span>{s}</span>
+                      {sel && <span style={{marginLeft:'auto',fontSize:11}}>✓</span>}
+                    </div>
+                  )
+                })}
+              </>)
+            })()}
           </div>
         </div>
       )}

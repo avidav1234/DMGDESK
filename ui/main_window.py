@@ -155,24 +155,12 @@ class MainWindow(ctk.CTk):
         self.tabview.set("🏠 Home")
     
     def _build_home_tab(self):
-        """Costruisce la Home tab delegando a TabProgetti._render_home in background."""
-        home_frame = self.tabview.tab("🏠 Home")
-        # Usa il corpo scrollabile di TabProgetti per il render
-        # ma lo associa al frame del tab Home
-        self._home_tab_frame = home_frame
-        # Richiama il render quando il tab viene selezionato
-        def _on_home_selected(*args):
-            if self.tabview.get() == "🏠 Home":
-                self._refresh_home()
-        self.tabview._segmented_button.configure(command=_on_home_selected)
-        # Prima render immediato
-        self.after(500, self._refresh_home)
+        """La Home è gestita da TabProgetti — qui solo avviamo il refresh iniziale."""
+        self._home_tab_frame = self.tabview.tab("🏠 Home")
+        self.after(800, self._refresh_home)
 
     def _refresh_home(self):
         """Aggiorna il contenuto della Home tab."""
-        for w in self._home_tab_frame.winfo_children():
-            w.destroy()
-        # Usa il render di TabProgetti passando il frame Home come parent
         import threading
         threading.Thread(target=self._home_worker, daemon=True).start()
 

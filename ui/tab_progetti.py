@@ -805,30 +805,56 @@ class TabProgetti:
 
     def _render_task(self, parent, project, step, task):
         s_next, t_next = get_next_task(project)
-        is_next = t_next is not None and t_next.get("id") == task.get("id")
-        bg = "#FFF4E8" if is_next else TC["surface"]
+        is_next  = t_next is not None and t_next.get("id") == task.get("id")
+        is_done  = task.get("done", False)
 
-        row = tk.Frame(parent, bg=bg)
+        # Sfondo: completato=verde chiaro, prossimo=arancio chiaro, normale=bianco
+        if is_next:
+            bg = "#FFF4E8"
+        elif is_done:
+            bg = "#F0FBF4"   # verde tenue
+        else:
+            bg = TC["surface"]
+
+        row = tk.Frame(parent, bg=bg,
+                       highlightbackground="#D1FAE5" if is_done else bg,
+                       highlightthickness=1 if is_done else 0)
         row.pack(fill="x", pady=1)
 
         if is_next:
             tk.Label(row, text="📍", bg=bg, font=("Arial",10)).pack(side="left")
 
         # Checkbox
-        check_var = tk.BooleanVar(value=task.get("done", False))
-        def _toggle(t=task, p=project):
+        check_var = tk.BooleanVar(value=is_done)
+        def _toggle(t=task, p=project, r=row):
             t["done"] = not t.get("done", False)
             t["doneAt"] = datetime.now().isoformat()[:10] if t["done"] else None
             self._save_project(p)
+            # Aggiorna colore riga immediatamente
+            new_bg = "#F0FBF4" if t["done"] else TC["surface"]
+            try:
+                r.configure(bg=new_bg,
+                             highlightbackground="#D1FAE5" if t["done"] else new_bg,
+                             highlightthickness=1 if t["done"] else 0)
+                for w in r.winfo_children():
+                    try: w.configure(bg=new_bg)
+                    except Exception: pass
+            except Exception:
+                pass
         tk.Checkbutton(row, variable=check_var, command=_toggle,
                        bg=bg, activebackground=bg, cursor="hand2",
                        relief="flat", borderwidth=0).pack(side="left")
 
-        # Testo
-        fg_col = TC["muted"] if task.get("done") else TC["text"]
-        prefix = "✓ " if task.get("done") else ""
-        tk.Label(row, text=prefix + task.get("text",""),
-                 font=("DM Sans",11), fg=fg_col, bg=bg).pack(side="left", padx=3)
+        # Testo: completato = barrato + verde, da fare = normale
+        if is_done:
+            fg_col = TC["green"]
+            # Testo con barrato simulato usando overstrike
+            lbl = tk.Label(row, text="✓  " + task.get("text",""),
+                     font=("DM Sans",11,"overstrike"), fg=TC["muted"], bg=bg)
+        else:
+            lbl = tk.Label(row, text=task.get("text",""),
+                     font=("DM Sans",11), fg=TC["text"], bg=bg)
+        lbl.pack(side="left", padx=3)
 
         if task.get("done") and task.get("doneAt"):
             tk.Label(row, text=task["doneAt"][:10],

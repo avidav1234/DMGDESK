@@ -308,6 +308,11 @@ class TabProgetti:
     # Render dispatcher
     # ══════════════════════════════════════════════════════════════════════════
 
+    def set_selected_id(self, project_id: str):
+        """Apre il progetto con quell'ID (chiamato da altri tab)."""
+        self._selected_id = project_id
+        self._refresh()
+
     def _refresh(self):
         self._clear_body()
         if self._editing_template:

@@ -631,10 +631,40 @@ class TabCodaLavorazione:
                 self.parent.after(0, self._fetch_data)
             threading.Thread(target=_save, daemon=True).start()
 
-        # Solo gli stati manuali — IN LAVORAZIONE viene dal PLC
-        for s in ["GREZZO", "VUOTO"]:
-            label = f"{'✓ ' if s == stato else '   '}{s}"
-            menu.add_command(label=label, command=lambda ns=s: _set(ns))
+        # ── Sezione progetto ──────────────────────────────────────────────
+        pallet_data = next((p for p in self._pallets if p.get("id") == pid), {})
+        proj_nome   = pallet_data.get("progetto_nome") or ""
+        proj_id     = pallet_data.get("progetto_id")   or ""
+
+        if proj_nome:
+            menu.add_command(
+                label=f"📋 Apri: {proj_nome[:28]}",
+                command=lambda pi=proj_id: self._apri_progetto(pi)
+            )
+            menu.add_command(
+                label="🔄 Cambia progetto...",
+                command=lambda: self._apri_assegna_pallet(pid)
+            )
+        else:
+            menu.add_command(
+                label="📋 Assegna progetto...",
+                command=lambda: self._apri_assegna_pallet(pid)
+            )
+        menu.add_separator()
+
+        # ── Sezione stati (4 voci) ─────────────────────────────────────────
+        STATI_LABEL = {
+            "GREZZO": "🟡 GREZZO",
+            "FINITO": "🟢 FINITO",
+            "GUASTO": "🔴 GUASTO",
+            "VUOTO":  "⬜ VUOTO",
+        }
+        for s, label in STATI_LABEL.items():
+            check = "✓ " if s == stato else "   "
+            menu.add_command(
+                label=f"{check}{label}",
+                command=lambda ns=s: _set(ns)
+            )
 
         # Posizione del menu sotto la card cliccata
         try:
@@ -644,6 +674,87 @@ class TabCodaLavorazione:
             pass
         finally:
             menu.grab_release()
+
+    def _apri_progetto(self, progetto_id: str):
+        """Naviga al progetto nella tab Progetti."""
+        if not progetto_id:
+            return
+        try:
+            tab_proj = self.main.tab_progetti
+            tab_proj.set_selected_id(progetto_id)
+            self.main.tabview.set("📋 Progetti")
+        except Exception:
+            pass
+
+    def _apri_assegna_pallet(self, pallet_num: int):
+        """Apre dialog per assegnare/cambiare progetto al pallet."""
+        import tkinter as _tk
+        win = _tk.Toplevel(self.parent)
+        win.title(f"Assegna progetto — Pallet {pallet_num}")
+        win.geometry("440x400")
+        win.grab_set()
+        win.configure(bg="#F5F4F0")
+
+        import customtkinter as _ctk
+        _tk.Label(win, text=f"Seleziona progetto per Pallet {pallet_num}",
+                  font=("DM Sans", 12, "bold"), fg="#1A1814", bg="#F5F4F0"
+                  ).pack(anchor="w", padx=20, pady=(16,8))
+
+        # Lista progetti
+        try:
+            from ui.tab_progetti import _load_projects_data, _carica_config as _cfg
+            cfg  = _cfg()
+            data = _load_projects_data(cfg)
+            projects = [p for p in data.get("projects", []) if not p.get("archived")]
+        except Exception:
+            projects = []
+
+        frame = _ctk.CTkScrollableFrame(win, fg_color="#FFFFFF", corner_radius=8)
+        frame.pack(fill="both", expand=True, padx=16, pady=(0,12))
+
+        def _assegna(proj):
+            import urllib.request, json as _j
+            base = "http://localhost:8000"
+            try:
+                body = _j.dumps({
+                    "progetto_id":     proj["id"],
+                    "progetto_nome":   proj.get("name",""),
+                    "progetto_colore": proj.get("color","#1D5FAD")
+                }).encode()
+                req = urllib.request.Request(
+                    f"{base}/api/pallet/{pallet_num}/assegna-progetto",
+                    data=body, headers={"Content-Type":"application/json"}, method="PATCH")
+                urllib.request.urlopen(req, timeout=2)
+                # Imposta GREZZO se VUOTO
+                r = urllib.request.urlopen(f"{base}/api/pallet/", timeout=2)
+                pallets = _j.loads(r.read()).get("pallet", [])
+                pal = next((p for p in pallets if p.get("numero")==pallet_num), None)
+                if pal and pal.get("stato","vuoto") == "vuoto":
+                    body2 = _j.dumps({"stato": "grezzo"}).encode()
+                    req2 = urllib.request.Request(
+                        f"{base}/api/pallet/{pallet_num}",
+                        data=body2, headers={"Content-Type":"application/json"}, method="PATCH")
+                    urllib.request.urlopen(req2, timeout=2)
+            except Exception:
+                pass
+            win.destroy()
+            self._fetch_data()
+
+        for proj in projects:
+            row = _tk.Frame(frame, bg="#FFFFFF")
+            row.pack(fill="x", pady=1)
+            dot = _tk.Frame(row, width=8, height=8, bg=proj.get("color","#1D5FAD"))
+            dot.pack(side="left", padx=(8,6), pady=8)
+            _tk.Label(row, text=proj.get("name","?"),
+                      font=("DM Sans",11,"bold"), fg="#1A1814", bg="#FFFFFF",
+                      anchor="w").pack(side="left", fill="x", expand=True)
+            _ctk.CTkButton(row, text="Assegna", width=80, height=26,
+                           fg_color="#1D5FAD", corner_radius=5,
+                           command=lambda p=proj: _assegna(p)).pack(side="right", padx=8, pady=4)
+
+        if not projects:
+            _tk.Label(frame, text="Nessun progetto attivo",
+                      font=("DM Sans",11), fg="#9A978E", bg="#FFFFFF").pack(pady=20)
 
     def refresh(self):
         if self._after_id:

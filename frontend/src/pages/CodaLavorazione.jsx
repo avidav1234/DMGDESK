@@ -624,11 +624,12 @@ export default function CodaLavorazione() {
             {(()=>{
               const pal = pallets.find(p => p.id === palletMenu.id)
               const proj = progettiPallet[palletMenu.id]
+              // Colori identici alle card pallet
               const STATI_MENU = [
-                { s:'GREZZO',  icon:'🔵', color:'#1D5FAD' },
-                { s:'FINITO',  icon:'✅', color:'#166534' },
-                { s:'GUASTO',  icon:'🔴', color:'#DC2626' },
-                { s:'VUOTO',   icon:'⬜', color:'#64748b' },
+                { s:'GREZZO',  dot:'#eab308', bg:'#fefce8', fg:'#854d0e' },
+                { s:'FINITO',  dot:'#22c55e', bg:'#dcfce7', fg:'#14532d' },
+                { s:'GUASTO',  dot:'#f87171', bg:'#fef2f2', fg:'#991b1b' },
+                { s:'VUOTO',   dot:'#cbd5e1', bg:'#f1f5f9', fg:'#94a3b8' },
               ]
               return(<>
                 <div style={{ padding:'8px 14px', fontSize:11, fontWeight:700,
@@ -684,21 +685,23 @@ export default function CodaLavorazione() {
                   color:'#9A978E',letterSpacing:'0.08em'}}>STATO</div>
 
                 {/* Voci stato */}
-                {STATI_MENU.map(({s, icon, color}) => {
+                {STATI_MENU.map(({s, dot, bg, fg}) => {
                   const sel = pal?.stato === s
                   return (
                     <div key={s}
                       onClick={() => { setPalletStato(palletMenu.id, s); setPalletMenu(null) }}
                       style={{ padding:'9px 14px', cursor:'pointer', fontSize:13,
                         fontWeight: sel ? 700 : 400,
-                        color: sel ? color : '#374151',
-                        background: sel ? `${color}12` : 'transparent',
-                        display:'flex', alignItems:'center', gap:8 }}
-                      onMouseEnter={e => e.currentTarget.style.background = sel ? `${color}20` : '#f1f5f9'}
-                      onMouseLeave={e => e.currentTarget.style.background = sel ? `${color}12` : 'transparent'}>
-                      <span>{icon}</span>
+                        color: sel ? fg : '#374151',
+                        background: sel ? bg : 'transparent',
+                        display:'flex', alignItems:'center', gap:10,
+                        borderLeft: sel ? `3px solid ${dot}` : '3px solid transparent' }}
+                      onMouseEnter={e => { if(!sel) e.currentTarget.style.background='#f1f5f9' }}
+                      onMouseLeave={e => { e.currentTarget.style.background = sel ? bg : 'transparent' }}>
+                      <div style={{width:10,height:10,borderRadius:'50%',
+                        background:dot,flexShrink:0}}/>
                       <span>{s}</span>
-                      {sel && <span style={{marginLeft:'auto',fontSize:11}}>✓</span>}
+                      {sel && <span style={{marginLeft:'auto',fontSize:11,color:fg}}>✓</span>}
                     </div>
                   )
                 })}

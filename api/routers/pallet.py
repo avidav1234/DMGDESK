@@ -337,3 +337,52 @@ async def get_progetto_info(numero: int):
             "da_fare":     sum(1 for p in all_pgm if p.get("stato") == "da_fare"),
         }
     }
+
+@router.post("/sync-progetti")
+async def sync_pallet_progetti():
+    """
+    Allinea i legami pallet ↔ progetti.
+    Percorre tutti i pallet con progetto_id e verifica che il progetto
+    abbia pallet_assegnato corretto. E viceversa.
+    """
+    from api.routers.progetti import _load_progetti, _progetti_path
+    import json as _json
+
+    config   = carica_configurazione()
+    state    = _load(config)
+    proj_data = _load_progetti(config)
+    projects  = proj_data.get("projects", [])
+    changed   = 0
+
+    # 1. Per ogni pallet con progetto_id → assicura che il progetto lo sappia
+    for pal in state["pallet"]:
+        pid = pal.get("progetto_id")
+        if not pid:
+            continue
+        proj = next((p for p in projects if p.get("id") == pid), None)
+        if proj and proj.get("pallet_assegnato") != pal["numero"]:
+            proj["pallet_assegnato"] = pal["numero"]
+            changed += 1
+
+    # 2. Per ogni progetto con pallet_assegnato → assicura che il pallet lo sappia
+    for proj in projects:
+        pa = proj.get("pallet_assegnato")
+        if not pa:
+            continue
+        pal = next((p for p in state["pallet"] if p["numero"] == pa), None)
+        if pal and pal.get("progetto_id") != proj.get("id"):
+            pal["progetto_id"]     = proj["id"]
+            pal["progetto_nome"]   = proj.get("name")
+            pal["progetto_colore"] = proj.get("color", "#1D5FAD")
+            changed += 1
+
+    if changed:
+        now = datetime.now().isoformat()
+        _save(config, state)
+        path = _progetti_path(config)
+        path.write_text(_json.dumps({"projects": projects,
+                                     "ultimo_aggiornamento": now},
+                                    ensure_ascii=False, indent=2),
+                        encoding="utf-8")
+
+    return {"ok": True, "allineamenti": changed}

@@ -1626,7 +1626,9 @@ export default function Progetti(){
       const r=await fetch(API+'/')
       if(!r.ok) throw new Error(`Server error ${r.status}`)
       const d=await r.json()
-      setProjects(d.projects||[])
+      // Normalizza: assicura che ogni progetto abbia pallet_assegnato
+      const projs = (d.projects||[]).map(p=>({pallet_assegnato:null,...p}))
+      setProjects(projs)
       setTemplates(d.templates||[])
       setError(null)
     }catch(e){setError(e.message)}

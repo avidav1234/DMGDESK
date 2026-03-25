@@ -1768,7 +1768,8 @@ class TabProgetti:
     def _set_pallet(self, project, value):
         """Assegna o rimuove pallet — unica chiamata API."""
         new_pallet = None if value in ("—", "", "None") else int(value)
-        old_pallet = project.get("pallet_assegnato")
+        # Legge il pallet reale da pallet_state (non dal JSON locale che può essere stale)
+        old_pallet = _get_pallet_assegnato(project.get("id")) or project.get("pallet_assegnato")
 
         def _sync():
             import urllib.request, json as _j

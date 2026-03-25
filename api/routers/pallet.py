@@ -63,7 +63,14 @@ def _load(config: dict) -> dict:
     path = _pallet_path(config)
     if path.exists():
         try:
-            return json.loads(path.read_text(encoding="utf-8"))
+            data = json.loads(path.read_text(encoding="utf-8"))
+            # Migrazione: aggiunge campi mancanti ai pallet esistenti
+            for p in data.get("pallet", []):
+                p.setdefault("progetto_id", None)
+                p.setdefault("progetto_nome", None)
+                p.setdefault("progetto_colore", None)
+                p.setdefault("pct_avanzamento", None)
+            return data
         except Exception:
             pass
     return _default_state()
@@ -289,6 +296,7 @@ async def assegna_progetto(numero: int, body: AssegnaProgettoBody):
             p["progetto_colore"] = body.progetto_colore
             p["aggiornato"]      = datetime.now().isoformat()
             _save(config, state)
+            print(f"[assegna-progetto] P{numero} → {body.progetto_id} ({body.progetto_nome})")
             return {"ok": True, "pallet": numero, "progetto_id": body.progetto_id}
     raise HTTPException(404, f"Pallet {numero} non trovato")
 

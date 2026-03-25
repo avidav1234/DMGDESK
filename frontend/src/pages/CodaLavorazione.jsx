@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate } from 'react-router-dom';
 
 // ── Colori stati pallet ──────────────────────────────────────────
@@ -610,16 +611,16 @@ export default function CodaLavorazione() {
         )}
 
       {/* Menu selezione stato pallet manuale */}
-      {palletMenu && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 100 }}
+      {palletMenu && createPortal(
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9998 }}
           onClick={() => setPalletMenu(null)}>
           <div style={{
             position: 'fixed', left: palletMenu.x, top: palletMenu.y,
             background: '#ffffff',
             border: '1px solid #D8D5CC',
             borderRadius: 10,
-            boxShadow: '0 8px 32px rgba(0,0,0,0.18), 0 2px 8px rgba(0,0,0,0.10)',
-            zIndex: 101, minWidth: 200, overflow: 'hidden',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.25), 0 2px 8px rgba(0,0,0,0.15)',
+            zIndex: 9999, minWidth: 200, overflow: 'hidden',
           }} onClick={e => e.stopPropagation()}>
             {/* Header menu */}
             {(()=>{
@@ -712,7 +713,7 @@ export default function CodaLavorazione() {
             })()}
           </div>
         </div>
-      )}
+      , document.body)}
 
       </div>
     </div>

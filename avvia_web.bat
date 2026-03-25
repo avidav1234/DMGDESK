@@ -27,6 +27,7 @@ if not exist "frontend\dist\index.html" (
     pause & exit /b 1
 )
 
+:start_server
 echo [3/4] Server in avvio...
 echo.
 echo   http://localhost:8000
@@ -37,8 +38,24 @@ for /f "tokens=2 delims=:" %%a in ('ipconfig ^| findstr /i "IPv4"') do (
 )
 echo.
 echo   Premi CTRL+C per fermare.
+echo   Premi R + INVIO per riavviare il server (senza rebuild).
 echo.
 
-uvicorn api.main:app --host 0.0.0.0 --port 8000
+start "" /b uvicorn api.main:app --host 0.0.0.0 --port 8000
 
-pause
+:wait_input
+set /p CMD="Comando (R=riavvia): "
+if /i "!CMD!"=="r" (
+    echo.
+    echo Riavvio server in corso...
+    taskkill /F /IM uvicorn.exe >nul 2>&1
+    taskkill /F /FI "WINDOWTITLE eq DMGDesk Web" /IM python.exe >nul 2>&1
+    for /f "tokens=5" %%p in ('netstat -ano ^| findstr ":8000 "') do (
+        taskkill /F /PID %%p >nul 2>&1
+    )
+    timeout /t 1 /nobreak >nul
+    echo Server riavviato.
+    echo.
+    goto start_server
+)
+goto wait_input

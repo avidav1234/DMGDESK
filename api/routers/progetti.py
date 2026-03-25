@@ -3,7 +3,7 @@ Router Progetti — integrazione WorkTrack / Progetto 5
 Legge e scrive worktrack_projects.json sulla share condivisa (tools_toa_folder).
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Body, HTTPException
 from pydantic import BaseModel
 from typing import Optional, Any
 from pathlib import Path

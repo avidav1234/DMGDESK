@@ -96,56 +96,60 @@ class MainWindow(ctk.CTk):
             height=TAB_HEIGHT                                 # 70px
         )
         
-        # Crea tabs
+        # Crea tabs principali
         self.tabview.add("🏠 Home")
         self.tabview.add("○ Macchina")
         self.tabview.add("📋 Lavori")
         self.tabview.add("📄 Analisi NC")
-        self.tabview.add("📝 Generatore")
         self.tabview.add("🔧 Utensili")
-        self.tabview.add("🏗 Scaffale")
-        self.tabview.add("📦 Smontati")
-        self.tabview.add("🔩 Holder & Bussole")
+        self.tabview.add("⚙ Utilità")
         
-        # Inizializza tabs
+        # Inizializza tabs principali
         self.tab_analisi_nc = TabAnalisiNC(
-            self.tabview.tab("📄 Analisi NC"),
-            self
-        )
-        
-        self.tab_generatore = TabGeneratore(
-            self.tabview.tab("📝 Generatore"),
-            self
-        )
+            self.tabview.tab("📄 Analisi NC"), self)
         
         self.tab_coda = TabCodaLavorazione(
-            self.tabview.tab("○ Macchina"),
-            self
-        )
+            self.tabview.tab("○ Macchina"), self)
 
         self.tab_macchina = TabMacchina(
-            self.tabview.tab("🔧 Utensili"),
-            self
-        )
-        
-        self.tab_scaffale = TabScaffale(
-            self.tabview.tab("🏗 Scaffale"),
-            self
-        )
-        
-        self.tab_smontati = TabSmontati(
-            self.tabview.tab("📦 Smontati"),
-            self
-        )
-        
-        self.tab_holder_bussole = TabHolderBussole(
-            self.tabview.tab("🔩 Holder & Bussole"),
-            self
-        )
+            self.tabview.tab("🔧 Utensili"), self)
 
         self.tab_progetti = TabProgetti(
-            self.tabview.tab("📋 Lavori"), self
+            self.tabview.tab("📋 Lavori"), self)
+
+        # ── Tab Utilità con sotto-tab ─────────────────────────────────────────
+        utilita_frame = self.tabview.tab("⚙ Utilità")
+        self._sub_tabview = ctk.CTkTabview(
+            utilita_frame,
+            fg_color=COLOR_BACKGROUND,
+            segmented_button_fg_color="#FFFFFF",
+            segmented_button_selected_color="#2196F3",
+            segmented_button_selected_hover_color="#1976D2",
+            segmented_button_unselected_color="#FFFFFF",
+            segmented_button_unselected_hover_color="#F5F5F5",
+            text_color="#616161",
+            border_width=1,
+            border_color="#E0E0E0"
         )
+        self._sub_tabview.pack(fill="both", expand=True)
+        self._sub_tabview._segmented_button.configure(
+            font=(FONT_FAMILY, 12, "bold"), height=44)
+
+        self._sub_tabview.add("📝 Generatore")
+        self._sub_tabview.add("🏗 Scaffale")
+        self._sub_tabview.add("📦 Smontati")
+        self._sub_tabview.add("🔩 Holder & Bussole")
+
+        self.tab_generatore = TabGeneratore(
+            self._sub_tabview.tab("📝 Generatore"), self)
+        self.tab_scaffale = TabScaffale(
+            self._sub_tabview.tab("🏗 Scaffale"), self)
+        self.tab_smontati = TabSmontati(
+            self._sub_tabview.tab("📦 Smontati"), self)
+        self.tab_holder_bussole = TabHolderBussole(
+            self._sub_tabview.tab("🔩 Holder & Bussole"), self)
+
+        self._sub_tabview.set("📝 Generatore")
 
         # Home — usa il _render_home di TabProgetti già implementato,
         # ma montato nel tab globale corretto

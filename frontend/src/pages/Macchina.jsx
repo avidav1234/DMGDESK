@@ -240,7 +240,7 @@ export default function Macchina() {
 
   return (
     <>
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 12, padding: '0 20px' }}>
       <SectionHeader title="In Macchina — V16"
         subtitle="Sync TOA/TMA  •  Confronto MPF  •  Tabella utensili" />
 

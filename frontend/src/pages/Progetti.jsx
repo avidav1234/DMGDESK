@@ -1650,6 +1650,7 @@ export default function Progetti(){
   const navigate=useNavigate()
   const[projects,setProjects]=useState([])
   const[templates,setTemplates]=useState([])
+  const[palletDisponibili,setPalletDisponibili]=useState([])
   const[deliveries,setDeliveries]=useState([])
   const[loading,setLoading]=useState(true)
   const[error,setError]=useState(null)
@@ -1681,7 +1682,16 @@ export default function Progetti(){
     }catch(e){setError(e.message)}
     finally{setLoading(false)}
   },[])
-  useEffect(()=>{ load() },[load])
+  useEffect(()=>{
+    load()
+    function caricaPalletDisp(){
+      fetch('/api/pallet/disponibili').then(r=>r.ok?r.json():{pallet:[]})
+        .then(d=>setPalletDisponibili(d.pallet||[])).catch(()=>{})
+    }
+    caricaPalletDisp()
+    const t=setInterval(caricaPalletDisp,10000)
+    return()=>clearInterval(t)
+  },[load])
 
   // Apre il progetto giusto dopo il caricamento (da sessionStorage)
   useEffect(()=>{

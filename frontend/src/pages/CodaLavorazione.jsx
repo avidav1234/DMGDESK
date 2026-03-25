@@ -189,6 +189,7 @@ export default function CodaLavorazione() {
       }
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
+        console.error('PATCH pallet error:', res.status, JSON.stringify(err));
         setError(`Errore: ${err.detail || res.status}`);
       }
       await fetchAll();

@@ -106,6 +106,15 @@ def _load_templates():
     return _load_json(_templates_path())
 
 def _load_deliveries():
+    """Carica le scadenze dall'API (fonte di verità = server)."""
+    try:
+        import urllib.request, json as _j
+        r = urllib.request.urlopen("http://localhost:8000/api/progetti/deliveries", timeout=2)
+        data = _j.loads(r.read())
+        return data if isinstance(data, list) else []
+    except Exception:
+        pass
+    # fallback: legge dal file diretto
     return _load_json(_deliveries_path())
 
 def _save_progetti(projects: list):

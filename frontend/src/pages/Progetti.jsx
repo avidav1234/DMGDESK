@@ -1775,9 +1775,12 @@ export default function Progetti(){
       if(isDelete) next=ds.filter(d=>d.id!==id)
       else if(isUpdate) next=ds.map(d=>d.id===id?{...d,...patch}:d)
       else next=[...ds,{id,createdAt:nowStr(),...patch}]
-      // Persiste subito su disco
-      fetch(API+'/deliveries',{method:'PUT',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify(next)}).catch(()=>{})
+      // Persiste subito su disco — usa setTimeout per uscire dal batch React
+      const toSave=next
+      setTimeout(()=>{
+        fetch(API+'/deliveries',{method:'PUT',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify(toSave)}).catch(()=>{})
+      },0)
       return next
     })
   }

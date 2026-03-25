@@ -1751,14 +1751,21 @@ class TabProgetti:
         # Sincronizza pallet_state.json tramite API locale
         def _sync_pallet():
             try:
-                import urllib.request, json as _j, urllib.parse
+                import urllib.request, json as _j
                 base = "http://localhost:8000"
+
                 # Rimuovi assegnazione dal vecchio pallet se c'era
                 if old_pallet and old_pallet != new_pallet:
                     body = _j.dumps({"progetto_id": None, "progetto_nome": None, "progetto_colore": None}).encode()
                     req = urllib.request.Request(f"{base}/api/pallet/{old_pallet}/assegna-progetto",
                         data=body, headers={"Content-Type": "application/json"}, method="PATCH")
                     urllib.request.urlopen(req, timeout=2)
+                    # Riporta a VUOTO il vecchio pallet
+                    body_stato = _j.dumps({"stato": "vuoto"}).encode()
+                    req2 = urllib.request.Request(f"{base}/api/pallet/{old_pallet}",
+                        data=body_stato, headers={"Content-Type": "application/json"}, method="PATCH")
+                    urllib.request.urlopen(req2, timeout=2)
+
                 # Assegna al nuovo pallet
                 if new_pallet:
                     body = _j.dumps({
@@ -1769,6 +1776,21 @@ class TabProgetti:
                     req = urllib.request.Request(f"{base}/api/pallet/{new_pallet}/assegna-progetto",
                         data=body, headers={"Content-Type": "application/json"}, method="PATCH")
                     urllib.request.urlopen(req, timeout=2)
+
+                    # Passa automaticamente a GREZZO se era VUOTO
+                    # (c'è un grezzo fisicamente su quel pallet)
+                    try:
+                        r = urllib.request.urlopen(f"{base}/api/pallet/", timeout=2)
+                        pallets = _j.loads(r.read()).get("pallet", [])
+                        pal = next((p for p in pallets if p.get("numero") == new_pallet), None)
+                        if pal and pal.get("stato", "vuoto") == "vuoto":
+                            body_grezzo = _j.dumps({"stato": "grezzo"}).encode()
+                            req3 = urllib.request.Request(f"{base}/api/pallet/{new_pallet}",
+                                data=body_grezzo, headers={"Content-Type": "application/json"}, method="PATCH")
+                            urllib.request.urlopen(req3, timeout=2)
+                    except Exception:
+                        pass
+
             except Exception:
                 pass  # API non disponibile — solo salva il progetto
 

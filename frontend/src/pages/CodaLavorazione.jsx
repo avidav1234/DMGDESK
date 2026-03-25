@@ -59,6 +59,25 @@ export default function CodaLavorazione() {
         headers: {'Content-Type':'application/json'},
         body: JSON.stringify({pallet_assegnato: palletNum})
       });
+      // Se il pallet era VUOTO → passa automaticamente a GREZZO
+      const palletCorrente = pallets.find(p => p.id === palletNum)
+      if (palletCorrente?.stato === 'VUOTO') {
+        await fetch(`/api/pallet/${palletNum}`, {
+          method: 'PATCH',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({stato: 'grezzo'})
+        })
+      }
+    } else {
+      // Rimozione assegnazione → pallet torna VUOTO
+      const palletCorrente = pallets.find(p => p.id === palletNum)
+      if (palletCorrente && palletCorrente.stato !== 'IN LAVORAZIONE') {
+        await fetch(`/api/pallet/${palletNum}`, {
+          method: 'PATCH',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({stato: 'vuoto'})
+        })
+      }
     }
     fetchAll();
   }

@@ -871,6 +871,22 @@ class TabProgetti:
                   font=("DM Sans",9,"bold"), fg="#fff", bg=TC["blue"],
                   relief="flat", padx=6, pady=2, cursor="hand2").pack(side="right")
 
+        # Bottone "Segna tutti in macchina" — solo se ci sono da_fare
+        da_fare_pgm = [p for p in fres_pgm if p.get("stato") == "da_fare"]
+        if da_fare_pgm:
+            def _segna_tutti_in_macchina(pgms=da_fare_pgm):
+                ts = now_str()
+                for p in pgms:
+                    p["stato"] = "in_macchina"
+                    if not p.get("tempoInizio"):
+                        p["tempoInizio"] = ts
+                task["programs"] = programs
+                self._save_project(project)
+            tk.Button(ph, text=f"⚙ Segna {len(da_fare_pgm)} in macchina",
+                      command=_segna_tutti_in_macchina,
+                      font=("DM Sans",9,"bold"), fg="#fff", bg="#1D5FAD",
+                      relief="flat", padx=6, pady=2, cursor="hand2").pack(side="right", padx=(0,4))
+
         # ── Sezione TASTATURA IPM (viola) ─────────────────────────────────────
         if ipm_pgm:
             ipm_header = tk.Frame(pf, bg="#F3E8FF")

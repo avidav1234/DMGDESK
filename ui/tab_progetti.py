@@ -75,6 +75,24 @@ def _get_pallet_assegnato(project_id: str) -> int | None:
     return None
 
 
+def _inject_pallet_assegnati(projects: list) -> list:
+    """Inietta pallet_assegnato in ogni progetto leggendo pallet_state dall'API."""
+    try:
+        import urllib.request, json as _j
+        r = urllib.request.urlopen("http://localhost:8000/api/pallet/", timeout=2)
+        data = _j.loads(r.read())
+        pallet_map = {
+            p["progetto_id"]: p["numero"]
+            for p in data.get("pallet", [])
+            if p.get("progetto_id")
+        }
+        for proj in projects:
+            proj["pallet_assegnato"] = pallet_map.get(proj.get("id"))
+    except Exception:
+        pass
+    return projects
+
+
 def _load_progetti():
     path = _progetti_path()
     if path and path.exists():
@@ -306,6 +324,7 @@ class TabProgetti:
             p = _load_progetti()
             t = _load_templates()
             d = _load_deliveries()
+            p = _inject_pallet_assegnati(p)
             self.parent.after(0, lambda: self._set_data(p, t, d))
         threading.Thread(target=_worker, daemon=True).start()
 
@@ -327,6 +346,7 @@ class TabProgetti:
             p = _load_progetti()
             t = _load_templates()
             d = _load_deliveries()
+            p = _inject_pallet_assegnati(p)
             self.parent.after(0, lambda: self._apply_silent(p, t, d))
         threading.Thread(target=_worker, daemon=True).start()
 

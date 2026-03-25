@@ -103,20 +103,16 @@ async def update_progetto(project_id: str, body: ProgettoUpdate):
     data = _load_progetti(config)
     projects = data.get("projects", [])
     idx = next((i for i, p in enumerate(projects) if p.get("id") == project_id), None)
+    incoming = body.data if isinstance(body.data, dict) else {}
+    # pallet_assegnato è gestito SOLO da pallet_state — rimuovilo sempre dal JSON progetti
+    incoming.pop("pallet_assegnato", None)
     if idx is not None:
-        # Preserva pallet_assegnato dal body SE presente, altrimenti dal progetto esistente
-        incoming = body.data if isinstance(body.data, dict) else {}
-        existing = projects[idx] if idx is not None else {}
-        # Il body.data deve vincere su tutto, ma se non ha pallet_assegnato usa quello esistente
-        if "pallet_assegnato" not in incoming or incoming.get("pallet_assegnato") is None:
-            if existing.get("pallet_assegnato") is not None:
-                incoming["pallet_assegnato"] = existing["pallet_assegnato"]
         projects[idx] = incoming
     else:
-        projects.append(body.data)
+        projects.append(incoming)
     data["projects"] = projects
     _save_progetti(config, data)
-    return {"ok": True, "pallet_assegnato": projects[idx].get("pallet_assegnato") if idx is not None else None}
+    return {"ok": True}
 
 @router.delete("/{project_id}")
 async def delete_progetto(project_id: str):

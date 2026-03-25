@@ -104,17 +104,25 @@ export default function CodaLavorazione() {
       setLastUpdate(new Date().toLocaleTimeString("it-IT"));
       setError(null);
 
-      // Carica info progetto per pallet con progetto_id assegnato
+      // Costruisci progettiPallet direttamente dai dati già in mano
+      // I pallet ritornano già con progetto_id/nome/colore dal GET /api/pallet/
       const pInfo = {};
       for (const pal of palletArr) {
         if (pal.progetto_id) {
-          try {
-            const r = await fetch(`/api/pallet/${pal.numero}/progetto-info`);
-            if (r.ok) {
-              const d = await r.json();
-              if (d.progetto) pInfo[pal.numero] = d.progetto;
-            }
-          } catch {}
+          pInfo[pal.numero] = {
+            id:     pal.progetto_id,
+            nome:   pal.progetto_nome   || '',
+            colore: pal.progetto_colore || '#1D5FAD',
+            pct:    0, completati: 0, totale: 0, da_fare: 0, in_macchina: 0,
+          };
+          // Carica avanzamento in background (non blocca il render)
+          fetch(`/api/pallet/${pal.numero}/progetto-info`)
+            .then(r => r.ok ? r.json() : null)
+            .then(d => {
+              if (d?.progetto) {
+                setProgettiPallet(prev => ({...prev, [pal.numero]: d.progetto}));
+              }
+            }).catch(() => {});
         }
       }
       setProgettiPallet(pInfo);
@@ -157,19 +165,28 @@ export default function CodaLavorazione() {
     // Aggiornamento ottimistico
     setPallets(prev => prev.map(p => p.id === id ? { ...p, stato } : p));
     try {
-      const res = await fetch(`/api/pallet/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ stato: stato.toLowerCase() }),
-      });
+      let res;
+      if (stato === "VUOTO") {
+        // VUOTO = sgancia il progetto + imposta stato
+        // Usa assegna-progetto(null) che fa entrambe le cose in un colpo
+        res = await fetch(`/api/pallet/${id}/assegna-progetto`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({progetto_id: null, progetto_nome: null, progetto_colore: null}),
+        });
+      } else {
+        // GREZZO / FINITO / GUASTO — solo cambio stato
+        res = await fetch(`/api/pallet/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ stato: stato.toLowerCase() }),
+        });
+      }
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         setError(`Errore: ${err.detail || res.status}`);
-        await fetchAll();
-      } else {
-        // Ricarica subito per riflettere sync progetto
-        await fetchAll();
       }
+      await fetchAll();
     } catch {
       setError("Errore aggiornamento");
       await fetchAll();

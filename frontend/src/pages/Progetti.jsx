@@ -1009,44 +1009,42 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
           }
           <StatusBadge progress={progress}/>
           <button onClick={()=>setShowSaveTemplate(true)} style={{background:T.blueBg,border:`1px solid ${T.blue}44`,borderRadius:8,color:T.blue,fontSize:13,padding:'7px 14px',cursor:'pointer',fontWeight:600}}>💾 Salva come Template</button>
-          {/* Pallet — dropdown semplice */}
-          {(()=>{
-            async function setPallet(val){
-              const old = project.pallet_assegnato
-              // Rimuovi dal vecchio pallet
-              if(old && old!==val){
-                await fetch(`/api/pallet/${old}/assegna-progetto`,{
-                  method:'PATCH', headers:{'Content-Type':'application/json'},
-                  body:JSON.stringify({progetto_id:null,progetto_nome:null,progetto_colore:null})
-                })
-              }
-              // Assegna al nuovo
-              if(val){
-                await fetch(`/api/pallet/${val}/assegna-progetto`,{
-                  method:'PATCH', headers:{'Content-Type':'application/json'},
-                  body:JSON.stringify({progetto_id:project.id,progetto_nome:project.name,progetto_colore:project.color||'#1D5FAD'})
-                })
-              }
-              // Ricarica progetti (GET legge pallet_state come fonte di verità)
-              load()
-            }
-            return(
-              <div style={{display:'flex',alignItems:'center',gap:6}}>
-                <span style={{fontSize:12,color:T.textMuted}}>Pallet:</span>
-                <select value={project.pallet_assegnato||''} onChange={e=>setPallet(e.target.value?parseInt(e.target.value):null)}
-                  style={{fontSize:12,fontWeight:700,background:'#F0F4FF',color:'#1D5FAD',
-                    border:'1px solid #BFDBFE',borderRadius:6,padding:'4px 8px',cursor:'pointer'}}>
-                  <option value=''>—</option>
-                  {[1,2,3,4,5,6].map(n=><option key={n} value={n}>P{n}</option>)}
-                </select>
-                {project.pallet_assegnato&&(
-                  <span onClick={()=>window.location.href='/coda'}
-                    style={{fontSize:11,color:'#1D5FAD',cursor:'pointer',
-                      textDecoration:'underline',textDecorationStyle:'dotted'}}>→ Coda</span>
-                )}
-              </div>
-            )
-          })()}
+          {/* Pallet */}
+          <div style={{display:'flex',alignItems:'center',gap:6}}>
+            <span style={{fontSize:12,color:T.textMuted}}>Pallet:</span>
+            <select
+              value={project.pallet_assegnato||''}
+              onChange={async e=>{
+                const val = e.target.value ? parseInt(e.target.value) : null
+                const old = project.pallet_assegnato
+                // Rimuovi dal vecchio
+                if(old && old!==val){
+                  await fetch('/api/pallet/'+old+'/assegna-progetto',{
+                    method:'PATCH',headers:{'Content-Type':'application/json'},
+                    body:JSON.stringify({progetto_id:null,progetto_nome:null,progetto_colore:null})
+                  })
+                }
+                // Assegna al nuovo
+                if(val){
+                  await fetch('/api/pallet/'+val+'/assegna-progetto',{
+                    method:'PATCH',headers:{'Content-Type':'application/json'},
+                    body:JSON.stringify({progetto_id:project.id,progetto_nome:project.name,progetto_colore:project.color||'#1D5FAD'})
+                  })
+                }
+                // Aggiorna lo state locale immediatamente
+                onUpdate({...project, pallet_assegnato: val})
+              }}
+              style={{fontSize:12,fontWeight:700,background:'#F0F4FF',color:'#1D5FAD',
+                border:'1px solid #BFDBFE',borderRadius:6,padding:'4px 8px',cursor:'pointer'}}>
+              <option value=''>—</option>
+              {[1,2,3,4,5,6].map(n=><option key={n} value={n}>P{n}</option>)}
+            </select>
+            {project.pallet_assegnato&&(
+              <span onClick={()=>window.location.href='/coda'}
+                style={{fontSize:11,color:'#1D5FAD',cursor:'pointer',
+                  textDecoration:'underline',textDecorationStyle:'dotted'}}>→ Coda</span>
+            )}
+          </div>
           {mpfList.length>0&&<button onClick={()=>setShowLancioModal(true)} style={{background:'#1D5FAD',border:'none',borderRadius:8,color:'#fff',fontWeight:700,fontSize:13,padding:'8px 16px',cursor:'pointer'}}>📄 Lancia in NC →</button>}
           <button onClick={()=>setConfirm('archive')} style={{background:T.surface2,border:`1px solid ${T.border}`,borderRadius:8,color:T.textSub,fontSize:14,padding:'7px 14px',cursor:'pointer',fontWeight:600}}>{project.archived?'📤 Riattiva':'📦 Archivia'}</button>
           <button onClick={()=>setConfirm('delete')} style={{background:T.redBg,border:`1px solid ${T.red}44`,borderRadius:8,color:T.red,fontSize:14,padding:'7px 14px',cursor:'pointer',fontWeight:600}}>🗑️ Elimina</button>

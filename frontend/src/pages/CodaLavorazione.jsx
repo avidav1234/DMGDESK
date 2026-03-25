@@ -46,42 +46,22 @@ export default function CodaLavorazione() {
   const navigate = typeof useNavigate === 'function' ? useNavigate() : null;
 
   async function assegnaProgetto(palletNum, progettoId, progettoNome, progettoColore) {
-    // Scrivi sul pallet
-    await fetch(`/api/pallet/${palletNum}/assegna-progetto`, {
-      method: 'PATCH',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({progetto_id: progettoId, progetto_nome: progettoNome, progetto_colore: progettoColore})
-    });
-    // Scrivi anche sul progetto (pallet_assegnato)
-    if (progettoId) {
-      await fetch(`/api/progetti/${progettoId}`, {
-        method: 'PATCH',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({pallet_assegnato: palletNum})
-      });
-      // Se il pallet era VUOTO → passa automaticamente a GREZZO
-      const palletCorrente = pallets.find(p => p.id === palletNum)
-      if (palletCorrente?.stato === 'VUOTO') {
-        await fetch(`/api/pallet/${palletNum}`, {
-          method: 'PATCH',
-          headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({stato: 'grezzo'})
-        })
-      }
-    } else {
-      // Rimozione assegnazione → pallet torna VUOTO
-      const palletCorrente = pallets.find(p => p.id === palletNum)
-      if (palletCorrente && palletCorrente.stato !== 'IN LAVORAZIONE') {
-        await fetch(`/api/pallet/${palletNum}`, {
-          method: 'PATCH',
-          headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({stato: 'vuoto'})
-        })
-      }
+    // Rimuovi dal pallet precedente se ce n'era uno diverso
+    const palletPrecedente = Object.entries(progettiPallet)
+      .find(([pn, pr]) => pr.id === progettoId && parseInt(pn) !== palletNum)
+    if(palletPrecedente) {
+      await fetch(`/api/pallet/${palletPrecedente[0]}/assegna-progetto`, {
+        method: 'PATCH', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({progetto_id:null, progetto_nome:null, progetto_colore:null})
+      })
     }
-    fetchAll();
-    // Notifica altri tab che il legame pallet è cambiato
-    window.dispatchEvent(new CustomEvent('pallet-progetto-changed'))
+    // Scrivi sul nuovo pallet (include cambio stato automatico nel backend)
+    await fetch(`/api/pallet/${palletNum}/assegna-progetto`, {
+      method: 'PATCH', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({progetto_id: progettoId, progetto_nome: progettoNome, progetto_colore: progettoColore})
+    })
+    // Ricarica tutto
+    fetchAll()
   }
 
   function avviaProgetto(palletNum) {

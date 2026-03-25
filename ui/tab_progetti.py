@@ -1753,31 +1753,21 @@ class TabProgetti:
         self.parent.after(0, self._refresh)
 
     def _set_pallet(self, project, value):
+        """Assegna o rimuove pallet — unica chiamata API."""
         new_pallet = None if value in ("—", "", "None") else int(value)
         old_pallet = project.get("pallet_assegnato")
-        project["pallet_assegnato"] = new_pallet
-        self._projects = [project if p["id"]==project["id"] else p for p in self._projects]
-        threading.Thread(target=lambda: _save_progetti(self._projects), daemon=True).start()
 
-        # Sincronizza pallet_state.json tramite API locale
-        def _sync_pallet():
+        def _sync():
+            import urllib.request, json as _j
+            base = "http://localhost:8000"
             try:
-                import urllib.request, json as _j
-                base = "http://localhost:8000"
-
-                # Rimuovi assegnazione dal vecchio pallet se c'era
+                # Rimuovi dal vecchio pallet
                 if old_pallet and old_pallet != new_pallet:
                     body = _j.dumps({"progetto_id": None, "progetto_nome": None, "progetto_colore": None}).encode()
                     req = urllib.request.Request(f"{base}/api/pallet/{old_pallet}/assegna-progetto",
                         data=body, headers={"Content-Type": "application/json"}, method="PATCH")
-                    urllib.request.urlopen(req, timeout=2)
-                    # Riporta a VUOTO il vecchio pallet
-                    body_stato = _j.dumps({"stato": "vuoto"}).encode()
-                    req2 = urllib.request.Request(f"{base}/api/pallet/{old_pallet}",
-                        data=body_stato, headers={"Content-Type": "application/json"}, method="PATCH")
-                    urllib.request.urlopen(req2, timeout=2)
-
-                # Assegna al nuovo pallet
+                    urllib.request.urlopen(req, timeout=3)
+                # Assegna al nuovo
                 if new_pallet:
                     body = _j.dumps({
                         "progetto_id":     project["id"],
@@ -1786,26 +1776,12 @@ class TabProgetti:
                     }).encode()
                     req = urllib.request.Request(f"{base}/api/pallet/{new_pallet}/assegna-progetto",
                         data=body, headers={"Content-Type": "application/json"}, method="PATCH")
-                    urllib.request.urlopen(req, timeout=2)
+                    urllib.request.urlopen(req, timeout=3)
+            except Exception as e:
+                print(f"[_set_pallet] errore API: {e}")
 
-                    # Passa automaticamente a GREZZO se era VUOTO
-                    # (c'è un grezzo fisicamente su quel pallet)
-                    try:
-                        r = urllib.request.urlopen(f"{base}/api/pallet/", timeout=2)
-                        pallets = _j.loads(r.read()).get("pallet", [])
-                        pal = next((p for p in pallets if p.get("numero") == new_pallet), None)
-                        if pal and pal.get("stato", "vuoto") == "vuoto":
-                            body_grezzo = _j.dumps({"stato": "grezzo"}).encode()
-                            req3 = urllib.request.Request(f"{base}/api/pallet/{new_pallet}",
-                                data=body_grezzo, headers={"Content-Type": "application/json"}, method="PATCH")
-                            urllib.request.urlopen(req3, timeout=2)
-                    except Exception:
-                        pass
+        threading.Thread(target=_sync, daemon=True).start()
 
-            except Exception:
-                pass  # API non disponibile — solo salva il progetto
-
-        threading.Thread(target=_sync_pallet, daemon=True).start()
 
     def _archivia(self, project):
         project["archived"] = not project.get("archived", False)

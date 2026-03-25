@@ -286,17 +286,36 @@ class AssegnaProgettoBody(BaseModel):
 
 @router.patch("/{numero}/assegna-progetto")
 async def assegna_progetto(numero: int, body: AssegnaProgettoBody):
-    """Assegna o rimuove il progetto da un pallet."""
+    """
+    Unica scrittura per il legame pallet ↔ progetto.
+    - progetto_id valorizzato → assegna + passa a GREZZO se era VUOTO
+    - progetto_id=null → rimuove assegnazione + passa a VUOTO
+    """
     config = carica_configurazione()
     state  = _load(config)
+    now    = datetime.now().isoformat()
+
     for p in state["pallet"]:
         if p["numero"] == numero:
             p["progetto_id"]     = body.progetto_id
             p["progetto_nome"]   = body.progetto_nome
             p["progetto_colore"] = body.progetto_colore
-            p["aggiornato"]      = datetime.now().isoformat()
+            p["aggiornato"]      = now
+
+            if body.progetto_id:
+                # Assegna: se era VUOTO → GREZZO
+                if p.get("stato", "vuoto") == "vuoto":
+                    p["stato"] = "grezzo"
+            else:
+                # Rimozione: torna VUOTO (a meno che non sia IN LAVORAZIONE)
+                if p.get("stato") not in ("in_lavorazione",):
+                    p["stato"] = "vuoto"
+
             _save(config, state)
-            return {"ok": True, "pallet": numero, "progetto_id": body.progetto_id}
+            return {"ok": True, "pallet": numero,
+                    "progetto_id": body.progetto_id,
+                    "stato": p["stato"]}
+
     raise HTTPException(404, f"Pallet {numero} non trovato")
 
 

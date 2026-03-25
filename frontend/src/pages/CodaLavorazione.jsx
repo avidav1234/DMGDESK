@@ -615,9 +615,11 @@ export default function CodaLavorazione() {
           onClick={() => setPalletMenu(null)}>
           <div style={{
             position: 'fixed', left: palletMenu.x, top: palletMenu.y,
-            background: 'var(--bg-card)', border: '1px solid var(--border)',
-            borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
-            zIndex: 101, minWidth: 140, overflow: 'hidden',
+            background: '#ffffff',
+            border: '1px solid #D8D5CC',
+            borderRadius: 10,
+            boxShadow: '0 8px 32px rgba(0,0,0,0.18), 0 2px 8px rgba(0,0,0,0.10)',
+            zIndex: 101, minWidth: 200, overflow: 'hidden',
           }} onClick={e => e.stopPropagation()}>
             {/* Header menu */}
             {(()=>{
@@ -631,8 +633,9 @@ export default function CodaLavorazione() {
                 { s:'VUOTO',   dot:'#cbd5e1', bg:'#f1f5f9', fg:'#94a3b8' },
               ]
               return(<>
-                <div style={{ padding:'8px 14px', fontSize:11, fontWeight:700,
+                <div style={{ padding:'10px 14px 8px', fontSize:11, fontWeight:700,
                   color:'#0d2d5e', borderBottom:'1px solid #E8E6E0',
+                  background:'#F8F7F4',
                   letterSpacing:'0.06em', display:'flex', alignItems:'center', gap:6 }}>
                   <span style={{fontWeight:900}}>P{palletMenu.id}</span>
                   {proj && <span style={{fontWeight:400,color:'#64748b',overflow:'hidden',
@@ -649,7 +652,7 @@ export default function CodaLavorazione() {
                       }}
                       style={{padding:'9px 14px',cursor:'pointer',fontSize:12,fontWeight:700,
                         color:'#1D5FAD',display:'flex',alignItems:'center',gap:8,
-                        borderBottom:'1px solid #F0EEE8'}}
+                        background:'#EFF6FF',borderBottom:'1px solid #E8E6E0'}}
                       onMouseEnter={e=>e.currentTarget.style.background='#EFF6FF'}
                       onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
                       <span>📋</span>
@@ -680,8 +683,9 @@ export default function CodaLavorazione() {
                 )}
 
                 {/* Separatore stati */}
-                <div style={{padding:'5px 14px 3px',fontSize:9,fontWeight:700,
-                  color:'#9A978E',letterSpacing:'0.08em'}}>STATO</div>
+                <div style={{padding:'6px 14px 3px',fontSize:9,fontWeight:700,
+                  color:'#9A978E',letterSpacing:'0.08em',background:'#F8F7F4',
+                  borderTop:'1px solid #E8E6E0'}}>STATO</div>
 
                 {/* Voci stato */}
                 {STATI_MENU.map(({s, dot, bg, fg}) => {

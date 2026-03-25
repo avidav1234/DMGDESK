@@ -733,12 +733,34 @@ class TabCodaLavorazione:
                         f"{base}/api/pallet/{pallet_num}",
                         data=body2, headers={"Content-Type":"application/json"}, method="PATCH")
                     urllib.request.urlopen(req2, timeout=2)
-            except Exception:
-                pass
+            except urllib.error.HTTPError as he:
+                import json as _je
+                try:
+                    msg = _je.loads(he.read()).get("detail", str(he))
+                except Exception:
+                    msg = str(he)
+                _tk.messagebox.showerror("Errore", msg, parent=win)
+                return
+            except Exception as e:
+                _tk.messagebox.showerror("Errore", str(e), parent=win)
+                return
             win.destroy()
             self._fetch_data()
 
-        for proj in projects:
+        # Progetti non assegnati ad altri pallet
+        pallet_occupati = {}
+        try:
+            r2 = urllib.request.urlopen(f"{base}/api/pallet/", timeout=2)
+            pd = _j.loads(r2.read())
+            pallet_occupati = {p["progetto_id"]: p["numero"]
+                               for p in pd.get("pallet",[]) if p.get("progetto_id")}
+        except Exception:
+            pass
+
+        progetti_liberi = [p for p in projects
+                           if p["id"] not in pallet_occupati]
+
+        for proj in progetti_liberi:
             row = _tk.Frame(frame, bg="#FFFFFF")
             row.pack(fill="x", pady=1)
             dot = _tk.Frame(row, width=8, height=8, bg=proj.get("color","#1D5FAD"))

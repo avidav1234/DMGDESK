@@ -1026,18 +1026,32 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
                 }
                 // Assegna al nuovo
                 if(val){
-                  await fetch('/api/pallet/'+val+'/assegna-progetto',{
+                  const r = await fetch('/api/pallet/'+val+'/assegna-progetto',{
                     method:'PATCH',headers:{'Content-Type':'application/json'},
                     body:JSON.stringify({progetto_id:project.id,progetto_nome:project.name,progetto_colore:project.color||'#1D5FAD'})
                   })
+                  if(!r.ok){
+                    const err = await r.json().catch(()=>({}))
+                    alert(err.detail||'Errore assegnazione pallet')
+                    return
+                  }
                 }
                 // Aggiorna lo state locale immediatamente
                 onUpdate({...project, pallet_assegnato: val})
+                // Ricarica pallet disponibili
+                fetch('/api/pallet/disponibili').then(r=>r.ok?r.json():{pallet:[]})
+                  .then(d=>setPalletDisponibili(d.pallet||[])).catch(()=>{})
               }}
               style={{fontSize:12,fontWeight:700,background:'#F0F4FF',color:'#1D5FAD',
                 border:'1px solid #BFDBFE',borderRadius:6,padding:'4px 8px',cursor:'pointer'}}>
               <option value=''>—</option>
-              {[1,2,3,4,5,6].map(n=><option key={n} value={n}>P{n}</option>)}
+              {[1,2,3,4,5,6].map(n=>{
+                const disp = palletDisponibili.find(p=>p.numero===n)
+                const isAssegnato = project.pallet_assegnato===n
+                // Mostra: assegnato a questo progetto (sempre) o VUOTO libero
+                if(!disp && !isAssegnato) return null
+                return <option key={n} value={n}>P{n}{isAssegnato?' ✓':''}</option>
+              })}
             </select>
             {project.pallet_assegnato&&(
               <span onClick={()=>window.location.href='/coda'}

@@ -57,11 +57,15 @@ export default function CodaLavorazione() {
       })
     }
     // Scrivi sul nuovo pallet (include cambio stato automatico nel backend)
-    await fetch(`/api/pallet/${palletNum}/assegna-progetto`, {
+    const res = await fetch(`/api/pallet/${palletNum}/assegna-progetto`, {
       method: 'PATCH', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({progetto_id: progettoId, progetto_nome: progettoNome, progetto_colore: progettoColore})
     })
-    // Ricarica tutto
+    if(!res.ok) {
+      const err = await res.json().catch(()=>({}))
+      alert(err.detail || 'Errore assegnazione pallet')
+      fetchAll(); return
+    }
     fetchAll()
   }
 
@@ -204,7 +208,13 @@ export default function CodaLavorazione() {
   const [listaProgetti, setListaProgetti] = useState([]);
   useEffect(()=>{
     fetch('/api/progetti/').then(r=>r.ok?r.json():[]).then(d=>{
-      setListaProgetti((d.projects||d||[]).filter(p=>!p.archived))
+      // Mostra solo progetti non assegnati ad altri pallet (o già su questo pallet)
+      const palletDiQuesto = modalAssegna ? progettiPallet[modalAssegna.palletId]?.id : null
+      setListaProgetti((d.projects||d||[]).filter(p=>{
+        if(p.archived) return false
+        // Permesso se non assegnato a nessun pallet, o assegnato a questo stesso pallet
+        return !p.pallet_assegnato || p.pallet_assegnato === (modalAssegna?.palletId)
+      }))
     }).catch(()=>{})
   },[])
 

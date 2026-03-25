@@ -297,17 +297,32 @@ async def assegna_progetto(numero: int, body: AssegnaProgettoBody):
 
     for p in state["pallet"]:
         if p["numero"] == numero:
+
+            if body.progetto_id:
+                stato_attuale = p.get("stato", "vuoto")
+                # Blocca se non è VUOTO (a meno che non sia già lo stesso progetto)
+                if stato_attuale != "vuoto" and p.get("progetto_id") != body.progetto_id:
+                    raise HTTPException(409,
+                        f"Pallet {numero} è '{stato_attuale}' con progetto già assegnato. "
+                        f"Sgancia prima il progetto corrente.")
+                # Blocca se il progetto è già assegnato a un altro pallet
+                altri = [x for x in state["pallet"]
+                         if x.get("progetto_id") == body.progetto_id
+                         and x["numero"] != numero]
+                if altri:
+                    raise HTTPException(409,
+                        f"Il progetto è già assegnato al Pallet {altri[0]['numero']}. "
+                        f"Sgancia prima.")
+
             p["progetto_id"]     = body.progetto_id
             p["progetto_nome"]   = body.progetto_nome
             p["progetto_colore"] = body.progetto_colore
             p["aggiornato"]      = now
 
             if body.progetto_id:
-                # Assegna: se era VUOTO → GREZZO
                 if p.get("stato", "vuoto") == "vuoto":
                     p["stato"] = "grezzo"
             else:
-                # Rimozione: torna VUOTO (a meno che non sia IN LAVORAZIONE)
                 if p.get("stato") not in ("in_lavorazione",):
                     p["stato"] = "vuoto"
 
@@ -412,3 +427,17 @@ async def sync_pallet_progetti():
                         encoding="utf-8")
 
     return {"ok": True, "allineamenti": changed}
+
+@router.get("/disponibili")
+async def get_pallet_disponibili():
+    """Ritorna i pallet VUOTI senza progetto assegnato."""
+    config = carica_configurazione()
+    state  = _load(config)
+    return {
+        "pallet": [
+            {"numero": p["numero"], "stato": p["stato"]}
+            for p in state["pallet"]
+            if p.get("stato", "vuoto") == "vuoto"
+            and not p.get("progetto_id")
+        ]
+    }

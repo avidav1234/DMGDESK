@@ -112,15 +112,22 @@ function ConfirmDialog({message,onConfirm,onCancel}){
   )
 }
 // ── ProgramRow ─────────────────────────────────────────────────────────────────
-function ProgramRow({pgm,gruppo,onStato,onOperatore,onTempo,onRemove,toolStatus}){
+function ProgramRow({pgm,gruppo,onStato,onOperatore,onTempo,onRemove,toolStatus,selected,onSelect}){
   const[expanded,setExpanded]=useState(false)
   const[editTempo,setEditTempo]=useState(pgm.tempoStimato||'')
   const[editingT,setEditingT]=useState(false)
   const sc=STATO_CFG[pgm.stato]||STATO_CFG.da_fare
   const opClean=(pgm.tipoOp||'').replace(/[-–]\s*NESSUN TESTO\s*/gi,'').replace(/MISURAZIONE NEL PROCESSO[-–]?/gi,'MISURA ').trim()
   return(
-    <div style={{borderBottom:`1px solid ${T.border}`,background:pgm.stato==='completato'?'#f0fdf4':pgm.stato==='in_macchina'?'#eff6ff':T.surface,opacity:pgm.stato==='completato'?0.75:1,transition:'background 0.15s'}}>
+    <div style={{borderBottom:`1px solid ${T.border}`,background:selected?'#EFF6FF':pgm.stato==='completato'?'#f0fdf4':pgm.stato==='in_macchina'?'#eff6ff':T.surface,opacity:pgm.stato==='completato'&&!selected?0.75:1,transition:'background 0.15s'}}>
       <div style={{display:'flex',alignItems:'center',minHeight:38}}>
+        {/* Checkbox */}
+        <div onClick={e=>{e.stopPropagation();onSelect&&onSelect()}}
+          style={{flexShrink:0,width:32,display:'flex',alignItems:'center',justifyContent:'center',alignSelf:'stretch',borderRight:`1px solid ${T.border}`,cursor:'pointer',background:selected?'#DBEAFE':'transparent'}}>
+          <div style={{width:16,height:16,borderRadius:4,border:selected?'none':'2px solid #B0ADA4',background:selected?'#1D5FAD':'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+            {selected&&<span style={{color:'#fff',fontSize:11,fontWeight:800,lineHeight:1}}>✓</span>}
+          </div>
+        </div>
         <div onClick={()=>onStato(STATO_NEXT[pgm.stato])} title={`→ ${STATO_CFG[STATO_NEXT[pgm.stato]].label}`}
           style={{flexShrink:0,width:110,display:'flex',alignItems:'center',justifyContent:'center',gap:5,padding:'0 10px',cursor:'pointer',borderRight:`1px solid ${T.border}`,background:toolStatus==='mancante'?'#FEE2E2':toolStatus==='fin_vita'?'#FEF9C3':sc.bg,color:toolStatus==='mancante'?'#DC2626':toolStatus==='fin_vita'?'#D97706':sc.color,fontWeight:700,fontSize:12,userSelect:'none',alignSelf:'stretch',transition:'all 0.12s'}}>
           <span style={{fontSize:14}}>{sc.dot}</span>{sc.short}
@@ -231,6 +238,7 @@ function FresaturaPanel({task,onUpdateTask,toolsDB,projectId}){
   const programs=Array.isArray(task.programs)?task.programs:[]
   const[expanded,setExpanded]=useState(false)
   const[collapsedGroups,setCollapsedGroups]=useState({ipm:true,fresatura:true})
+  const[selected,setSelected]=useState(new Set())
   const TOOL_BADGE={
     ok:          {dot:'✓',color:'#166534',bg:'#dcfce7'},
     fin_vita:    {dot:'⚠',color:'#B45309',bg:'#FEF3C7'},
@@ -274,6 +282,19 @@ function FresaturaPanel({task,onUpdateTask,toolsDB,projectId}){
       return next
     }))
   }
+  function toggleSelect(id){ setSelected(s=>{ const n=new Set(s); n.has(id)?n.delete(id):n.add(id); return n }) }
+  function selTutti(lista){ setSelected(s=>{ const n=new Set(s); lista.forEach(p=>n.add(p.id)); return n }) }
+  function deselTutti(){ setSelected(new Set()) }
+  function massaStato(stato){
+    updatePrograms(programs.map(p=>{
+      if(!selected.has(p.id)) return p
+      const next={...p,stato}
+      if(stato==='in_macchina'&&!p.tempoInizio) next.tempoInizio=nowStr()
+      if(stato==='completato') next.tempoFine=nowStr()
+      return next
+    }))
+    setSelected(new Set())
+  }
   const gruppi=[
     {key:'ipm',label:'Tastatura (IPM)',icon:'📏',color:'#8B2FC9',bgColor:'#F3E8FF',list:ipmPrograms},
     {key:'fresatura',label:'Fresatura',icon:'⚙️',color:'#1D5FAD',bgColor:'#E8F0FA',list:fresPrograms},
@@ -302,9 +323,31 @@ function FresaturaPanel({task,onUpdateTask,toolsDB,projectId}){
             <button onClick={()=>fileInputRef.current.click()} style={{background:'#1D5FAD',border:'none',borderRadius:7,color:'#fff',fontWeight:700,fontSize:13,padding:'7px 14px',cursor:'pointer'}}>📂 Carica .mpf</button>
             {total>0&&<span style={{fontSize:12,color:T.textMuted}}>{ipmPrograms.length>0&&`📏 ${ipmPrograms.length} IPM · `}⚙️ {fresPrograms.length} fresatura</span>}
           </div>
+
+          {/* Toolbar multi-select */}
+          {selected.size>0&&(
+            <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 14px',background:'#EFF6FF',borderBottom:`1px solid #1D5FAD33`,flexWrap:'wrap'}}>
+              <span style={{fontSize:12,fontWeight:700,color:'#1D5FAD',marginRight:4}}>{selected.size} selezionati</span>
+              <span style={{fontSize:11,color:'#1D5FAD',marginRight:8}}>→ Segna come:</span>
+              {[['da_fare','○ Da fare','#F0EEE8','#5A5750'],['in_macchina','⚙ In macchina','#DBEAFE','#1D5FAD'],['completato','✓ Completato','#DCFCE7','#166534']].map(([stato,label,bg,color])=>(
+                <button key={stato} onClick={()=>massaStato(stato)}
+                  style={{background:bg,border:`1.5px solid ${color}44`,borderRadius:6,color,fontSize:11,fontWeight:700,padding:'4px 10px',cursor:'pointer'}}>
+                  {label}
+                </button>
+              ))}
+              <button onClick={deselTutti} style={{marginLeft:'auto',background:'none',border:`1px solid ${T.border}`,borderRadius:6,color:T.textMuted,fontSize:11,padding:'4px 8px',cursor:'pointer'}}>✕ Deseleziona</button>
+            </div>
+          )}
+
           {total===0&&<div style={{textAlign:'center',padding:24,color:T.textMuted,fontSize:13}}>Nessun programma · clicca "Carica .mpf"</div>}
           {total>0&&(
             <div style={{display:'flex',background:T.surface2,borderBottom:`1px solid ${T.border}`,fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:'0.07em'}}>
+              <div style={{width:32,padding:'5px 8px',borderRight:`1px solid ${T.border}`,display:'flex',alignItems:'center',justifyContent:'center'}}>
+                <input type='checkbox' checked={selected.size>0&&programs.every(p=>selected.has(p.id))}
+                  ref={el=>{if(el) el.indeterminate=selected.size>0&&!programs.every(p=>selected.has(p.id))}}
+                  onChange={e=>e.target.checked?selTutti(programs):deselTutti()}
+                  onClick={e=>e.stopPropagation()} style={{cursor:'pointer',accentColor:'#1D5FAD'}}/>
+              </div>
               <div style={{width:110,padding:'5px 10px',borderRight:`1px solid ${T.border}`}}>STATO</div>
               <div style={{width:160,padding:'5px 10px',borderRight:`1px solid ${T.border}`}}>PROGRAMMA</div>
               <div style={{width:130,padding:'5px 10px',borderRight:`1px solid ${T.border}`}}>UTENSILE</div>
@@ -318,12 +361,15 @@ function FresaturaPanel({task,onUpdateTask,toolsDB,projectId}){
                   style={{display:'flex',alignItems:'center',gap:8,padding:'6px 14px',background:gruppo.bgColor,cursor:'pointer',userSelect:'none',borderBottom:`1px solid ${T.border}`}}>
                   <span style={{fontSize:12}}>{gruppo.icon}</span>
                   <span style={{fontSize:11,fontWeight:800,color:gruppo.color,flex:1,letterSpacing:'0.06em'}}>{gruppo.label.toUpperCase()}</span>
+                  <button onClick={e=>{e.stopPropagation();selTutti(gruppo.list)}} style={{background:'none',border:`1px solid ${gruppo.color}44`,borderRadius:5,color:gruppo.color,fontSize:10,padding:'2px 7px',cursor:'pointer',fontWeight:600}}>Sel. tutti</button>
                   <span style={{fontSize:11,color:gruppo.color}}>{gruppo.list.filter(p=>p.stato==='completato').length}/{gruppo.list.length}</span>
                   <span style={{fontSize:10,color:gruppo.color}}>{collapsedGroups[gruppo.key]?'▼':'▲'}</span>
                 </div>
               )}
               {(gruppi.length===1||!collapsedGroups[gruppo.key])&&gruppo.list.map(pgm=>(
                 <ProgramRow key={pgm.id} pgm={pgm} gruppo={gruppo}
+                  selected={selected.has(pgm.id)}
+                  onSelect={()=>toggleSelect(pgm.id)}
                   onStato={stato=>updatePgm(pgm.id,{stato})}
                   onOperatore={operatore=>updatePgm(pgm.id,{operatore})}
                   onTempo={tempoStimato=>updatePgm(pgm.id,{tempoStimato})}
@@ -711,10 +757,14 @@ function LancioNCModal({project, toolsDB, onLancia, onClose}){
 
   const [selected, setSelected] = useState(new Set())
   const [showCompletati, setShowCompletati] = useState(false)
+  const [filtro, setFiltro] = useState('da_fare') // 'da_fare' | 'in_macchina' | 'tutti'
+
+  const listaFiltrata = filtro==='da_fare' ? da_fare : filtro==='in_macchina' ? in_macchina : [...da_fare,...in_macchina]
 
   function toggle(id){ setSelected(s=>{ const n=new Set(s); n.has(id)?n.delete(id):n.add(id); return n }) }
   function selezionaDaFare(){ setSelected(new Set(da_fare.map(p=>p.id))) }
   function selezionaTutti(){ setSelected(new Set([...da_fare,...in_macchina].map(p=>p.id))) }
+  function selezionaFiltro(){ setSelected(new Set(listaFiltrata.map(p=>p.id))) }
   function deselezionaTutti(){ setSelected(new Set()) }
 
   const pgmSelezionati = allPgm.filter(p=>selected.has(p.id))
@@ -807,53 +857,47 @@ function LancioNCModal({project, toolsDB, onLancia, onClose}){
               borderRadius:8,color:'#5A5750',fontSize:13,padding:'5px 12px',cursor:'pointer'}}>✕</button>
           </div>
 
-          {/* Bottoni selezione rapida */}
-          <div style={{display:'flex',gap:8,flexWrap:'wrap',marginTop:10}}>
-            <button onClick={selezionaDaFare}
-              style={{background:'#1D5FAD',border:'none',borderRadius:7,color:'#fff',
-                fontSize:12,fontWeight:700,padding:'6px 14px',cursor:'pointer'}}>
-              ☑ Seleziona da fare ({da_fare.length})
-            </button>
-            {in_macchina.length>0&&<button onClick={selezionaTutti}
-              style={{background:'#F0EEE8',border:'1px solid #D8D5CC',borderRadius:7,
-                color:'#5A5750',fontSize:12,fontWeight:600,padding:'6px 14px',cursor:'pointer'}}>
-              Seleziona tutti ({da_fare.length+in_macchina.length})
-            </button>}
-            {selected.size>0&&<button onClick={deselezionaTutti}
-              style={{background:'none',border:'1px solid #D8D5CC',borderRadius:7,
-                color:'#9A978E',fontSize:12,padding:'6px 14px',cursor:'pointer'}}>
-              Deseleziona tutto
-            </button>}
+          {/* Filtri tab */}
+          <div style={{display:'flex',gap:6,marginTop:10,flexWrap:'wrap',alignItems:'center'}}>
+            {[['da_fare',`Da fare (${da_fare.length})`],['in_macchina',`In macchina (${in_macchina.length})`],['tutti',`Tutti (${da_fare.length+in_macchina.length})`]].map(([k,label])=>(
+              <button key={k} onClick={()=>{setFiltro(k);setSelected(new Set())}}
+                style={{background:filtro===k?'#1D5FAD':'#F0EEE8',border:`1.5px solid ${filtro===k?'#1D5FAD':'#D8D5CC'}`,borderRadius:7,
+                  color:filtro===k?'#fff':'#5A5750',fontSize:12,fontWeight:700,padding:'5px 12px',cursor:'pointer'}}>
+                {label}
+              </button>
+            ))}
+            <div style={{marginLeft:'auto',display:'flex',gap:6}}>
+              <button onClick={selezionaFiltro}
+                style={{background:'#EFF6FF',border:'1px solid #1D5FAD44',borderRadius:7,color:'#1D5FAD',fontSize:12,fontWeight:700,padding:'5px 12px',cursor:'pointer'}}>
+                ☑ Seleziona tutti visibili
+              </button>
+              {selected.size>0&&<button onClick={deselezionaTutti}
+                style={{background:'none',border:'1px solid #D8D5CC',borderRadius:7,color:'#9A978E',fontSize:12,padding:'5px 12px',cursor:'pointer'}}>
+                Deseleziona ({selected.size})
+              </button>}
+            </div>
           </div>
         </div>
 
         {/* Lista programmi */}
         <div style={{flex:1,overflowY:'auto'}}>
-          {/* Da fare */}
-          {da_fare.length>0&&(
+          {listaFiltrata.length>0?(
             <div>
-              <div style={{padding:'8px 14px 4px',fontSize:10,fontWeight:700,
-                color:'#9A978E',letterSpacing:'0.07em',background:'#F5F4F0',
-                borderBottom:'1px solid #E8E6E0'}}>
-                DA FARE — {da_fare.length}
+              <div style={{padding:'6px 14px',fontSize:10,fontWeight:700,letterSpacing:'0.07em',
+                background:'#F5F4F0',borderBottom:'1px solid #E8E6E0',
+                color:'#9A978E',display:'flex',alignItems:'center',gap:8}}>
+                <span>{filtro==='da_fare'?'DA FARE':filtro==='in_macchina'?'IN MACCHINA':'TUTTI'} — {listaFiltrata.length}</span>
+                {selected.size>0&&<span style={{color:'#1D5FAD',marginLeft:'auto'}}>{selected.size} selezionati</span>}
               </div>
-              {da_fare.map(p=><PgmRow key={p.id} pgm={p}/>)}
+              {listaFiltrata.map(p=><PgmRow key={p.id} pgm={p} dimmed={p.stato==='in_macchina'&&filtro==='tutti'}/>)}
+            </div>
+          ):(
+            <div style={{padding:40,textAlign:'center',color:'#9A978E',fontSize:14}}>
+              {allPgm.length===0?'Nessun programma MPF caricato':'Nessun programma con questo stato'}
             </div>
           )}
 
-          {/* In macchina */}
-          {in_macchina.length>0&&(
-            <div>
-              <div style={{padding:'8px 14px 4px',fontSize:10,fontWeight:700,
-                color:'#1D5FAD',letterSpacing:'0.07em',background:'#F0F4FF',
-                borderBottom:'1px solid #E8E6E0'}}>
-                IN MACCHINA — {in_macchina.length}
-              </div>
-              {in_macchina.map(p=><PgmRow key={p.id} pgm={p} dimmed/>)}
-            </div>
-          )}
-
-          {/* Completati (collassati) */}
+          {/* Completati (collassati, sempre in fondo) */}
           {completati.length>0&&(
             <div>
               <div onClick={()=>setShowCompletati(v=>!v)}
@@ -864,12 +908,6 @@ function LancioNCModal({project, toolsDB, onLancia, onClose}){
                 {showCompletati?'▼':'▶'} COMPLETATI — {completati.length}
               </div>
               {showCompletati&&completati.map(p=><PgmRow key={p.id} pgm={p} dimmed/>)}
-            </div>
-          )}
-
-          {allPgm.length===0&&(
-            <div style={{padding:40,textAlign:'center',color:'#9A978E',fontSize:14}}>
-              Nessun programma MPF caricato
             </div>
           )}
         </div>

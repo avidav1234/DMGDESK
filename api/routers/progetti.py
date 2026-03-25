@@ -66,12 +66,34 @@ class PalletAssoc(BaseModel):
 
 @router.get("/")
 async def get_progetti():
-    """Tutti i progetti + templates."""
-    config = carica_configurazione()
-    data = _load_progetti(config)
+    """Tutti i progetti + templates, con pallet_assegnato da pallet_state."""
+    config    = carica_configurazione()
+    data      = _load_progetti(config)
     templates = _load_templates(config)
+    projects  = data.get("projects", [])
+
+    # Incrocia con pallet_state per avere pallet_assegnato aggiornato
+    try:
+        from api.routers.pallet import _load as _load_pallet, _pallet_path
+        pallet_state = _load_pallet(config)
+        # Mappa progetto_id → numero pallet
+        pallet_map = {
+            p["progetto_id"]: p["numero"]
+            for p in pallet_state.get("pallet", [])
+            if p.get("progetto_id")
+        }
+        # Aggiorna ogni progetto con il pallet corretto
+        for proj in projects:
+            pid = proj.get("id")
+            if pid in pallet_map:
+                proj["pallet_assegnato"] = pallet_map[pid]
+            elif "pallet_assegnato" not in proj:
+                proj["pallet_assegnato"] = None
+    except Exception:
+        pass
+
     return {
-        "projects":  data.get("projects", []),
+        "projects":  projects,
         "templates": templates,
         "path":      str(_progetti_path(config)),
     }

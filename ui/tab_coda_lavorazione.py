@@ -702,10 +702,8 @@ class TabCodaLavorazione:
 
         # Lista progetti
         try:
-            from ui.tab_progetti import _load_projects_data, _carica_config as _cfg
-            cfg  = _cfg()
-            data = _load_projects_data(cfg)
-            projects = [p for p in data.get("projects", []) if not p.get("archived")]
+            from ui.tab_progetti import _load_progetti
+            projects = [p for p in _load_progetti() if not p.get("archived")]
         except Exception:
             projects = []
 

@@ -77,16 +77,11 @@ async def get_progetti():
         from api.routers.pallet import _load as _load_pallet, _pallet_path
         pallet_state = _load_pallet(config)
         # Mappa progetto_id → numero pallet
-        pallets_raw = pallet_state.get("pallet", [])
-        print(f"[get_progetti] pallet_state ha {len(pallets_raw)} pallet")
-        for p in pallets_raw:
-            print(f"  P{p.get('numero')}: stato={p.get('stato')} progetto_id={p.get('progetto_id')}")
         pallet_map = {
             p["progetto_id"]: p["numero"]
-            for p in pallets_raw
+            for p in pallet_state.get("pallet", [])
             if p.get("progetto_id")
         }
-        print(f"[get_progetti] pallet_map: {pallet_map}")
         # Aggiorna ogni progetto con il pallet corretto
         for proj in projects:
             pid = proj.get("id")
@@ -94,9 +89,8 @@ async def get_progetti():
                 proj["pallet_assegnato"] = pallet_map[pid]
             elif "pallet_assegnato" not in proj:
                 proj["pallet_assegnato"] = None
-    except Exception as _e:
-        import traceback; traceback.print_exc()
-        print(f'[get_progetti] errore pallet_state: {_e}')
+    except Exception:
+        pass
 
     return {
         "projects":  projects,

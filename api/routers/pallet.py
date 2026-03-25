@@ -296,7 +296,6 @@ async def assegna_progetto(numero: int, body: AssegnaProgettoBody):
             p["progetto_colore"] = body.progetto_colore
             p["aggiornato"]      = datetime.now().isoformat()
             _save(config, state)
-            print(f"[assegna-progetto] P{numero} → {body.progetto_id} ({body.progetto_nome})")
             return {"ok": True, "pallet": numero, "progetto_id": body.progetto_id}
     raise HTTPException(404, f"Pallet {numero} non trovato")
 

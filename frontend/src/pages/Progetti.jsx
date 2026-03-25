@@ -942,7 +942,6 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
         // classifyTool scansiona per name → trova tutti i gemelli con lo stesso alias
         const map={}
         arr.forEach(t=>{ if(t.name) map[String(t.tool_id)]=t })
-        console.log('[toolsDB] caricati', Object.keys(map).length, 'tools')
         setToolsDB(map)
       }).catch(()=>setToolsDB({}))
   },[])  // solo al mount del ProjectDetail
@@ -1628,10 +1627,6 @@ export default function Progetti(){
       const d=await r.json()
       // Normalizza: assicura che ogni progetto abbia pallet_assegnato
       const projs = (d.projects||[]).map(p=>({pallet_assegnato:null,...p}))
-      console.log('[Progetti] caricati', projs.length, 'progetti')
-      projs.filter(p=>p.pallet_assegnato).forEach(p=>
-        console.log(`  ${p.name} → P${p.pallet_assegnato}`)
-      )
       setProjects(projs)
       setTemplates(d.templates||[])
       setError(null)

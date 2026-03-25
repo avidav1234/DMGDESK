@@ -96,13 +96,14 @@ class MainWindow(ctk.CTk):
             height=TAB_HEIGHT                                 # 70px
         )
         
-        # Crea tabs - ANALISI NC PRIMO!
-        self.tabview.add("⬡ Coda")
-        self.tabview.add("📋 Progetti")
+        # Crea tabs
+        self.tabview.add("🏠 Home")
+        self.tabview.add("○ Macchina")
+        self.tabview.add("📋 Lavori")
         self.tabview.add("📄 Analisi NC")
         self.tabview.add("📝 Generatore")
-        self.tabview.add("🔧 In Macchina")
-        self.tabview.add("🏠 Scaffale")
+        self.tabview.add("🔧 Utensili")
+        self.tabview.add("🏗 Scaffale")
         self.tabview.add("📦 Smontati")
         self.tabview.add("🔩 Holder & Bussole")
         
@@ -118,17 +119,17 @@ class MainWindow(ctk.CTk):
         )
         
         self.tab_coda = TabCodaLavorazione(
-            self.tabview.tab("⬡ Coda"),
+            self.tabview.tab("○ Macchina"),
             self
         )
 
         self.tab_macchina = TabMacchina(
-            self.tabview.tab("🔧 In Macchina"),
+            self.tabview.tab("🔧 Utensili"),
             self
         )
         
         self.tab_scaffale = TabScaffale(
-            self.tabview.tab("🏠 Scaffale"),
+            self.tabview.tab("🏗 Scaffale"),
             self
         )
         
@@ -143,12 +144,66 @@ class MainWindow(ctk.CTk):
         )
 
         self.tab_progetti = TabProgetti(
-            self.tabview.tab("📋 Progetti"), self
+            self.tabview.tab("📋 Lavori"), self
         )
+
+        # Home — usa il _render_home di TabProgetti già implementato,
+        # ma montato nel tab globale corretto
+        self._build_home_tab()
         
-        # Imposta tab Analisi NC come default
-        self.tabview.set("⬡ Coda")
+        # Imposta Home come tab di default
+        self.tabview.set("🏠 Home")
     
+    def _build_home_tab(self):
+        """Costruisce la Home tab delegando a TabProgetti._render_home in background."""
+        home_frame = self.tabview.tab("🏠 Home")
+        # Usa il corpo scrollabile di TabProgetti per il render
+        # ma lo associa al frame del tab Home
+        self._home_tab_frame = home_frame
+        # Richiama il render quando il tab viene selezionato
+        def _on_home_selected(*args):
+            if self.tabview.get() == "🏠 Home":
+                self._refresh_home()
+        self.tabview._segmented_button.configure(command=_on_home_selected)
+        # Prima render immediato
+        self.after(500, self._refresh_home)
+
+    def _refresh_home(self):
+        """Aggiorna il contenuto della Home tab."""
+        for w in self._home_tab_frame.winfo_children():
+            w.destroy()
+        # Usa il render di TabProgetti passando il frame Home come parent
+        import threading
+        threading.Thread(target=self._home_worker, daemon=True).start()
+
+    def _home_worker(self):
+        """Carica i dati per la Home in background poi renderizza."""
+        import urllib.request as _ur, json as _jj
+        pallet_list, setup_data = [], {}
+        try:
+            r = _ur.urlopen("http://localhost:8000/api/pallet/", timeout=2)
+            pallet_list = _jj.loads(r.read()).get("pallet", [])
+        except Exception:
+            pass
+        try:
+            r = _ur.urlopen("http://localhost:8000/api/progetti/analisi-setup/non-utilizzati", timeout=2)
+            setup_data = _jj.loads(r.read())
+        except Exception:
+            pass
+        self.after(0, lambda: self._home_render(pallet_list, setup_data))
+
+    def _home_render(self, pallet_list, setup_data):
+        """Renderizza la Home con i dati già caricati."""
+        if not hasattr(self, '_home_tab_frame'):
+            return
+        # Delega a TabProgetti che ha già tutta la logica
+        tp = getattr(self, 'tab_progetti', None)
+        if tp:
+            # Temporaneamente usa il body di TabProgetti con i dati aggiornati
+            tp._pallet_list_cache = pallet_list
+            tp._setup_data_cache = setup_data
+            tp._render_home_in(self._home_tab_frame, pallet_list, setup_data)
+
     def _seleziona_database(self):
         """Obsoleto — i DB vengono trovati automaticamente dalla cartella TOA."""
         pass

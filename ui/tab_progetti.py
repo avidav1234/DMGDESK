@@ -458,13 +458,35 @@ class TabProgetti:
     # ══════════════════════════════════════════════════════════════════════════
 
     def _render_home(self):
+        self._render_home_in(self._body)
+
+    def _render_home_in(self, body, pallet_list=None, setup_data=None):
         from datetime import datetime as _dt
         import urllib.request as _ur
         import json as _jj
 
-        body = self._body
+        # Pulisce il parent se chiamato dall'esterno
+        if body is not self._body:
+            for w in body.winfo_children():
+                w.destroy()
+
+        # Carica dati se non passati
+        if pallet_list is None:
+            try:
+                r = _ur.urlopen("http://localhost:8000/api/pallet/", timeout=2)
+                pallet_list = _jj.loads(r.read()).get("pallet", [])
+            except Exception:
+                pallet_list = []
+        if setup_data is None:
+            try:
+                r = _ur.urlopen("http://localhost:8000/api/progetti/analisi-setup/non-utilizzati", timeout=2)
+                setup_data = _jj.loads(r.read())
+            except Exception:
+                setup_data = {}
         today = _dt.now().strftime("%Y-%m-%d")
         now_label = _dt.now().strftime("%A %d %B %Y").capitalize()
+
+        today = _dt.now().strftime("%Y-%m-%d")
 
         in_progress = [p for p in self._projects if not p.get("archived") and get_progress(p) < 100]
         all_pgm = [pr for p in in_progress
@@ -486,23 +508,8 @@ class TabProgetti:
             key=lambda p: days_until(get_delivery(p["id"])["dueDate"]) if get_delivery(p["id"]) else 99
         )
 
-        # Setup data da API
-        da_montare_n, fine_vita_n, setup_data = 0, 0, {}
-        try:
-            r = _ur.urlopen("http://localhost:8000/api/progetti/analisi-setup/non-utilizzati", timeout=2)
-            setup_data = _jj.loads(r.read())
-            da_montare_n = len(setup_data.get("da_montare", []))
-            fine_vita_n  = len(setup_data.get("fin_vita", []))
-        except Exception:
-            pass
-
-        # Pallet state
-        pallet_list = []
-        try:
-            r = _ur.urlopen("http://localhost:8000/api/pallet/", timeout=2)
-            pallet_list = _jj.loads(r.read()).get("pallet", [])
-        except Exception:
-            pass
+        da_montare_n = len(setup_data.get("da_montare", []))
+        fine_vita_n  = len(setup_data.get("fin_vita", []))
 
         # ── Header ────────────────────────────────────────────────────────────
         hdr = tk.Frame(body, bg=TC["surface"])

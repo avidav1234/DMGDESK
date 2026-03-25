@@ -799,7 +799,7 @@ class TabMacchina:
 
         win = tk.Toplevel(self.parent)
         win.title("🔧 Analisi Setup Macchina")
-        win.geometry("620x540")
+        win.geometry("620x580")
         win.grab_set()
         win.configure(bg="#F5F4F0")
 
@@ -816,18 +816,38 @@ class TabMacchina:
 
         tk.Frame(win, height=1, bg="#D8D5CC").pack(fill="x")
 
+        # Barra di ricerca
+        search_frame = tk.Frame(win, bg="#F5F4F0")
+        search_frame.pack(fill="x", padx=16, pady=(10,0))
+        tk.Label(search_frame, text="🔍", font=("Arial",13), bg="#F5F4F0", fg="#5A5750").pack(side="left")
+        search_var = tk.StringVar()
+        search_entry = tk.Entry(search_frame, textvariable=search_var,
+                                font=("DM Sans",12), bg="#FFFFFF", fg="#1A1814",
+                                relief="flat", highlightbackground="#D8D5CC",
+                                highlightthickness=1, bd=0)
+        search_entry.pack(side="left", fill="x", expand=True, padx=8, ipady=5)
+        search_entry.insert(0, "Cerca alias...")
+        search_entry.config(fg="#9A978E")
+        def _on_focus_in(e):
+            if search_entry.get() == "Cerca alias...":
+                search_entry.delete(0, "end")
+                search_entry.config(fg="#1A1814")
+        def _on_focus_out(e):
+            if not search_entry.get():
+                search_entry.insert(0, "Cerca alias...")
+                search_entry.config(fg="#9A978E")
+        search_entry.bind("<FocusIn>", _on_focus_in)
+        search_entry.bind("<FocusOut>", _on_focus_out)
+
+        tk.Frame(win, height=1, bg="#D8D5CC").pack(fill="x", pady=(10,0))
+
         # Body scrollabile
-        body = ctk.CTkScrollableFrame(win, fg_color="#F5F4F0", corner_radius=0)
+        body_container = tk.Frame(win, bg="#F5F4F0")
+        body_container.pack(fill="both", expand=True)
+        body = ctk.CTkScrollableFrame(body_container, fg_color="#F5F4F0", corner_radius=0)
         body.pack(fill="both", expand=True, padx=16, pady=12)
 
-        def _sezione(titolo, items, color, bg, render_fn):
-            if not items: return
-            ctk.CTkLabel(body, text=titolo, font=("DM Sans",10,"bold"),
-                         text_color=color).pack(anchor="w", pady=(10,4))
-            for item in items:
-                row = tk.Frame(body, bg=bg, highlightbackground="#D8D5CC", highlightthickness=1)
-                row.pack(fill="x", pady=1)
-                render_fn(row, item)
+        bg_dm = "#FDECEA"
 
         def _render_da_montare(row, item):
             left = tk.Frame(row, bg=bg_dm)
@@ -881,10 +901,34 @@ class TabMacchina:
                 tk.Label(row, text=f"{item['life_percent']}%",
                          font=("DM Sans",9), fg="#9A978E", bg="#F0EEE8").pack(side="right", padx=10)
 
-        bg_dm = "#FDECEA"
-        _sezione(f"✗  MANCANTI / DA MONTARE — {len(da_montare)}", da_montare, "#C0392B", bg_dm, _render_da_montare)
-        _sezione(f"⚠  FINE VITA (<15%) — {len(fin_vita)}", fin_vita, "#B45309", "#FEF3C7", _render_fin_vita)
-        _sezione(f"📦  NON UTILIZZATI DA NESSUN PROGETTO — {len(non_utilizzati)}", non_utilizzati, "#5A5750", "#F0EEE8", _render_non_usati)
+        def _sezione(titolo, items, color, bg, render_fn, tutti):
+            if not items: return
+            n_tot = len(tutti)
+            n_filt = len(items)
+            label = titolo if n_filt == n_tot else titolo.rsplit("—",1)[0] + f"— {n_filt} di {n_tot}"
+            ctk.CTkLabel(body, text=label, font=("DM Sans",10,"bold"),
+                         text_color=color).pack(anchor="w", pady=(10,4))
+            for item in items:
+                row = tk.Frame(body, bg=bg, highlightbackground="#D8D5CC", highlightthickness=1)
+                row.pack(fill="x", pady=1)
+                render_fn(row, item)
+
+        def _rebuild(q=""):
+            q = q.strip().lower()
+            if q == "cerca alias...":
+                q = ""
+            for w in body.winfo_children():
+                w.destroy()
+            def filt(lst): return [i for i in lst if q in i.get("alias","").lower()] if q else lst
+            dm_f  = filt(da_montare)
+            fv_f  = filt(fin_vita)
+            nu_f  = filt(non_utilizzati)
+            _sezione(f"✗  MANCANTI / DA MONTARE — {len(da_montare)}", dm_f, "#C0392B", bg_dm, _render_da_montare, da_montare)
+            _sezione(f"⚠  FINE VITA (<15%) — {len(fin_vita)}", fv_f, "#B45309", "#FEF3C7", _render_fin_vita, fin_vita)
+            _sezione(f"📦  NON UTILIZZATI — {len(non_utilizzati)}", nu_f, "#5A5750", "#F0EEE8", _render_non_usati, non_utilizzati)
+
+        search_var.trace_add("write", lambda *_: _rebuild(search_var.get()))
+        _rebuild()
 
         # Footer
         ftr = ctk.CTkFrame(win, fg_color="#F5F4F0", height=48, corner_radius=0)

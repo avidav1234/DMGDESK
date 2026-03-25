@@ -316,7 +316,7 @@ export default function AnalisiNC() {
 
   // ── Layout ────────────────────────────────────────────────────────────────
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 0, padding: '0 20px' }}>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 0, padding: '12px 20px 0' }}>
 
       {/* ── Top bar: ordine flow ── */}
       {/* SX: Aggiungi | Nome | Fase(opz.) | Genera MAIN | Reset | banner stato */}

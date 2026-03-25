@@ -240,9 +240,8 @@ export default function Macchina() {
 
   return (
     <>
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 12, padding: '0 20px' }}>
-      <SectionHeader title="In Macchina — V16"
-        subtitle="Sync TOA/TMA  •  Confronto MPF  •  Tabella utensili" />
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 12, padding: '12px 20px 0' }}>
+      <SectionHeader title="Utensili in macchina" subtitle="" />
 
       {/* Toolbar: MPF a sinistra (grande), sync a destra (piccolo) */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

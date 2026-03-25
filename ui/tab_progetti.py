@@ -967,6 +967,9 @@ class TabProgetti:
                       highlightbackground="#1D5FAD", highlightthickness=1)
         pf.pack(fill="x", padx=(28,0), pady=(3,6))
 
+        # Stato selezione condiviso tra le righe
+        selected_ids = set()
+
         # ── Header principale ─────────────────────────────────────────────────
         ph = tk.Frame(pf, bg="#EAF1FB")
         ph.pack(fill="x", padx=8, pady=5)
@@ -989,6 +992,74 @@ class TabProgetti:
             tk.Label(ph, text=f"⚠ {len(anomalie)} utensili problematici",
                      font=("DM Sans",9,"bold"), fg="#DC2626", bg="#FEE2E2",
                      padx=6, pady=1).pack(side="left", padx=6)
+
+        # ── Toolbar multi-select (appare quando ci sono selezioni) ────────────
+        toolbar = tk.Frame(pf, bg="#DBEAFE")
+        sel_label = tk.Label(toolbar, text="0 selezionati",
+                             font=("DM Sans",9,"bold"), fg="#1D5FAD", bg="#DBEAFE")
+        sel_label.pack(side="left", padx=8, pady=4)
+
+        def _massa_stato(nuovo_stato):
+            ts = now_str()
+            for p in programs:
+                if p["id"] in selected_ids:
+                    p["stato"] = nuovo_stato
+                    if nuovo_stato == "in_macchina" and not p.get("tempoInizio"):
+                        p["tempoInizio"] = ts
+                    elif nuovo_stato == "completato":
+                        p["tempoFine"] = ts
+            task["programs"] = programs
+            all_done = programs and all(x.get("stato")=="completato" for x in programs)
+            task["done"] = all_done
+            task["doneAt"] = datetime.now().isoformat()[:10] if all_done else None
+            selected_ids.clear()
+            self._save_project(project)
+            # Aggiorna tutte le righe senza refresh completo
+            _update_all_rows()
+            _update_toolbar()
+
+        for stato, label, bg_btn, fg_btn in [
+            ("da_fare",     "○ Da fare",     "#F0EEE8", "#5A5750"),
+            ("in_macchina", "⚙ In macchina", "#DBEAFE", "#1D5FAD"),
+            ("completato",  "✓ Completato",  "#DCFCE7", "#166534"),
+        ]:
+            tk.Button(toolbar, text=label, command=lambda s=stato: _massa_stato(s),
+                      font=("DM Sans",9,"bold"), fg=fg_btn, bg=bg_btn,
+                      relief="flat", padx=6, pady=2, cursor="hand2").pack(side="left", padx=2, pady=3)
+
+        tk.Button(toolbar, text="✕ Deseleziona", command=lambda: _desel_tutti(),
+                  font=("DM Sans",9), fg=TC["muted"], bg="#DBEAFE",
+                  relief="flat", padx=4, pady=2, cursor="hand2").pack(side="right", padx=6, pady=3)
+
+        # Funzioni per aggiornare toolbar e righe
+        row_refs = {}  # id → (row_frame, btn_stato, check_var)
+
+        def _update_toolbar():
+            n = len(selected_ids)
+            if n > 0:
+                toolbar.pack(fill="x", padx=4, pady=(0,2))
+                sel_label.configure(text=f"{n} selezionati → segna come:")
+            else:
+                toolbar.pack_forget()
+
+        def _update_all_rows():
+            for pid, (row_frame, btn, check_var) in row_refs.items():
+                pgm = next((p for p in programs if p["id"]==pid), None)
+                if not pgm: continue
+                stato = pgm.get("stato","da_fare")
+                lbl_s, fg_s, bg_s = STATO_CFG.get(stato, STATO_CFG["da_fare"])
+                sel = pid in selected_ids
+                try:
+                    row_frame.configure(bg="#DBEAFE" if sel else bg_s)
+                    btn.configure(text=lbl_s, fg=fg_s, bg="#DBEAFE" if sel else bg_s)
+                    check_var.set(sel)
+                except Exception:
+                    pass
+
+        def _desel_tutti():
+            selected_ids.clear()
+            _update_all_rows()
+            _update_toolbar()
 
         def _carica():
             files = fd.askopenfilenames(title="Carica file MPF",
@@ -1069,7 +1140,7 @@ class TabProgetti:
 
             # Popola il body (non packato = collassato di default)
             for pgm in ipm_pgm:
-                self._render_program_row(ipm_body, project, task, pgm, programs)
+                self._render_program_row(ipm_body, project, task, pgm, programs, selected_ids, row_refs, _update_toolbar, _update_all_rows)
             # Non chiamare .pack() qui — rimane nascosto finché non si clicca
 
         # ── Sezione FRESATURA (blu) ────────────────────────────────────────────
@@ -1105,14 +1176,15 @@ class TabProgetti:
             toggle_fres_btn.pack(side="right", padx=4)
 
             for pgm in fres_pgm:
-                self._render_program_row(fres_body, project, task, pgm, programs)
+                self._render_program_row(fres_body, project, task, pgm, programs, selected_ids, row_refs, _update_toolbar, _update_all_rows)
 
         elif fres_pgm:
             # Solo fresatura, nessun header separatore
             for pgm in fres_pgm:
-                self._render_program_row(pf, project, task, pgm, programs)
+                self._render_program_row(pf, project, task, pgm, programs, selected_ids, row_refs, _update_toolbar, _update_all_rows)
 
-    def _render_program_row(self, parent, project, task, pgm, programs):
+    def _render_program_row(self, parent, project, task, pgm, programs,
+                             selected_ids=None, row_refs=None, update_toolbar=None, update_all_rows=None):
         stato = pgm.get("stato","da_fare")
         lbl, fg, bg = STATO_CFG.get(stato, STATO_CFG["da_fare"])
 
@@ -1134,11 +1206,39 @@ class TabProgetti:
             "disabilitato":"#7C3AED",
         }
         row_bg = TOOL_BG.get(tool_status, bg)
+        pid = pgm.get("id","")
 
         row = tk.Frame(parent, bg=row_bg,
                        highlightbackground=TOOL_FG.get(tool_status, row_bg),
                        highlightthickness=2 if tool_status in TOOL_BG else 0)
         row.pack(fill="x", padx=4, pady=1)
+
+        # Checkbox selezione
+        check_var = tk.BooleanVar(value=False)
+        if row_refs is not None:
+            row_refs[pid] = (row, None, check_var)  # btn aggiornato dopo
+
+        def _toggle_sel(p_id=pid, rv=row_bg):
+            if selected_ids is None: return
+            if p_id in selected_ids:
+                selected_ids.discard(p_id)
+                check_var.set(False)
+                try:
+                    stato_cur = pgm.get("stato","da_fare")
+                    _, _, bg_cur = STATO_CFG.get(stato_cur, STATO_CFG["da_fare"])
+                    row.configure(bg=TOOL_BG.get(tool_status, bg_cur))
+                except Exception: pass
+            else:
+                selected_ids.add(p_id)
+                check_var.set(True)
+                try: row.configure(bg="#DBEAFE")
+                except Exception: pass
+            if update_toolbar: update_toolbar()
+
+        chk = tk.Checkbutton(row, variable=check_var, command=_toggle_sel,
+                             bg=row_bg, activebackground=row_bg,
+                             relief="flat", cursor="hand2", padx=2)
+        chk.pack(side="left")
 
         def _adv(p=pgm, btn_ref=[None], row_ref=[row]):
             p["stato"] = STATO_NEXT.get(p.get("stato","da_fare"), "da_fare")
@@ -1170,6 +1270,8 @@ class TabProgetti:
                   relief="flat", padx=6, pady=2, cursor="hand2", width=13)
         _btn.pack(side="left", padx=3)
         _adv.__defaults__[0][0] = _btn  # salva riferimento nel btn_ref
+        if row_refs is not None and pid in row_refs:
+            row_refs[pid] = (row, _btn, check_var)  # aggiorna con btn reale
         tk.Label(row, text=pgm.get("numPgm",""),
                  font=("Consolas",9,"bold"), fg=TC["blue"], bg=row_bg, width=5).pack(side="left")
         # Badge utensile con colore problema

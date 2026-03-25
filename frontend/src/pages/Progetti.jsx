@@ -1347,104 +1347,106 @@ function TemplateEditor({template,onSave,onCancel}){
 function HomePage({projects,deliveries,palletState,setupData,onNavigateProject,onNavigateCoda}){
   const now=new Date()
   const todayStr=now.toISOString().slice(0,10)
+  const dayLabel=now.toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long'})
   const inProgress=projects.filter(p=>!p.archived&&getProgress(p)<100)
   const allPgm=inProgress.flatMap(p=>(p.steps||[]).flatMap(s=>s.tasks||[]).filter(t=>t.text?.trim().toLowerCase()==='fresatura').flatMap(t=>(t.programs||[]).filter(p=>p.tipoGruppo!=='ipm')))
   const pgmDaFare=allPgm.filter(p=>p.stato==='da_fare')
-  const pgmInMacchina=allPgm.filter(p=>p.stato==='in_macchina')
+  const pgmInMac=allPgm.filter(p=>p.stato==='in_macchina')
   const pgmCompletati=allPgm.filter(p=>p.stato==='completato')
-  const pgmOggi=allPgm.filter(p=>p.tempoFine&&p.tempoFine.startsWith(todayStr))
-
-  // Scadenze urgenti (<=7gg)
+  const pgmOggi=allPgm.filter(p=>(p.tempoFine||'').startsWith(todayStr))
   function getDelivery(pid){return deliveries.find(d=>d.projectId===pid)||null}
-  const urgenti=inProgress.filter(p=>{const d=getDelivery(p.id);const days=d&&d.dueDate&&!d.delivered?daysUntil(d.dueDate):null;return days!==null&&days<=7}).sort((a,b)=>{const da=getDelivery(a.id);const db=getDelivery(b.id);return (daysUntil(da?.dueDate)||99)-(daysUntil(db?.dueDate)||99)})
-
-  // Utensili critici da setupData
+  const urgenti=inProgress.filter(p=>{const d=getDelivery(p.id);const days=d&&d.dueDate&&!d.delivered?daysUntil(d.dueDate):null;return days!==null&&days<=7}).sort((a,b)=>{const da=getDelivery(a.id);const db=getDelivery(b.id);return(daysUntil(da?.dueDate)||99)-(daysUntil(db?.dueDate)||99)})
   const daMontare=(setupData?.da_montare||[]).length
   const fineVita=(setupData?.fin_vita||[]).length
-
-  // Pallet
   const pallets=palletState||[]
-
-  const StatCard=({label,val,color,sub})=>(
-    <div style={{background:T.surface,border:`1.5px solid ${color}33`,borderRadius:12,padding:'14px 18px',borderLeft:`4px solid ${color}`}}>
-      <div style={{fontSize:28,fontWeight:800,color,lineHeight:1}}>{val}</div>
-      <div style={{fontSize:12,fontWeight:700,color,marginTop:2}}>{label}</div>
-      {sub&&<div style={{fontSize:11,color:T.textMuted,marginTop:1}}>{sub}</div>}
-    </div>
-  )
+  const STATO_COLOR={grezzo:'#D4700A',finito:'#1A7A4A',guasto:'#C0392B',vuoto:'#9A978E'}
+  const STATO_BG={grezzo:'#FFF4E8',finito:'#E8F5EE',guasto:'#FDECEA',vuoto:'#F5F4F0'}
+  const STATO_BORDER={grezzo:'#D4700A44',finito:'#1A7A4A44',guasto:'#C0392B44',vuoto:'#D8D5CC'}
 
   return(
-    <div style={{flex:1,overflowY:'auto',padding:'24px 28px',background:T.bg,fontFamily:"'DM Sans', system-ui"}}>
-      {/* Header */}
-      <div style={{display:'flex',alignItems:'baseline',gap:12,marginBottom:24}}>
+    <div style={{flex:1,overflowY:'auto',background:T.bg,fontFamily:"'DM Sans', system-ui"}}>
+
+      {/* ── Topbar header ── */}
+      <div style={{background:T.surface,borderBottom:`1px solid ${T.border}`,padding:'14px 28px',display:'flex',alignItems:'baseline',gap:12}}>
         <div style={{fontSize:22,fontWeight:800,color:T.text}}>Buongiorno</div>
-        <div style={{fontSize:14,color:T.textMuted}}>{now.toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long'})}</div>
+        <div style={{fontSize:14,color:T.textMuted}}>{dayLabel}</div>
       </div>
 
-      {/* FOCUS — Scadenze urgenti */}
-      {urgenti.length>0&&(
-        <div style={{background:'#FDECEA',border:'1.5px solid #C0392B44',borderRadius:14,padding:'14px 18px',marginBottom:20}}>
-          <div style={{fontSize:12,fontWeight:800,color:'#C0392B',letterSpacing:'0.07em',marginBottom:10}}>🎯 FOCUS — {urgenti.length} CONSEGN{urgenti.length===1?'A':'E'} URGENTI</div>
-          <div style={{display:'flex',flexDirection:'column',gap:6}}>
+      <div style={{padding:'20px 28px',display:'flex',flexDirection:'column',gap:20}}>
+
+        {/* ── Alert strip ── */}
+        {(urgenti.length>0||daMontare>0||fineVita>0)&&(
+          <div style={{display:'flex',flexDirection:'column',gap:8}}>
             {urgenti.map(p=>{
               const d=getDelivery(p.id)
               const days=daysUntil(d?.dueDate)
-              const pct=getProgress(p)
               return(
                 <div key={p.id} onClick={()=>onNavigateProject(p.id)}
-                  style={{display:'flex',alignItems:'center',gap:12,background:'#fff',borderRadius:8,padding:'8px 12px',cursor:'pointer',border:'1px solid #C0392B22'}}>
-                  <div style={{width:8,height:8,borderRadius:'50%',background:p.color,flexShrink:0}}/>
-                  <div style={{flex:1,fontWeight:700,fontSize:14,color:T.text}}>{p.name}</div>
-                  <div style={{fontSize:12,fontWeight:800,color:'#C0392B',background:'#FDECEA',padding:'2px 10px',borderRadius:20}}>
-                    {days===0?'OGGI':days<0?`Scaduto ${Math.abs(days)}gg fa`:`${days}gg`}
+                  style={{display:'flex',alignItems:'center',gap:12,background:'#FDECEA',border:'1px solid #C0392B33',borderRadius:10,padding:'10px 16px',cursor:'pointer'}}>
+                  <div style={{width:8,height:8,borderRadius:'50%',background:'#C0392B',flexShrink:0}}/>
+                  <div style={{fontSize:13,fontWeight:700,color:'#7B1F1F',flex:1}}>
+                    🎯 {p.name}
+                    <span style={{fontWeight:400,color:'#C0392B',marginLeft:8}}>— scadenza {days===0?'oggi':days<0?`${Math.abs(days)} giorni fa`:`tra ${days} giorni`}</span>
                   </div>
-                  <div style={{fontSize:12,color:T.textMuted}}>{pct}%</div>
+                  <span style={{fontSize:12,fontWeight:800,color:'#C0392B',background:'#fff',padding:'2px 10px',borderRadius:20,border:'1px solid #C0392B33'}}>{days===0?'OGGI':days<0?`${Math.abs(days)}gg fa`:`${days}gg`}</span>
                 </div>
               )
             })}
+            {(daMontare>0||fineVita>0)&&(
+              <div style={{display:'flex',alignItems:'center',gap:12,background:'#FEF3C7',border:'1px solid #D4700A33',borderRadius:10,padding:'10px 16px'}}>
+                <div style={{fontSize:13,fontWeight:700,color:'#7B4500',flex:1}}>
+                  🔧 Utensili — azione richiesta
+                  {daMontare>0&&<span style={{marginLeft:8,fontWeight:400,color:'#B45309'}}>{daMontare} da montare</span>}
+                  {fineVita>0&&<span style={{marginLeft:8,fontWeight:400,color:'#B45309'}}>{fineVita} a fine vita</span>}
+                </div>
+                <span style={{fontSize:11,color:'#B45309'}}>Vai su Utensili → Setup</span>
+              </div>
+            )}
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Metriche turno */}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12,marginBottom:20}}>
-        <StatCard label="Da fare" val={pgmDaFare.length} color="#9A978E" sub={`${inProgress.length} progetti attivi`}/>
-        <StatCard label="In macchina" val={pgmInMacchina.length} color="#1D5FAD" sub="programmi attivi"/>
-        <StatCard label="Completati oggi" val={pgmOggi.length} color="#1A7A4A" sub={`${pgmCompletati.length} totali`}/>
-        <StatCard label="Utensili critici" val={daMontare+fineVita} color={daMontare+fineVita>0?'#C0392B':'#1A7A4A'} sub={daMontare>0?`${daMontare} da montare`:'tutto ok'}/>
-      </div>
-
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:20}}>
-        {/* Pallet */}
+        {/* ── Pallet — protagonisti ── */}
         <div>
-          <div style={{fontSize:12,fontWeight:800,color:T.textMuted,letterSpacing:'0.07em',marginBottom:10}}>STATO PALLET</div>
-          <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8}}>
+          <div style={{fontSize:11,fontWeight:700,letterSpacing:'0.08em',color:T.textMuted,marginBottom:12}}>PALLET MACCHINA</div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:12}}>
             {[1,2,3,4,5,6].map(n=>{
-              const p=pallets.find(x=>x.numero===n)
-              const stato=p?.stato||'vuoto'
-              const hasProg=p?.progetto_nome
-              const proj=hasProg?inProgress.find(x=>x.id===p.progetto_id):null
+              const pd=pallets.find(x=>x.numero===n)||{}
+              const stato=(pd.stato||'vuoto').toLowerCase()
+              const nome=pd.progetto_nome||''
+              const pid=pd.progetto_id
+              const proj=pid?inProgress.find(x=>x.id===pid):null
               const pct=proj?getProgress(proj):null
-              const statoColor={grezzo:'#D4700A',finito:'#1A7A4A',guasto:'#C0392B',vuoto:'#9A978E'}[stato]
-              const statoBg={grezzo:'#FFF4E8',finito:'#E8F5EE',guasto:'#FDECEA',vuoto:'#F5F4F0'}[stato]
+              const d=proj?getDelivery(proj.id):null
+              const days=d&&d.dueDate&&!d.delivered?daysUntil(d.dueDate):null
+              const isUrgent=days!==null&&days<=3
+              const color=STATO_COLOR[stato]||'#9A978E'
+              const bg=STATO_BG[stato]||'#F5F4F0'
+              const isEmpty=stato==='vuoto'&&!nome
               return(
-                <div key={n} onClick={hasProg?()=>onNavigateProject(p.progetto_id):onNavigateCoda}
-                  style={{background:statoBg,border:`1.5px solid ${statoColor}44`,borderRadius:10,padding:'10px',cursor:hasProg?'pointer':'default',minHeight:72}}>
-                  <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:4}}>
-                    <span style={{fontSize:16,fontWeight:800,color:statoColor}}>P{n}</span>
-                    <span style={{fontSize:10,fontWeight:700,color:statoColor,background:`${statoColor}22`,padding:'1px 6px',borderRadius:10}}>{stato}</span>
+                <div key={n} onClick={pid?()=>onNavigateProject(pid):undefined}
+                  style={{background:bg,border:`1.5px solid ${isUrgent?'#C0392B':isEmpty?T.border:color+'66'}`,borderRadius:12,padding:'14px 16px',cursor:pid?'pointer':'default',transition:'all 0.15s',minHeight:isEmpty?72:110}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:nome?8:0}}>
+                    <span style={{fontSize:22,fontWeight:900,color:isEmpty?'#C8C5BE':color,lineHeight:1}}>P{n}</span>
+                    <span style={{fontSize:10,fontWeight:700,color:isEmpty?'#C8C5BE':color,background:isEmpty?'transparent':bg,padding:'2px 8px',borderRadius:10,border:`1px solid ${isEmpty?'transparent':color+'44'}`}}>
+                      {stato}
+                    </span>
+                    {isUrgent&&<span style={{marginLeft:'auto',fontSize:10,fontWeight:800,color:'#C0392B',background:'#FDECEA',padding:'2px 8px',borderRadius:10}}>{days===0?'OGGI':`${days}gg`}</span>}
                   </div>
-                  {hasProg?(
+                  {nome&&(
                     <>
-                      <div style={{fontSize:11,fontWeight:700,color:T.text,lineHeight:1.2,marginBottom:3}}>{p.progetto_nome}</div>
+                      <div style={{fontSize:14,fontWeight:800,color:T.text,marginBottom:6,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{nome}</div>
                       {pct!==null&&(
-                        <div style={{height:4,background:'#D8D5CC',borderRadius:2}}>
-                          <div style={{height:4,width:`${pct}%`,background:statoColor,borderRadius:2,transition:'width 0.3s'}}/>
-                        </div>
+                        <>
+                          <div style={{height:5,background:'rgba(0,0,0,0.08)',borderRadius:3,overflow:'hidden',marginBottom:3}}>
+                            <div style={{height:5,width:`${pct}%`,background:color,borderRadius:3,transition:'width 0.3s'}}/>
+                          </div>
+                          <div style={{display:'flex',justifyContent:'space-between'}}>
+                            <span style={{fontSize:11,color:T.textMuted}}>{(()=>{const p=allPgm.filter(x=>proj?.steps?.flatMap(s=>s.tasks||[]).find(t=>t.text?.trim().toLowerCase()==='fresatura'&&(t.programs||[]).find(pr=>pr.id===x.id)));return p.filter(x=>x.stato==='da_fare').length})()} pgm da fare</span>
+                            <span style={{fontSize:12,fontWeight:800,color:color}}>{pct}%</span>
+                          </div>
+                        </>
                       )}
                     </>
-                  ):(
-                    <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>—</div>
                   )}
                 </div>
               )
@@ -1452,48 +1454,61 @@ function HomePage({projects,deliveries,palletState,setupData,onNavigateProject,o
           </div>
         </div>
 
-        {/* Progetti in corso */}
-        <div>
-          <div style={{fontSize:12,fontWeight:800,color:T.textMuted,letterSpacing:'0.07em',marginBottom:10}}>PROGETTI IN CORSO</div>
-          <div style={{display:'flex',flexDirection:'column',gap:6}}>
-            {inProgress.slice(0,6).map(p=>{
-              const pct=getProgress(p)
-              const d=getDelivery(p.id)
-              const days=d&&d.dueDate&&!d.delivered?daysUntil(d.dueDate):null
-              const pgmP=allPgm.filter(x=>p.steps?.flatMap(s=>s.tasks||[]).find(t=>t.text?.trim().toLowerCase()==='fresatura'&&(t.programs||[]).find(pr=>pr.id===x.id)))
-              const daFareP=pgmP.filter(x=>x.stato==='da_fare').length
-              return(
-                <div key={p.id} onClick={()=>onNavigateProject(p.id)}
-                  style={{display:'flex',alignItems:'center',gap:10,background:T.surface,border:`1px solid ${T.border}`,borderRadius:10,padding:'9px 12px',cursor:'pointer',borderLeft:`4px solid ${p.color}`}}>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontWeight:700,fontSize:13,color:T.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}</div>
-                    <div style={{height:3,background:T.surface2,borderRadius:2,marginTop:4}}>
-                      <div style={{height:3,width:`${pct}%`,background:p.color,borderRadius:2}}/>
+        {/* ── Griglia inferiore: metriche + progetti ── */}
+        <div style={{display:'grid',gridTemplateColumns:'auto 1fr',gap:20,alignItems:'start'}}>
+
+          {/* Metriche turno — colonna sinistra */}
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,width:280}}>
+            {[
+              {val:pgmDaFare.length,  label:'Da fare',          sub:`${inProgress.length} lavori attivi`, color:'#5A5750', bg:T.surface2},
+              {val:pgmInMac.length,   label:'In macchina',       sub:'programmi attivi',                  color:'#1D5FAD', bg:'#EFF6FF'},
+              {val:pgmOggi.length,    label:'Completati oggi',   sub:`${pgmCompletati.length} totali`,    color:'#1A7A4A', bg:'#F0FBF4'},
+              {val:daMontare+fineVita,label:'Utensili critici',  sub:daMontare>0?`${daMontare} da montare`:'tutto ok',
+               color:daMontare+fineVita>0?'#C0392B':'#1A7A4A', bg:daMontare+fineVita>0?'#FEF0EE':'#F0FBF4'},
+            ].map(({val,label,sub,color,bg})=>(
+              <div key={label} style={{background:bg,borderRadius:10,padding:'12px 14px'}}>
+                <div style={{fontSize:26,fontWeight:700,color,lineHeight:1,marginBottom:3}}>{val}</div>
+                <div style={{fontSize:11,fontWeight:700,color,marginBottom:1}}>{label}</div>
+                <div style={{fontSize:10,color:T.textMuted}}>{sub}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Progetti in corso — colonna destra */}
+          <div>
+            <div style={{fontSize:11,fontWeight:700,letterSpacing:'0.08em',color:T.textMuted,marginBottom:10}}>LAVORI IN CORSO</div>
+            <div style={{display:'flex',flexDirection:'column',gap:6}}>
+              {inProgress.slice(0,6).map(p=>{
+                const pct=getProgress(p)
+                const d=getDelivery(p.id)
+                const days=d&&d.dueDate&&!d.delivered?daysUntil(d.dueDate):null
+                const pNum=pallets.find(x=>x.progetto_id===p.id)?.numero
+                const daFareP=allPgm.filter(x=>p.steps?.flatMap(s=>s.tasks||[]).find(t=>t.text?.trim().toLowerCase()==='fresatura'&&(t.programs||[]).find(pr=>pr.id===x.id))).filter(x=>x.stato==='da_fare').length
+                return(
+                  <div key={p.id} onClick={()=>onNavigateProject(p.id)}
+                    style={{display:'flex',alignItems:'center',gap:12,background:T.surface,border:`1px solid ${T.border}`,borderRadius:10,padding:'10px 14px',cursor:'pointer',borderLeft:`4px solid ${p.color}`}}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
+                        <span style={{fontSize:13,fontWeight:700,color:T.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}</span>
+                        {pNum&&<span style={{fontSize:10,fontWeight:700,color:'#1D5FAD',background:'#EFF6FF',padding:'1px 7px',borderRadius:8,flexShrink:0}}>P{pNum}</span>}
+                      </div>
+                      <div style={{height:4,background:T.surface2,borderRadius:2,overflow:'hidden'}}>
+                        <div style={{height:4,width:`${pct}%`,background:p.color,borderRadius:2}}/>
+                      </div>
+                    </div>
+                    <div style={{textAlign:'right',flexShrink:0}}>
+                      <div style={{fontSize:13,fontWeight:800,color:pct===100?'#1A7A4A':p.color}}>{pct}%</div>
+                      {days!==null&&<div style={{fontSize:10,fontWeight:700,color:days<=3?'#C0392B':'#D4700A'}}>{days===0?'oggi':days<0?`${Math.abs(days)}gg fa`:`${days}gg`}</div>}
+                      {daFareP>0&&<div style={{fontSize:10,color:'#1D5FAD'}}>{daFareP} pgm</div>}
                     </div>
                   </div>
-                  <div style={{textAlign:'right',flexShrink:0}}>
-                    <div style={{fontSize:12,fontWeight:800,color:pct===100?'#1A7A4A':T.accent}}>{pct}%</div>
-                    {days!==null&&<div style={{fontSize:10,color:days<=3?'#C0392B':'#D4700A',fontWeight:700}}>{days===0?'oggi':days<0?`${Math.abs(days)}gg fa`:`${days}gg`}</div>}
-                    {daFareP>0&&<div style={{fontSize:10,color:'#1D5FAD'}}>{daFareP} pgm</div>}
-                  </div>
-                </div>
-              )
-            })}
+                )
+              })}
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Utensili critici */}
-      {(daMontare>0||fineVita>0)&&(
-        <div style={{marginTop:20,background:T.surface,border:`1.5px solid #C0392B33`,borderRadius:14,padding:'14px 18px'}}>
-          <div style={{fontSize:12,fontWeight:800,color:'#C0392B',letterSpacing:'0.07em',marginBottom:10}}>🔧 UTENSILI — AZIONE RICHIESTA</div>
-          <div style={{display:'flex',gap:12}}>
-            {daMontare>0&&<div style={{background:'#FDECEA',border:'1px solid #C0392B44',borderRadius:8,padding:'8px 14px',fontSize:13,fontWeight:700,color:'#C0392B'}}>✗ {daMontare} da montare</div>}
-            {fineVita>0&&<div style={{background:'#FEF3C7',border:'1px solid #D9770644',borderRadius:8,padding:'8px 14px',fontSize:13,fontWeight:700,color:'#B45309'}}>⚠ {fineVita} fine vita</div>}
-            <div style={{fontSize:12,color:T.textMuted,alignSelf:'center'}}>Vai su "In Macchina → Setup" per i dettagli</div>
-          </div>
-        </div>
-      )}
+      </div>
     </div>
   )
 }

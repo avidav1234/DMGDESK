@@ -314,6 +314,45 @@ class TabProgetti:
         self._templates  = templates
         self._deliveries = deliveries
         self._refresh()
+        # Avvia auto-reload dal disco ogni 15 secondi (sincronizzazione con web)
+        self._schedule_reload()
+
+    def _schedule_reload(self):
+        """Ricarica silenziosamente i dati dal disco ogni 15s."""
+        self.parent.after(15000, self._silent_reload)
+
+    def _silent_reload(self):
+        """Ricarica dal disco senza rebuild UI se il progetto corrente è aperto."""
+        def _worker():
+            p = _load_progetti()
+            t = _load_templates()
+            d = _load_deliveries()
+            self.parent.after(0, lambda: self._apply_silent(p, t, d))
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _apply_silent(self, projects, templates, deliveries):
+        """Applica i nuovi dati senza refresh se niente è cambiato sul progetto aperto."""
+        self._templates  = templates
+        self._deliveries = deliveries
+
+        if not self._selected_id:
+            # Nessun dettaglio aperto — aggiorna lista silenziosamente
+            self._projects = projects
+            self._schedule_reload()
+            return
+
+        # Progetto corrente aperto — confronta se è cambiato
+        old_proj = next((p for p in self._projects if p.get("id") == self._selected_id), None)
+        new_proj = next((p for p in projects if p.get("id") == self._selected_id), None)
+
+        if new_proj and old_proj != new_proj:
+            # Cambiato da web — aggiorna e refresh
+            self._projects = projects
+            self._refresh()
+        else:
+            self._projects = projects
+
+        self._schedule_reload()
 
     def _save_all(self):
         threading.Thread(target=lambda: (
@@ -999,7 +1038,7 @@ class TabProgetti:
                        highlightthickness=2 if tool_status in TOOL_BG else 0)
         row.pack(fill="x", padx=4, pady=1)
 
-        def _adv(p=pgm):
+        def _adv(p=pgm, btn_ref=[None], row_ref=[row]):
             p["stato"] = STATO_NEXT.get(p.get("stato","da_fare"), "da_fare")
             if p["stato"] == "in_macchina" and not p.get("tempoInizio"):
                 p["tempoInizio"] = now_str()
@@ -1010,12 +1049,25 @@ class TabProgetti:
             task["done"] = all_done
             task["doneAt"] = datetime.now().isoformat()[:10] if all_done else None
             self._save_project(project)
+            # Aggiorna solo il bottone e il colore riga — nessun refresh completo
+            new_stato = p["stato"]
+            lbl_new, fg_new, bg_new = STATO_CFG.get(new_stato, STATO_CFG["da_fare"])
+            try:
+                row_ref[0].configure(bg=bg_new)
+                for w in row_ref[0].winfo_children():
+                    w.configure(bg=bg_new)
+                if btn_ref[0]:
+                    btn_ref[0].configure(text=lbl_new, fg=fg_new, bg=bg_new)
+            except Exception:
+                pass
 
         btn_bg = TOOL_BG.get(tool_status, bg)
         btn_fg = TOOL_FG.get(tool_status, fg)
-        tk.Button(row, text=lbl, command=_adv,
+        _btn = tk.Button(row, text=lbl, command=_adv,
                   font=("DM Sans",9,"bold"), fg=btn_fg, bg=btn_bg,
-                  relief="flat", padx=6, pady=2, cursor="hand2", width=13).pack(side="left", padx=3)
+                  relief="flat", padx=6, pady=2, cursor="hand2", width=13)
+        _btn.pack(side="left", padx=3)
+        _adv.__defaults__[0][0] = _btn  # salva riferimento nel btn_ref
         tk.Label(row, text=pgm.get("numPgm",""),
                  font=("Consolas",9,"bold"), fg=TC["blue"], bg=row_bg, width=5).pack(side="left")
         # Badge utensile con colore problema
@@ -1783,7 +1835,7 @@ class TabProgetti:
     def _save_project(self, project):
         self._projects = [project if p["id"]==project["id"] else p for p in self._projects]
         threading.Thread(target=lambda: _save_progetti(self._projects), daemon=True).start()
-        self.parent.after(0, self._refresh)
+        # NON chiama _refresh — troppo lento. I widget si aggiornano localmente.
 
     def _set_pallet(self, project, value):
         """Assegna o rimuove pallet — unica chiamata API."""

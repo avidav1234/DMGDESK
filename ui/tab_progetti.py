@@ -370,6 +370,30 @@ class TabProgetti:
         self._selected_id = project_id
         self._refresh()
 
+    def _save_due_date(self, project, date_str: str):
+        """Salva la data di scadenza per il progetto."""
+        pid = project.get("id","")
+        date_str = date_str.strip()
+        existing = self._get_delivery(pid)
+        if date_str:
+            if existing:
+                existing["dueDate"] = date_str
+            else:
+                import uuid as _uuid
+                self._deliveries.append({
+                    "id": str(_uuid.uuid4())[:8],
+                    "projectId": pid,
+                    "dueDate": date_str,
+                    "delivered": False,
+                    "note": "",
+                })
+        else:
+            # Rimuovi scadenza
+            if existing:
+                existing["dueDate"] = None
+        threading.Thread(target=lambda: _save_deliveries(self._deliveries), daemon=True).start()
+        self._refresh()
+
     def _refresh(self):
         self._clear_body()
         if self._editing_template:
@@ -636,7 +660,30 @@ class TabProgetti:
                   relief="flat", cursor="hand2").pack(side="left")
 
         # Pallet — legge da pallet_state (fonte di verità)
-        tk.Label(r1, text="Pallet:", font=("DM Sans",10), fg=TC["muted"], bg=TC["surface"]).pack(side="left", padx=(16,3))
+        # Scadenza consegna
+        delivery = self._get_delivery(project.get("id",""))
+        due_var = tk.StringVar(value=delivery.get("dueDate","")[:10] if delivery else "")
+        tk.Label(r1, text="Scadenza:", font=("DM Sans",10), fg=TC["muted"], bg=TC["surface"]).pack(side="left", padx=(0,3))
+        due_entry = tk.Entry(r1, textvariable=due_var, width=11,
+                             font=("DM Sans",10), relief="flat",
+                             bg="#F0FBF4" if (delivery and delivery.get("dueDate")) else "#F5F4F0",
+                             fg=TC["text"])
+        due_entry.pack(side="left")
+        due_entry.bind("<FocusOut>", lambda e: self._save_due_date(project, due_var.get()))
+        due_entry.bind("<Return>",   lambda e: self._save_due_date(project, due_var.get()))
+        if delivery and delivery.get("dueDate"):
+            days = days_until(delivery["dueDate"])
+            lbl2, urg_col, urg_bg, _ = delivery_urgency(days)
+            if not delivery.get("delivered"):
+                tk.Label(r1, text=lbl2, font=("DM Sans",9,"bold"),
+                         fg=urg_col, bg=urg_bg, padx=4, pady=1).pack(side="left", padx=(3,8))
+            else:
+                tk.Label(r1, text="✓ Consegnato", font=("DM Sans",9,"bold"),
+                         fg=TC["green"], bg=TC["greenBg"], padx=4, pady=1).pack(side="left", padx=(3,8))
+        else:
+            tk.Label(r1, text="gg/mm/aaaa", font=("DM Sans",9), fg=TC["muted"], bg=TC["surface"]).pack(side="left", padx=(2,8))
+
+        tk.Label(r1, text="Pallet:", font=("DM Sans",10), fg=TC["muted"], bg=TC["surface"]).pack(side="left", padx=(0,3))
         _pv = _get_pallet_assegnato(project.get("id")) or project.get("pallet_assegnato")
         pallet_var = tk.StringVar(value=str(_pv) if _pv is not None else "—")
         _combo_pallet = ttk.Combobox(r1, textvariable=pallet_var,

@@ -473,6 +473,7 @@ export default function CodaLavorazione() {
                     )}
                   </div>
                 )}
+              </div>
             );
           })}
         </div>

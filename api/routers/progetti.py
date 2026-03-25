@@ -87,8 +87,9 @@ async def get_progetti():
             pid = proj.get("id")
             # pallet_map è la fonte di verità — sovrascrive sempre
             proj["pallet_assegnato"] = pallet_map.get(pid, None)
-    except Exception:
-        pass
+    except Exception as e:
+        import traceback
+        print(f"[WARN] get_progetti: errore incrocio pallet_state: {e}\n{traceback.format_exc()}")
 
     return {
         "projects":  projects,
@@ -602,6 +603,61 @@ async def save_deliveries(body: Any = Body(...)):
     _save_deliveries(config, deliveries)
     return {"ok": True, "count": len(deliveries)}
 
+
+
+@router.get("/debug-stato")
+async def debug_stato():
+    """Debug: mostra pallet_state, deliveries e config in un colpo solo."""
+    import traceback
+    config = carica_configurazione()
+    result = {
+        "tools_toa_folder": config.get("tools_toa_folder"),
+        "pallet_state": None,
+        "pallet_state_error": None,
+        "pallet_state_path": None,
+        "deliveries": None,
+        "deliveries_error": None,
+        "deliveries_path": None,
+        "progetti_count": 0,
+        "progetti_con_pallet": [],
+    }
+    # pallet_state
+    try:
+        from api.routers.pallet import _load as _load_pallet, _pallet_path
+        pp = _pallet_path(config)
+        result["pallet_state_path"] = str(pp)
+        result["pallet_state_exists"] = pp.exists()
+        ps = _load_pallet(config)
+        result["pallet_state"] = [
+            {"numero": p["numero"], "stato": p.get("stato"), "progetto_id": p.get("progetto_id"), "progetto_nome": p.get("progetto_nome")}
+            for p in ps.get("pallet", [])
+        ]
+    except Exception as e:
+        result["pallet_state_error"] = f"{e}\n{traceback.format_exc()}"
+    # deliveries
+    try:
+        dp = _deliveries_path(config)
+        result["deliveries_path"] = str(dp)
+        result["deliveries_exists"] = dp.exists()
+        result["deliveries"] = _load_deliveries(config)
+    except Exception as e:
+        result["deliveries_error"] = f"{e}\n{traceback.format_exc()}"
+    # progetti
+    try:
+        data = _load_progetti(config)
+        projs = data.get("projects", [])
+        result["progetti_count"] = len(projs)
+        # pallet_map
+        pallet_map = {}
+        if result["pallet_state"]:
+            pallet_map = {p["progetto_id"]: p["numero"] for p in result["pallet_state"] if p.get("progetto_id")}
+        result["progetti_con_pallet"] = [
+            {"id": p.get("id"), "name": p.get("name"), "pallet": pallet_map.get(p.get("id"))}
+            for p in projs if pallet_map.get(p.get("id"))
+        ]
+    except Exception as e:
+        result["progetti_error"] = str(e)
+    return result
 
 
 @router.get("/debug-setup")

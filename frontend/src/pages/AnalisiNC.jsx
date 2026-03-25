@@ -316,12 +316,12 @@ export default function AnalisiNC() {
 
   // ── Layout ────────────────────────────────────────────────────────────────
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 0 }}>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 0, padding: '0 20px' }}>
 
       {/* ── Top bar: ordine flow ── */}
       {/* SX: Aggiungi | Nome | Fase(opz.) | Genera MAIN | Reset | banner stato */}
       {/* DX: Verifica | Invia tutto | Solo MAIN */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 0 8px', flexShrink: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 0 10px', flexShrink: 0 }}>
 
         {/* 1. Aggiungi file */}
         <div onClick={() => inputRef.current?.click()}

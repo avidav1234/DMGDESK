@@ -373,102 +373,106 @@ export default function CodaLavorazione() {
         <div style={{
           display: "grid",
           gridTemplateColumns: "repeat(2, 200px)",
-          gridTemplateRows: "repeat(3, 155px)",
+          gridTemplateRows: "auto",
           gap: 10,
+          alignItems: "start",
         }}>
           {pallets.map(p => {
             const s        = STATI[p.stato] || STATI["VUOTO"];
             const isActive = macchina?.pallet_attivo === p.id;
             const isLav    = p.stato === "IN LAVORAZIONE";
+            const hasProj  = !!progettiPallet[p.id];
+            const isEmpty  = !hasProj && p.stato === "VUOTO";
 
             return (
               <div
                 key={p.id}
                 title={isLav ? "Gestito automaticamente dalla macchina" : "Click per cambiare stato"}
                 style={{
-                  background:   s.bg,
-                  border:       `2px solid ${isActive ? "#f59e0b" : s.border}`,
+                  background:   isEmpty ? '#F8F7F5' : s.bg,
+                  border:       `${isEmpty ? 1 : 2}px solid ${isActive ? "#f59e0b" : isEmpty ? '#E8E6E0' : s.border}`,
                   borderRadius: 10,
-                  padding:      "10px 12px",
+                  padding:      isEmpty ? "8px 10px" : "10px 12px",
                   cursor:       isLav ? "default" : "pointer",
                   position:     "relative",
+                  height:       isEmpty ? 80 : 155,
                   boxShadow:    isActive
                     ? "0 0 0 3px rgba(245,158,11,0.25), 0 2px 6px rgba(0,0,0,0.12)"
-                    : "0 1px 3px rgba(0,0,0,0.07)",
+                    : isEmpty ? "none" : "0 1px 3px rgba(0,0,0,0.07)",
                   display:        "flex",
                   flexDirection:  "column",
                   justifyContent: "space-between",
-                  transition: "box-shadow 0.2s",
+                  transition: "all 0.2s",
                   userSelect: "none",
+                  opacity: isEmpty ? 0.6 : 1,
                 }}
                 onClick={(e) => {
-                  if (isLav) return; // IN LAVORAZIONE = solo dal PLC
+                  if (isLav) return;
                   setPalletMenu({ id: p.id, x: e.clientX, y: e.clientY });
                 }}
               >
-                {/* Numero + indicatore pulsante */}
+                {/* Numero + stato */}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                  <span style={{ fontSize: 36, fontWeight: 900, color: s.fg, lineHeight: 1 }}>
+                  <span style={{ fontSize: isEmpty ? 22 : 36, fontWeight: 900, color: isEmpty ? '#B0ADA4' : s.fg, lineHeight: 1 }}>
                     P{p.id}
                   </span>
                   {isActive && (
                     <span style={{
-                      width: 9, height: 9,
-                      borderRadius: "50%",
-                      background: "#f59e0b",
-                      display: "inline-block",
+                      width: 9, height: 9, borderRadius: "50%",
+                      background: "#f59e0b", display: "inline-block",
                       animation: "blink 1.4s infinite",
                     }} />
                   )}
                 </div>
 
-                {/* Stato + programma + progetto */}
-                <div style={{flex:1,minHeight:0,display:'flex',flexDirection:'column',justifyContent:'flex-end',gap:2}}>
-                  <div style={{fontSize:11,fontWeight:700,color:s.fg,opacity:0.9,letterSpacing:1,textTransform:'uppercase'}}>
-                    {p.stato}
-                  </div>
-                  {/* Progetto assegnato */}
-                  {progettiPallet[p.id] ? (
-                    <div style={{marginTop:2}}>
-                      <div style={{display:'flex',alignItems:'center',gap:3}}>
-                        <div style={{width:6,height:6,borderRadius:'50%',background:progettiPallet[p.id].colore,flexShrink:0}}/>
-                        <span style={{fontSize:9,fontWeight:700,color:progettiPallet[p.id].colore,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:110}}>
-                          {progettiPallet[p.id].nome}
-                        </span>
-                      </div>
-                      <div style={{marginTop:4,height:5,background:'rgba(0,0,0,0.1)',borderRadius:3,overflow:'hidden'}}>
-                        <div style={{height:'100%',background:progettiPallet[p.id].colore,width:`${progettiPallet[p.id].pct}%`,borderRadius:2}}/>
-                      </div>
-                      <div style={{display:'flex',justifyContent:'space-between',marginTop:1}}>
-                        <span style={{fontSize:10,color:s.fg,opacity:0.7}}>{progettiPallet[p.id].completati}/{progettiPallet[p.id].totale} pgm</span>
-                        <span style={{fontSize:10,fontWeight:700,color:s.fg,opacity:0.9}}>{progettiPallet[p.id].pct}%</span>
-                      </div>
-                      {/* Bottone Avvia */}
-                      {progettiPallet[p.id].da_fare > 0 && (
-                        <button onClick={e=>{e.stopPropagation();avviaProgetto(p.id)}}
-                          style={{marginTop:4,width:'100%',background:'#1D5FAD',border:'none',borderRadius:4,
-                            color:'#fff',fontWeight:700,fontSize:8,padding:'3px 0',cursor:'pointer'}}>
-                          ▶ Avvia ({progettiPallet[p.id].da_fare})
-                        </button>
-                      )}
-                      {progettiPallet[p.id].pct===100 && p.stato!=='FINITO' && (
-                        <button onClick={e=>{e.stopPropagation();setPalletStato(p.id,'FINITO')}}
-                          style={{marginTop:3,width:'100%',background:'#166534',border:'none',borderRadius:4,
-                            color:'#fff',fontWeight:700,fontSize:8,padding:'3px 0',cursor:'pointer'}}>
-                          ✓ Segna Finito
-                        </button>
-                      )}
+                {/* Stato label */}
+                {isEmpty ? (
+                  <div style={{fontSize:10, color:'#B0ADA4', fontWeight:600, letterSpacing:1}}>VUOTO</div>
+                ) : (
+                  <div style={{flex:1,minHeight:0,display:'flex',flexDirection:'column',justifyContent:'flex-end',gap:2}}>
+                    <div style={{fontSize:11,fontWeight:700,color:s.fg,opacity:0.9,letterSpacing:1,textTransform:'uppercase'}}>
+                      {p.stato}
                     </div>
-                  ) : (
-                    <button onClick={e=>{e.stopPropagation();setModalAssegna({palletId:p.id})}}
-                      style={{marginTop:4,width:'100%',background:'transparent',
-                        border:'1px dashed rgba(0,0,0,0.2)',borderRadius:4,
-                        color:s.fg,opacity:0.5,fontWeight:600,fontSize:8,padding:'3px 0',cursor:'pointer'}}>
-                      + Assegna progetto
-                    </button>
-                  )}
-                </div>
-              </div>
+                    {progettiPallet[p.id] ? (
+                      <div style={{marginTop:2}}>
+                        <div style={{display:'flex',alignItems:'center',gap:4,marginBottom:3}}>
+                          <div style={{width:7,height:7,borderRadius:'50%',background:progettiPallet[p.id].colore,flexShrink:0}}/>
+                          <span style={{fontSize:12,fontWeight:800,color:s.fg,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:130}}>
+                            {progettiPallet[p.id].nome}
+                          </span>
+                        </div>
+                        <div style={{height:5,background:'rgba(0,0,0,0.1)',borderRadius:3,overflow:'hidden'}}>
+                          <div style={{height:'100%',background:progettiPallet[p.id].colore,width:`${progettiPallet[p.id].pct}%`,borderRadius:2}}/>
+                        </div>
+                        <div style={{display:'flex',justifyContent:'space-between',marginTop:2}}>
+                          <span style={{fontSize:10,color:s.fg,opacity:0.7}}>{progettiPallet[p.id].completati}/{progettiPallet[p.id].totale} pgm</span>
+                          <span style={{fontSize:11,fontWeight:800,color:s.fg}}>{progettiPallet[p.id].pct}%</span>
+                        </div>
+                        {progettiPallet[p.id].da_fare > 0 && (
+                          <button onClick={e=>{e.stopPropagation();avviaProgetto(p.id)}}
+                            style={{marginTop:4,width:'100%',background:'#1D5FAD',border:'none',borderRadius:4,
+                              color:'#fff',fontWeight:700,fontSize:9,padding:'3px 0',cursor:'pointer'}}>
+                            ▶ Avvia ({progettiPallet[p.id].da_fare})
+                          </button>
+                        )}
+                        {progettiPallet[p.id].pct===100 && p.stato!=='FINITO' && (
+                          <button onClick={e=>{e.stopPropagation();setPalletStato(p.id,'FINITO')}}
+                            style={{marginTop:3,width:'100%',background:'#166534',border:'none',borderRadius:4,
+                              color:'#fff',fontWeight:700,fontSize:9,padding:'3px 0',cursor:'pointer'}}>
+                            ✓ Segna Finito
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <button onClick={e=>{e.stopPropagation();setModalAssegna({palletId:p.id})}}
+                        style={{marginTop:4,width:'100%',background:'transparent',
+                          border:'1px dashed rgba(0,0,0,0.2)',borderRadius:4,
+                          color:s.fg,opacity:0.5,fontWeight:600,fontSize:8,padding:'3px 0',cursor:'pointer'}}>
+                        + Assegna progetto
+                      </button>
+                    )}
+                  </div>
+                )}
             );
           })}
         </div>
@@ -538,14 +542,16 @@ export default function CodaLavorazione() {
             </div>
             <div>
               <div style={{ fontSize: 10, letterSpacing: 1, marginBottom: 4,
-                color: inLavorazione ? "#93c5fd" : "#94a3b8" }}>UTENSILE</div>
+                color: inLavorazione ? "#93c5fd" : "#94a3b8" }}>UTENSILE ATTIVO</div>
               {utensile ? (
                 <div>
-                  <div style={{ fontSize: 14, fontWeight: 700,
-                    color: inLavorazione ? "#ffffff" : "#0d2d5e" }}>{utensile}</div>
+                  <div style={{ fontSize: 16, fontWeight: 800,
+                    color: inLavorazione ? "#fbbf24" : "#0d2d5e",
+                    fontFamily: 'var(--font-mono)', letterSpacing: '-0.02em' }}>{utensile}</div>
                   {tNum > 0 && (
-                    <div style={{ fontSize: 10, color: inLavorazione ? "#93c5fd" : "#64748b", marginTop: 2 }}>
-                      T{tNum}
+                    <div style={{ fontSize: 11, fontWeight: 600,
+                      color: inLavorazione ? "#93c5fd" : "#64748b", marginTop: 2 }}>
+                      Posizione T{tNum}
                     </div>
                   )}
                 </div>
@@ -599,10 +605,14 @@ export default function CodaLavorazione() {
             borderRadius: 12,
             padding:      "12px 16px",
           }}>
-            <div style={{ fontSize: 10, color: "#991b1b", letterSpacing: 1, marginBottom: 4 }}>
-              ALLARME
+            <div style={{ fontSize: 10, color: "#991b1b", letterSpacing: 1, marginBottom: 4, fontWeight: 700 }}>
+              ⚠ ALLARME MACCHINA
             </div>
-            <div style={{ fontSize: 11, color: "#991b1b" }}>{alarm}</div>
+            <div style={{ fontSize: 12, color: "#991b1b", fontWeight: 500 }}>
+              {alarm.startsWith('MESS.') || alarm.startsWith('MESS,')
+                ? 'Macchina ferma — nessun programma in esecuzione'
+                : alarm}
+            </div>
           </div>
         )}
 

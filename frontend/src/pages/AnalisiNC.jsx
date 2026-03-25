@@ -587,8 +587,8 @@ export default function AnalisiNC() {
           </div>
 
           {/* Genera MAIN */}
-          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, padding: '12px 14px' }}>
-            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', letterSpacing: '0.08em', marginBottom: 8 }}>
+          <div style={{ background: 'var(--bg-card)', border: '1.5px solid #D4700A44', borderRadius: 8, padding: '12px 14px' }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: '#D4700A', fontFamily: 'var(--font-mono)', letterSpacing: '0.08em', marginBottom: 8 }}>
               GENERA MAIN <span style={{ fontWeight: 400, opacity: 0.6 }}>(opzionale)</span>
             </div>
             {mainError && <div style={{ fontSize: 11, color: '#dc2626', marginBottom: 6 }}>⚠ {mainError}</div>}
@@ -599,7 +599,14 @@ export default function AnalisiNC() {
             )}
             <button onClick={handleGeneraMain}
               disabled={mainBusy || !done.length || !nomeCartella.trim() || !percorso}
-              style={btnPrimary(mainBusy || !done.length || !nomeCartella.trim() || !percorso)}>
+              style={{
+                width: '100%', padding: '10px 16px', borderRadius: 7, fontSize: 13, fontWeight: 800,
+                cursor: (mainBusy || !done.length || !nomeCartella.trim() || !percorso) ? 'not-allowed' : 'pointer',
+                background: (mainBusy || !done.length || !nomeCartella.trim() || !percorso) ? '#E8E6E0' : '#D4700A',
+                border: 'none',
+                color: (mainBusy || !done.length || !nomeCartella.trim() || !percorso) ? '#9A978E' : 'white',
+                transition: 'all 0.15s',
+              }}>
               {mainBusy ? <><Spinner small /> Generazione...</> : '📄 Genera e salva MAIN'}
             </button>
           </div>

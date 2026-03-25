@@ -1628,6 +1628,10 @@ export default function Progetti(){
       const d=await r.json()
       // Normalizza: assicura che ogni progetto abbia pallet_assegnato
       const projs = (d.projects||[]).map(p=>({pallet_assegnato:null,...p}))
+      console.log('[Progetti] caricati', projs.length, 'progetti')
+      projs.filter(p=>p.pallet_assegnato).forEach(p=>
+        console.log(`  ${p.name} → P${p.pallet_assegnato}`)
+      )
       setProjects(projs)
       setTemplates(d.templates||[])
       setError(null)

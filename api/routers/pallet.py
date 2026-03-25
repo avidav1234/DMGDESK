@@ -19,7 +19,7 @@ from database.db_handler import carica_configurazione
 router = APIRouter()
 
 STATI_VALIDI   = {"vuoto", "grezzo", "in_lavorazione", "finito", "guasto"}
-STATI_MANUALI  = {"vuoto", "grezzo", "guasto"}   # operatore può impostare solo questi
+STATI_MANUALI  = {"vuoto", "grezzo", "guasto", "finito"}   # operatore può impostare questi
 N_PALLET       = 6
 
 

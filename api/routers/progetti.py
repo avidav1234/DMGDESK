@@ -85,10 +85,8 @@ async def get_progetti():
         # Aggiorna ogni progetto con il pallet corretto
         for proj in projects:
             pid = proj.get("id")
-            if pid in pallet_map:
-                proj["pallet_assegnato"] = pallet_map[pid]
-            elif "pallet_assegnato" not in proj:
-                proj["pallet_assegnato"] = None
+            # pallet_map è la fonte di verità — sovrascrive sempre
+            proj["pallet_assegnato"] = pallet_map.get(pid, None)
     except Exception:
         pass
 

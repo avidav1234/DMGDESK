@@ -582,14 +582,13 @@ class TabProgetti:
         tk.Label(r1, text="Pallet:", font=("DM Sans",10), fg=TC["muted"], bg=TC["surface"]).pack(side="left", padx=(16,3))
         _pv = project.get("pallet_assegnato")
         pallet_var = tk.StringVar(value=str(_pv) if _pv is not None else "—")
-        ttk.Combobox(r1, textvariable=pallet_var, values=["—","1","2","3","4","5","6"],
-                     width=4, state="readonly").pack(side="left")
-        # Ignora la prima chiamata (inizializzazione widget)
-        _pallet_init = [True]
-        def _on_pallet_change(*a):
-            if _pallet_init[0]: _pallet_init[0]=False; return
-            self._set_pallet(project, pallet_var.get())
-        pallet_var.trace_add("write", _on_pallet_change)
+        _combo_pallet = ttk.Combobox(r1, textvariable=pallet_var,
+                     values=["—","1","2","3","4","5","6"],
+                     width=4, state="readonly")
+        _combo_pallet.pack(side="left")
+        # Usa <<ComboboxSelected>> che scatta solo su selezione utente
+        _combo_pallet.bind("<<ComboboxSelected>>",
+                           lambda e: self._set_pallet(project, pallet_var.get()))
 
         # Lancia NC
         if mpf:

@@ -580,10 +580,16 @@ class TabProgetti:
 
         # Pallet
         tk.Label(r1, text="Pallet:", font=("DM Sans",10), fg=TC["muted"], bg=TC["surface"]).pack(side="left", padx=(16,3))
-        pallet_var = tk.StringVar(value=str(project.get("pallet_assegnato","—")))
+        _pv = project.get("pallet_assegnato")
+        pallet_var = tk.StringVar(value=str(_pv) if _pv is not None else "—")
         ttk.Combobox(r1, textvariable=pallet_var, values=["—","1","2","3","4","5","6"],
                      width=4, state="readonly").pack(side="left")
-        pallet_var.trace_add("write", lambda *a: self._set_pallet(project, pallet_var.get()))
+        # Ignora la prima chiamata (inizializzazione widget)
+        _pallet_init = [True]
+        def _on_pallet_change(*a):
+            if _pallet_init[0]: _pallet_init[0]=False; return
+            self._set_pallet(project, pallet_var.get())
+        pallet_var.trace_add("write", _on_pallet_change)
 
         # Lancia NC
         if mpf:
@@ -1747,7 +1753,7 @@ class TabProgetti:
         self.parent.after(0, self._refresh)
 
     def _set_pallet(self, project, value):
-        new_pallet = None if value == "—" else int(value)
+        new_pallet = None if value in ("—", "", "None") else int(value)
         old_pallet = project.get("pallet_assegnato")
         project["pallet_assegnato"] = new_pallet
         self._projects = [project if p["id"]==project["id"] else p for p in self._projects]

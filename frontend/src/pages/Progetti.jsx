@@ -2070,9 +2070,9 @@ export default function Progetti(){
       {/* TOP BAR */}
       {!isOnProject&&!isOnEditor&&(
         <div style={{borderBottom:`1px solid ${T.border}`,padding:'0 28px',display:'flex',alignItems:'center',gap:0,flexShrink:0,background:T.surface,boxShadow:'0 1px 0 rgba(0,0,0,0.06)'}}>
-          <div style={{fontSize:20,fontWeight:800,color:T.text,letterSpacing:'-0.02em',padding:'16px 16px 16px 0',marginRight:4,borderRight:`1px solid ${T.border}`}}><span style={{color:T.accent}}>◈</span> WorkTrack</div>
-          <NavBtn id='home' label='🏠 Home'/>
-          <NavBtn id='projects' label='Progetti'/>
+          <div style={{fontSize:20,fontWeight:800,color:T.text,letterSpacing:'-0.02em',padding:'16px 16px 16px 0',marginRight:4,borderRight:`1px solid ${T.border}`}}><span style={{color:T.accent}}>◈</span> DMGDesk</div>
+          <NavBtn id='home' label='🏠 Dashboard'/>
+          <NavBtn id='projects' label='Lavori'/>
           <NavBtn id='archived' label='Archivio' badge={archivedProjects.length}/>
           <NavBtn id='templates' label={`Template (${templates.length})`}/>
           <NavBtn id='consegne' label='Consegne' badge={deliveries.filter(d=>!d.delivered&&daysUntil(d.dueDate)!==null&&daysUntil(d.dueDate)<=7).length}/>

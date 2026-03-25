@@ -1,15 +1,57 @@
 import { NavLink } from 'react-router-dom'
 
-const NAV = [
-  { to: '/coda',           icon: '⬡',  label: 'Coda',    title: 'Coda lavorazione' },
-  { to: '/progetti',       icon: '📋', label: 'Progetti',title: 'Gestione Progetti' },
-  { to: '/analisi-nc',     icon: '📄', label: 'NC',       title: 'Analisi NC' },
-  { to: '/macchina',       icon: '⚙',  label: 'Tool',     title: 'Utensili in macchina' },
-  { to: '/magazzino',      icon: '🗄', label: 'Mag.',     title: 'Magazzino' },
-  { to: '/scaffale',       icon: '📦', label: 'Scaff.',   title: 'Scaffale' },
-  { to: '/smontati',       icon: '🔧', label: 'Smont.',   title: 'Smontati' },
-  { to: '/holder-bussole', icon: '🔩', label: 'Holder',   title: 'Holder & Bussole' },
+const NAV_PRIMARY = [
+  { to: '/progetti',       icon: '🏠', label: 'Home',     title: 'Home — Dashboard turno' },
+  { to: '/coda',           icon: '○',  label: 'Macchina', title: 'Macchina — Stato pallet live' },
+  { to: '/analisi-nc',     icon: '📄', label: 'Analisi',  title: 'Analisi NC' },
+  { to: '/macchina',       icon: '🔧', label: 'Utensili', title: 'Utensili in macchina' },
 ]
+
+const NAV_SECONDARY = [
+  { to: '/scaffale',       icon: '📦', label: 'Scaffale', title: 'Scaffale' },
+  { to: '/smontati',       icon: '🔩', label: 'Smont.',   title: 'Smontati' },
+  { to: '/holder-bussole', icon: '⚙',  label: 'Holder',   title: 'Holder & Bussole' },
+  { to: '/generatore',     icon: '📝', label: 'Gen.',     title: 'Generatore codici' },
+]
+
+function NavItem({ to, icon, label, title, small }) {
+  return (
+    <NavLink
+      to={to}
+      title={title}
+      style={({ isActive }) => ({
+        width: small ? 52 : 58,
+        height: small ? 44 : 52,
+        borderRadius: 10,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 3,
+        textDecoration: 'none',
+        transition: 'all 0.15s',
+        background: isActive ? 'rgba(255,255,255,0.18)' : 'transparent',
+        borderLeft: isActive ? '3px solid var(--navy-accent)' : '3px solid transparent',
+        cursor: 'pointer',
+      })}
+    >
+      {({ isActive }) => (
+        <>
+          <span style={{ fontSize: small ? 18 : 22, opacity: isActive ? 1 : 0.5, lineHeight: 1 }}>{icon}</span>
+          <span style={{
+            fontSize: small ? 8 : 9,
+            fontFamily: 'var(--font-mono)',
+            fontWeight: 600,
+            color: isActive ? 'var(--navy-accent)' : 'rgba(255,255,255,0.45)',
+            letterSpacing: '0.04em',
+          }}>
+            {label}
+          </span>
+        </>
+      )}
+    </NavLink>
+  )
+}
 
 export default function Sidebar() {
   return (
@@ -52,44 +94,14 @@ export default function Sidebar() {
         </div>
       </div>
 
-      {/* Nav items */}
-      {NAV.map(({ to, icon, label, title }) => (
-        <NavLink
-          key={to}
-          to={to}
-          title={title}
-          style={({ isActive }) => ({
-            width: 58,
-            height: 52,
-            borderRadius: 10,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 3,
-            textDecoration: 'none',
-            transition: 'all 0.15s',
-            background: isActive ? 'rgba(255,255,255,0.18)' : 'transparent',
-            borderLeft: isActive ? '3px solid var(--navy-accent)' : '3px solid transparent',
-            cursor: 'pointer',
-          })}
-        >
-          {({ isActive }) => (
-            <>
-              <span style={{ fontSize: 22, opacity: isActive ? 1 : 0.5, lineHeight: 1 }}>{icon}</span>
-              <span style={{
-                fontSize: 9,
-                fontFamily: 'var(--font-mono)',
-                fontWeight: 600,
-                color: isActive ? 'var(--navy-accent)' : 'rgba(255,255,255,0.45)',
-                letterSpacing: '0.04em',
-              }}>
-                {label}
-              </span>
-            </>
-          )}
-        </NavLink>
-      ))}
+      {/* Nav principali */}
+      {NAV_PRIMARY.map(item => <NavItem key={item.to} {...item} />)}
+
+      {/* Separatore */}
+      <div style={{ width: 40, height: 1, background: 'rgba(255,255,255,0.1)', margin: '6px 0' }} />
+
+      {/* Nav secondarie — più piccole */}
+      {NAV_SECONDARY.map(item => <NavItem key={item.to} {...item} small />)}
 
       {/* Footer */}
       <div style={{ marginTop: 'auto' }}>

@@ -16,24 +16,19 @@ export default function App() {
     <BrowserRouter>
       <div style={{ display:'flex', height:'100vh', overflow:'hidden', background:'var(--bg-base)' }}>
         <Sidebar />
-        <main style={{
-          flex: 1,
-          overflow: 'auto',
-          padding: '20px 24px',
-          background: 'var(--bg-base)',
-        }}>
+        <main style={{ flex:1, overflow:'auto', padding:0, background:'var(--bg-base)' }}>
           <Routes>
-            <Route path="/"              element={<Navigate to="/coda" replace />} />
-            <Route path="/coda"          element={<CodaLavorazione />} />
-            <Route path="/macchina"      element={<Macchina />} />
-            <Route path="/scaffale"      element={<Scaffale />} />
-            <Route path="/smontati"      element={<Smontati />} />
+            <Route path="/"               element={<Navigate to="/progetti" replace />} />
+            <Route path="/coda"           element={<CodaLavorazione />} />
+            <Route path="/macchina"       element={<Macchina />} />
+            <Route path="/scaffale"       element={<Scaffale />} />
+            <Route path="/smontati"       element={<Smontati />} />
             <Route path="/holder-bussole" element={<HolderBussole />} />
-            <Route path="/generatore"    element={<Generatore />} />
-            <Route path="/analisi-nc"    element={<AnalisiNC />} />
+            <Route path="/generatore"     element={<Generatore />} />
+            <Route path="/analisi-nc"     element={<AnalisiNC />} />
             <Route path="/invia"          element={<InvioMacchina />} />
-            <Route path="/magazzino"     element={<Smontati />} />
-            <Route path="/progetti"      element={<Progetti />} />
+            <Route path="/magazzino"      element={<Smontati />} />
+            <Route path="/progetti"       element={<Progetti />} />
           </Routes>
         </main>
       </div>

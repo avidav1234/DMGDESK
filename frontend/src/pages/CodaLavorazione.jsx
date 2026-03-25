@@ -80,6 +80,8 @@ export default function CodaLavorazione() {
       }
     }
     fetchAll();
+    // Notifica altri tab che il legame pallet è cambiato
+    window.dispatchEvent(new CustomEvent('pallet-progetto-changed'))
   }
 
   function avviaProgetto(palletNum) {

@@ -560,6 +560,50 @@ async def patch_project(project_id: str, body: dict = Body(...)):
     return {"ok": True, "project_id": project_id}
 
 
+# ── Deliveries (scadenze consegne) ────────────────────────────────────────────
+
+def _deliveries_path(config: dict) -> Path:
+    base = (config.get("tools_toa_folder") or "").strip()
+    if not base:
+        base = "."
+    return Path(base) / "worktrack_deliveries.json"
+
+def _load_deliveries(config: dict) -> list:
+    path = _deliveries_path(config)
+    if path.exists():
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(data, list):
+                return data
+            if isinstance(data, dict):
+                return data.get("deliveries", data.get("projects", []))
+        except Exception:
+            pass
+    return []
+
+def _save_deliveries(config: dict, deliveries: list):
+    path = _deliveries_path(config)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(deliveries, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+@router.get("/deliveries")
+async def get_deliveries():
+    """Tutte le scadenze di consegna."""
+    config = carica_configurazione()
+    return _load_deliveries(config)
+
+
+@router.put("/deliveries")
+async def save_deliveries(body: Any = Body(...)):
+    """Salva l'intera lista deliveries (sostituisce tutto)."""
+    config = carica_configurazione()
+    deliveries = body if isinstance(body, list) else []
+    _save_deliveries(config, deliveries)
+    return {"ok": True, "count": len(deliveries)}
+
+
+
 @router.get("/debug-setup")
 async def debug_setup():
     """Debug: mostra cosa vede analisi setup."""

@@ -1671,13 +1671,16 @@ export default function Progetti(){
   // ── Carica ──────────────────────────────────────────────────────────────────
   const load=useCallback(async()=>{
     try{
-      const r=await fetch(API+'/')
+      const [r, rd] = await Promise.all([
+        fetch(API+'/'),
+        fetch(API+'/deliveries')
+      ])
       if(!r.ok) throw new Error(`Server error ${r.status}`)
       const d=await r.json()
-      // Normalizza: assicura che ogni progetto abbia pallet_assegnato
       const projs = (d.projects||[]).map(p=>({pallet_assegnato:null,...p}))
       setProjects(projs)
       setTemplates(d.templates||[])
+      if(rd.ok){ const ds=await rd.json(); setDeliveries(Array.isArray(ds)?ds:[]) }
       setError(null)
     }catch(e){setError(e.message)}
     finally{setLoading(false)}
@@ -1768,9 +1771,14 @@ export default function Progetti(){
   // ── Consegne ─────────────────────────────────────────────────────────────────
   function setDelivery(id,patch,isUpdate,isDelete){
     setDeliveries(ds=>{
-      if(isDelete) return ds.filter(d=>d.id!==id)
-      if(isUpdate) return ds.map(d=>d.id===id?{...d,...patch}:d)
-      return[...ds,{id,createdAt:nowStr(),...patch}]
+      let next
+      if(isDelete) next=ds.filter(d=>d.id!==id)
+      else if(isUpdate) next=ds.map(d=>d.id===id?{...d,...patch}:d)
+      else next=[...ds,{id,createdAt:nowStr(),...patch}]
+      // Persiste subito su disco
+      fetch(API+'/deliveries',{method:'PUT',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(next)}).catch(()=>{})
+      return next
     })
   }
   function getDelivery(projectId){return deliveries.find(d=>d.projectId===projectId)||null}

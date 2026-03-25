@@ -52,7 +52,11 @@ def _load_json(path) -> list:
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
             if isinstance(data, list): return data
-            if isinstance(data, dict): return data.get("projects", [])
+            if isinstance(data, dict):
+                # Prova le chiavi comuni
+                for key in ("deliveries", "projects", "templates"):
+                    if key in data: return data[key]
+                return []
         except Exception:
             pass
     return []

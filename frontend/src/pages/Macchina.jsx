@@ -79,9 +79,11 @@ export default function Macchina() {
             </div>
             <input
               value={q} onChange={e=>setQ(e.target.value)}
-              placeholder="🔍 Cerca alias..."
-              style={{background:'#F5F4F0',border:'1.5px solid #D8D5CC',borderRadius:8,
-                padding:'6px 12px',fontSize:13,color:'#1A1814',outline:'none',width:160}}
+              placeholder="Cerca alias…"
+              style={{flex:1, maxWidth:280, padding:'7px 12px', borderRadius:6,
+                background:'var(--bg-surface)', border:'1px solid var(--border)',
+                color:'var(--text-primary)', fontSize:13, outline:'none',
+                fontFamily:'var(--font-mono)'}}
             />
             <button onClick={()=>setSetupPopup(false)}
               style={{background:'none',border:'1px solid #D8D5CC',borderRadius:8,
@@ -375,17 +377,19 @@ export default function Macchina() {
       )}
 
       {/* Ricerca + contatore */}
-      <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-        <input value={searchSync} onChange={e => setSearchSync(e.target.value)}
-          placeholder="Cerca utensile…"
-          style={{ flex: 1, maxWidth: 280, padding: '7px 12px', borderRadius: 6,
-            background: 'var(--bg-surface)', border: '1px solid var(--border)',
-            color: 'var(--text-primary)', fontSize: 13, outline: 'none',
-            fontFamily: 'var(--font-mono)' }} />
-        <span style={{ fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
-          {filtered.length} / {tools.length}
-        </span>
-      </div>
+      {!setupPopup && (
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <input value={searchSync} onChange={e => setSearchSync(e.target.value)}
+            placeholder="Cerca utensile…"
+            style={{ flex: 1, maxWidth: 280, padding: '7px 12px', borderRadius: 6,
+              background: 'var(--bg-surface)', border: '1px solid var(--border)',
+              color: 'var(--text-primary)', fontSize: 13, outline: 'none',
+              fontFamily: 'var(--font-mono)' }} />
+          <span style={{ fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+            {filtered.length} / {tools.length}
+          </span>
+        </div>
+      )}
 
       {setupPopup && <SetupPannel />}
 

@@ -1,27 +1,27 @@
-// App.jsx — DMG Desk
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
-import Sidebar           from './components/Sidebar'
-import CodaLavorazione   from './pages/CodaLavorazione'
-import Macchina          from './pages/Macchina'
-import Scaffale          from './pages/Scaffale'
-import Smontati          from './pages/Smontati'
-import HolderBussole     from './pages/HolderBussole'
-import Generatore        from './pages/Generatore'
-import AnalisiNC         from './pages/AnalisiNC'
-import InvioMacchina     from './pages/InvioMacchina'
-import Progetti          from './pages/Progetti'
+import Sidebar       from './components/Sidebar'
+import Home          from './pages/Home'
+import CodaLavorazione from './pages/CodaLavorazione'
+import Macchina      from './pages/Macchina'
+import Scaffale      from './pages/Scaffale'
+import Smontati      from './pages/Smontati'
+import HolderBussole from './pages/HolderBussole'
+import Generatore    from './pages/Generatore'
+import AnalisiNC     from './pages/AnalisiNC'
+import InvioMacchina from './pages/InvioMacchina'
+import Progetti      from './pages/Progetti'
 
-// Pagine che gestiscono il loro layout internamente (no padding esterno)
-const FULL_PAGES = ['/progetti', '/coda', '/analisi-nc', '/macchina']
+const FULL_PAGES = ['/home', '/coda', '/analisi-nc', '/macchina', '/progetti']
 
 function MainContent() {
   const loc = useLocation()
   const isFull = FULL_PAGES.some(p => loc.pathname.startsWith(p))
   return (
     <main style={{ flex:1, overflow:'auto', background:'var(--bg-base)',
-      padding: isFull ? 0 : '20px 24px' }}>
+      padding: isFull ? 0 : '20px 24px', display:'flex', flexDirection:'column' }}>
       <Routes>
-        <Route path="/"               element={<Navigate to="/progetti" replace />} />
+        <Route path="/"               element={<Navigate to="/home" replace />} />
+        <Route path="/home"           element={<Home />} />
         <Route path="/coda"           element={<CodaLavorazione />} />
         <Route path="/macchina"       element={<Macchina />} />
         <Route path="/scaffale"       element={<Scaffale />} />

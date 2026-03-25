@@ -2,7 +2,8 @@ import { NavLink, useLocation } from 'react-router-dom'
 import { useState } from 'react'
 
 const NAV_PRIMARY = [
-  { to: '/progetti',   icon: '🏠', label: 'Home',     title: 'Home — Dashboard turno' },
+  { to: '/home',       icon: '🏠', label: 'Home',     title: 'Home — Dashboard turno' },
+  { to: '/progetti',   icon: '📋', label: 'Lavori',   title: 'Lavori — Gestione commesse' },
   { to: '/coda',       icon: '○',  label: 'Macchina', title: 'Macchina — Stato pallet live' },
   { to: '/analisi-nc', icon: '📄', label: 'Analisi',  title: 'Analisi NC' },
   { to: '/macchina',   icon: '🔧', label: 'Utensili', title: 'Utensili in macchina' },

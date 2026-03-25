@@ -1038,9 +1038,7 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
                 }
                 // Aggiorna lo state locale immediatamente
                 onUpdate({...project, pallet_assegnato: val})
-                // Ricarica pallet disponibili
-                fetch('/api/pallet/disponibili').then(r=>r.ok?r.json():{pallet:[]})
-                  .then(d=>setPalletDisponibili(d.pallet||[])).catch(()=>{})
+
               }}
               style={{fontSize:12,fontWeight:700,background:'#F0F4FF',color:'#1D5FAD',
                 border:'1px solid #BFDBFE',borderRadius:6,padding:'4px 8px',cursor:'pointer'}}>

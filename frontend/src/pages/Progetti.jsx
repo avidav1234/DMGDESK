@@ -1671,6 +1671,27 @@ export default function Progetti(){
   },[])
   useEffect(()=>{ load() },[load])
 
+  // Apre il progetto giusto dopo il caricamento (da sessionStorage)
+  useEffect(()=>{
+    if(!projects.length) return
+    // Apertura diretta per ID (da Coda → "Apri progetto")
+    const pid = sessionStorage.getItem('dmgdesk_apri_progetto_id')
+    if(pid){
+      sessionStorage.removeItem('dmgdesk_apri_progetto_id')
+      if(projects.find(p=>p.id===pid)) { setSelectedId(pid); return }
+    }
+    // Apertura per numero pallet (da Coda → "Avvia")
+    const pn = sessionStorage.getItem('dmgdesk_apri_per_pallet')
+    if(pn){
+      sessionStorage.removeItem('dmgdesk_apri_per_pallet')
+      const proj = projects.find(p=>p.pallet_assegnato===parseInt(pn))
+      if(proj){
+        setSelectedId(proj.id)
+        sessionStorage.setItem('dmgdesk_apri_modal_lancio','1')
+      }
+    }
+  },[projects])
+
   // ── Salva progetti (debounced) ───────────────────────────────────────────────
   const persistProjects=useCallback((projs)=>{
     clearTimeout(saveTimer.current)

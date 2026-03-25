@@ -516,7 +516,7 @@ async def debug_utensili(project_id: str):
 
 
 @router.patch("/{project_id}")
-async def patch_project(project_id: str, body: dict):
+async def patch_project(project_id: str, body: dict = Body(...)):
     """Aggiorna campi semplici di un progetto (es. pallet_assegnato)."""
     config   = carica_configurazione()
     data     = _load_progetti(config)

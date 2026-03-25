@@ -346,8 +346,8 @@ class TabProgetti:
         self._schedule_reload()
 
     def _schedule_reload(self):
-        """Ricarica silenziosamente i dati dal disco ogni 15s."""
-        self.parent.after(15000, self._silent_reload)
+        """Ricarica silenziosamente i dati dal disco ogni 30s."""
+        self.parent.after(30000, self._silent_reload)
 
     def _silent_reload(self):
         """Ricarica dal disco senza rebuild UI se il progetto corrente è aperto."""
@@ -375,9 +375,15 @@ class TabProgetti:
         new_proj = next((p for p in projects if p.get("id") == self._selected_id), None)
 
         if new_proj and old_proj != new_proj:
-            # Cambiato da web — aggiorna e refresh
-            self._projects = projects
-            self._refresh()
+            # Cambiato da web — aggiorna solo se non ci sono selezioni attive
+            # (evita di distruggere la selezione mentre l'operatore sta lavorando)
+            has_active_selections = getattr(self, "_has_active_selections", False)
+            if not has_active_selections:
+                self._projects = projects
+                self._refresh()
+            else:
+                # Aggiorna i dati in memoria ma non tocca la UI
+                self._projects = projects
         else:
             self._projects = projects
 
@@ -641,12 +647,19 @@ class TabProgetti:
         """Ritorna: ok | fin_vita | disabilitato | mancante | None (no alias/db)."""
         if not alias or not tools_db:
             return None
-        t = tools_db.get(alias.upper().strip())
-        if not t:
+        key = alias.upper().strip()
+        # tools_db è indicizzato per t_num — bisogna scansionare per nome
+        tutti = [t for t in tools_db.values()
+                 if (t.get("name") or "").upper().strip() == key]
+        if not tutti:
             return "mancante"
-        if t.get("is_worn") or not t.get("is_enabled", True):
+        # Cerca il gemello migliore: abilitato, non worn
+        abilitati = [t for t in tutti
+                     if t.get("is_enabled", True) and not t.get("is_worn", False)]
+        if not abilitati:
             return "disabilitato"
-        lp = t.get("life_percent")
+        best = max(abilitati, key=lambda t: t.get("life_percent") or 100)
+        lp = best.get("life_percent")
         if lp is not None and lp < 15:
             return "fin_vita"
         return "ok"
@@ -1036,8 +1049,9 @@ class TabProgetti:
 
         def _update_toolbar():
             n = len(selected_ids)
+            self._has_active_selections = n > 0  # blocca silent reload
             if n > 0:
-                toolbar.pack(fill="x", padx=4, pady=(0,2))
+                toolbar.pack(fill="x", after=ph)
                 sel_label.configure(text=f"{n} selezionati → segna come:")
             else:
                 toolbar.pack_forget()

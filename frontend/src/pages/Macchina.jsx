@@ -36,23 +36,30 @@ export default function Macchina() {
   const SetupPannel = () => {
     if (!setupPopup || !setupData) return null
     const {non_utilizzati, da_montare, fin_vita} = setupData
+    const [q, setQ] = React.useState('')
+    const filter = items => q.trim()
+      ? items.filter(i => i.alias?.toLowerCase().includes(q.toLowerCase()))
+      : items
 
-    const Section = ({title, items, color: c, bg, renderItem}) => (
-      items.length > 0 ? (
+    const Section = ({title, items, color: c, bg, renderItem}) => {
+      const filtered = filter(items)
+      return filtered.length > 0 ? (
         <div style={{marginBottom:16}}>
-          <div style={{fontSize:12,fontWeight:700,color:c,letterSpacing:'0.06em',marginBottom:8}}>{title}</div>
+          <div style={{fontSize:12,fontWeight:700,color:c,letterSpacing:'0.06em',marginBottom:8}}>
+            {title}{q.trim() && filtered.length !== items.length ? ` (${filtered.length} di ${items.length})` : ''}
+          </div>
           <div style={{border:'1px solid #D8D5CC',borderRadius:8,overflow:'hidden'}}>
-            {items.map((item,i) => (
+            {filtered.map((item,i) => (
               <div key={item.alias} style={{display:'flex',alignItems:'center',gap:10,
                 padding:'7px 12px',background:i%2===0?'#FFFFFF':bg,
-                borderBottom:i<items.length-1?'1px solid #D8D5CC':'none'}}>
+                borderBottom:i<filtered.length-1?'1px solid #D8D5CC':'none'}}>
                 {renderItem(item)}
               </div>
             ))}
           </div>
         </div>
       ) : null
-    )
+    }
 
     return (
       <div style={{marginTop:12,border:'1px solid #D8D5CC',borderRadius:12,
@@ -70,6 +77,12 @@ export default function Macchina() {
                 </div>
               )}
             </div>
+            <input
+              value={q} onChange={e=>setQ(e.target.value)}
+              placeholder="🔍 Cerca alias..."
+              style={{background:'#F5F4F0',border:'1.5px solid #D8D5CC',borderRadius:8,
+                padding:'6px 12px',fontSize:13,color:'#1A1814',outline:'none',width:160}}
+            />
             <button onClick={()=>setSetupPopup(false)}
               style={{background:'none',border:'1px solid #D8D5CC',borderRadius:8,
                 color:'#5A5750',fontSize:13,padding:'5px 12px',cursor:'pointer',fontWeight:600}}>

@@ -1123,6 +1123,12 @@ function ProjectCard({project,onClick,onDelete,onArchive,delivery,onSetDelivery}
           <div style={{display:'flex',alignItems:'center',gap:8}}>
             <div style={{width:10,height:10,borderRadius:'50%',background:project.color,flexShrink:0}}/>
             <div style={{fontSize:17,fontWeight:800,color:T.text}}>{project.name}</div>
+            {project.pallet_assegnato&&(
+              <span style={{fontSize:11,fontWeight:700,background:'#EFF6FF',color:'#1D5FAD',
+                padding:'2px 8px',borderRadius:6,flexShrink:0}}>
+                P{project.pallet_assegnato}
+              </span>
+            )}
           </div>
           {project.description&&<div style={{fontSize:13,color:T.textSub,marginLeft:18}}>{project.description}</div>}
         </div>

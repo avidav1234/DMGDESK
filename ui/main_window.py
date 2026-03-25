@@ -155,12 +155,17 @@ class MainWindow(ctk.CTk):
         self.tabview.set("🏠 Home")
     
     def _build_home_tab(self):
-        """La Home è gestita da TabProgetti — qui solo avviamo il refresh iniziale."""
-        self._home_tab_frame = self.tabview.tab("🏠 Home")
+        """Crea un frame scrollabile nel tab Home e avvia il primo render."""
+        import customtkinter as ctk
+        home_tab = self.tabview.tab("🏠 Home")
+        # Crea frame scrollabile che riempie il tab
+        self._home_scroll = ctk.CTkScrollableFrame(home_tab, fg_color="#F5F4F0", corner_radius=0)
+        self._home_scroll.pack(fill="both", expand=True)
+        self._home_tab_frame = self._home_scroll
         self.after(800, self._refresh_home)
 
     def _refresh_home(self):
-        """Aggiorna il contenuto della Home tab."""
+        """Aggiorna il contenuto della Home tab in background."""
         import threading
         threading.Thread(target=self._home_worker, daemon=True).start()
 
@@ -184,13 +189,15 @@ class MainWindow(ctk.CTk):
         """Renderizza la Home con i dati già caricati."""
         if not hasattr(self, '_home_tab_frame'):
             return
-        # Delega a TabProgetti che ha già tutta la logica
         tp = getattr(self, 'tab_progetti', None)
-        if tp:
-            # Temporaneamente usa il body di TabProgetti con i dati aggiornati
-            tp._pallet_list_cache = pallet_list
-            tp._setup_data_cache = setup_data
-            tp._render_home_in(self._home_tab_frame, pallet_list, setup_data)
+        if not tp:
+            return
+        # Pulisce il frame
+        for w in self._home_tab_frame.winfo_children():
+            w.destroy()
+        tp._pallet_list_cache = pallet_list
+        tp._setup_data_cache = setup_data
+        tp._render_home_in(self._home_tab_frame, pallet_list, setup_data)
 
     def _seleziona_database(self):
         """Obsoleto — i DB vengono trovati automaticamente dalla cartella TOA."""

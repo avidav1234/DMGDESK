@@ -237,7 +237,7 @@ class TabProgetti:
         self._projects   = []
         self._templates  = []
         self._deliveries = []
-        self._page       = "home"   # home | projects | archived | templates | deliveries | backup
+        self._page       = "projects"   # projects | archived | templates | deliveries | backup
         self._selected_id = None
         self._editing_template = None
         self._active_detail_tab = "tasks"
@@ -286,7 +286,7 @@ class TabProgetti:
 
         # Nav
         self._nav_btns = {}
-        nav_items = [("home","🏠 Home"),("projects","Progetti"),("archived","Archivio"),
+        nav_items = [("projects","Lavori"),("archived","Archivio"),
                      ("templates","Template"),("deliveries","Consegne"),("backup","Backup")]
         for nav_id, label in nav_items:
             is_active = self._page == nav_id and not self._selected_id and not self._editing_template
@@ -441,8 +441,6 @@ class TabProgetti:
                 else:
                     self._selected_id = None
                     self._render_lista()
-            elif self._page == "home":
-                self._render_home()
             elif self._page == "archived":
                 self._render_lista(archived=True)
             elif self._page == "templates":

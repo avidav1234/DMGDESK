@@ -36,7 +36,7 @@ export default function Macchina() {
   const SetupPannel = () => {
     if (!setupPopup || !setupData) return null
     const {non_utilizzati, da_montare, fin_vita} = setupData
-    const [q, setQ] = React.useState('')
+    const [q, setQ] = useState('')
     const filter = items => q.trim()
       ? items.filter(i => i.alias?.toLowerCase().includes(q.toLowerCase()))
       : items

@@ -527,7 +527,7 @@ class TabProgetti:
 
         # ── Focus scadenze urgenti ─────────────────────────────────────────────
         if urgenti:
-            uf = tk.Frame(content, bg="#FDECEA", highlightbackground="#C0392B44", highlightthickness=1)
+            uf = tk.Frame(content, bg="#FDECEA", highlightbackground="#E8A89E", highlightthickness=1)
             uf.pack(fill="x", pady=(0,12))
             tk.Label(uf, text=f"🎯 FOCUS — {len(urgenti)} CONSEGN{'A' if len(urgenti)==1 else 'E'} URGENTI",
                      font=("DM Sans",9,"bold"), fg="#C0392B", bg="#FDECEA").pack(anchor="w", padx=12, pady=(8,4))
@@ -535,7 +535,7 @@ class TabProgetti:
                 d = get_delivery(p["id"])
                 days = days_until(d["dueDate"]) if d else None
                 pct = get_progress(p)
-                row = tk.Frame(uf, bg="#fff", highlightbackground="#C0392B22", highlightthickness=1)
+                row = tk.Frame(uf, bg="#fff", highlightbackground="#F0C4C0", highlightthickness=1)
                 row.pack(fill="x", padx=8, pady=2)
                 tk.Label(row, text="●", fg=p.get("color",TC["accent"]), bg="#fff",
                          font=("Arial",8)).pack(side="left", padx=(8,4), pady=6)
@@ -662,7 +662,7 @@ class TabProgetti:
         # Utensili critici
         if da_montare_n > 0 or fine_vita_n > 0:
             uf2 = tk.Frame(content, bg=TC["surface"],
-                           highlightbackground="#C0392B44", highlightthickness=1)
+                           highlightbackground="#E8A89E", highlightthickness=1)
             uf2.pack(fill="x", pady=(12,0))
             tk.Label(uf2, text="🔧 UTENSILI — AZIONE RICHIESTA",
                      font=("DM Sans",9,"bold"), fg="#C0392B", bg=TC["surface"]).pack(side="left", padx=12, pady=8)

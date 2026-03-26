@@ -3,12 +3,12 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 const T = {
-  bg:'#F5F4F0', surface:'#FFFFFF', surface2:'#F0EEE8',
-  border:'#D8D5CC', text:'#1A1814', textSub:'#5A5750', textMuted:'#9A978E',
-  accent:'#D4700A', accentBg:'#FFF4E8',
-  green:'#1A7A4A', greenBg:'#E8F5EE',
-  red:'#C0392B', redBg:'#FDECEA',
-  blue:'#1D5FAD', blueBg:'#EAF1FB',
+  bg:'#eef2f7', surface:'#ffffff', surface2:'#f8fafc',
+  border:'#e2e8f0', text:'#0f172a', textSub:'#475569', textMuted:'#94a3b8',
+  accent:'#0d2d5e', accentBg:'#e6f1fb',
+  green:'#16a34a', greenBg:'#f0fdf4',
+  red:'#dc2626', redBg:'#fef2f2',
+  blue:'#0d2d5e', blueBg:'#e6f1fb',
 }
 
 function getProgress(project) {
@@ -80,8 +80,8 @@ export default function Home() {
   const daMontare = (setupData?.da_montare||[]).length
   const fineVita  = (setupData?.fin_vita||[]).length
 
-  const STATO_COLOR={grezzo:'#D4700A',finito:'#1A7A4A',guasto:'#C0392B',vuoto:'#9A978E'}
-  const STATO_BG={grezzo:'#FFF4E8',finito:'#E8F5EE',guasto:'#FDECEA',vuoto:'#F5F4F0'}
+  const STATO_COLOR={grezzo:'#0d2d5e',finito:'#16a34a',guasto:'#dc2626',vuoto:'#94a3b8'}
+  const STATO_BG={grezzo:'#e6f1fb',finito:'#f0fdf4',guasto:'#fef2f2',vuoto:'#eef2f7'}
 
   if(loading) return(
     <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',
@@ -91,7 +91,7 @@ export default function Home() {
   )
 
   return(
-    <div style={{flex:1,overflowY:'auto',background:T.bg,fontFamily:"'DM Sans', system-ui",height:'100%'}}>
+    <div style={{flex:1,overflowY:'auto',background:T.bg,fontFamily:"var(--font-display)",height:'100%'}}>
 
       {/* Header */}
       <div style={{background:T.surface,borderBottom:`1px solid ${T.border}`,
@@ -109,16 +109,16 @@ export default function Home() {
               const d=getDelivery(p.id); const days=daysUntil(d?.dueDate)
               return(
                 <div key={p.id} onClick={()=>nav('/progetti')}
-                  style={{display:'flex',alignItems:'center',gap:12,background:'#FDECEA',
+                  style={{display:'flex',alignItems:'center',gap:12,background:'#fef2f2',
                     border:'1px solid #C0392B33',borderRadius:10,padding:'10px 16px',cursor:'pointer'}}>
-                  <div style={{width:8,height:8,borderRadius:'50%',background:'#C0392B',flexShrink:0}}/>
-                  <div style={{fontSize:13,fontWeight:700,color:'#7B1F1F',flex:1}}>
+                  <div style={{width:8,height:8,borderRadius:'50%',background:'#dc2626',flexShrink:0}}/>
+                  <div style={{fontSize:13,fontWeight:700,color:'#7f1d1d',flex:1}}>
                     🎯 {p.name}
-                    <span style={{fontWeight:400,color:'#C0392B',marginLeft:8}}>
+                    <span style={{fontWeight:400,color:'#dc2626',marginLeft:8}}>
                       — scadenza {days===0?'oggi':days<0?`${Math.abs(days)} giorni fa`:`tra ${days} giorni`}
                     </span>
                   </div>
-                  <span style={{fontSize:12,fontWeight:800,color:'#C0392B',background:'#fff',
+                  <span style={{fontSize:12,fontWeight:800,color:'#dc2626',background:'#fff',
                     padding:'2px 10px',borderRadius:20,border:'1px solid #C0392B33'}}>
                     {days===0?'OGGI':days<0?`${Math.abs(days)}gg fa`:`${days}gg`}
                   </span>
@@ -128,7 +128,7 @@ export default function Home() {
             {(daMontare>0||fineVita>0)&&(
               <div style={{display:'flex',alignItems:'center',gap:12,background:'#FEF3C7',
                 border:'1px solid #D4700A33',borderRadius:10,padding:'10px 16px'}}>
-                <div style={{fontSize:13,fontWeight:700,color:'#7B4500',flex:1}}>
+                <div style={{fontSize:13,fontWeight:700,color:'#1e3a6e',flex:1}}>
                   🔧 Utensili — azione richiesta
                   {daMontare>0&&<span style={{marginLeft:8,fontWeight:400,color:'#B45309'}}>{daMontare} da montare</span>}
                   {fineVita>0&&<span style={{marginLeft:8,fontWeight:400,color:'#B45309'}}>{fineVita} a fine vita</span>}
@@ -153,12 +153,12 @@ export default function Home() {
               const d=proj?getDelivery(proj.id):null
               const days=d&&d.dueDate&&!d.delivered?daysUntil(d.dueDate):null
               const isUrgent=days!==null&&days<=3
-              const color=STATO_COLOR[stato]||'#9A978E'
-              const bg=STATO_BG[stato]||'#F5F4F0'
+              const color=STATO_COLOR[stato]||'#94a3b8'
+              const bg=STATO_BG[stato]||'#eef2f7'
               const isEmpty=stato==='vuoto'&&!nome
               return(
                 <div key={n} onClick={pid?()=>nav('/progetti'):undefined}
-                  style={{background:bg,border:`1.5px solid ${isUrgent?'#C0392B':isEmpty?T.border:color+'66'}`,
+                  style={{background:bg,border:`1.5px solid ${isUrgent?'#dc2626':isEmpty?T.border:color+'66'}`,
                     borderRadius:12,padding:'14px 16px',cursor:pid?'pointer':'default',
                     transition:'all 0.15s',minHeight:isEmpty?72:110}}>
                   <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:nome?8:0}}>
@@ -167,8 +167,8 @@ export default function Home() {
                       padding:'2px 8px',borderRadius:10,border:`1px solid ${isEmpty?'transparent':color+'44'}`}}>
                       {stato}
                     </span>
-                    {isUrgent&&<span style={{marginLeft:'auto',fontSize:10,fontWeight:800,color:'#C0392B',
-                      background:'#FDECEA',padding:'2px 8px',borderRadius:10}}>
+                    {isUrgent&&<span style={{marginLeft:'auto',fontSize:10,fontWeight:800,color:'#dc2626',
+                      background:'#fef2f2',padding:'2px 8px',borderRadius:10}}>
                       {days===0?'OGGI':`${days}gg`}
                     </span>}
                   </div>
@@ -200,11 +200,11 @@ export default function Home() {
           {/* Metriche */}
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,width:280}}>
             {[
-              {val:pgmDaFare.length,    label:'Da fare',        sub:`${inProgress.length} lavori attivi`, color:'#5A5750', bg:T.surface2},
-              {val:pgmInMac.length,     label:'In macchina',    sub:'programmi attivi',                   color:'#1D5FAD', bg:'#EFF6FF'},
-              {val:pgmOggi.length,      label:'Completati oggi',sub:`${pgmCompletati.length} totali`,     color:'#1A7A4A', bg:'#F0FBF4'},
+              {val:pgmDaFare.length,    label:'Da fare',        sub:`${inProgress.length} lavori attivi`, color:'#475569', bg:T.surface2},
+              {val:pgmInMac.length,     label:'In macchina',    sub:'programmi attivi',                   color:'#0d2d5e', bg:'#EFF6FF'},
+              {val:pgmOggi.length,      label:'Completati oggi',sub:`${pgmCompletati.length} totali`,     color:'#16a34a', bg:'#F0FBF4'},
               {val:daMontare+fineVita,  label:'Utensili critici',sub:daMontare>0?`${daMontare} da montare`:'tutto ok',
-               color:daMontare+fineVita>0?'#C0392B':'#1A7A4A', bg:daMontare+fineVita>0?'#FEF0EE':'#F0FBF4'},
+               color:daMontare+fineVita>0?'#dc2626':'#16a34a', bg:daMontare+fineVita>0?'#FEF0EE':'#F0FBF4'},
             ].map(({val,label,sub,color,bg})=>(
               <div key={label} style={{background:bg,borderRadius:10,padding:'12px 14px'}}>
                 <div style={{fontSize:26,fontWeight:700,color,lineHeight:1,marginBottom:3}}>{val}</div>
@@ -232,7 +232,7 @@ export default function Home() {
                       <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
                         <span style={{fontSize:13,fontWeight:700,color:T.text,
                           overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}</span>
-                        {pNum&&<span style={{fontSize:10,fontWeight:700,color:'#1D5FAD',
+                        {pNum&&<span style={{fontSize:10,fontWeight:700,color:'#0d2d5e',
                           background:'#EFF6FF',padding:'1px 7px',borderRadius:8,flexShrink:0}}>P{pNum}</span>}
                       </div>
                       <div style={{height:4,background:T.surface2,borderRadius:2,overflow:'hidden'}}>
@@ -240,9 +240,9 @@ export default function Home() {
                       </div>
                     </div>
                     <div style={{textAlign:'right',flexShrink:0}}>
-                      <div style={{fontSize:13,fontWeight:800,color:pct===100?'#1A7A4A':p.color||T.accent}}>{pct}%</div>
+                      <div style={{fontSize:13,fontWeight:800,color:pct===100?'#16a34a':p.color||T.accent}}>{pct}%</div>
                       {days!==null&&<div style={{fontSize:10,fontWeight:700,
-                        color:days<=3?'#C0392B':'#D4700A'}}>
+                        color:days<=3?'#dc2626':'#0d2d5e'}}>
                         {days===0?'oggi':days<0?`${Math.abs(days)}gg fa`:`${days}gg`}
                       </div>}
                     </div>

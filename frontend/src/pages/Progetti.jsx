@@ -6,17 +6,17 @@ import { useNavigate } from 'react-router-dom'
 
 const API = '/api/progetti'
 
-// ── Tema identico all'originale ────────────────────────────────────────────────
+// ── Tema allineato al sistema blu navy ────────────────────────────────────────
 const T = {
-  bg:'#F5F4F0', surface:'#FFFFFF', surface2:'#F0EEE8',
-  border:'#D8D5CC', borderStrong:'#B0ADA4',
-  text:'#1A1814', textSub:'#5A5750', textMuted:'#9A978E',
-  accent:'#D4700A', accentBg:'#FFF4E8',
-  green:'#1A7A4A', greenBg:'#E8F5EE',
-  red:'#C0392B', redBg:'#FDECEA',
-  blue:'#1D5FAD', blueBg:'#EAF1FB',
+  bg:'#eef2f7', surface:'#ffffff', surface2:'#f8fafc',
+  border:'#e2e8f0', borderStrong:'#cbd5e1',
+  text:'#0f172a', textSub:'#475569', textMuted:'#94a3b8',
+  accent:'#0d2d5e', accentBg:'#e6f1fb',
+  green:'#16a34a', greenBg:'#f0fdf4',
+  red:'#dc2626', redBg:'#fef2f2',
+  blue:'#0d2d5e', blueBg:'#e6f1fb',
 }
-const COLORS = ['#D4700A','#1A7A4A','#1D5FAD','#C0392B','#8B2FC9','#C2185B','#0097A7','#E65100']
+const COLORS = ['#0d2d5e','#16a34a','#0d2d5e','#dc2626','#7c3aed','#be185d','#0891b2','#d97706']
 const ICONS  = ['🌐','📱','📣','🏗️','📦','🎯','🔧','📊','✍️','🚀','💡','🎨']
 const DRAG_STEP = 'application/x-wt-step'
 const DRAG_TASK = 'application/x-wt-task'
@@ -51,7 +51,7 @@ function deliveryUrgency(days){
   if(days<0)     return {label:'SCADUTA',      color:'#fff',    bg:T.red,     dot:'💀',rank:0}
   if(days===0)   return {label:'OGGI',          color:'#fff',    bg:T.red,     dot:'🚨',rank:0}
   if(days<=3)    return {label:`${days}gg`,     color:T.red,     bg:T.redBg,   dot:'🔴',rank:1}
-  if(days<=7)    return {label:`${days}gg`,     color:'#C2720A', bg:'#FFF0DC', dot:'🟠',rank:2}
+  if(days<=7)    return {label:`${days}gg`,     color:'#1e40af', bg:'#FFF0DC', dot:'🟠',rank:2}
   if(days<=21)   return {label:`${days}gg`,     color:T.accent,  bg:T.accentBg,dot:'🟡',rank:3}
   return               {label:`${days}gg`,     color:T.green,   bg:T.greenBg, dot:'🟢',rank:4}
 }
@@ -80,14 +80,14 @@ function parseMpfFile(filename,content){
 const STATO_NEXT={da_fare:'in_macchina',in_macchina:'completato',completato:'da_fare'}
 const STATO_CFG={
   da_fare:    {label:'Da fare',    short:'Da fare',    color:T.textMuted,bg:T.surface2,border:T.border,  dot:'○'},
-  in_macchina:{label:'In macchina',short:'In macchina',color:'#1D5FAD',  bg:'#dbeafe', border:'#1D5FAD',dot:'⚙'},
+  in_macchina:{label:'In macchina',short:'In macchina',color:'#0d2d5e',  bg:'#e6f1fb', border:'#0d2d5e',dot:'⚙'},
   completato: {label:'Completato', short:'Fatto',      color:'#166534',  bg:'#dcfce7', border:'#166534',dot:'✓'},
 }
 const OPERATORI=['I.Dodon','Operatore 2','Operatore 3']
 const PRIORITY={
-  alta: {label:'Alta', color:'#C0392B',bg:'#FDECEA',dot:'🔴'},
-  media:{label:'Media',color:'#D4700A',bg:'#FFF4E8',dot:'🟡'},
-  bassa:{label:'Bassa',color:'#1A7A4A',bg:'#E8F5EE',dot:'🟢'},
+  alta: {label:'Alta', color:'#dc2626',bg:'#fef2f2',dot:'🔴'},
+  media:{label:'Media',color:'#0d2d5e',bg:'#e6f1fb',dot:'🟡'},
+  bassa:{label:'Bassa',color:'#16a34a',bg:'#f0fdf4',dot:'🟢'},
 }
 
 // ── Shared UI ──────────────────────────────────────────────────────────────────
@@ -124,7 +124,7 @@ function ProgramRow({pgm,gruppo,onStato,onOperatore,onTempo,onRemove,toolStatus,
         {/* Checkbox */}
         <div onClick={e=>{e.stopPropagation();onSelect&&onSelect()}}
           style={{flexShrink:0,width:32,display:'flex',alignItems:'center',justifyContent:'center',alignSelf:'stretch',borderRight:`1px solid ${T.border}`,cursor:'pointer',background:selected?'#DBEAFE':'transparent'}}>
-          <div style={{width:16,height:16,borderRadius:4,border:selected?'none':'2px solid #B0ADA4',background:selected?'#1D5FAD':'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+          <div style={{width:16,height:16,borderRadius:4,border:selected?'none':'2px solid #B0ADA4',background:selected?'#0d2d5e':'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
             {selected&&<span style={{color:'#fff',fontSize:11,fontWeight:800,lineHeight:1}}>✓</span>}
           </div>
         </div>
@@ -155,7 +155,7 @@ function ProgramRow({pgm,gruppo,onStato,onOperatore,onTempo,onRemove,toolStatus,
         </div>
         {(pgm.tempoInizio||pgm.tempoFine)&&(
           <div style={{flexShrink:0,padding:'0 8px',borderLeft:`1px solid ${T.border}`,alignSelf:'stretch',display:'flex',flexDirection:'column',justifyContent:'center'}}>
-            {pgm.tempoInizio&&<span style={{fontSize:10,color:'#1D5FAD',fontFamily:'monospace',whiteSpace:'nowrap'}}>▶ {pgm.tempoInizio}</span>}
+            {pgm.tempoInizio&&<span style={{fontSize:10,color:'#0d2d5e',fontFamily:'monospace',whiteSpace:'nowrap'}}>▶ {pgm.tempoInizio}</span>}
             {pgm.tempoFine&&<span style={{fontSize:10,color:'#166534',fontFamily:'monospace',whiteSpace:'nowrap'}}>■ {pgm.tempoFine}</span>}
           </div>
         )}
@@ -177,7 +177,7 @@ function ProgramRow({pgm,gruppo,onStato,onOperatore,onTempo,onRemove,toolStatus,
                 <input value={editTempo} onChange={e=>setEditTempo(e.target.value)} placeholder='es. 2h30m' autoFocus
                   style={{width:90,background:T.surface,border:'1.5px solid #1D5FAD44',borderRadius:6,padding:'4px 8px',color:T.text,fontSize:12,outline:'none'}}
                   onKeyDown={e=>{if(e.key==='Enter'){onTempo(editTempo);setEditingT(false)}if(e.key==='Escape')setEditingT(false)}}/>
-                <button onClick={()=>{onTempo(editTempo);setEditingT(false)}} style={{background:'#1D5FAD',border:'none',borderRadius:5,color:'#fff',fontSize:11,fontWeight:700,padding:'4px 9px',cursor:'pointer'}}>OK</button>
+                <button onClick={()=>{onTempo(editTempo);setEditingT(false)}} style={{background:'#0d2d5e',border:'none',borderRadius:5,color:'#fff',fontSize:11,fontWeight:700,padding:'4px 9px',cursor:'pointer'}}>OK</button>
               </div>
             ):(
               <button onClick={()=>setEditingT(true)} style={{background:'none',border:`1px dashed ${T.border}`,borderRadius:6,color:pgm.tempoStimato?T.text:T.textMuted,fontSize:12,padding:'4px 10px',cursor:'pointer'}}>⏱ {pgm.tempoStimato||'Aggiungi'}</button>
@@ -243,7 +243,7 @@ function FresaturaPanel({task,onUpdateTask,toolsDB,projectId}){
     ok:          {dot:'✓',color:'#166534',bg:'#dcfce7'},
     fin_vita:    {dot:'⚠',color:'#B45309',bg:'#FEF3C7'},
     disabilitato:{dot:'⊘',color:'#9333EA',bg:'#F3E8FF'},
-    mancante:    {dot:'✗',color:'#C0392B',bg:'#FDECEA'},
+    mancante:    {dot:'✗',color:'#dc2626',bg:'#fef2f2'},
   }
   const ipmPrograms=programs.filter(p=>p.tipoGruppo==='ipm')
   const fresPrograms=programs.filter(p=>p.tipoGruppo!=='ipm')
@@ -297,39 +297,39 @@ function FresaturaPanel({task,onUpdateTask,toolsDB,projectId}){
   }
   const gruppi=[
     {key:'ipm',label:'Tastatura (IPM)',icon:'📏',color:'#8B2FC9',bgColor:'#F3E8FF',list:ipmPrograms},
-    {key:'fresatura',label:'Fresatura',icon:'⚙️',color:'#1D5FAD',bgColor:'#E8F0FA',list:fresPrograms},
+    {key:'fresatura',label:'Fresatura',icon:'⚙️',color:'#0d2d5e',bgColor:'#E8F0FA',list:fresPrograms},
   ].filter(g=>g.list.length>0)
   return(
     <div style={{marginTop:8,background:T.surface,border:'1.5px solid #1D5FAD33',borderRadius:10,overflow:'hidden'}}>
       <div onClick={()=>setExpanded(v=>!v)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',cursor:'pointer',background:'#E8F0FA',userSelect:'none'}}>
         <span style={{fontSize:15}}>⚙️</span>
-        <span style={{fontSize:13,fontWeight:800,color:'#1D5FAD',flex:1}}>PROGRAMMI FRESATURA</span>
+        <span style={{fontSize:13,fontWeight:800,color:'#0d2d5e',flex:1}}>PROGRAMMI FRESATURA</span>
         {toolsDB&&(()=>{
           const issues=programs.filter(p=>p.stato==='in_macchina'&&p.utensile&&p.tipoGruppo!=='ipm'&&['mancante','fin_vita','disabilitato'].includes(classifyTool(p.utensile,toolsDB)))
           return issues.length>0?(
-            <span style={{fontSize:11,fontWeight:700,color:'#C0392B',background:'#FDECEA',padding:'2px 8px',borderRadius:20,border:'1px solid #C0392B44'}}>
+            <span style={{fontSize:11,fontWeight:700,color:'#dc2626',background:'#fef2f2',padding:'2px 8px',borderRadius:20,border:'1px solid #C0392B44'}}>
               ⚠ {issues.length} utensil{issues.length===1?'e':'i'} problematic{issues.length===1?'o':'i'}
             </span>
           ):null
         })()}
-        {inMacchina>0&&<span style={{fontSize:11,fontWeight:700,color:'#1D5FAD',background:'#fff',padding:'2px 9px',borderRadius:20,border:'1px solid #1D5FAD44'}}>⚙ {inMacchina} in macchina</span>}
-        {total>0&&<span style={{fontSize:12,fontWeight:700,color:allDone?'#166534':'#1D5FAD',background:allDone?'#dcfce7':'#fff',padding:'2px 10px',borderRadius:20,border:`1px solid ${allDone?'#166534':'#1D5FAD'}44`}}>{doneTotal}/{total} {allDone?'✓':'completati'}</span>}
-        <span style={{fontSize:11,color:'#1D5FAD',fontWeight:700}}>{expanded?'▲':'▼'}</span>
+        {inMacchina>0&&<span style={{fontSize:11,fontWeight:700,color:'#0d2d5e',background:'#fff',padding:'2px 9px',borderRadius:20,border:'1px solid #1D5FAD44'}}>⚙ {inMacchina} in macchina</span>}
+        {total>0&&<span style={{fontSize:12,fontWeight:700,color:allDone?'#166534':'#0d2d5e',background:allDone?'#dcfce7':'#fff',padding:'2px 10px',borderRadius:20,border:`1px solid ${allDone?'#166534':'#0d2d5e'}44`}}>{doneTotal}/{total} {allDone?'✓':'completati'}</span>}
+        <span style={{fontSize:11,color:'#0d2d5e',fontWeight:700}}>{expanded?'▲':'▼'}</span>
       </div>
       {expanded&&(
         <div>
           <div style={{display:'flex',gap:10,alignItems:'center',padding:'10px 14px',borderBottom:`1px solid ${T.border}`}}>
             <input ref={fileInputRef} type='file' accept='.mpf,.MPF' multiple style={{display:'none'}} onChange={handleFileUpload}/>
-            <button onClick={()=>fileInputRef.current.click()} style={{background:'#1D5FAD',border:'none',borderRadius:7,color:'#fff',fontWeight:700,fontSize:13,padding:'7px 14px',cursor:'pointer'}}>📂 Carica .mpf</button>
+            <button onClick={()=>fileInputRef.current.click()} style={{background:'#0d2d5e',border:'none',borderRadius:7,color:'#fff',fontWeight:700,fontSize:13,padding:'7px 14px',cursor:'pointer'}}>📂 Carica .mpf</button>
             {total>0&&<span style={{fontSize:12,color:T.textMuted}}>{ipmPrograms.length>0&&`📏 ${ipmPrograms.length} IPM · `}⚙️ {fresPrograms.length} fresatura</span>}
           </div>
 
           {/* Toolbar multi-select */}
           {selected.size>0&&(
             <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 14px',background:'#EFF6FF',borderBottom:`1px solid #1D5FAD33`,flexWrap:'wrap'}}>
-              <span style={{fontSize:12,fontWeight:700,color:'#1D5FAD',marginRight:4}}>{selected.size} selezionati</span>
-              <span style={{fontSize:11,color:'#1D5FAD',marginRight:8}}>→ Segna come:</span>
-              {[['da_fare','○ Da fare','#F0EEE8','#5A5750'],['in_macchina','⚙ In macchina','#DBEAFE','#1D5FAD'],['completato','✓ Completato','#DCFCE7','#166534']].map(([stato,label,bg,color])=>(
+              <span style={{fontSize:12,fontWeight:700,color:'#0d2d5e',marginRight:4}}>{selected.size} selezionati</span>
+              <span style={{fontSize:11,color:'#0d2d5e',marginRight:8}}>→ Segna come:</span>
+              {[['da_fare','○ Da fare','#f8fafc','#475569'],['in_macchina','⚙ In macchina','#DBEAFE','#0d2d5e'],['completato','✓ Completato','#DCFCE7','#166534']].map(([stato,label,bg,color])=>(
                 <button key={stato} onClick={()=>massaStato(stato)}
                   style={{background:bg,border:`1.5px solid ${color}44`,borderRadius:6,color,fontSize:11,fontWeight:700,padding:'4px 10px',cursor:'pointer'}}>
                   {label}
@@ -346,7 +346,7 @@ function FresaturaPanel({task,onUpdateTask,toolsDB,projectId}){
                 <input type='checkbox' checked={selected.size>0&&programs.every(p=>selected.has(p.id))}
                   ref={el=>{if(el) el.indeterminate=selected.size>0&&!programs.every(p=>selected.has(p.id))}}
                   onChange={e=>e.target.checked?selTutti(programs):deselTutti()}
-                  onClick={e=>e.stopPropagation()} style={{cursor:'pointer',accentColor:'#1D5FAD'}}/>
+                  onClick={e=>e.stopPropagation()} style={{cursor:'pointer',accentColor:'#0d2d5e'}}/>
               </div>
               <div style={{width:110,padding:'5px 10px',borderRight:`1px solid ${T.border}`}}>STATO</div>
               <div style={{width:160,padding:'5px 10px',borderRight:`1px solid ${T.border}`}}>PROGRAMMA</div>
@@ -403,9 +403,9 @@ function UtensiliProgetto({projectId}){
     ok:         {label:'In macchina',   color:'#166534',bg:'#dcfce7',dot:'✓'},
     fin_vita:   {label:'Fine vita <15%',color:'#B45309',bg:'#FEF3C7',dot:'⚠'},
     disabilitato:{label:'Disabilitato', color:'#9333EA',bg:'#F3E8FF',dot:'⊘'},
-    scaffale:   {label:'A scaffale',    color:'#1D5FAD',bg:'#dbeafe',dot:'🏠'},
-    smontato:   {label:'Smontato',      color:'#C2720A',bg:'#FFF0DC',dot:'📦'},
-    mancante:   {label:'Non trovato',   color:'#C0392B',bg:'#FDECEA',dot:'✗'},
+    scaffale:   {label:'A scaffale',    color:'#0d2d5e',bg:'#e6f1fb',dot:'🏠'},
+    smontato:   {label:'Smontato',      color:'#1e40af',bg:'#FFF0DC',dot:'📦'},
+    mancante:   {label:'Non trovato',   color:'#dc2626',bg:'#fef2f2',dot:'✗'},
   }
 
   const hasIssues = data && (
@@ -414,12 +414,12 @@ function UtensiliProgetto({projectId}){
   )
 
   return(
-    <div style={{marginTop:12,border:`1.5px solid ${hasIssues&&expanded?'#C0392B33':'#D8D5CC'}`,borderRadius:10,overflow:'hidden'}}>
+    <div style={{marginTop:12,border:`1.5px solid ${hasIssues&&expanded?'#C0392B33':'#e2e8f0'}`,borderRadius:10,overflow:'hidden'}}>
       <div onClick={()=>setExpanded(v=>!v)}
         style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',cursor:'pointer',
-          background:hasIssues?'#FFF4E8':'#F5F4F0',userSelect:'none'}}>
+          background:hasIssues?'#e6f1fb':'#eef2f7',userSelect:'none'}}>
         <span style={{fontSize:14}}>🔧</span>
-        <span style={{fontSize:13,fontWeight:800,color:'#1A1814',flex:1}}>UTENSILI RICHIESTI</span>
+        <span style={{fontSize:13,fontWeight:800,color:'#0f172a',flex:1}}>UTENSILI RICHIESTI</span>
         {data&&<>
           <span style={{fontSize:11,fontWeight:700,color:'#166534',background:'#dcfce7',padding:'2px 8px',borderRadius:20}}>
             ✓ {data.summary.ok}
@@ -427,29 +427,29 @@ function UtensiliProgetto({projectId}){
           {data.summary.fin_vita>0&&<span style={{fontSize:11,fontWeight:700,color:'#B45309',background:'#FEF3C7',padding:'2px 8px',borderRadius:20}}>
             ⚠ {data.summary.fin_vita} vita bassa
           </span>}
-          {(data.summary.scaffale+data.summary.smontato)>0&&<span style={{fontSize:11,fontWeight:700,color:'#1D5FAD',background:'#dbeafe',padding:'2px 8px',borderRadius:20}}>
+          {(data.summary.scaffale+data.summary.smontato)>0&&<span style={{fontSize:11,fontWeight:700,color:'#0d2d5e',background:'#e6f1fb',padding:'2px 8px',borderRadius:20}}>
             🏠 {data.summary.scaffale+data.summary.smontato} da montare
           </span>}
-          {data.summary.mancante>0&&<span style={{fontSize:11,fontWeight:700,color:'#C0392B',background:'#FDECEA',padding:'2px 8px',borderRadius:20}}>
+          {data.summary.mancante>0&&<span style={{fontSize:11,fontWeight:700,color:'#dc2626',background:'#fef2f2',padding:'2px 8px',borderRadius:20}}>
             ✗ {data.summary.mancante} mancanti
           </span>}
         </>}
-        <span style={{fontSize:11,color:'#9A978E',fontWeight:700}}>{expanded?'▲':'▼'}</span>
+        <span style={{fontSize:11,color:'#94a3b8',fontWeight:700}}>{expanded?'▲':'▼'}</span>
       </div>
 
       {expanded&&(
         <div>
-          {loading&&<div style={{padding:16,textAlign:'center',color:'#9A978E',fontSize:13}}>Caricamento...</div>}
+          {loading&&<div style={{padding:16,textAlign:'center',color:'#94a3b8',fontSize:13}}>Caricamento...</div>}
           {!loading&&data&&data.utensili.length===0&&(
-            <div style={{padding:16,textAlign:'center',color:'#9A978E',fontSize:13}}>
+            <div style={{padding:16,textAlign:'center',color:'#94a3b8',fontSize:13}}>
               Nessun utensile rilevato nei programmi MPF
             </div>
           )}
           {!loading&&data&&data.utensili.length>0&&(
             <>
               {/* Header colonne */}
-              <div style={{display:'flex',background:'#F0EEE8',borderBottom:'1px solid #D8D5CC',
-                fontSize:10,fontWeight:700,color:'#9A978E',letterSpacing:'0.07em'}}>
+              <div style={{display:'flex',background:'#f8fafc',borderBottom:'1px solid #D8D5CC',
+                fontSize:10,fontWeight:700,color:'#94a3b8',letterSpacing:'0.07em'}}>
                 <div style={{width:110,padding:'5px 10px',borderRight:'1px solid #D8D5CC'}}>STATO</div>
                 <div style={{flex:1,padding:'5px 10px',borderRight:'1px solid #D8D5CC'}}>ALIAS</div>
                 <div style={{width:80,padding:'5px 10px',borderRight:'1px solid #D8D5CC',textAlign:'center'}}>MAG/POS</div>
@@ -467,17 +467,17 @@ function UtensiliProgetto({projectId}){
                       {cfg.dot} {cfg.label}
                     </div>
                     <div style={{flex:1,padding:'6px 10px',borderRight:'1px solid #D8D5CC',
-                      fontSize:12,fontFamily:'monospace',fontWeight:700,color:'#1A1814'}}>
+                      fontSize:12,fontFamily:'monospace',fontWeight:700,color:'#0f172a'}}>
                       {u.alias}
                     </div>
                     <div style={{width:80,padding:'6px 10px',borderRight:'1px solid #D8D5CC',
-                      textAlign:'center',fontSize:11,color:'#5A5750',fontFamily:'monospace'}}>
+                      textAlign:'center',fontSize:11,color:'#475569',fontFamily:'monospace'}}>
                       {u.magazine!=null?`M${u.magazine}`:''}{u.position!=null?` P${u.position}`:''}
                       {u.magazine==null&&u.position==null?'—':''}
                     </div>
                     <div style={{width:80,padding:'6px 10px',textAlign:'center',fontSize:11,
                       fontWeight:700,
-                      color:u.life_percent!=null?(u.life_percent<15?'#C0392B':u.life_percent<30?'#D4700A':'#1A7A4A'):'#9A978E'}}>
+                      color:u.life_percent!=null?(u.life_percent<15?'#dc2626':u.life_percent<30?'#0d2d5e':'#16a34a'):'#94a3b8'}}>
                       {u.life_percent!=null?`${u.life_percent}%`:'—'}
                     </div>
                   </div>
@@ -522,7 +522,7 @@ function TaskItem({task,idx,stepId,onToggle,onUpdateTask,onDelete,isNext,onReord
       <div style={{display:'flex',alignItems:'center',gap:10}}>
         <span style={{color:T.borderStrong,fontSize:13,cursor:'grab',opacity:hovered?0.8:0.25,flexShrink:0,userSelect:'none'}}>⣿</span>
         {isNext&&<span style={{fontSize:13}}>📍</span>}
-        <div onClick={()=>onToggle(task.id)} style={{width:20,height:20,borderRadius:6,border:task.done?'none':`2px solid ${T.borderStrong}`,background:task.done?'#1A7A4A':'transparent',cursor:'pointer',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',transition:'all 0.2s'}}>
+        <div onClick={()=>onToggle(task.id)} style={{width:20,height:20,borderRadius:6,border:task.done?'none':`2px solid ${T.borderStrong}`,background:task.done?'#16a34a':'transparent',cursor:'pointer',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',transition:'all 0.2s'}}>
           {task.done&&<span style={{color:'#fff',fontSize:13,fontWeight:700}}>✓</span>}
         </div>
         <span style={{fontSize:15,color:task.done?T.textMuted:T.text,textDecoration:task.done?'line-through':'none',flex:1,fontWeight:task.done?400:500}}>{task.text}</span>
@@ -803,16 +803,16 @@ function LancioNCModal({project, toolsDB, onLancia, onClose}){
           opacity:dimmed?0.55:1}}>
         <div style={{width:18,height:18,borderRadius:5,flexShrink:0,
           border:sel?'none':'2px solid #B0ADA4',
-          background:sel?'#1D5FAD':'transparent',
+          background:sel?'#0d2d5e':'transparent',
           display:'flex',alignItems:'center',justifyContent:'center'}}>
           {sel&&<span style={{color:'#fff',fontSize:12,fontWeight:800}}>✓</span>}
         </div>
         {/* Badge stato */}
         {(()=>{const s=pgm.stato||'da_fare';const cfg={
-          da_fare:    {label:'Da fare',    color:'#9A978E',bg:'#F0EEE8'},
-          in_macchina:{label:'In macchina',color:'#1D5FAD',bg:'#DBEAFE'},
+          da_fare:    {label:'Da fare',    color:'#94a3b8',bg:'#f8fafc'},
+          in_macchina:{label:'In macchina',color:'#0d2d5e',bg:'#DBEAFE'},
           completato: {label:'Fatto',      color:'#166534',bg:'#DCFCE7'},
-        }[s]||{label:s,color:'#9A978E',bg:'#F0EEE8'};return(
+        }[s]||{label:s,color:'#94a3b8',bg:'#f8fafc'};return(
           <span style={{fontSize:10,fontWeight:700,color:cfg.color,background:cfg.bg,
             padding:'2px 7px',borderRadius:10,flexShrink:0,whiteSpace:'nowrap'}}>
             {cfg.label}
@@ -820,16 +820,16 @@ function LancioNCModal({project, toolsDB, onLancia, onClose}){
         )})()}
         {/* Filename */}
         <span style={{fontSize:12,fontFamily:'monospace',fontWeight:700,
-          color:'#1D5FAD',minWidth:145,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+          color:'#0d2d5e',minWidth:145,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
           {pgm.filename?.replace(/\.MPF$/i,'')||`#${pgm.numPgm}`}
         </span>
         {/* Utensile */}
-        <span style={{fontSize:11,fontFamily:'monospace',color:'#1A1814',
+        <span style={{fontSize:11,fontFamily:'monospace',color:'#0f172a',
           minWidth:120,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
           {pgm.utensile||'—'}
         </span>
         {/* Operazione */}
-        <span style={{fontSize:11,color:'#9A978E',flex:1,
+        <span style={{fontSize:11,color:'#94a3b8',flex:1,
           overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
           {(pgm.tipoOp||'').replace(/[-–]\s*NESSUN TESTO\s*/gi,'').trim()||''}
         </span>
@@ -850,29 +850,29 @@ function LancioNCModal({project, toolsDB, onLancia, onClose}){
           <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:4}}>
             <span style={{fontSize:18}}>📄</span>
             <div style={{flex:1}}>
-              <div style={{fontSize:16,fontWeight:800,color:'#1A1814'}}>Lancia in Analisi NC</div>
-              <div style={{fontSize:12,color:'#9A978E',marginTop:1}}>{project.name}</div>
+              <div style={{fontSize:16,fontWeight:800,color:'#0f172a'}}>Lancia in Analisi NC</div>
+              <div style={{fontSize:12,color:'#94a3b8',marginTop:1}}>{project.name}</div>
             </div>
             <button onClick={onClose} style={{background:'none',border:'1px solid #D8D5CC',
-              borderRadius:8,color:'#5A5750',fontSize:13,padding:'5px 12px',cursor:'pointer'}}>✕</button>
+              borderRadius:8,color:'#475569',fontSize:13,padding:'5px 12px',cursor:'pointer'}}>✕</button>
           </div>
 
           {/* Filtri tab */}
           <div style={{display:'flex',gap:6,marginTop:10,flexWrap:'wrap',alignItems:'center'}}>
             {[['da_fare',`Da fare (${da_fare.length})`],['in_macchina',`In macchina (${in_macchina.length})`],['tutti',`Tutti (${da_fare.length+in_macchina.length})`]].map(([k,label])=>(
               <button key={k} onClick={()=>{setFiltro(k);setSelected(new Set())}}
-                style={{background:filtro===k?'#1D5FAD':'#F0EEE8',border:`1.5px solid ${filtro===k?'#1D5FAD':'#D8D5CC'}`,borderRadius:7,
-                  color:filtro===k?'#fff':'#5A5750',fontSize:12,fontWeight:700,padding:'5px 12px',cursor:'pointer'}}>
+                style={{background:filtro===k?'#0d2d5e':'#f8fafc',border:`1.5px solid ${filtro===k?'#0d2d5e':'#e2e8f0'}`,borderRadius:7,
+                  color:filtro===k?'#fff':'#475569',fontSize:12,fontWeight:700,padding:'5px 12px',cursor:'pointer'}}>
                 {label}
               </button>
             ))}
             <div style={{marginLeft:'auto',display:'flex',gap:6}}>
               <button onClick={selezionaFiltro}
-                style={{background:'#EFF6FF',border:'1px solid #1D5FAD44',borderRadius:7,color:'#1D5FAD',fontSize:12,fontWeight:700,padding:'5px 12px',cursor:'pointer'}}>
+                style={{background:'#EFF6FF',border:'1px solid #1D5FAD44',borderRadius:7,color:'#0d2d5e',fontSize:12,fontWeight:700,padding:'5px 12px',cursor:'pointer'}}>
                 ☑ Seleziona tutti visibili
               </button>
               {selected.size>0&&<button onClick={deselezionaTutti}
-                style={{background:'none',border:'1px solid #D8D5CC',borderRadius:7,color:'#9A978E',fontSize:12,padding:'5px 12px',cursor:'pointer'}}>
+                style={{background:'none',border:'1px solid #D8D5CC',borderRadius:7,color:'#94a3b8',fontSize:12,padding:'5px 12px',cursor:'pointer'}}>
                 Deseleziona ({selected.size})
               </button>}
             </div>
@@ -884,15 +884,15 @@ function LancioNCModal({project, toolsDB, onLancia, onClose}){
           {listaFiltrata.length>0?(
             <div>
               <div style={{padding:'6px 14px',fontSize:10,fontWeight:700,letterSpacing:'0.07em',
-                background:'#F5F4F0',borderBottom:'1px solid #E8E6E0',
-                color:'#9A978E',display:'flex',alignItems:'center',gap:8}}>
+                background:'#eef2f7',borderBottom:'1px solid #E8E6E0',
+                color:'#94a3b8',display:'flex',alignItems:'center',gap:8}}>
                 <span>{filtro==='da_fare'?'DA FARE':filtro==='in_macchina'?'IN MACCHINA':'TUTTI'} — {listaFiltrata.length}</span>
-                {selected.size>0&&<span style={{color:'#1D5FAD',marginLeft:'auto'}}>{selected.size} selezionati</span>}
+                {selected.size>0&&<span style={{color:'#0d2d5e',marginLeft:'auto'}}>{selected.size} selezionati</span>}
               </div>
               {listaFiltrata.map(p=><PgmRow key={p.id} pgm={p} dimmed={p.stato==='in_macchina'&&filtro==='tutti'}/>)}
             </div>
           ):(
-            <div style={{padding:40,textAlign:'center',color:'#9A978E',fontSize:14}}>
+            <div style={{padding:40,textAlign:'center',color:'#94a3b8',fontSize:14}}>
               {allPgm.length===0?'Nessun programma MPF caricato':'Nessun programma con questo stato'}
             </div>
           )}
@@ -902,7 +902,7 @@ function LancioNCModal({project, toolsDB, onLancia, onClose}){
             <div>
               <div onClick={()=>setShowCompletati(v=>!v)}
                 style={{padding:'8px 14px',fontSize:10,fontWeight:700,
-                  color:'#9A978E',letterSpacing:'0.07em',background:'#FAFAFA',
+                  color:'#94a3b8',letterSpacing:'0.07em',background:'#FAFAFA',
                   borderBottom:'1px solid #E8E6E0',cursor:'pointer',
                   display:'flex',alignItems:'center',gap:6}}>
                 {showCompletati?'▼':'▶'} COMPLETATI — {completati.length}
@@ -914,7 +914,7 @@ function LancioNCModal({project, toolsDB, onLancia, onClose}){
 
         {/* Footer */}
         <div style={{borderTop:'1px solid #E8E6E0',padding:'12px 22px',
-          background:'#F5F4F0',borderRadius:'0 0 16px 16px'}}>
+          background:'#eef2f7',borderRadius:'0 0 16px 16px'}}>
 
           {/* Avviso problemi */}
           {mancanti.length>0&&(
@@ -933,10 +933,10 @@ function LancioNCModal({project, toolsDB, onLancia, onClose}){
 
           <div style={{display:'flex',alignItems:'center',gap:12}}>
             {/* Counter */}
-            <div style={{flex:1,fontSize:13,color:'#5A5750'}}>
+            <div style={{flex:1,fontSize:13,color:'#475569'}}>
               {selected.size===0
-                ? <span style={{color:'#9A978E'}}>Nessun programma selezionato</span>
-                : <><span style={{fontWeight:700,color:'#1A1814'}}>{selected.size} selezionat{selected.size===1?'o':'i'}</span>
+                ? <span style={{color:'#94a3b8'}}>Nessun programma selezionato</span>
+                : <><span style={{fontWeight:700,color:'#0f172a'}}>{selected.size} selezionat{selected.size===1?'o':'i'}</span>
                     {problemi.length===0&&<span style={{color:'#166534',marginLeft:6}}>· tutti ok ✓</span>}
                     {mancanti.length>0&&<span style={{color:'#DC2626',marginLeft:6}}>· {mancanti.length} mancant{mancanti.length===1?'e':'i'}</span>}
                   </>
@@ -944,13 +944,13 @@ function LancioNCModal({project, toolsDB, onLancia, onClose}){
             </div>
             <button onClick={onClose}
               style={{background:'none',border:'1px solid #D8D5CC',borderRadius:8,
-                color:'#5A5750',fontSize:13,padding:'9px 18px',cursor:'pointer',fontWeight:600}}>
+                color:'#475569',fontSize:13,padding:'9px 18px',cursor:'pointer',fontWeight:600}}>
               Annulla
             </button>
             <button
               disabled={selected.size===0}
               onClick={()=>onLancia(pgmSelezionati)}
-              style={{background:selected.size===0?'#D8D5CC':'#1D5FAD',border:'none',
+              style={{background:selected.size===0?'#e2e8f0':'#0d2d5e',border:'none',
                 borderRadius:8,color:'#fff',fontWeight:700,fontSize:14,
                 padding:'9px 22px',cursor:selected.size===0?'default':'pointer',
                 transition:'background 0.15s'}}>
@@ -1012,7 +1012,7 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
   const Tab=({id,label})=>(<button onClick={()=>setActiveTab(id)} style={{background:'none',border:'none',cursor:'pointer',color:activeTab===id?project.color:T.textSub,fontSize:15,fontWeight:700,padding:'10px 0',borderBottom:activeTab===id?`3px solid ${project.color}`:'3px solid transparent',marginRight:24,transition:'all 0.15s'}}>{label}</button>)
 
   return(
-    <div style={{display:'flex',flexDirection:'column',height:'100%',background:T.bg,fontFamily:"'DM Sans', system-ui, sans-serif"}}>
+    <div style={{display:'flex',flexDirection:'column',height:'100%',background:T.bg,fontFamily:"var(--font-display)"}}>
       {/* Header */}
       <div style={{padding:'20px 28px 0',borderBottom:`1px solid ${T.border}`,flexShrink:0,background:T.surface}}>
         <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:16,flexWrap:'wrap'}}>
@@ -1066,7 +1066,7 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
                 if(val){
                   const r = await fetch('/api/pallet/'+val+'/assegna-progetto',{
                     method:'PATCH',headers:{'Content-Type':'application/json'},
-                    body:JSON.stringify({progetto_id:project.id,progetto_nome:project.name,progetto_colore:project.color||'#1D5FAD'})
+                    body:JSON.stringify({progetto_id:project.id,progetto_nome:project.name,progetto_colore:project.color||'#0d2d5e'})
                   })
                   if(!r.ok){
                     const err = await r.json().catch(()=>({}))
@@ -1078,7 +1078,7 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
                 onUpdate({...project, pallet_assegnato: val})
 
               }}
-              style={{fontSize:12,fontWeight:700,background:'#F0F4FF',color:'#1D5FAD',
+              style={{fontSize:12,fontWeight:700,background:'#F0F4FF',color:'#0d2d5e',
                 border:'1px solid #BFDBFE',borderRadius:6,padding:'4px 8px',cursor:'pointer'}}>
               <option value=''>—</option>
               {[1,2,3,4,5,6].map(n=>{
@@ -1091,11 +1091,11 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
             </select>
             {project.pallet_assegnato&&(
               <span onClick={()=>window.location.href='/coda'}
-                style={{fontSize:11,color:'#1D5FAD',cursor:'pointer',
+                style={{fontSize:11,color:'#0d2d5e',cursor:'pointer',
                   textDecoration:'underline',textDecorationStyle:'dotted'}}>→ Coda</span>
             )}
           </div>
-          {mpfList.length>0&&<button onClick={()=>setShowLancioModal(true)} style={{background:'#1D5FAD',border:'none',borderRadius:8,color:'#fff',fontWeight:700,fontSize:13,padding:'8px 16px',cursor:'pointer'}}>📄 Lancia in NC →</button>}
+          {mpfList.length>0&&<button onClick={()=>setShowLancioModal(true)} style={{background:'#0d2d5e',border:'none',borderRadius:8,color:'#fff',fontWeight:700,fontSize:13,padding:'8px 16px',cursor:'pointer'}}>📄 Lancia in NC →</button>}
           <button onClick={()=>setConfirm('archive')} style={{background:T.surface2,border:`1px solid ${T.border}`,borderRadius:8,color:T.textSub,fontSize:14,padding:'7px 14px',cursor:'pointer',fontWeight:600}}>{project.archived?'📤 Riattiva':'📦 Archivia'}</button>
           <button onClick={()=>setConfirm('delete')} style={{background:T.redBg,border:`1px solid ${T.red}44`,borderRadius:8,color:T.red,fontSize:14,padding:'7px 14px',cursor:'pointer',fontWeight:600}}>🗑️ Elimina</button>
         </div>
@@ -1114,8 +1114,8 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
               <div style={{fontSize:15,color:T.text,fontWeight:600}}><span style={{color:T.textSub,fontWeight:400}}>{next.step.title} › </span>{next.task.text}</div>
               {next.task.text?.trim().toLowerCase()==='fresatura'&&Array.isArray(next.task.programs)&&next.task.programs.length>0&&(
                 <div style={{display:'flex',alignItems:'center',gap:8,marginTop:5}}>
-                  <span style={{fontSize:13,color:'#1D5FAD',fontWeight:700}}>⚙️ {next.task.programs.filter(p=>p.stato==='completato').length}/{next.task.programs.length} programmi completati</span>
-                  {next.task.programs.filter(p=>p.stato==='in_macchina').length>0&&<span style={{fontSize:12,color:'#1D5FAD',background:'#E8F0FA',padding:'2px 10px',borderRadius:10}}>{next.task.programs.filter(p=>p.stato==='in_macchina').length} in macchina</span>}
+                  <span style={{fontSize:13,color:'#0d2d5e',fontWeight:700}}>⚙️ {next.task.programs.filter(p=>p.stato==='completato').length}/{next.task.programs.length} programmi completati</span>
+                  {next.task.programs.filter(p=>p.stato==='in_macchina').length>0&&<span style={{fontSize:12,color:'#0d2d5e',background:'#E8F0FA',padding:'2px 10px',borderRadius:10}}>{next.task.programs.filter(p=>p.stato==='in_macchina').length} in macchina</span>}
                 </div>
               )}
             </div>
@@ -1209,7 +1209,7 @@ function ProjectCard({project,onClick,onDelete,onArchive,delivery,onSetDelivery}
             <div style={{width:10,height:10,borderRadius:'50%',background:project.color,flexShrink:0}}/>
             <div style={{fontSize:17,fontWeight:800,color:T.text}}>{project.name}</div>
             {project.pallet_assegnato&&(
-              <span style={{fontSize:11,fontWeight:700,background:'#EFF6FF',color:'#1D5FAD',
+              <span style={{fontSize:11,fontWeight:700,background:'#EFF6FF',color:'#0d2d5e',
                 padding:'2px 8px',borderRadius:6,flexShrink:0}}>
                 P{project.pallet_assegnato}
               </span>
@@ -1246,7 +1246,7 @@ function ProjectCard({project,onClick,onDelete,onArchive,delivery,onSetDelivery}
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:8,marginBottom:next?12:0}}>
           <span style={{fontSize:13,color:T.textSub,fontWeight:500}}>{(project.steps||[]).flatMap(s=>s.tasks||[]).filter(t=>t.done).length} / {(project.steps||[]).flatMap(s=>s.tasks||[]).length} task</span>
           <div style={{display:'flex',gap:8,alignItems:'center'}}>
-            {mpfTot.length>0&&<span style={{fontSize:11,color:'#1D5FAD',fontWeight:700,background:'#E8F0FA',padding:'2px 8px',borderRadius:10}}>⚙ {mpfDone}/{mpfTot.length} MPF</span>}
+            {mpfTot.length>0&&<span style={{fontSize:11,color:'#0d2d5e',fontWeight:700,background:'#E8F0FA',padding:'2px 8px',borderRadius:10}}>⚙ {mpfDone}/{mpfTot.length} MPF</span>}
             <StatusBadge progress={progress}/>
           </div>
         </div>
@@ -1256,8 +1256,8 @@ function ProjectCard({project,onClick,onDelete,onArchive,delivery,onSetDelivery}
             <div style={{fontSize:14,color:T.text,fontWeight:600}}><span style={{color:T.textSub,fontWeight:400}}>{next.step.title} › </span>{next.task.text}</div>
             {next.task.text?.trim().toLowerCase()==='fresatura'&&Array.isArray(next.task.programs)&&next.task.programs.length>0&&(
               <div style={{display:'flex',alignItems:'center',gap:8,marginTop:4}}>
-                <span style={{fontSize:12,color:'#1D5FAD',fontWeight:700}}>⚙️ {next.task.programs.filter(p=>p.stato==='completato').length}/{next.task.programs.length} pgm</span>
-                {next.task.programs.filter(p=>p.stato==='in_macchina').length>0&&<span style={{fontSize:11,color:'#1D5FAD',background:'#E8F0FA',padding:'1px 8px',borderRadius:10}}>{next.task.programs.filter(p=>p.stato==='in_macchina').length} in macchina</span>}
+                <span style={{fontSize:12,color:'#0d2d5e',fontWeight:700}}>⚙️ {next.task.programs.filter(p=>p.stato==='completato').length}/{next.task.programs.length} pgm</span>
+                {next.task.programs.filter(p=>p.stato==='in_macchina').length>0&&<span style={{fontSize:11,color:'#0d2d5e',background:'#E8F0FA',padding:'1px 8px',borderRadius:10}}>{next.task.programs.filter(p=>p.stato==='in_macchina').length} in macchina</span>}
               </div>
             )}
           </div>
@@ -1287,7 +1287,7 @@ function TemplateEditor({template,onSave,onCancel}){
   function moveStep(idx,dir){const ns=[...steps],t=idx+dir;if(t<0||t>=ns.length)return;[ns[idx],ns[t]]=[ns[t],ns[idx]];setSteps(ns)}
   const inputStyle={background:T.surface2,border:`1.5px solid ${T.border}`,borderRadius:8,padding:'9px 12px',color:T.text,fontSize:14,outline:'none',width:'100%'}
   return(
-    <div style={{display:'flex',flexDirection:'column',height:'100%',background:T.bg,fontFamily:"'DM Sans', system-ui"}}>
+    <div style={{display:'flex',flexDirection:'column',height:'100%',background:T.bg,fontFamily:"var(--font-display)"}}>
       <div style={{padding:'18px 28px',borderBottom:`1px solid ${T.border}`,flexShrink:0,background:T.surface,display:'flex',alignItems:'center',gap:12}}>
         <button onClick={onCancel} style={{background:T.surface2,border:`1px solid ${T.border}`,borderRadius:8,color:T.textSub,fontSize:14,padding:'8px 16px',cursor:'pointer',fontWeight:600}}>← Annulla</button>
         <div style={{fontSize:18,fontWeight:800,color:T.text,flex:1}}>{template.id.startsWith('new_')?'Nuovo Template':`Modifica: ${template.name}`}</div>
@@ -1359,12 +1359,12 @@ function HomePage({projects,deliveries,palletState,setupData,onNavigateProject,o
   const daMontare=(setupData?.da_montare||[]).length
   const fineVita=(setupData?.fin_vita||[]).length
   const pallets=palletState||[]
-  const STATO_COLOR={grezzo:'#D4700A',finito:'#1A7A4A',guasto:'#C0392B',vuoto:'#9A978E'}
-  const STATO_BG={grezzo:'#FFF4E8',finito:'#E8F5EE',guasto:'#FDECEA',vuoto:'#F5F4F0'}
-  const STATO_BORDER={grezzo:'#D4700A44',finito:'#1A7A4A44',guasto:'#C0392B44',vuoto:'#D8D5CC'}
+  const STATO_COLOR={grezzo:'#0d2d5e',finito:'#16a34a',guasto:'#dc2626',vuoto:'#94a3b8'}
+  const STATO_BG={grezzo:'#e6f1fb',finito:'#f0fdf4',guasto:'#fef2f2',vuoto:'#eef2f7'}
+  const STATO_BORDER={grezzo:'#D4700A44',finito:'#1A7A4A44',guasto:'#C0392B44',vuoto:'#e2e8f0'}
 
   return(
-    <div style={{flex:1,overflowY:'auto',background:T.bg,fontFamily:"'DM Sans', system-ui"}}>
+    <div style={{flex:1,overflowY:'auto',background:T.bg,fontFamily:"var(--font-display)"}}>
 
       {/* ── Topbar header ── */}
       <div style={{background:T.surface,borderBottom:`1px solid ${T.border}`,padding:'14px 28px',display:'flex',alignItems:'baseline',gap:12}}>
@@ -1382,13 +1382,13 @@ function HomePage({projects,deliveries,palletState,setupData,onNavigateProject,o
               const days=daysUntil(d?.dueDate)
               return(
                 <div key={p.id} onClick={()=>onNavigateProject(p.id)}
-                  style={{display:'flex',alignItems:'center',gap:12,background:'#FDECEA',border:'1px solid #C0392B33',borderRadius:10,padding:'10px 16px',cursor:'pointer'}}>
-                  <div style={{width:8,height:8,borderRadius:'50%',background:'#C0392B',flexShrink:0}}/>
+                  style={{display:'flex',alignItems:'center',gap:12,background:'#fef2f2',border:'1px solid #C0392B33',borderRadius:10,padding:'10px 16px',cursor:'pointer'}}>
+                  <div style={{width:8,height:8,borderRadius:'50%',background:'#dc2626',flexShrink:0}}/>
                   <div style={{fontSize:13,fontWeight:700,color:'#7B1F1F',flex:1}}>
                     🎯 {p.name}
-                    <span style={{fontWeight:400,color:'#C0392B',marginLeft:8}}>— scadenza {days===0?'oggi':days<0?`${Math.abs(days)} giorni fa`:`tra ${days} giorni`}</span>
+                    <span style={{fontWeight:400,color:'#dc2626',marginLeft:8}}>— scadenza {days===0?'oggi':days<0?`${Math.abs(days)} giorni fa`:`tra ${days} giorni`}</span>
                   </div>
-                  <span style={{fontSize:12,fontWeight:800,color:'#C0392B',background:'#fff',padding:'2px 10px',borderRadius:20,border:'1px solid #C0392B33'}}>{days===0?'OGGI':days<0?`${Math.abs(days)}gg fa`:`${days}gg`}</span>
+                  <span style={{fontSize:12,fontWeight:800,color:'#dc2626',background:'#fff',padding:'2px 10px',borderRadius:20,border:'1px solid #C0392B33'}}>{days===0?'OGGI':days<0?`${Math.abs(days)}gg fa`:`${days}gg`}</span>
                 </div>
               )
             })}
@@ -1419,18 +1419,18 @@ function HomePage({projects,deliveries,palletState,setupData,onNavigateProject,o
               const d=proj?getDelivery(proj.id):null
               const days=d&&d.dueDate&&!d.delivered?daysUntil(d.dueDate):null
               const isUrgent=days!==null&&days<=3
-              const color=STATO_COLOR[stato]||'#9A978E'
-              const bg=STATO_BG[stato]||'#F5F4F0'
+              const color=STATO_COLOR[stato]||'#94a3b8'
+              const bg=STATO_BG[stato]||'#eef2f7'
               const isEmpty=stato==='vuoto'&&!nome
               return(
                 <div key={n} onClick={pid?()=>onNavigateProject(pid):undefined}
-                  style={{background:bg,border:`1.5px solid ${isUrgent?'#C0392B':isEmpty?T.border:color+'66'}`,borderRadius:12,padding:'14px 16px',cursor:pid?'pointer':'default',transition:'all 0.15s',minHeight:isEmpty?72:110}}>
+                  style={{background:bg,border:`1.5px solid ${isUrgent?'#dc2626':isEmpty?T.border:color+'66'}`,borderRadius:12,padding:'14px 16px',cursor:pid?'pointer':'default',transition:'all 0.15s',minHeight:isEmpty?72:110}}>
                   <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:nome?8:0}}>
                     <span style={{fontSize:22,fontWeight:900,color:isEmpty?'#C8C5BE':color,lineHeight:1}}>P{n}</span>
                     <span style={{fontSize:10,fontWeight:700,color:isEmpty?'#C8C5BE':color,background:isEmpty?'transparent':bg,padding:'2px 8px',borderRadius:10,border:`1px solid ${isEmpty?'transparent':color+'44'}`}}>
                       {stato}
                     </span>
-                    {isUrgent&&<span style={{marginLeft:'auto',fontSize:10,fontWeight:800,color:'#C0392B',background:'#FDECEA',padding:'2px 8px',borderRadius:10}}>{days===0?'OGGI':`${days}gg`}</span>}
+                    {isUrgent&&<span style={{marginLeft:'auto',fontSize:10,fontWeight:800,color:'#dc2626',background:'#fef2f2',padding:'2px 8px',borderRadius:10}}>{days===0?'OGGI':`${days}gg`}</span>}
                   </div>
                   {nome&&(
                     <>
@@ -1460,11 +1460,11 @@ function HomePage({projects,deliveries,palletState,setupData,onNavigateProject,o
           {/* Metriche turno — colonna sinistra */}
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,width:280}}>
             {[
-              {val:pgmDaFare.length,  label:'Da fare',          sub:`${inProgress.length} lavori attivi`, color:'#5A5750', bg:T.surface2},
-              {val:pgmInMac.length,   label:'In macchina',       sub:'programmi attivi',                  color:'#1D5FAD', bg:'#EFF6FF'},
-              {val:pgmOggi.length,    label:'Completati oggi',   sub:`${pgmCompletati.length} totali`,    color:'#1A7A4A', bg:'#F0FBF4'},
+              {val:pgmDaFare.length,  label:'Da fare',          sub:`${inProgress.length} lavori attivi`, color:'#475569', bg:T.surface2},
+              {val:pgmInMac.length,   label:'In macchina',       sub:'programmi attivi',                  color:'#0d2d5e', bg:'#EFF6FF'},
+              {val:pgmOggi.length,    label:'Completati oggi',   sub:`${pgmCompletati.length} totali`,    color:'#16a34a', bg:'#F0FBF4'},
               {val:daMontare+fineVita,label:'Utensili critici',  sub:daMontare>0?`${daMontare} da montare`:'tutto ok',
-               color:daMontare+fineVita>0?'#C0392B':'#1A7A4A', bg:daMontare+fineVita>0?'#FEF0EE':'#F0FBF4'},
+               color:daMontare+fineVita>0?'#dc2626':'#16a34a', bg:daMontare+fineVita>0?'#FEF0EE':'#F0FBF4'},
             ].map(({val,label,sub,color,bg})=>(
               <div key={label} style={{background:bg,borderRadius:10,padding:'12px 14px'}}>
                 <div style={{fontSize:26,fontWeight:700,color,lineHeight:1,marginBottom:3}}>{val}</div>
@@ -1490,16 +1490,16 @@ function HomePage({projects,deliveries,palletState,setupData,onNavigateProject,o
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
                         <span style={{fontSize:13,fontWeight:700,color:T.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}</span>
-                        {pNum&&<span style={{fontSize:10,fontWeight:700,color:'#1D5FAD',background:'#EFF6FF',padding:'1px 7px',borderRadius:8,flexShrink:0}}>P{pNum}</span>}
+                        {pNum&&<span style={{fontSize:10,fontWeight:700,color:'#0d2d5e',background:'#EFF6FF',padding:'1px 7px',borderRadius:8,flexShrink:0}}>P{pNum}</span>}
                       </div>
                       <div style={{height:4,background:T.surface2,borderRadius:2,overflow:'hidden'}}>
                         <div style={{height:4,width:`${pct}%`,background:p.color,borderRadius:2}}/>
                       </div>
                     </div>
                     <div style={{textAlign:'right',flexShrink:0}}>
-                      <div style={{fontSize:13,fontWeight:800,color:pct===100?'#1A7A4A':p.color}}>{pct}%</div>
-                      {days!==null&&<div style={{fontSize:10,fontWeight:700,color:days<=3?'#C0392B':'#D4700A'}}>{days===0?'oggi':days<0?`${Math.abs(days)}gg fa`:`${days}gg`}</div>}
-                      {daFareP>0&&<div style={{fontSize:10,color:'#1D5FAD'}}>{daFareP} pgm</div>}
+                      <div style={{fontSize:13,fontWeight:800,color:pct===100?'#16a34a':p.color}}>{pct}%</div>
+                      {days!==null&&<div style={{fontSize:10,fontWeight:700,color:days<=3?'#dc2626':'#0d2d5e'}}>{days===0?'oggi':days<0?`${Math.abs(days)}gg fa`:`${days}gg`}</div>}
+                      {daFareP>0&&<div style={{fontSize:10,color:'#0d2d5e'}}>{daFareP} pgm</div>}
                     </div>
                   </div>
                 )
@@ -1516,7 +1516,7 @@ function HomePage({projects,deliveries,palletState,setupData,onNavigateProject,o
 // ── TemplatesPage ──────────────────────────────────────────────────────────────
 function TemplatesPage({templates,onEdit,onCreate,onDelete,onDuplicate,onUseTemplate,lastSaved}){
   return(
-    <div style={{flex:1,overflowY:'auto',padding:'24px 28px',background:T.bg,fontFamily:"'DM Sans', system-ui"}}>
+    <div style={{flex:1,overflowY:'auto',padding:'24px 28px',background:T.bg,fontFamily:"var(--font-display)"}}>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:20}}>
         <div>
           <div style={{fontSize:13,color:T.textSub,fontWeight:600,letterSpacing:'0.06em',marginBottom:4}}>TEMPLATE SALVATI — {templates.length}</div>
@@ -1745,7 +1745,7 @@ function DeliveryPage({projects,deliveries,onSetDelivery,onNavigateToProject}){
   }
   const inputSt={background:T.surface2,border:`1.5px solid ${T.border}`,borderRadius:8,padding:'9px 12px',color:T.text,fontSize:14,outline:'none',width:'100%'}
   return(
-    <div style={{flex:1,overflowY:'auto',padding:'24px 28px',background:T.bg,fontFamily:"'DM Sans', system-ui"}}>
+    <div style={{flex:1,overflowY:'auto',padding:'24px 28px',background:T.bg,fontFamily:"var(--font-display)"}}>
       {urgent.length>0&&(
         <div style={{background:T.redBg,border:`2px solid ${T.red}44`,borderRadius:14,padding:'16px 20px',marginBottom:24}}>
           <div style={{fontSize:13,fontWeight:800,color:T.red,letterSpacing:'0.08em',marginBottom:10}}>🎯 FOCUS DEL GIORNO — {urgent.length} CONSEGN{urgent.length===1?'A':'E'} URGENTI</div>
@@ -1809,7 +1809,7 @@ function DeliveryPage({projects,deliveries,onSetDelivery,onNavigateToProject}){
 function NewProjectModal({onClose,onCreate,templates,preselectedTemplate}){
   const[name,setName]=useState('')
   const[desc,setDesc]=useState('')
-  const[color,setColor]=useState(preselectedTemplate?.color||'#D4700A')
+  const[color,setColor]=useState(preselectedTemplate?.color||'#0d2d5e')
   const[selectedTmpl,setSelectedTmpl]=useState(preselectedTemplate||null)
   const[stepsRaw,setStepsRaw]=useState('')
   function selectTmpl(t){setSelectedTmpl(t);if(t)setColor(t.color)}
@@ -2076,11 +2076,11 @@ export default function Progetti(){
     </button>
   )
 
-  if(loading) return <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100%',color:T.textMuted,background:T.bg,fontFamily:"'DM Sans', system-ui"}}>Caricamento...</div>
+  if(loading) return <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100%',color:T.textMuted,background:T.bg,fontFamily:"var(--font-display)"}}>Caricamento...</div>
 
   return(
-    <div style={{height:'100%',display:'flex',flexDirection:'column',background:T.bg,fontFamily:"'DM Sans', system-ui, sans-serif",color:T.text}}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap');*{box-sizing:border-box}input,textarea,select{font-family:inherit}`}</style>
+    <div style={{height:'100%',display:'flex',flexDirection:'column',background:T.bg,fontFamily:"var(--font-display)",color:T.text}}>
+      <style>{`*{box-sizing:border-box}input,textarea,select{font-family:inherit}`}</style>
 
       {/* TOP BAR */}
       {!isOnProject&&!isOnEditor&&(
@@ -2114,7 +2114,7 @@ export default function Progetti(){
               onNavigateProject={id=>{setSelectedId(id);setPage('projects')}}
               onNavigateCoda={()=>{ window.location.href='/'; }}/>
           ):page==='templates'?(
-            <TemplatesPage templates={templates} onEdit={tmpl=>{setEditingTemplate(tmpl);setPage('templateEditor')}} onCreate={()=>{setEditingTemplate({id:`new_${uid()}`,name:'Nuovo Template',description:'',icon:'🚀',color:'#D4700A',steps:[]});setPage('templateEditor')}} onDelete={deleteTemplate} onDuplicate={duplicateTemplate} onUseTemplate={useTemplate} lastSaved={lastSavedTmpl}/>
+            <TemplatesPage templates={templates} onEdit={tmpl=>{setEditingTemplate(tmpl);setPage('templateEditor')}} onCreate={()=>{setEditingTemplate({id:`new_${uid()}`,name:'Nuovo Template',description:'',icon:'🚀',color:'#0d2d5e',steps:[]});setPage('templateEditor')}} onDelete={deleteTemplate} onDuplicate={duplicateTemplate} onUseTemplate={useTemplate} lastSaved={lastSavedTmpl}/>
           ):page==='consegne'?(
             <DeliveryPage projects={projects} deliveries={deliveries} onSetDelivery={setDelivery} onNavigateToProject={id=>{setSelectedId(id);setPage('projects')}}/>
           ):page==='backup'?(

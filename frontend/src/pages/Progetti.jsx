@@ -300,7 +300,7 @@ function FresaturaPanel({task,onUpdateTask,toolsDB,projectId}){
     {key:'fresatura',label:'Fresatura',icon:'⚙️',color:'#0d2d5e',bgColor:'#E8F0FA',list:fresPrograms},
   ].filter(g=>g.list.length>0)
   return(
-    <div style={{marginTop:8,background:T.surface,border:'1.5px solid #1D5FAD33',borderRadius:10,overflow:'hidden'}}>
+    <div style={{marginTop:8,background:T.surface,border:'1.5px solid #1D5FAD33',borderRadius:10}}>
       <div onClick={()=>setExpanded(v=>!v)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',cursor:'pointer',background:'#E8F0FA',userSelect:'none'}}>
         <span style={{fontSize:15}}>⚙️</span>
         <span style={{fontSize:13,fontWeight:800,color:'#0d2d5e',flex:1}}>PROGRAMMI FRESATURA</span>
@@ -417,7 +417,7 @@ function UtensiliProgetto({projectId}){
   )
 
   return(
-    <div style={{marginTop:12,border:`1.5px solid ${hasIssues&&expanded?'#C0392B33':'#e2e8f0'}`,borderRadius:10,overflow:'hidden'}}>
+    <div style={{marginTop:12,border:`1.5px solid ${hasIssues&&expanded?'#C0392B33':'#e2e8f0'}`,borderRadius:10}}>
       <div onClick={()=>setExpanded(v=>!v)}
         style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',cursor:'pointer',
           background:hasIssues?'#e6f1fb':'#eef2f7',userSelect:'none'}}>

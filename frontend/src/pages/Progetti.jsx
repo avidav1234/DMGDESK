@@ -571,7 +571,7 @@ function TaskItem({task,idx,stepId,onToggle,onUpdateTask,onDelete,isNext,onReord
         </div>
       )}
       {task.text?.trim().toLowerCase()==='fresatura'&&(
-        <div style={{marginTop:8}}><FresaturaPanel task={task} onUpdateTask={onUpdateTask} toolsDB={toolsDB} projectId={projectId} onSelectionChange={ids=>setPreselectedIds(new Set(ids))}/></div>
+        <div style={{marginTop:8}}><FresaturaPanel task={task} onUpdateTask={onUpdateTask} toolsDB={toolsDB} projectId={projectId} onSelectionChange={ids=>{ preselectedIdsRef.current = new Set(ids) }}/></div>
       )}
     </div>
   )
@@ -1085,7 +1085,7 @@ function LancioNCModal({project, toolsDB, preselectedIds, onLancia, onClose}){
 function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onSaveAsTemplate,onLanciaNC,palletDisponibili=[]}){
   // Carica tools_machine una volta sola per questo progetto
   const [toolsDB, setToolsDB] = useState(null)
-  const [preselectedIds, setPreselectedIds] = useState(new Set())
+  const preselectedIdsRef = useRef(new Set())
   const [showLancioModal, setShowLancioModal] = useState(()=>{
     // Apri automaticamente se arrivato dalla Coda con bottone Avvia
     const flag = sessionStorage.getItem('dmgdesk_apri_modal_lancio')
@@ -1276,11 +1276,11 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
       {showLancioModal&&<LancioNCModal
         project={project}
         toolsDB={toolsDB}
-        preselectedIds={preselectedIds}
+        preselectedIds={preselectedIdsRef.current}
         onClose={()=>setShowLancioModal(false)}
         onLancia={pgmSelezionati=>{
           setShowLancioModal(false)
-          setPreselectedIds(new Set())
+          preselectedIdsRef.current = new Set()
           onLanciaNC(project, pgmSelezionati)
         }}
       />}

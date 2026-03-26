@@ -1324,8 +1324,11 @@ class TabProgetti:
                      font=("Inter",9,"bold"), fg="#DC2626", bg="#FEE2E2",
                      padx=6, pady=1).pack(side="left", padx=6)
 
-        # ── Toolbar multi-select (appare quando ci sono selezioni) ────────────
-        toolbar = tk.Frame(pf, bg="#DBEAFE")
+        # ── Toolbar multi-select — FUORI dal frame scrollabile, sempre visibile ──
+        # Il parent del content area è self._content_body (frame sopra il body)
+        # Usiamo il frame direttamente sopra _body
+        toolbar_parent = self._body.master if hasattr(self._body, 'master') else pf
+        toolbar = tk.Frame(toolbar_parent, bg="#DBEAFE")
         sel_label = tk.Label(toolbar, text="0 selezionati",
                              font=("Inter",9,"bold"), fg="#0d2d5e", bg="#DBEAFE")
         sel_label.pack(side="left", padx=8, pady=4)
@@ -1367,9 +1370,9 @@ class TabProgetti:
 
         def _update_toolbar():
             n = len(selected_ids)
-            self._has_active_selections = n > 0  # blocca silent reload
+            self._has_active_selections = n > 0
             if n > 0:
-                toolbar.pack(fill="x", after=ph)
+                toolbar.pack(fill="x", before=self._body)
                 sel_label.configure(text=f"{n} selezionati → segna come:")
             else:
                 toolbar.pack_forget()
@@ -1571,6 +1574,8 @@ class TabProgetti:
                              bg=row_bg, activebackground=row_bg,
                              relief="flat", cursor="hand2", padx=2)
         chk.pack(side="left")
+        # Click sulla riga intera attiva/disattiva selezione (non sul bottone stato)
+        row.bind("<Button-1>", lambda e: _toggle_sel())
 
         def _adv(p=pgm, btn_ref=[None], row_ref=[row]):
             p["stato"] = STATO_NEXT.get(p.get("stato","da_fare"), "da_fare")
@@ -2383,8 +2388,20 @@ class TabProgetti:
 
     def _save_project(self, project):
         self._projects = [project if p["id"]==project["id"] else p for p in self._projects]
-        threading.Thread(target=lambda: _save_progetti(self._projects), daemon=True).start()
-        # NON chiama _refresh — troppo lento. I widget si aggiornano localmente.
+        def _do_save():
+            _save_progetti(self._projects)
+            # Notifica il server HTTP così il web vede i cambiamenti
+            try:
+                import urllib.request, json as _j
+                data = _j.dumps(project, ensure_ascii=False).encode()
+                req  = urllib.request.Request(
+                    f"http://localhost:8000/api/progetti/{project['id']}",
+                    data=data, method="PUT",
+                    headers={"Content-Type":"application/json"})
+                urllib.request.urlopen(req, timeout=1)
+            except Exception:
+                pass  # Il file è già salvato — il web lo leggerà al prossimo reload
+        threading.Thread(target=_do_save, daemon=True).start()
 
     def _set_pallet(self, project, value):
         """Assegna o rimuove pallet — unica chiamata API."""

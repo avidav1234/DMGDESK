@@ -70,11 +70,11 @@ class MainWindow(ctk.CTk):
         # Logo
         logo_frame = _tk.Frame(sidebar, bg=NAVY)
         logo_frame.pack(pady=(14,4))
-        logo_box = _tk.Frame(logo_frame, bg="#ffffff22", width=48, height=48)
+        logo_box = _tk.Frame(logo_frame, bg="#1a3f6f", width=48, height=48)
         logo_box.pack()
         logo_box.pack_propagate(False)
         _tk.Label(logo_box, text="DMG", font=("Inter",11,"bold"),
-                  fg="#fff", bg="#ffffff22").place(relx=0.5,rely=0.5,anchor="center")
+                  fg="#fff", bg="#1a3f6f").place(relx=0.5,rely=0.5,anchor="center")
         _tk.Label(sidebar, text="LIVE", font=("Inter",7,"bold"),
                   fg=ACCENT, bg=NAVY).pack(pady=(2,10))
 
@@ -124,15 +124,15 @@ class MainWindow(ctk.CTk):
             for n, btn_data in self._sidebar_btns.items():
                 active = (n == name)
                 btn_data["frame"].config(
-                    bg="#ffffff2e" if active else NAVY,
+                    bg="#1e4a82" if active else NAVY,
                     highlightbackground=ACCENT if active else NAVY,
                     highlightthickness=3 if active else 0)
                 btn_data["icon_lbl"].config(
-                    bg="#ffffff2e" if active else NAVY,
-                    fg="#fff" if active else "#ffffff88")
+                    bg="#1e4a82" if active else NAVY,
+                    fg="#fff" if active else "#a0bcd8")
                 btn_data["text_lbl"].config(
-                    bg="#ffffff2e" if active else NAVY,
-                    fg=ACCENT if active else "#ffffff55")
+                    bg="#1e4a82" if active else NAVY,
+                    fg=ACCENT if active else "#7096b8")
 
         self._switch = switch
 
@@ -144,23 +144,23 @@ class MainWindow(ctk.CTk):
                             cursor="hand2", highlightthickness=0)
             fr.pack(pady=1)
             fr.pack_propagate(False)
-            il = _tk.Label(fr, text=icon, font=("Arial",fsz), fg="#ffffff88", bg=NAVY)
+            il = _tk.Label(fr, text=icon, font=("Arial",fsz), fg="#a0bcd8", bg=NAVY)
             il.place(relx=0.5, rely=0.42, anchor="center")
             tl = _tk.Label(fr, text=label, font=("Inter",lsz,"bold"),
-                           fg="#ffffff55", bg=NAVY)
+                           fg="#7096b8", bg=NAVY)
             tl.place(relx=0.5, rely=0.82, anchor="center")
             fr.bind("<Button-1>", lambda e, k=key: switch(k))
             il.bind("<Button-1>", lambda e, k=key: switch(k))
             tl.bind("<Button-1>", lambda e, k=key: switch(k))
             fr.bind("<Enter>", lambda e: fr.config(bg=NAVY_LT) if self._current!=key else None)
-            fr.bind("<Leave>", lambda e: fr.config(bg="#ffffff2e" if self._current==key else NAVY))
+            fr.bind("<Leave>", lambda e: fr.config(bg="#1e4a82" if self._current==key else NAVY))
             self._sidebar_btns[key] = {"frame":fr,"icon_lbl":il,"text_lbl":tl}
 
         for key, icon, label in NAV:
             make_nav_btn(sidebar, key, icon, label)
 
         # Separatore
-        sep = _tk.Frame(sidebar, bg="#ffffff22", height=1, width=50)
+        sep = _tk.Frame(sidebar, bg="#1a3f6f", height=1, width=50)
         sep.pack(pady=6)
 
         # Utilità toggle
@@ -169,12 +169,12 @@ class MainWindow(ctk.CTk):
         uf = _tk.Frame(sidebar, bg=NAVY, width=60, height=56, cursor="hand2", highlightthickness=0)
         uf.pack(pady=1)
         uf.pack_propagate(False)
-        uil = _tk.Label(uf, text="⚙", font=("Arial",22), fg="#ffffff88", bg=NAVY)
+        uil = _tk.Label(uf, text="⚙", font=("Arial",22), fg="#a0bcd8", bg=NAVY)
         uil.place(relx=0.5, rely=0.38, anchor="center")
-        utl = _tk.Label(uf, text="Utilità ▾", font=("Inter",9,"bold"), fg="#ffffff55", bg=NAVY)
+        utl = _tk.Label(uf, text="Utilità ▾", font=("Inter",9,"bold"), fg="#7096b8", bg=NAVY)
         utl.place(relx=0.5, rely=0.80, anchor="center")
 
-        util_sub = _tk.Frame(sidebar, bg="#0a2040")
+        util_sub = _tk.Frame(sidebar, bg="#0d2d5e")
 
         def toggle_utilita():
             if self._utilita_open.get():

@@ -5,16 +5,16 @@ import { useNavigate } from 'react-router-dom'
 const T = {
   bg:'#eef2f7', surface:'#ffffff', surface2:'#f8fafc',
   border:'#e2e8f0', text:'#0f172a', textSub:'#475569', textMuted:'#94a3b8',
-  accent:'#0d2d5e', accentBg:'#e6f1fb',
-  green:'#16a34a', greenBg:'#f0fdf4',
-  red:'#dc2626', redBg:'#fef2f2',
-  blue:'#0d2d5e', blueBg:'#e6f1fb',
+  accent:'#0d2d5e', accentBg:'#eef4fb',
+  green:'#16a34a', greenBg:'#eef8f2',
+  red:'#dc2626', redBg:'#fdf4f4',
+  blue:'#0d2d5e', blueBg:'#eef4fb',
 }
 function getProgress(p){const a=(p.steps||[]).flatMap(s=>s.tasks||[]);if(!a.length)return 0;return Math.round(a.filter(t=>t.done).length/a.length*100)}
 function daysUntil(d){if(!d)return null;const t=new Date();t.setHours(0,0,0,0);const g=new Date(d);g.setHours(0,0,0,0);return Math.round((g-t)/86400000)}
 
-const STATO_COLOR={grezzo:'#b45309',finito:'#16a34a',guasto:'#dc2626',vuoto:'#94a3b8'}
-const STATO_BG   ={grezzo:'#fef9c3',finito:'#f0fdf4',guasto:'#fef2f2',vuoto:'#f8fafc'}
+const STATO_COLOR={grezzo:'#b07030',finito:'#2d8a55',guasto:'#c0392b',vuoto:'#94a3b8'}
+const STATO_BG   ={grezzo:'#fdf8ee',finito:'#f0f9f4',guasto:'#fdf2f2',vuoto:'#f8fafc'}
 
 export default function Home(){
   const nav=useNavigate()
@@ -70,11 +70,11 @@ export default function Home(){
               const txt=days===0?'oggi':days<0?`${Math.abs(days)}gg fa`:`tra ${days}gg`
               return(
                 <div key={p.id} onClick={()=>apri(p.id)}
-                  style={{display:'flex',alignItems:'center',gap:12,background:'#fef2f2',
+                  style={{display:'flex',alignItems:'center',gap:12,background:'#fdf4f4',
                     border:'1px solid #fca5a5',borderRadius:10,padding:'10px 18px',
                     cursor:'pointer',flex:1,minWidth:220}}>
                   <div style={{width:9,height:9,borderRadius:'50%',background:'#dc2626',flexShrink:0}}/>
-                  <span style={{fontSize:13,fontWeight:700,color:'#7f1d1d',flex:1}}>
+                  <span style={{fontSize:13,fontWeight:700,color:'#6b2929',flex:1}}>
                     {p.name} <span style={{fontWeight:400,color:'#dc2626'}}>— scadenza {txt}</span>
                   </span>
                   <span style={{fontSize:12,fontWeight:800,color:'#dc2626',background:'#fff',
@@ -85,11 +85,11 @@ export default function Home(){
               )
             })}
             {(daM>0||fV>0)&&(
-              <div style={{display:'flex',alignItems:'center',gap:10,background:'#fef9c3',
+              <div style={{display:'flex',alignItems:'center',gap:10,background:'#fdf6e3',
                 border:'1px solid #fcd34d',borderRadius:10,padding:'10px 18px',flexShrink:0}}>
                 <span style={{fontSize:16}}>🔧</span>
-                {daM>0&&<span style={{fontSize:13,fontWeight:600,color:'#b45309'}}>{daM} da montare</span>}
-                {fV>0&&<span style={{fontSize:13,fontWeight:600,color:'#b45309'}}>{fV} a fine vita</span>}
+                {daM>0&&<span style={{fontSize:13,fontWeight:600,color:'#9a6b2e'}}>{daM} da montare</span>}
+                {fV>0&&<span style={{fontSize:13,fontWeight:600,color:'#9a6b2e'}}>{fV} a fine vita</span>}
               </div>
             )}
           </div>
@@ -114,7 +114,7 @@ export default function Home(){
               const empty=stato==='vuoto'&&!nome
               return(
                 <div key={n} onClick={pid?()=>apri(pid):undefined}
-                  style={{background:bg,border:`2px solid ${isUrg?'#dc2626':empty?T.border:color+'55'}`,
+                  style={{background:bg,border:`1.5px solid ${isUrg?'#e87070':empty?T.border:color+'44'}`,
                     borderRadius:14,padding:'16px 18px',cursor:pid?'pointer':'default',
                     minHeight:empty?70:120,opacity:empty?0.55:1,
                     transition:'all 0.15s',boxShadow:pid?'0 1px 4px rgba(0,0,0,0.06)':'none'}}>
@@ -125,7 +125,7 @@ export default function Home(){
                       {stato}
                     </span>
                     {isUrg&&<span style={{marginLeft:'auto',fontSize:11,fontWeight:800,color:'#dc2626',
-                      background:'#fef2f2',padding:'2px 10px',borderRadius:20,flexShrink:0}}>
+                      background:'#fdf4f4',padding:'2px 10px',borderRadius:20,flexShrink:0}}>
                       {days===0?'OGGI':`${days}gg`}
                     </span>}
                   </div>
@@ -156,10 +156,10 @@ export default function Home(){
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,width:300}}>
             {[
               {val:daFare.length,   label:'Da fare',        sub:`${ip.length} lavori attivi`,   color:'#475569', bg:T.surface2},
-              {val:inMac.length,    label:'In macchina',    sub:'programmi attivi',              color:'#0d2d5e', bg:'#e6f1fb'},
-              {val:ogg.length,      label:'Completati oggi',sub:`${comp.length} totali`,         color:'#16a34a', bg:'#f0fdf4'},
+              {val:inMac.length,    label:'In macchina',    sub:'programmi attivi',              color:'#0d2d5e', bg:'#eef4fb'},
+              {val:ogg.length,      label:'Completati oggi',sub:`${comp.length} totali`,         color:'#16a34a', bg:'#eef8f2'},
               {val:daM+fV,          label:'Utensili critici',sub:daM>0?`${daM} da montare`:'tutto ok',
-               color:(daM+fV)>0?'#dc2626':'#16a34a', bg:(daM+fV)>0?'#fef0ee':'#f0fdf4'},
+               color:(daM+fV)>0?'#dc2626':'#16a34a', bg:(daM+fV)>0?'#fdf4f3':'#eef8f2'},
             ].map(({val,label,sub,color,bg})=>(
               <div key={label} style={{background:bg,borderRadius:12,padding:'16px 18px'}}>
                 <div style={{fontSize:32,fontWeight:700,color,lineHeight:1,marginBottom:4}}>{val}</div>
@@ -182,7 +182,7 @@ export default function Home(){
                   <div key={p.id} onClick={()=>apri(p.id)}
                     style={{display:'flex',alignItems:'center',gap:14,background:T.surface,
                       border:`1px solid ${T.border}`,borderRadius:10,padding:'12px 16px',
-                      cursor:'pointer',borderLeft:`4px solid ${p.color||T.accent}`,
+                      cursor:'pointer',borderLeft:`3px solid ${p.color||T.accent}88`,
                       boxShadow:'0 1px 3px rgba(0,0,0,0.05)',transition:'box-shadow 0.15s'}}
                     onMouseEnter={e=>e.currentTarget.style.boxShadow='0 3px 10px rgba(0,0,0,0.1)'}
                     onMouseLeave={e=>e.currentTarget.style.boxShadow='0 1px 3px rgba(0,0,0,0.05)'}>
@@ -191,7 +191,7 @@ export default function Home(){
                         <span style={{fontSize:14,fontWeight:700,color:T.text,
                           overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}</span>
                         {pNum&&<span style={{fontSize:10,fontWeight:700,color:'#0d2d5e',
-                          background:'#e6f1fb',padding:'2px 8px',borderRadius:8,flexShrink:0}}>P{pNum}</span>}
+                          background:'#eef4fb',padding:'2px 8px',borderRadius:8,flexShrink:0}}>P{pNum}</span>}
                       </div>
                       <div style={{height:5,background:T.surface2,borderRadius:3,overflow:'hidden'}}>
                         <div style={{height:5,width:`${pct}%`,background:p.color||T.accent,borderRadius:3}}/>
@@ -200,7 +200,7 @@ export default function Home(){
                     <div style={{textAlign:'right',flexShrink:0,minWidth:56}}>
                       <div style={{fontSize:14,fontWeight:800,color:pct===100?'#16a34a':p.color||T.accent}}>{pct}%</div>
                       {days!==null&&<div style={{fontSize:11,fontWeight:700,
-                        color:days<=3?'#dc2626':days<=7?'#b45309':'#94a3b8'}}>
+                        color:days<=3?'#dc2626':days<=7?'#9a6b2e':'#94a3b8'}}>
                         {days===0?'oggi':days<0?`${Math.abs(days)}gg fa`:`${days}gg`}
                       </div>}
                     </div>

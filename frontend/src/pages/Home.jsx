@@ -80,8 +80,8 @@ export default function Home() {
   const daMontare = (setupData?.da_montare||[]).length
   const fineVita  = (setupData?.fin_vita||[]).length
 
-  const STATO_COLOR={grezzo:'#0d2d5e',finito:'#16a34a',guasto:'#dc2626',vuoto:'#94a3b8'}
-  const STATO_BG={grezzo:'#e6f1fb',finito:'#f0fdf4',guasto:'#fef2f2',vuoto:'#eef2f7'}
+  const STATO_COLOR={grezzo:'#b45309',finito:'#16a34a',guasto:'#dc2626',vuoto:'#94a3b8'}
+  const STATO_BG={grezzo:'#fef9c3',finito:'#f0fdf4',guasto:'#fef2f2',vuoto:'#f8fafc'}
 
   if(loading) return(
     <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',

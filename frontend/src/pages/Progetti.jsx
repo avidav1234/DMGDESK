@@ -1359,9 +1359,9 @@ function HomePage({projects,deliveries,palletState,setupData,onNavigateProject,o
   const daMontare=(setupData?.da_montare||[]).length
   const fineVita=(setupData?.fin_vita||[]).length
   const pallets=palletState||[]
-  const STATO_COLOR={grezzo:'#0d2d5e',finito:'#16a34a',guasto:'#dc2626',vuoto:'#94a3b8'}
-  const STATO_BG={grezzo:'#e6f1fb',finito:'#f0fdf4',guasto:'#fef2f2',vuoto:'#eef2f7'}
-  const STATO_BORDER={grezzo:'#D4700A44',finito:'#1A7A4A44',guasto:'#C0392B44',vuoto:'#e2e8f0'}
+  const STATO_COLOR={grezzo:'#b45309',finito:'#16a34a',guasto:'#dc2626',vuoto:'#94a3b8'}
+  const STATO_BG={grezzo:'#fef9c3',finito:'#f0fdf4',guasto:'#fef2f2',vuoto:'#f8fafc'}
+  const STATO_BORDER={grezzo:'#d9770633',finito:'#16a34a33',guasto:'#dc262633',vuoto:'#e2e8f0'}
 
   return(
     <div style={{flex:1,overflowY:'auto',background:T.bg,fontFamily:"var(--font-display)"}}>

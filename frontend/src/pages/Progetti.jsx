@@ -2052,15 +2052,33 @@ export default function Progetti(){
 
   // ── Lancia NC ───────────────────────────────────────────────────────────────
   function lanciaNC(project, pgmSelezionati){
-    // pgmSelezionati = array di programmi scelti nel modal
-    // Se non passati (chiamata diretta), usa tutti i da_fare
     const mpf = pgmSelezionati || (project.steps||[])
       .flatMap(s=>s.tasks||[])
       .filter(t=>t.text?.trim().toLowerCase()==='fresatura')
       .flatMap(t=>(t.programs||[]).filter(p=>p.tipoGruppo!=='ipm'&&p.stato==='da_fare'))
     if(!mpf.length) return
-    // nomeCartella: usa nome progetto come fonte primaria
-    // Fallback su pattern file MPF solo se nome progetto è troppo generico
+
+    // ── Aggiorna stato programmi → in_macchina ──────────────────────────────
+    const mpfIds = new Set(mpf.map(p=>p.id))
+    const now = nowStr()
+    const updatedProject = {
+      ...project,
+      steps: (project.steps||[]).map(s=>({
+        ...s,
+        tasks: (s.tasks||[]).map(t=>{
+          if(t.text?.trim().toLowerCase()!=='fresatura') return t
+          return {
+            ...t,
+            programs: (t.programs||[]).map(p=>{
+              if(!mpfIds.has(p.id)) return p
+              return {...p, stato:'in_macchina', tempoInizio: p.tempoInizio||now}
+            })
+          }
+        })
+      }))
+    }
+    updateProject(updatedProject)
+
     const nomeFromProject = project.name.replace(/\s+/g,'_').replace(/[^a-zA-Z0-9_]/g,'').toUpperCase()
     const firstFile = mpf[0]?.filename || ''
     const baseTokens = firstFile.replace(/\.MPF$/i,'').split('_')

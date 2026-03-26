@@ -788,16 +788,20 @@ class TabProgetti:
 
             # Forza altezza uniforme: aggiorna dopo il pack per misurare
             def _equalize(g=grid, n=len(section_projects)):
-                g.update_idletasks()
-                n_r = (n + 1) // 2
-                max_h = 0
-                for r in range(n_r):
-                    for c in range(2):
-                        slaves = [w for w in g.grid_slaves(row=r, column=c)]
-                        if slaves:
-                            max_h = max(max_h, slaves[0].winfo_reqheight())
-                for r in range(n_r):
-                    g.rowconfigure(r, minsize=max_h)
+                try:
+                    if not g.winfo_exists(): return
+                    g.update_idletasks()
+                    n_r = (n + 1) // 2
+                    max_h = 0
+                    for r in range(n_r):
+                        for c in range(2):
+                            slaves = [w for w in g.grid_slaves(row=r, column=c)]
+                            if slaves:
+                                max_h = max(max_h, slaves[0].winfo_reqheight())
+                    for r in range(n_r):
+                        g.rowconfigure(r, minsize=max_h)
+                except Exception:
+                    pass
             self._body.after(50, _equalize)
 
     def _is_urgent(self, project):
@@ -1720,12 +1724,16 @@ class TabProgetti:
             self._template_card(grid, tmpl, row, col)
 
         def _fix_w(g=grid):
-            g.update_idletasks()
-            w = g.winfo_width()
-            if w > 10:
-                half = (w - 12) // 2
-                g.columnconfigure(0, minsize=half)
-                g.columnconfigure(1, minsize=half)
+            try:
+                if not g.winfo_exists(): return
+                g.update_idletasks()
+                w = g.winfo_width()
+                if w > 10:
+                    half = (w - 12) // 2
+                    g.columnconfigure(0, minsize=half)
+                    g.columnconfigure(1, minsize=half)
+            except Exception:
+                pass
         self._body.after(30, _fix_w)
 
     def _template_card(self, parent, tmpl, row, col):

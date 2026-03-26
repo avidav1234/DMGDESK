@@ -763,9 +763,21 @@ class TabProgetti:
                      font=("Inter",10,"bold"), fg=TC["muted"], bg=TC["bg"]).pack(side="left")
 
             grid = tk.Frame(self._body, bg=TC["bg"])
-            grid.pack(fill="both", expand=True, padx=16, pady=0)
+            grid.pack(fill="x", padx=16, pady=0)
             grid.columnconfigure(0, weight=1)
             grid.columnconfigure(1, weight=1)
+
+            # Forza larghezza uguale delle colonne aggiornando dopo il render
+            def _fix_width(g=grid):
+                g.update_idletasks()
+                w = g.winfo_width()
+                if w > 10:
+                    half = (w - 12) // 2  # 12 = gap totale tra colonne
+                    g.columnconfigure(0, minsize=half)
+                    g.columnconfigure(1, minsize=half)
+            self._body.after(30, _fix_width)
+            # Rebind su resize finestra
+            self._body.bind("<Configure>", lambda e, g=grid: _fix_width(g), add="+")
 
             for i, p in enumerate(section_projects):
                 row, col = divmod(i, 2)

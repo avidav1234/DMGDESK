@@ -119,10 +119,12 @@ class ToolSummary(BaseModel):
     length: float
     radius: float
     life_percent: Optional[float]
+    life_total: Optional[float]      # vita totale (stessa unità di life_remaining)
+    life_remaining: Optional[float]  # vita rimanente assoluta
     is_enabled: bool
     is_worn: bool
-    magazine: Optional[int]   # numero magazine (1=Regal_120, 2=buffer, None=non mappato)
-    position: Optional[int]   # posizione nel magazine
+    magazine: Optional[int]
+    position: Optional[int]
 
 
 class SyncStatus(BaseModel):
@@ -168,7 +170,9 @@ def _save_tools_db(tools: dict, sync_time: str, positions=None, format_used: str
                 "status":       t.status,
                 "length":       t.length,
                 "radius":       t.radius,
-                "life_percent": t.life_percent,
+                "life_percent":   t.life_percent,
+                "life_total":     t.life_total,
+                "life_remaining": t.life_remaining,
                 "is_enabled":   t.is_enabled,
                 "is_worn":      t.is_worn,
                 "magazine":     t.magazine if t.magazine is not None else pos_map.get(t_num, {}).get("magazine"),
@@ -297,6 +301,8 @@ async def list_tools(only_enabled: bool = False):
             length=t.get("length", 0.0),
             radius=t.get("radius", 0.0),
             life_percent=t.get("life_percent"),
+            life_total=t.get("life_total"),
+            life_remaining=t.get("life_remaining"),
             is_enabled=t.get("is_enabled", True),
             is_worn=t.get("is_worn", False),
             magazine=t.get("magazine"),
@@ -432,3 +438,114 @@ async def check_tools_text(body: dict):
         total_required=len(alias_richiesti),
         can_run=not missing and not disabled,
     )
+
+
+# ── Analisi previsione fine vita utensili ─────────────────────────────────────
+
+@router.post("/analisi-fine-vita")
+async def analisi_fine_vita(body: dict):
+    """
+    Calcola se gli utensili reggeranno per i programmi selezionati.
+
+    Body: { "programmi": [
+        {"filename":"x.MPF","utensile":"FS25R2L85","tempoStimato":42,"stato":"da_fare","numPgm":"001"},
+        ...
+    ]}
+
+    Unità life_total / life_remaining: secondi ($TC_MOP11 / $TC_MOP2 Siemens 840D).
+    """
+    from collections import defaultdict
+
+    programmi = body.get("programmi", [])
+    if not programmi:
+        return {"analisi": [], "ha_problemi": False}
+
+    tools_db, _, _ = _load_tools_db()
+
+    # Solo programmi attivi con tempo e utensile definiti
+    attivi = [
+        p for p in programmi
+        if p.get("stato") in ("da_fare", "in_macchina")
+        and p.get("tempoStimato")
+        and p.get("utensile")
+    ]
+
+    # Raggruppa per alias utensile
+    per_utensile: dict[str, list] = defaultdict(list)
+    for p in attivi:
+        per_utensile[p["utensile"].upper().strip()].append(p)
+
+    analisi = []
+
+    for alias, pgm_list in per_utensile.items():
+        # Trova il migliore gemello disponibile (più vita rimanente)
+        tool_entry = None
+        for t in tools_db.values():
+            if t.get("name", "").upper().strip() == alias:
+                if (tool_entry is None or
+                    (t.get("life_percent") or 0) > (tool_entry.get("life_percent") or 0)):
+                    tool_entry = t
+
+        life_pct   = tool_entry.get("life_percent")   if tool_entry else None
+        life_total = tool_entry.get("life_total")     if tool_entry else None   # secondi
+        life_rem   = tool_entry.get("life_remaining") if tool_entry else None   # secondi
+
+        # Minuti richiesti dai programmi
+        pgm_ordinati = sorted(pgm_list, key=lambda p: str(p.get("numPgm", "")))
+        minuti_richiesti = sum(int(p.get("tempoStimato") or 0) for p in pgm_ordinati)
+        secondi_richiesti = minuti_richiesti * 60
+
+        # Calcolo previsione
+        alert = False
+        alert_tipo = None
+        pgm_critico = None
+        minuti_rimanenti = None
+        deficit_minuti = None
+
+        if life_rem is not None and life_total is not None and life_total > 0:
+            # Vita in secondi → converti in minuti
+            minuti_rimanenti = life_rem / 60.0
+
+            if secondi_richiesti > 0 and life_rem < secondi_richiesti:
+                alert = True
+                alert_tipo = "insufficiente"
+                deficit_minuti = round((secondi_richiesti - life_rem) / 60, 1)
+
+                # Trova il programma critico (dove la vita si esaurisce)
+                vita_consumata = 0
+                for p in pgm_ordinati:
+                    vita_consumata += int(p.get("tempoStimato") or 0) * 60
+                    if vita_consumata >= life_rem and pgm_critico is None:
+                        pgm_critico = p.get("filename") or p.get("numPgm")
+
+        elif life_pct is not None:
+            # Fallback: solo percentuale disponibile, segnala se vita bassa
+            if life_pct < 15:
+                alert = True
+                alert_tipo = "vita_bassa"
+
+        analisi.append({
+            "utensile":          alias,
+            "tool_found":        tool_entry is not None,
+            "life_percent":      life_pct,
+            "life_total_min":    round(life_total / 60, 1) if life_total else None,
+            "life_remaining_min": round(minuti_rimanenti, 1) if minuti_rimanenti is not None else None,
+            "minuti_richiesti":  minuti_richiesti,
+            "programmi_count":   len(pgm_list),
+            "programmi":         [{"filename": p.get("filename"), "numPgm": p.get("numPgm"),
+                                    "tempoStimato": p.get("tempoStimato"), "stato": p.get("stato")}
+                                   for p in pgm_ordinati],
+            "pgm_critico":       pgm_critico,
+            "deficit_minuti":    deficit_minuti,
+            "alert":             alert,
+            "alert_tipo":        alert_tipo,  # "insufficiente" | "vita_bassa" | None
+        })
+
+    # Ordina: prima quelli con alert, poi per % vita crescente
+    analisi.sort(key=lambda a: (0 if a["alert"] else 1, a["life_percent"] or 100))
+
+    return {
+        "analisi":      analisi,
+        "ha_problemi":  any(a["alert"] for a in analisi),
+        "n_alert":      sum(1 for a in analisi if a["alert"]),
+    }

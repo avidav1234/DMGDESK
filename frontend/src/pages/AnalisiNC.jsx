@@ -456,7 +456,7 @@ export default function AnalisiNC() {
 
           {/* Lista file */}
           {entries.length > 0 && (
-            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', flexShrink: 0 }}>
+            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', flexShrink: 0, maxHeight: '40%', overflowY: 'auto' }}>
               {entries.map(e => {
                 const n = e.result?.totale_mancanti ?? 0
                 const color = e.status === 'analyzing' ? 'var(--text-dim)' : e.status === 'error' ? '#dc2626' : n > 0 ? '#dc2626' : '#15803d'

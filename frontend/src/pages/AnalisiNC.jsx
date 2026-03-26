@@ -452,11 +452,11 @@ export default function AnalisiNC() {
       <div style={{ flex: 1, display: 'flex', gap: 10, minHeight: 0 }}>
 
         {/* ── Colonna sinistra: file + risultati ── */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 }}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0, minHeight: 0 }}>
 
-          {/* Lista file */}
+          {/* Lista file — max 50% dello spazio, scrollabile */}
           {entries.length > 0 && (
-            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', flexShrink: 0, maxHeight: '40%', overflowY: 'auto' }}>
+            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', flexShrink: 1, flexBasis: 'auto', maxHeight: '50%', overflowY: 'auto' }}>
               {entries.map(e => {
                 const n = e.result?.totale_mancanti ?? 0
                 const color = e.status === 'analyzing' ? 'var(--text-dim)' : e.status === 'error' ? '#dc2626' : n > 0 ? '#dc2626' : '#15803d'
@@ -477,8 +477,8 @@ export default function AnalisiNC() {
             </div>
           )}
 
-          {/* Risultati confronto */}
-          <div style={{ flex: 1, background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          {/* Risultati confronto — sempre visibile con minHeight */}
+          <div style={{ flex: 1, minHeight: 160, background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
 
             {/* Header tabella */}
             <div style={{ display: 'grid', gridTemplateColumns: '130px 1fr', padding: '6px 12px',

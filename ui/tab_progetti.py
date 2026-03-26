@@ -183,13 +183,13 @@ def days_until(date_str: str):
         return None
 
 def delivery_urgency(days):
-    if days is None:    return ("Nessuna data", "#94a3b8", "#f8fafc", "⚪")
-    if days < 0:        return ("SCADUTA",       "#FFFFFF", "#dc2626", "💀")
-    if days == 0:       return ("OGGI",           "#FFFFFF", "#dc2626", "🚨")
-    if days <= 3:       return (f"{days}gg",      "#dc2626", "#fdf4f4", "🔴")
-    if days <= 7:       return (f"{days}gg",      "#C2720A", "#FFF0DC", "🟠")
+    if days is None:    return ("Nessuna data", "#94a3b8", "#f8fafc",  "⚪")
+    if days < 0:        return ("SCADUTA",       "#FFFFFF", "#c0392b",  "💀")
+    if days == 0:       return ("OGGI",           "#FFFFFF", "#c0392b",  "🚨")
+    if days <= 3:       return (f"{days}gg",      "#c0392b", "#fdf4f4", "🔴")
+    if days <= 7:       return (f"{days}gg",      "#9a6b2e", "#fdf6e3", "🟠")
     if days <= 21:      return (f"{days}gg",      "#0d2d5e", "#eef4fb", "🟡")
-    return              (f"{days}gg",             "#16a34a", "#f0f9f4", "🟢")
+    return              (f"{days}gg",             "#2d8a55", "#f0f9f4", "🟢")
 
 def clone_template_to_steps(tmpl: dict) -> list:
     return [
@@ -790,17 +790,19 @@ class TabProgetti:
 
         # Urgenza bordo
         border_color = color
+        border_thin  = TC["border"]  # bordo esterno sempre tenue
         if delivery and delivery.get("dueDate") and not delivery.get("delivered"):
             days = days_until(delivery["dueDate"])
             label, urg_color, urg_bg, urg_dot = delivery_urgency(days)
             if days is not None and days <= 7:
                 border_color = urg_color
+                border_thin  = urg_color  # bordo esterno solo se urgente
 
         card = tk.Frame(parent, bg=TC["surface"], cursor="hand2",
-                        highlightbackground=border_color, highlightthickness=2)
+                        highlightbackground=border_thin, highlightthickness=1)
         card.grid(row=row, column=col, padx=6, pady=6, sticky="nsew")
 
-        # Bordo sinistro colorato
+        # Bordo sinistro colorato (usa colore pieno)
         lbar = tk.Frame(card, width=4, bg=border_color)
         lbar.pack(side="left", fill="y")
 

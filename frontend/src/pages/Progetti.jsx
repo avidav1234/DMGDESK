@@ -1245,11 +1245,34 @@ function ProjectCard({project,onClick,onDelete,onArchive,delivery,onSetDelivery}
             <button onClick={e=>{e.stopPropagation();setDateVal('');setEditingDate(true)}} style={{background:'none',border:`1px dashed ${T.border}`,borderRadius:6,color:T.textMuted,fontSize:12,padding:'3px 10px',cursor:'pointer',opacity:hovered?1:0.4}}>📅 Imposta scadenza</button>
           )}
         </div>
-        <ProgressBar value={progress} color={project.color}/>
-        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:8,marginBottom:next?12:0}}>
+        {/* Barra preparazione */}
+        <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
+          <span style={{fontSize:9,fontWeight:700,color:T.textMuted,letterSpacing:'0.07em',width:76,flexShrink:0}}>PREPARAZIONE</span>
+          <div style={{flex:1}}><ProgressBar value={progress} color={project.color}/></div>
+          <span style={{fontSize:11,fontWeight:700,color:project.color,width:34,textAlign:'right'}}>{progress}%</span>
+        </div>
+        {/* Barra NC fresatura */}
+        {mpfTot.length>0&&(
+          <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
+            <span style={{fontSize:9,fontWeight:700,color:T.textMuted,letterSpacing:'0.07em',width:76,flexShrink:0}}>NC</span>
+            <div style={{flex:1}}>
+              <div style={{height:6,background:T.surface2,borderRadius:3,overflow:'hidden',position:'relative'}}>
+                {/* completati */}
+                <div style={{position:'absolute',left:0,top:0,height:'100%',width:`${Math.round(mpfDone/mpfTot.length*100)}%`,background:'#16a34a',borderRadius:3,transition:'width 0.3s'}}/>
+                {/* in macchina */}
+                <div style={{position:'absolute',left:`${Math.round(mpfDone/mpfTot.length*100)}%`,top:0,height:'100%',
+                  width:`${Math.round(mpfTot.filter(p=>p.stato==='in_macchina').length/mpfTot.length*100)}%`,
+                  background:'#0d2d5e',borderRadius:3,transition:'width 0.3s'}}/>
+              </div>
+            </div>
+            <span style={{fontSize:11,fontWeight:700,color:'#16a34a',width:34,textAlign:'right'}}>
+              {mpfDone}/{mpfTot.length}
+            </span>
+          </div>
+        )}
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:6,marginBottom:next?12:0}}>
           <span style={{fontSize:13,color:T.textSub,fontWeight:500}}>{(project.steps||[]).flatMap(s=>s.tasks||[]).filter(t=>t.done).length} / {(project.steps||[]).flatMap(s=>s.tasks||[]).length} task</span>
           <div style={{display:'flex',gap:8,alignItems:'center'}}>
-            {mpfTot.length>0&&<span style={{fontSize:11,color:'#0d2d5e',fontWeight:700,background:'#E8F0FA',padding:'2px 8px',borderRadius:10}}>⚙ {mpfDone}/{mpfTot.length} MPF</span>}
             <StatusBadge progress={progress}/>
           </div>
         </div>

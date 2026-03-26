@@ -74,9 +74,10 @@ class TabHome:
         self._canvas.configure(scrollregion=self._canvas.bbox("all"))
 
     def _on_canvas_configure(self, event):
-        # 24px margine sx + 24px margine dx + scrollbar
+        print(f"[DEBUG canvas] w={event.width} h={event.height}")
         inner_width = max(400, event.width - 48)
         self._canvas.itemconfig(self._win_id, width=inner_width)
+        print(f"[DEBUG inner] width set to {inner_width}")
 
     # ══════════════════════════════════════════════════════════════════════════
     # Caricamento dati
@@ -143,6 +144,8 @@ class TabHome:
     # ══════════════════════════════════════════════════════════════════════════
 
     def _render(self):
+        print(f"[DEBUG render] inner size: {self._inner.winfo_width()}x{self._inner.winfo_height()}")
+        print(f"[DEBUG render] canvas size: {self._canvas.winfo_width()}x{self._canvas.winfo_height()}")
         # Pulisce inner frame
         for w in self._inner.winfo_children():
             w.destroy()

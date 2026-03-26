@@ -2234,7 +2234,6 @@ export default function Progetti(){
                           onSetDelivery={(pid,date,toggle)=>{if(toggle!==undefined&&d)setDelivery(d.id,{delivered:toggle,deliveredAt:toggle?nowStr():null},true);else if(date!==null)d?setDelivery(d.id,{dueDate:date},true):setDelivery(uid(),{projectId:pid,dueDate:date,delivered:false},false);else if(d)setDelivery(d.id,{dueDate:''},true)}}/>
                       </div>
                     })}
-                    })}
                   </div>
                 </>
               )}
@@ -2249,7 +2248,6 @@ export default function Progetti(){
                         <ProjectCard project={p} onClick={()=>setSelectedId(p.id)} onDelete={deleteProject} onArchive={archiveProject} delivery={d}
                           onSetDelivery={(pid,date,toggle)=>{if(toggle!==undefined&&d)setDelivery(d.id,{delivered:toggle,deliveredAt:toggle?nowStr():null},true);else if(date!==null)d?setDelivery(d.id,{dueDate:date},true):setDelivery(uid(),{projectId:pid,dueDate:date,delivered:false},false);else if(d)setDelivery(d.id,{dueDate:''},true)}}/>
                       </div>
-                    })}
                     })}
                   </div>
                 </>

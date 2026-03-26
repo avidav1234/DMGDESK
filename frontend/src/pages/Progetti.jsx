@@ -290,9 +290,6 @@ function FresaturaPanel({task,onUpdateTask,toolsDB,projectId}){
   function toggleSelect(id){ setSelected(s=>{ const n=new Set(s); n.has(id)?n.delete(id):n.add(id); return n }) }
   function selTutti(lista){ setSelected(s=>{ const n=new Set(s); lista.forEach(p=>n.add(p.id)); return n }) }
   function deselTutti(){ setSelected(new Set()) }
-  // Propaga la selezione al context (per passarla al LancioNCModal)
-  const pgmSelCtx = useContext(PgmSelContext)
-  useEffect(()=>{ pgmSelCtx.setSelectedIds(selected) }, [selected])
   function massaStato(stato){
     updatePrograms(programs.map(p=>{
       if(!selected.has(p.id)) return p
@@ -1140,6 +1137,7 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
   const Tab=({id,label})=>(<button onClick={()=>setActiveTab(id)} style={{background:'none',border:'none',cursor:'pointer',color:activeTab===id?project.color:T.textSub,fontSize:15,fontWeight:700,padding:'10px 0',borderBottom:activeTab===id?`3px solid ${project.color}`:'3px solid transparent',marginRight:24,transition:'all 0.15s'}}>{label}</button>)
 
   return(
+    <PgmSelContext.Provider value={{selectedIds, setSelectedIds}}>
     <div style={{display:'flex',flexDirection:'column',height:'100%',background:T.bg,fontFamily:"var(--font-display)"}}>
       {/* Header */}
       <div style={{padding:'10px 20px 0',borderBottom:`1px solid ${T.border}`,flexShrink:0,background:T.surface}}>
@@ -1293,6 +1291,7 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
         }}
       />}
     </div>
+    </PgmSelContext.Provider>
   )
 }
 // ── ProjectCard ────────────────────────────────────────────────────────────────

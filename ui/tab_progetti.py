@@ -1108,7 +1108,7 @@ class TabProgetti:
         # Lancia in NC — CTA principale
         if mpf:
             tk.Button(r1, text="📄 Lancia in NC →",
-                      command=lambda: self._apri_modal_lancio(project),
+                      command=lambda: self._apri_modal_lancio(project, getattr(self, "_selected_ids_lancio", set())),
                       font=("Inter",10,"bold"), fg="#fff", bg=TC["blue"],
                       relief="flat", padx=12, pady=5, cursor="hand2").pack(side="left", padx=8)
 
@@ -1503,6 +1503,7 @@ class TabProgetti:
         def _update_toolbar():
             n = len(selected_ids)
             self._has_active_selections = n > 0
+            self._selected_ids_lancio = set(selected_ids)  # salva per il modal
             if n > 0:
                 toolbar.pack(fill="x")
                 sel_label.configure(text=f"{n} selezionati → segna come:")
@@ -2627,7 +2628,7 @@ class TabProgetti:
         _save_templates(self._templates)
         mb.showinfo("Template salvato", f"Template '{name}' salvato con {len(steps)} fasi.")
 
-    def _apri_modal_lancio(self, project):
+    def _apri_modal_lancio(self, project, pre_selected_ids=None):
         """Modal di selezione programmi prima del lancio in NC — identico alla versione web."""
         all_pgm = [pgm
                    for step in project.get("steps", [])
@@ -2731,7 +2732,9 @@ class TabProgetti:
 
             for pgm in items:
                 fn = pgm.get("filename","")
-                var = tk.BooleanVar(value=False)
+                pre_sel = pre_selected_ids or set()
+                is_pre = pgm.get("id","") in pre_sel or fn in pre_sel
+                var = tk.BooleanVar(value=is_pre)
                 selected[fn] = var
 
                 ts = self._classify_tool(pgm.get("utensile",""), tools_db)                      if pgm.get("stato")=="in_macchina" else None
@@ -2783,6 +2786,7 @@ class TabProgetti:
 
         _render_section("DA FARE", "#F0F4FF", da_fare)
         _render_section("IN MACCHINA", "#eef4fb", in_macchina, dimmed=True)
+        _aggiorna_counter()  # aggiorna counter con pre-selezione
         # Completati collassati
         if completati:
             show_comp = tk.BooleanVar(value=False)

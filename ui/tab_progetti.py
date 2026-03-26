@@ -763,7 +763,7 @@ class TabProgetti:
                      font=("Inter",10,"bold"), fg=TC["muted"], bg=TC["bg"]).pack(side="left")
 
             grid = tk.Frame(self._body, bg=TC["bg"])
-            grid.pack(fill="x", padx=16, pady=0)
+            grid.pack(fill="both", expand=True, padx=16, pady=0)
             grid.columnconfigure(0, weight=1)
             grid.columnconfigure(1, weight=1)
 

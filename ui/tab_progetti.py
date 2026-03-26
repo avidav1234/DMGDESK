@@ -183,13 +183,13 @@ def days_until(date_str: str):
         return None
 
 def delivery_urgency(days):
-    if days is None:    return ("Nessuna data", "#9A978E", "#F0EEE8", "⚪")
-    if days < 0:        return ("SCADUTA",       "#FFFFFF", "#C0392B", "💀")
-    if days == 0:       return ("OGGI",           "#FFFFFF", "#C0392B", "🚨")
-    if days <= 3:       return (f"{days}gg",      "#C0392B", "#FDECEA", "🔴")
+    if days is None:    return ("Nessuna data", "#94a3b8", "#f8fafc", "⚪")
+    if days < 0:        return ("SCADUTA",       "#FFFFFF", "#dc2626", "💀")
+    if days == 0:       return ("OGGI",           "#FFFFFF", "#dc2626", "🚨")
+    if days <= 3:       return (f"{days}gg",      "#dc2626", "#fef2f2", "🔴")
     if days <= 7:       return (f"{days}gg",      "#C2720A", "#FFF0DC", "🟠")
-    if days <= 21:      return (f"{days}gg",      "#D4700A", "#FFF4E8", "🟡")
-    return              (f"{days}gg",             "#1A7A4A", "#E8F5EE", "🟢")
+    if days <= 21:      return (f"{days}gg",      "#0d2d5e", "#e6f1fb", "🟡")
+    return              (f"{days}gg",             "#16a34a", "#f0fdf4", "🟢")
 
 def clone_template_to_steps(tmpl: dict) -> list:
     return [
@@ -202,29 +202,34 @@ def clone_template_to_steps(tmpl: dict) -> list:
 
 # ── Colori tema ────────────────────────────────────────────────────────────────
 TC = {
-    "bg":      "#F5F4F0", "surface": "#FFFFFF", "surface2": "#F0EEE8",
-    "border":  "#D8D5CC", "borderStrong": "#B0ADA4",
-    "text":    "#1A1814", "sub":     "#5A5750",  "muted":   "#9A978E",
-    "accent":  "#D4700A", "accentBg": "#FFF4E8",
-    "green":   "#1A7A4A", "greenBg": "#E8F5EE",
-    "red":     "#C0392B", "redBg":   "#FDECEA",
-    "blue":    "#1D5FAD", "blueBg":  "#EAF1FB",
+    "bg":      "#eef2f7", "surface": "#FFFFFF", "surface2": "#f8fafc",
+    "border":  "#e2e8f0", "borderStrong": "#cbd5e1",
+    "text":    "#0f172a", "sub":     "#475569",  "muted":   "#94a3b8",
+    "accent":  "#0d2d5e", "accentBg": "#e6f1fb",
+    "green":   "#16a34a", "greenBg": "#f0fdf4",
+    "red":     "#dc2626", "redBg":   "#fef2f2",
+    "blue":    "#0d2d5e", "blueBg":  "#e6f1fb",
+    # stati pallet — semantici
+    "grezzo_bg": "#fef9c3", "grezzo_fg": "#b45309",
+    "finito_bg": "#f0fdf4", "finito_fg": "#16a34a",
+    "guasto_bg": "#fef2f2", "guasto_fg": "#dc2626",
+    "vuoto_bg":  "#f8fafc", "vuoto_fg":  "#94a3b8",
 }
 
-COLORS_LIST = ["#D4700A","#1A7A4A","#1D5FAD","#C0392B","#8B2FC9","#C2185B","#0097A7","#E65100"]
+COLORS_LIST = ["#0d2d5e","#16a34a","#0d2d5e","#dc2626","#8B2FC9","#C2185B","#0097A7","#E65100"]
 ICONS_LIST  = ["🌐","📱","📣","🏗️","📦","🎯","🔧","📊","✍️","🚀","💡","🎨"]
 
 STATO_NEXT = {"da_fare":"in_macchina","in_macchina":"completato","completato":"da_fare"}
 STATO_CFG  = {
-    "da_fare":     ("○ Da fare",     "#9A978E","#F0EEE8"),
-    "in_macchina": ("⚙ In macchina","#1D5FAD","#EAF1FB"),
-    "completato":  ("✓ Completato",  "#1A7A4A","#E8F5EE"),
+    "da_fare":     ("○ Da fare",     "#94a3b8","#f8fafc"),
+    "in_macchina": ("⚙ In macchina","#0d2d5e","#e6f1fb"),
+    "completato":  ("✓ Completato",  "#16a34a","#f0fdf4"),
 }
 
 PRIORITY_CFG = {
-    "alta":  ("Alta",  "#C0392B","#FDECEA","🔴"),
-    "media": ("Media", "#D4700A","#FFF4E8","🟡"),
-    "bassa": ("Bassa", "#1A7A4A","#E8F5EE","🟢"),
+    "alta":  ("Alta",  "#dc2626","#fef2f2","🔴"),
+    "media": ("Media", "#0d2d5e","#e6f1fb","🟡"),
+    "bassa": ("Bassa", "#16a34a","#f0fdf4","🟢"),
 }
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -303,7 +308,7 @@ class TabProgetti:
         right.pack(side="right", padx=8)
 
         self._btn_nuovo = ctk.CTkButton(right, text="+ Nuovo Progetto",
-            command=self._nuovo_progetto, fg_color=TC["accent"], hover_color="#B5600A",
+            command=self._nuovo_progetto, fg_color=TC["accent"], hover_color="#1e3a6e",
             font=("DM Sans",11,"bold"), height=30, corner_radius=6)
         self._btn_nuovo.pack(side="right", padx=4, pady=8)
 
@@ -363,6 +368,14 @@ class TabProgetti:
         """Applica i nuovi dati senza refresh se niente è cambiato sul progetto aperto."""
         self._templates  = templates
         self._deliveries = deliveries
+
+        # Hash per evitare ridisegni se i dati non sono cambiati
+        import json as _json
+        new_hash = hash(_json.dumps(projects, sort_keys=True, default=str))
+        if getattr(self, '_projects_hash', None) == new_hash:
+            self._schedule_reload()
+            return
+        self._projects_hash = new_hash
 
         if not self._selected_id:
             # Nessun dettaglio aperto — aggiorna lista silenziosamente
@@ -457,7 +470,7 @@ class TabProgetti:
             print(f"\n[REFRESH ERROR] pagina={self._page}\n{err}")
             import tkinter as _tk
             lbl = _tk.Label(self._body, text=f"Errore rendering:\n{e}\n\nVedi terminale per dettagli.",
-                           font=("Consolas",10), fg="#C0392B", bg="#FFF", justify="left", wraplength=600)
+                           font=("Consolas",10), fg="#dc2626", bg="#FFF", justify="left", wraplength=600)
             lbl.pack(padx=20, pady=20, anchor="w")
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -493,208 +506,233 @@ class TabProgetti:
         threading.Thread(target=_bg, daemon=True).start()
 
     def _render_home_in(self, body, pallet_list=None, setup_data=None):
+        """Renderizza la Home dashboard — identica al web."""
         from datetime import datetime as _dt
 
-        # Pulisce il parent se chiamato dall'esterno
-        if body is not self._body:
-            for w in body.winfo_children():
-                w.destroy()
+        # Pulisce il parent
+        for w in body.winfo_children():
+            w.destroy()
 
-        if pallet_list is None:
-            pallet_list = []
-        if setup_data is None:
-            setup_data = {}
+        if pallet_list is None: pallet_list = []
+        if setup_data is None:  setup_data  = {}
 
-        today = _dt.now().strftime("%Y-%m-%d")
-        now_label = _dt.now().strftime("%A %d %B %Y").capitalize()
+        today     = _dt.now().strftime("%Y-%m-%d")
+        day_label = _dt.now().strftime("%A %d %B %Y").capitalize()
 
         in_progress = [p for p in self._projects if not p.get("archived") and get_progress(p) < 100]
         all_pgm = [pr for p in in_progress
-                   for s in p.get("steps",[]) for t in s.get("tasks",[])
+                   for s in p.get("steps", []) for t in s.get("tasks", [])
                    if t.get("text","").strip().lower() == "fresatura"
-                   for pr in t.get("programs",[]) if pr.get("tipoGruppo") != "ipm"]
+                   for pr in t.get("programs", []) if pr.get("tipoGruppo") != "ipm"]
 
-        da_fare     = [p for p in all_pgm if p.get("stato")=="da_fare"]
-        in_mac      = [p for p in all_pgm if p.get("stato")=="in_macchina"]
-        completati  = [p for p in all_pgm if p.get("stato")=="completato"]
-        oggi        = [p for p in all_pgm if (p.get("tempoFine") or "").startswith(today)]
+        da_fare    = [x for x in all_pgm if x.get("stato") == "da_fare"]
+        in_mac     = [x for x in all_pgm if x.get("stato") == "in_macchina"]
+        completati = [x for x in all_pgm if x.get("stato") == "completato"]
+        oggi       = [x for x in all_pgm if (x.get("tempoFine") or "").startswith(today)]
 
         def get_delivery(pid):
-            return next((d for d in self._deliveries if d.get("projectId")==pid), None)
+            return next((d for d in self._deliveries if d.get("projectId") == pid), None)
 
         urgenti = sorted(
-            [p for p in in_progress if (lambda d,dy: d and dy is not None and dy<=7)(
-                get_delivery(p["id"]), days_until(get_delivery(p["id"])["dueDate"]) if get_delivery(p["id"]) and get_delivery(p["id"]).get("dueDate") else None)],
+            [p for p in in_progress if (lambda d, dy: d and dy is not None and dy <= 7)(
+                get_delivery(p["id"]),
+                days_until(get_delivery(p["id"])["dueDate"])
+                if get_delivery(p["id"]) and get_delivery(p["id"]).get("dueDate") else None)],
             key=lambda p: days_until(get_delivery(p["id"])["dueDate"]) if get_delivery(p["id"]) else 99
         )
 
         da_montare_n = len(setup_data.get("da_montare", []))
-        fine_vita_n  = len(setup_data.get("fin_vita", []))
+        fine_vita_n  = len(setup_data.get("fin_vita",   []))
+
+        BG = TC["bg"]
 
         # ── Header ────────────────────────────────────────────────────────────
         hdr = tk.Frame(body, bg=TC["surface"])
-        hdr.pack(fill="x", padx=0, pady=0)
+        hdr.pack(fill="x")
         tk.Frame(hdr, height=1, bg=TC["border"]).pack(fill="x", side="bottom")
-        inner_hdr = tk.Frame(hdr, bg=TC["surface"])
-        inner_hdr.pack(fill="x", padx=20, pady=14)
-        tk.Label(inner_hdr, text="Buongiorno", font=("DM Sans",18,"bold"),
+        ih = tk.Frame(hdr, bg=TC["surface"])
+        ih.pack(fill="x", padx=24, pady=14)
+        tk.Label(ih, text="Buongiorno", font=("Inter", 18, "bold"),
                  fg=TC["text"], bg=TC["surface"]).pack(side="left")
-        tk.Label(inner_hdr, text=f"  {now_label}", font=("DM Sans",12),
+        tk.Label(ih, text=f"  {day_label}", font=("Inter", 12),
                  fg=TC["muted"], bg=TC["surface"]).pack(side="left")
 
-        content = tk.Frame(body, bg=TC["bg"])
-        content.pack(fill="both", expand=True, padx=16, pady=12)
+        wrap = tk.Frame(body, bg=BG)
+        wrap.pack(fill="both", expand=True, padx=24, pady=16)
 
-        # ── Focus scadenze urgenti ─────────────────────────────────────────────
-        if urgenti:
-            uf = tk.Frame(content, bg="#FDECEA", highlightbackground="#E8A89E", highlightthickness=1)
-            uf.pack(fill="x", pady=(0,12))
-            tk.Label(uf, text=f"🎯 FOCUS — {len(urgenti)} CONSEGN{'A' if len(urgenti)==1 else 'E'} URGENTI",
-                     font=("DM Sans",9,"bold"), fg="#C0392B", bg="#FDECEA").pack(anchor="w", padx=12, pady=(8,4))
-            for p in urgenti:
-                d = get_delivery(p["id"])
-                days = days_until(d["dueDate"]) if d else None
-                pct = get_progress(p)
-                row = tk.Frame(uf, bg="#fff", highlightbackground="#F0C4C0", highlightthickness=1)
-                row.pack(fill="x", padx=8, pady=2)
-                tk.Label(row, text="●", fg=p.get("color",TC["accent"]), bg="#fff",
-                         font=("Arial",8)).pack(side="left", padx=(8,4), pady=6)
-                tk.Label(row, text=p.get("name","?"), font=("DM Sans",10,"bold"),
-                         fg=TC["text"], bg="#fff").pack(side="left")
-                days_txt = "OGGI" if days==0 else f"Scaduto {abs(days)}gg fa" if days and days<0 else f"{days}gg"
-                tk.Label(row, text=days_txt, font=("DM Sans",9,"bold"),
-                         fg="#C0392B", bg="#FDECEA", padx=8).pack(side="right", padx=8, pady=4)
-                tk.Label(row, text=f"{pct}%", font=("DM Sans",9),
-                         fg=TC["muted"], bg="#fff").pack(side="right", padx=4)
-                row.bind("<Button-1>", lambda e, pid=p["id"]: self._apri_progetto(pid))
-                for w in row.winfo_children(): w.bind("<Button-1>", lambda e, pid=p["id"]: self._apri_progetto(pid))
-            tk.Frame(uf, height=8, bg="#FDECEA").pack()
+        # ── Alert strip ───────────────────────────────────────────────────────
+        for p in urgenti:
+            d    = get_delivery(p["id"])
+            days = days_until(d.get("dueDate")) if d else None
+            day_txt = "oggi" if days == 0 else (f"{abs(days)}gg fa" if days and days < 0 else f"tra {days}gg")
+            af = tk.Frame(wrap, bg="#fef2f2", highlightbackground="#dc262633",
+                          highlightthickness=1, cursor="hand2")
+            af.pack(fill="x", pady=(0, 6))
+            af.bind("<Button-1>", lambda e, pid=p["id"]: self._apri_progetto(pid))
+            tk.Label(af, text=f"🎯  {p['name']}  —  scadenza {day_txt}",
+                     font=("Inter", 11, "bold"), fg="#7f1d1d", bg="#fef2f2",
+                     anchor="w", cursor="hand2").pack(side="left", padx=12, pady=8)
+            tk.Label(af, text=f"{'OGGI' if days == 0 else day_txt.upper()}",
+                     font=("Inter", 10, "bold"), fg="#dc2626", bg="#fff",
+                     relief="flat", bd=0, padx=8, pady=2).pack(side="right", padx=10, pady=8)
 
-        # ── Metriche ───────────────────────────────────────────────────────────
-        mf = tk.Frame(content, bg=TC["bg"])
-        mf.pack(fill="x", pady=(0,12))
-        for col, (val, label, sub, color) in enumerate([
-            (len(da_fare),    "Da fare",          f"{len(in_progress)} progetti attivi", "#9A978E"),
-            (len(in_mac),     "In macchina",       "programmi attivi",                    TC["blue"]),
-            (len(oggi),       "Completati oggi",   f"{len(completati)} totali",           TC["green"]),
-            (da_montare_n+fine_vita_n, "Utensili critici",
-             f"{da_montare_n} da montare" if da_montare_n else "tutto ok",
-             "#C0392B" if da_montare_n+fine_vita_n>0 else TC["green"]),
-        ]):
-            mf.columnconfigure(col, weight=1)
-            card = tk.Frame(mf, bg=TC["surface"],
-                            highlightbackground=color, highlightthickness=2)
-            card.grid(row=0, column=col, padx=5, sticky="ew")
-            tk.Frame(card, width=4, bg=color).pack(side="left", fill="y")
-            inner = tk.Frame(card, bg=TC["surface"])
-            inner.pack(side="left", padx=10, pady=10)
-            tk.Label(inner, text=str(val), font=("DM Sans",22,"bold"),
-                     fg=color, bg=TC["surface"]).pack(anchor="w")
-            tk.Label(inner, text=label, font=("DM Sans",9,"bold"),
-                     fg=color, bg=TC["surface"]).pack(anchor="w")
-            tk.Label(inner, text=sub, font=("DM Sans",8),
-                     fg=TC["muted"], bg=TC["surface"]).pack(anchor="w")
+        if da_montare_n or fine_vita_n:
+            uf = tk.Frame(wrap, bg="#fef9c3", highlightbackground="#b4530966",
+                          highlightthickness=1)
+            uf.pack(fill="x", pady=(0, 12))
+            msg = f"🔧  Utensili — azione richiesta"
+            if da_montare_n: msg += f"   {da_montare_n} da montare"
+            if fine_vita_n:  msg += f"   {fine_vita_n} a fine vita"
+            tk.Label(uf, text=msg, font=("Inter", 10, "bold"),
+                     fg="#7B4500", bg="#fef9c3", anchor="w").pack(side="left", padx=12, pady=8)
 
-        # ── Pallet + Progetti in corso ─────────────────────────────────────────
-        bottom = tk.Frame(content, bg=TC["bg"])
+        # ── Pallet 3×2 ───────────────────────────────────────────────────────
+        tk.Label(wrap, text="PALLET MACCHINA", font=("Inter", 9, "bold"),
+                 fg=TC["muted"], bg=BG).pack(anchor="w", pady=(0, 8))
+
+        pg = tk.Frame(wrap, bg=BG)
+        pg.pack(fill="x", pady=(0, 16))
+        for i in range(3):
+            pg.columnconfigure(i, weight=1)
+
+        STATO_BG = {"grezzo": TC["grezzo_bg"], "finito": TC["finito_bg"],
+                    "guasto": TC["guasto_bg"], "vuoto":  TC["vuoto_bg"]}
+        STATO_FG = {"grezzo": TC["grezzo_fg"], "finito": TC["finito_fg"],
+                    "guasto": TC["guasto_fg"], "vuoto":  TC["vuoto_fg"]}
+
+        for idx in range(6):
+            n    = idx + 1
+            col  = idx % 3
+            row  = idx // 3
+            pd   = next((x for x in pallet_list if x.get("numero") == n), {})
+            stato = (pd.get("stato") or "vuoto").lower()
+            nome  = pd.get("progetto_nome") or ""
+            pid   = pd.get("progetto_id")
+            proj  = next((p for p in in_progress if p.get("id") == pid), None) if pid else None
+            pct   = get_progress(proj) if proj else None
+            d     = get_delivery(pid) if pid else None
+            days  = days_until(d.get("dueDate")) if d and d.get("dueDate") and not d.get("delivered") else None
+            is_urgent = days is not None and days <= 3
+            is_empty  = stato == "vuoto" and not nome
+
+            bg_c  = STATO_BG.get(stato, TC["vuoto_bg"])
+            fg_c  = STATO_FG.get(stato, TC["vuoto_fg"])
+            bd_c  = "#dc2626" if is_urgent else (TC["border"] if is_empty else fg_c + "88")
+
+            card = tk.Frame(pg, bg=bg_c, highlightbackground=bd_c,
+                            highlightthickness=2 if is_urgent else 1,
+                            cursor="hand2" if pid else "arrow")
+            card.grid(row=row, column=col, padx=4, pady=4, sticky="nsew")
+
+            top = tk.Frame(card, bg=bg_c)
+            top.pack(fill="x", padx=10, pady=(8, 2))
+            tk.Label(top, text=f"P{n}", font=("Inter", 20, "bold"),
+                     fg="#C8C5BE" if is_empty else fg_c, bg=bg_c).pack(side="left")
+            tk.Label(top, text=stato, font=("Inter", 9, "bold"),
+                     fg="#C8C5BE" if is_empty else fg_c, bg=bg_c).pack(side="left", padx=6)
+            if is_urgent:
+                tk.Label(top, text="OGGI" if days == 0 else f"{days}gg",
+                         font=("Inter", 9, "bold"), fg="#dc2626", bg="#fef2f2",
+                         padx=4).pack(side="right")
+
+            if nome:
+                tk.Label(card, text=nome, font=("Inter", 12, "bold"),
+                         fg=TC["text"], bg=bg_c, anchor="w",
+                         cursor="hand2").pack(fill="x", padx=10, pady=(2, 4))
+                if pct is not None:
+                    bar_bg = tk.Frame(card, bg="#0000001A", height=5)
+                    bar_bg.pack(fill="x", padx=10, pady=(0, 2))
+                    bar_bg.update_idletasks()
+                    bar_fill = tk.Frame(bar_bg, bg=fg_c, height=5)
+                    bar_fill.place(x=0, y=0, relwidth=pct/100, height=5)
+                    tk.Label(card, text=f"{pct}%", font=("Inter", 10, "bold"),
+                             fg=fg_c, bg=bg_c, anchor="e").pack(fill="x", padx=10, pady=(0, 8))
+
+            if pid:
+                for w in card.winfo_children():
+                    w.bind("<Button-1>", lambda e, p2=pid: self._apri_progetto(p2))
+                card.bind("<Button-1>", lambda e, p2=pid: self._apri_progetto(p2))
+
+        # ── Griglia inferiore: metriche + lavori ──────────────────────────────
+        bottom = tk.Frame(wrap, bg=BG)
         bottom.pack(fill="both", expand=True)
-        bottom.columnconfigure(0, weight=1)
         bottom.columnconfigure(1, weight=1)
 
-        # Pallet
-        pf = tk.Frame(bottom, bg=TC["bg"])
-        pf.grid(row=0, column=0, sticky="nsew", padx=(0,8))
-        tk.Label(pf, text="STATO PALLET", font=("DM Sans",9,"bold"),
-                 fg=TC["muted"], bg=TC["bg"]).pack(anchor="w", pady=(0,6))
-        pgrid = tk.Frame(pf, bg=TC["bg"])
-        pgrid.pack(fill="x")
-        STATO_COLOR = {"grezzo":"#D4700A","finito":"#1A7A4A","guasto":"#C0392B","vuoto":"#9A978E"}
-        STATO_BG    = {"grezzo":"#FFF4E8","finito":"#E8F5EE","guasto":"#FDECEA","vuoto":"#F5F4F0"}
-        for i in range(6):
-            n = i+1
-            p_data = next((x for x in pallet_list if x.get("numero")==n), {})
-            stato  = p_data.get("stato","vuoto")
-            nome   = p_data.get("progetto_nome","")
-            pid    = p_data.get("progetto_id")
-            proj   = next((x for x in in_progress if x.get("id")==pid), None) if pid else None
-            pct    = get_progress(proj) if proj else None
-            color  = STATO_COLOR.get(stato,"#9A978E")
-            bg     = STATO_BG.get(stato,"#F5F4F0")
-            row, col = divmod(i, 3)
-            pgrid.columnconfigure(col, weight=1)
-            pc = tk.Frame(pgrid, bg=bg, highlightbackground=color, highlightthickness=1)
-            pc.grid(row=row, column=col, padx=3, pady=3, sticky="ew")
-            top_row = tk.Frame(pc, bg=bg)
-            top_row.pack(fill="x", padx=8, pady=(6,2))
-            tk.Label(top_row, text=f"P{n}", font=("DM Sans",13,"bold"),
-                     fg=color, bg=bg).pack(side="left")
-            tk.Label(top_row, text=stato, font=("DM Sans",8,"bold"),
-                     fg=color, bg=bg).pack(side="left", padx=4)
-            if nome:
-                tk.Label(pc, text=nome, font=("DM Sans",9,"bold"),
-                         fg=TC["text"], bg=bg).pack(anchor="w", padx=8)
-                if pct is not None:
-                    bar_bg = tk.Frame(pc, height=4, bg="#D8D5CC")
-                    bar_bg.pack(fill="x", padx=8, pady=(2,6))
-                    tk.Frame(bar_bg, height=4, bg=color,
-                             width=int(max(0,min(pct,100))*1.5)).pack(side="left")
-            else:
-                tk.Label(pc, text="—", font=("DM Sans",9), fg=TC["muted"], bg=bg).pack(anchor="w", padx=8, pady=(0,6))
-            if pid:
-                pc.bind("<Button-1>", lambda e, p_id=pid: self._apri_progetto(p_id))
+        # Metriche 2×2
+        metrics_frame = tk.Frame(bottom, bg=BG)
+        metrics_frame.grid(row=0, column=0, sticky="n", padx=(0, 20))
 
-        # Progetti in corso
-        prf = tk.Frame(bottom, bg=TC["bg"])
-        prf.grid(row=0, column=1, sticky="nsew", padx=(8,0))
-        tk.Label(prf, text="PROGETTI IN CORSO", font=("DM Sans",9,"bold"),
-                 fg=TC["muted"], bg=TC["bg"]).pack(anchor="w", pady=(0,6))
-        for p in in_progress[:7]:
-            pct = get_progress(p)
-            d   = get_delivery(p["id"])
-            days = days_until(d["dueDate"]) if d and d.get("dueDate") and not d.get("delivered") else None
-            color = p.get("color", TC["accent"])
-            prow = tk.Frame(prf, bg=TC["surface"],
-                            highlightbackground=TC["border"], highlightthickness=1)
-            prow.pack(fill="x", pady=2)
-            tk.Frame(prow, width=4, bg=color).pack(side="left", fill="y")
-            inner = tk.Frame(prow, bg=TC["surface"])
-            inner.pack(side="left", fill="both", expand=True, padx=10, pady=6)
-            name_row = tk.Frame(inner, bg=TC["surface"])
-            name_row.pack(fill="x")
-            tk.Label(name_row, text=p.get("name","?"), font=("DM Sans",10,"bold"),
+        metrics = [
+            (len(da_fare),    "Da fare",         f"{len(in_progress)} lavori attivi", TC["muted"],  TC["surface2"]),
+            (len(in_mac),     "In macchina",      "programmi attivi",                  "#0d2d5e",    "#e6f1fb"),
+            (len(oggi),       "Completati oggi",  f"{len(completati)} totali",         "#16a34a",    "#f0fdf4"),
+            (da_montare_n + fine_vita_n, "Utensili critici",
+             f"{da_montare_n} da montare" if da_montare_n else "tutto ok",
+             "#dc2626" if (da_montare_n + fine_vita_n) > 0 else "#16a34a",
+             "#fef0ee" if (da_montare_n + fine_vita_n) > 0 else "#f0fdf4"),
+        ]
+        for mi, (val, label, sub, color, bg_m) in enumerate(metrics):
+            mf = tk.Frame(metrics_frame, bg=bg_m, width=130, height=80)
+            mf.grid(row=mi//2, column=mi%2, padx=4, pady=4, sticky="nsew")
+            mf.grid_propagate(False)
+            tk.Label(mf, text=str(val), font=("Inter", 22, "bold"),
+                     fg=color, bg=bg_m).pack(anchor="w", padx=12, pady=(10,0))
+            tk.Label(mf, text=label, font=("Inter", 10, "bold"),
+                     fg=color, bg=bg_m).pack(anchor="w", padx=12)
+            tk.Label(mf, text=sub, font=("Inter", 9),
+                     fg=TC["muted"], bg=bg_m).pack(anchor="w", padx=12, pady=(0,6))
+
+        # Lavori in corso
+        lavori_frame = tk.Frame(bottom, bg=BG)
+        lavori_frame.grid(row=0, column=1, sticky="nsew")
+        tk.Label(lavori_frame, text="LAVORI IN CORSO", font=("Inter", 9, "bold"),
+                 fg=TC["muted"], bg=BG).pack(anchor="w", pady=(0, 6))
+
+        for p in in_progress[:6]:
+            pct  = get_progress(p)
+            d    = get_delivery(p.get("id",""))
+            days = days_until(d.get("dueDate")) if d and d.get("dueDate") and not d.get("delivered") else None
+            pnum = next((x.get("numero") for x in pallet_list if x.get("progetto_id") == p.get("id")), None)
+
+            rf = tk.Frame(lavori_frame, bg=TC["surface"],
+                          highlightbackground=TC["border"], highlightthickness=1,
+                          cursor="hand2")
+            rf.pack(fill="x", pady=3)
+            # Bordo sinistro colorato
+            tk.Frame(rf, bg=p.get("color", TC["accent"]), width=4).pack(side="left", fill="y")
+
+            inner = tk.Frame(rf, bg=TC["surface"])
+            inner.pack(fill="x", expand=True, padx=10, pady=6)
+
+            top_row = tk.Frame(inner, bg=TC["surface"])
+            top_row.pack(fill="x")
+            tk.Label(top_row, text=p.get("name","?"), font=("Inter", 12, "bold"),
                      fg=TC["text"], bg=TC["surface"]).pack(side="left")
-            right_lbl = tk.Frame(prow, bg=TC["surface"])
-            right_lbl.pack(side="right", padx=10)
-            pct_color = TC["green"] if pct==100 else TC["accent"]
-            tk.Label(right_lbl, text=f"{pct}%", font=("DM Sans",10,"bold"),
-                     fg=pct_color, bg=TC["surface"]).pack(anchor="e")
+            if pnum:
+                tk.Label(top_row, text=f" P{pnum}", font=("Inter", 10, "bold"),
+                         fg="#0d2d5e", bg="#e6f1fb", padx=4).pack(side="left", padx=4)
+
+            # Barra progresso
+            bar_bg = tk.Frame(inner, bg=TC["surface2"], height=4)
+            bar_bg.pack(fill="x", pady=(3, 0))
+            bar_bg.update_idletasks()
+            tk.Frame(bar_bg, bg=p.get("color", TC["accent"]), height=4).place(
+                x=0, y=0, relwidth=pct/100, height=4)
+
+            right_row = tk.Frame(inner, bg=TC["surface"])
+            right_row.pack(fill="x")
+            pct_color = "#16a34a" if pct == 100 else p.get("color", TC["accent"])
+            tk.Label(right_row, text=f"{pct}%", font=("Inter", 11, "bold"),
+                     fg=pct_color, bg=TC["surface"]).pack(side="right")
             if days is not None:
-                d_color = "#C0392B" if days<=3 else "#D4700A"
-                d_txt = "oggi" if days==0 else f"{abs(days)}gg fa" if days<0 else f"{days}gg"
-                tk.Label(right_lbl, text=d_txt, font=("DM Sans",8,"bold"),
-                         fg=d_color, bg=TC["surface"]).pack(anchor="e")
-            bar = tk.Frame(inner, height=3, bg=TC["surface2"])
-            bar.pack(fill="x", pady=(3,0))
-            tk.Frame(bar, height=3, bg=color).place(relwidth=pct/100, relheight=1)
-            prow.bind("<Button-1>", lambda e, pid=p["id"]: self._apri_progetto(pid))
-            for w in [inner, name_row]: w.bind("<Button-1>", lambda e, pid=p["id"]: self._apri_progetto(pid))
+                day_c = "#dc2626" if days <= 3 else "#b45309"
+                day_t = "oggi" if days == 0 else (f"{abs(days)}gg fa" if days < 0 else f"{days}gg")
+                tk.Label(right_row, text=day_t, font=("Inter", 9, "bold"),
+                         fg=day_c, bg=TC["surface"]).pack(side="right", padx=8)
 
-        # Utensili critici
-        if da_montare_n > 0 or fine_vita_n > 0:
-            uf2 = tk.Frame(content, bg=TC["surface"],
-                           highlightbackground="#E8A89E", highlightthickness=1)
-            uf2.pack(fill="x", pady=(12,0))
-            tk.Label(uf2, text="🔧 UTENSILI — AZIONE RICHIESTA",
-                     font=("DM Sans",9,"bold"), fg="#C0392B", bg=TC["surface"]).pack(side="left", padx=12, pady=8)
-            if da_montare_n:
-                tk.Label(uf2, text=f"✗ {da_montare_n} da montare",
-                         font=("DM Sans",9,"bold"), fg="#C0392B", bg="#FDECEA",
-                         padx=8, pady=3).pack(side="left", padx=4)
-            if fine_vita_n:
-                tk.Label(uf2, text=f"⚠ {fine_vita_n} fine vita",
-                         font=("DM Sans",9,"bold"), fg="#B45309", bg="#FEF3C7",
-                         padx=8, pady=3).pack(side="left", padx=4)
-
+            # Bind click su tutto il frame
+            for w in [rf, inner, top_row, right_row]:
+                w.bind("<Button-1>", lambda e, pid=p["id"]: self._apri_progetto(pid))
     def _apri_progetto(self, project_id):
         """Apre il dettaglio di un progetto dalla dashboard."""
         p = next((x for x in self._projects if x.get("id")==project_id), None)
@@ -729,13 +767,13 @@ class TabProgetti:
         # Banner urgenza
         urgent = [p for p in in_progress if self._is_urgent(p)]
         if urgent:
-            ub = tk.Frame(self._body, bg="#FDECEA",
-                          highlightbackground="#C0392B", highlightthickness=1)
+            ub = tk.Frame(self._body, bg="#fef2f2",
+                          highlightbackground="#dc2626", highlightthickness=1)
             ub.pack(fill="x", padx=20, pady=(12,0))
             tk.Label(ub, text=f"🎯 FOCUS — {len(urgent)} CONSEGN{'A' if len(urgent)==1 else 'E'} ENTRO 7 GIORNI",
-                     font=("DM Sans",10,"bold"), fg="#C0392B", bg="#FDECEA").pack(side="left", padx=10, pady=6)
+                     font=("DM Sans",10,"bold"), fg="#dc2626", bg="#fef2f2").pack(side="left", padx=10, pady=6)
             names = " · ".join(p.get("name","?") for p in urgent[:4])
-            tk.Label(ub, text=names, font=("DM Sans",10), fg="#5A5750", bg="#FDECEA").pack(side="left", padx=4)
+            tk.Label(ub, text=names, font=("DM Sans",10), fg="#475569", bg="#fef2f2").pack(side="left", padx=4)
 
         if not projects:
             txt = "Nessun progetto. Clicca '+ Nuovo Progetto' per iniziare." if not archived else "Nessun progetto archiviato."
@@ -853,11 +891,11 @@ class TabProgetti:
 
         # Prossimo step
         if t_next:
-            nf = tk.Frame(body, bg="#FFF4E8")
+            nf = tk.Frame(body, bg="#e6f1fb")
             nf.pack(fill="x", pady=(4,0))
-            tk.Label(nf, text="📍", bg="#FFF4E8", font=("Arial",10)).pack(side="left", padx=(4,2))
+            tk.Label(nf, text="📍", bg="#e6f1fb", font=("Arial",10)).pack(side="left", padx=(4,2))
             tk.Label(nf, text=f"{s_next.get('title','?')} › {t_next.get('text','?')}",
-                     font=("DM Sans",11), fg=TC["text"], bg="#FFF4E8").pack(side="left")
+                     font=("DM Sans",11), fg=TC["text"], bg="#e6f1fb").pack(side="left")
 
         # Click
         for w in [card, body, row1, stats]:
@@ -961,7 +999,7 @@ class TabProgetti:
         tk.Label(r1, text="Scadenza:", font=("DM Sans",10), fg=TC["muted"], bg=TC["surface"]).pack(side="left", padx=(0,3))
         due_entry = tk.Entry(r1, textvariable=due_var, width=11,
                              font=("DM Sans",10), relief="flat",
-                             bg="#F0FBF4" if (delivery and delivery.get("dueDate")) else "#F5F4F0",
+                             bg="#F0FBF4" if (delivery and delivery.get("dueDate")) else "#eef2f7",
                              fg=TC["text"])
         due_entry.pack(side="left")
         due_entry.bind("<FocusOut>", lambda e: self._save_due_date(project, due_var.get()))
@@ -1029,12 +1067,12 @@ class TabProgetti:
 
         # Prossimo step
         if t_next:
-            nf = tk.Frame(hdr, bg="#FFF4E8")
+            nf = tk.Frame(hdr, bg="#e6f1fb")
             nf.pack(fill="x", padx=20, pady=(0,8))
             tk.Label(nf, text="📍 RIPRENDI DA QUI",
-                     font=("DM Sans",9,"bold"), fg=TC["accent"], bg="#FFF4E8").pack(anchor="w", padx=10, pady=(5,0))
+                     font=("DM Sans",9,"bold"), fg=TC["accent"], bg="#e6f1fb").pack(anchor="w", padx=10, pady=(5,0))
             tk.Label(nf, text=f"{s_next.get('title','?')} › {t_next.get('text','?')}",
-                     font=("DM Sans",12), fg=TC["text"], bg="#FFF4E8").pack(anchor="w", padx=10, pady=(0,6))
+                     font=("DM Sans",12), fg=TC["text"], bg="#e6f1fb").pack(anchor="w", padx=10, pady=(0,6))
 
         # Tab switcher
         tab_row = tk.Frame(hdr, bg=TC["surface"])
@@ -1096,7 +1134,7 @@ class TabProgetti:
             self._save_project(project)
         entry.bind("<Return>", _add_step)
         ctk.CTkButton(add_row, text="+ Fase", command=_add_step,
-                      fg_color=TC["accent"], hover_color="#B5600A",
+                      fg_color=TC["accent"], hover_color="#1e3a6e",
                       font=("DM Sans",10,"bold"), height=30, width=70, corner_radius=6).pack(side="left", padx=5)
 
     def _render_step(self, parent, project, step):
@@ -1152,7 +1190,7 @@ class TabProgetti:
 
         # Sfondo: completato=verde chiaro, prossimo=arancio chiaro, normale=bianco
         if is_next:
-            bg = "#FFF4E8"
+            bg = "#e6f1fb"
         elif is_done:
             bg = "#F0FBF4"   # verde tenue
         else:
@@ -1213,10 +1251,10 @@ class TabProgetti:
         if not notes and task.get("note"):
             notes = [{"id": f"legacy_{task['id']}", "text": task["note"], "createdAt": ""}]
         for note in notes:
-            nrow = tk.Frame(parent, bg="#FFF4E8")
+            nrow = tk.Frame(parent, bg="#e6f1fb")
             nrow.pack(fill="x", padx=(28,0), pady=1)
             tk.Label(nrow, text=f"💬 {note['text']}",
-                     font=("DM Sans",9,"italic"), fg=TC["accent"], bg="#FFF4E8").pack(side="left", padx=6)
+                     font=("DM Sans",9,"italic"), fg=TC["accent"], bg="#e6f1fb").pack(side="left", padx=6)
 
         # FresaturaPanel
         if task.get("text","").strip().lower() == "fresatura":
@@ -1229,25 +1267,25 @@ class TabProgetti:
         done_tot = sum(1 for p in programs if p.get("stato") == "completato")
         in_mac   = sum(1 for p in programs if p.get("stato") == "in_macchina")
 
-        pf = tk.Frame(parent, bg="#EAF1FB",
-                      highlightbackground="#1D5FAD", highlightthickness=1)
+        pf = tk.Frame(parent, bg="#e6f1fb",
+                      highlightbackground="#0d2d5e", highlightthickness=1)
         pf.pack(fill="x", padx=(28,0), pady=(3,6))
 
         # Stato selezione condiviso tra le righe
         selected_ids = set()
 
         # ── Header principale ─────────────────────────────────────────────────
-        ph = tk.Frame(pf, bg="#EAF1FB")
+        ph = tk.Frame(pf, bg="#e6f1fb")
         ph.pack(fill="x", padx=8, pady=5)
         tk.Label(ph, text="⚙️ PROGRAMMI FRESATURA",
-                 font=("DM Sans",9,"bold"), fg=TC["blue"], bg="#EAF1FB").pack(side="left")
+                 font=("DM Sans",9,"bold"), fg=TC["blue"], bg="#e6f1fb").pack(side="left")
         if in_mac > 0:
             tk.Label(ph, text=f"⚙ {in_mac} in macchina",
-                     font=("DM Sans",9,"bold"), fg=TC["blue"], bg="#EAF1FB").pack(side="left", padx=6)
+                     font=("DM Sans",9,"bold"), fg=TC["blue"], bg="#e6f1fb").pack(side="left", padx=6)
         if programs:
             ck = TC["green"] if done_tot == len(programs) else TC["blue"]
             tk.Label(ph, text=f"{done_tot}/{len(programs)} completati",
-                     font=("DM Sans",9,"bold"), fg=ck, bg="#EAF1FB").pack(side="left")
+                     font=("DM Sans",9,"bold"), fg=ck, bg="#e6f1fb").pack(side="left")
 
         # Badge anomalie (solo fresatura)
         tools_db = getattr(self, "_tools_db_cache", {})
@@ -1262,7 +1300,7 @@ class TabProgetti:
         # ── Toolbar multi-select (appare quando ci sono selezioni) ────────────
         toolbar = tk.Frame(pf, bg="#DBEAFE")
         sel_label = tk.Label(toolbar, text="0 selezionati",
-                             font=("DM Sans",9,"bold"), fg="#1D5FAD", bg="#DBEAFE")
+                             font=("DM Sans",9,"bold"), fg="#0d2d5e", bg="#DBEAFE")
         sel_label.pack(side="left", padx=8, pady=4)
 
         def _massa_stato(nuovo_stato):
@@ -1285,8 +1323,8 @@ class TabProgetti:
             _update_toolbar()
 
         for stato, label, bg_btn, fg_btn in [
-            ("da_fare",     "○ Da fare",     "#F0EEE8", "#5A5750"),
-            ("in_macchina", "⚙ In macchina", "#DBEAFE", "#1D5FAD"),
+            ("da_fare",     "○ Da fare",     "#f8fafc", "#475569"),
+            ("in_macchina", "⚙ In macchina", "#DBEAFE", "#0d2d5e"),
             ("completato",  "✓ Completato",  "#DCFCE7", "#166534"),
         ]:
             tk.Button(toolbar, text=label, command=lambda s=stato: _massa_stato(s),
@@ -1367,7 +1405,7 @@ class TabProgetti:
                 self._save_project(project)
             tk.Button(ph, text=f"⚙ Segna {len(da_fare_pgm)} in macchina",
                       command=_segna_tutti_in_macchina,
-                      font=("DM Sans",9,"bold"), fg="#fff", bg="#1D5FAD",
+                      font=("DM Sans",9,"bold"), fg="#fff", bg="#0d2d5e",
                       relief="flat", padx=6, pady=2, cursor="hand2").pack(side="right", padx=(0,4))
 
         # ── Sezione TASTATURA IPM (viola) ─────────────────────────────────────
@@ -1433,12 +1471,12 @@ class TabProgetti:
             tk.Label(fres_header, text="⚙️", font=("Arial",9),
                      bg="#E8F0FA").pack(side="left", padx=(6,2), pady=3)
             tk.Label(fres_header, text="FRESATURA",
-                     font=("DM Sans",8,"bold"), fg="#1D5FAD", bg="#E8F0FA").pack(side="left")
+                     font=("DM Sans",8,"bold"), fg="#0d2d5e", bg="#E8F0FA").pack(side="left")
             tk.Label(fres_header, text=f"{done_fres}/{len(fres_pgm)}",
-                     font=("DM Sans",8), fg="#1D5FAD", bg="#E8F0FA").pack(side="left", padx=4)
+                     font=("DM Sans",8), fg="#0d2d5e", bg="#E8F0FA").pack(side="left", padx=4)
             toggle_fres_btn = tk.Button(fres_header, text="▲",
                      command=_toggle_fres,
-                     font=("DM Sans",8), fg="#1D5FAD", bg="#E8F0FA",
+                     font=("DM Sans",8), fg="#0d2d5e", bg="#E8F0FA",
                      relief="flat", cursor="hand2")
             toggle_fres_btn.pack(side="right", padx=4)
 
@@ -1641,7 +1679,7 @@ class TabProgetti:
                  font=("DM Sans",11,"bold"), fg=TC["sub"], bg=TC["bg"]).pack(side="left")
         ctk.CTkButton(hdr, text="+ Nuovo Template",
                       command=self._nuovo_template,
-                      fg_color=TC["accent"], hover_color="#B5600A",
+                      fg_color=TC["accent"], hover_color="#1e3a6e",
                       font=("DM Sans",10,"bold"), height=28, corner_radius=6).pack(side="right")
 
         if not self._templates:
@@ -1737,7 +1775,7 @@ class TabProgetti:
             self._set_page("templates")
 
         ctk.CTkButton(hdr_inner, text="💾 Salva Template", command=_save,
-                      fg_color=color, hover_color="#B5600A",
+                      fg_color=color, hover_color="#1e3a6e",
                       font=("DM Sans",11,"bold"), height=30, corner_radius=6).pack(side="right")
 
         tk.Frame(hdr, height=1, bg=TC["border"]).pack(fill="x")
@@ -1897,10 +1935,10 @@ class TabProgetti:
 
         # Banner urgenza
         if urgent:
-            ub = tk.Frame(self._body, bg="#FDECEA")
+            ub = tk.Frame(self._body, bg="#fef2f2")
             ub.pack(fill="x", padx=20, pady=(14,4))
             tk.Label(ub, text=f"🎯 FOCUS DEL GIORNO — {len(urgent)} CONSEGN{'A' if len(urgent)==1 else 'E'} URGENTI",
-                     font=("DM Sans",10,"bold"), fg="#C0392B", bg="#FDECEA").pack(anchor="w", padx=10, pady=6)
+                     font=("DM Sans",10,"bold"), fg="#dc2626", bg="#fef2f2").pack(anchor="w", padx=10, pady=6)
 
         # Header
         hdr = tk.Frame(self._body, bg=TC["bg"])
@@ -1909,7 +1947,7 @@ class TabProgetti:
                  font=("DM Sans",11,"bold"), fg=TC["sub"], bg=TC["bg"]).pack(side="left")
         ctk.CTkButton(hdr, text="+ Nuova consegna",
                       command=lambda: self._nuovo_delivery(active_projects),
-                      fg_color=TC["accent"], hover_color="#B5600A",
+                      fg_color=TC["accent"], hover_color="#1e3a6e",
                       font=("DM Sans",10,"bold"), height=28, corner_radius=6).pack(side="right")
 
         if not pending:
@@ -2047,7 +2085,7 @@ class TabProgetti:
             self._refresh()
 
         ctk.CTkButton(win, text="Aggiungi", command=_save,
-                      fg_color=TC["accent"], hover_color="#B5600A",
+                      fg_color=TC["accent"], hover_color="#1e3a6e",
                       font=("DM Sans",11,"bold"), height=32, corner_radius=6).pack(pady=12)
 
     def _elimina_delivery(self, did):
@@ -2092,7 +2130,7 @@ class TabProgetti:
                      font=("DM Sans",11), text_color=TC["muted"]).pack(anchor="w", padx=16)
         ctk.CTkButton(exp_f, text=f"📤 Scarica backup completo ({len(self._projects)} progetti · {len(self._templates)} template)",
                       command=self._export_file,
-                      fg_color=TC["accent"], hover_color="#B5600A",
+                      fg_color=TC["accent"], hover_color="#1e3a6e",
                       font=("DM Sans",11,"bold"), height=32, corner_radius=6).pack(anchor="w", padx=16, pady=12)
 
         # Import
@@ -2111,7 +2149,7 @@ class TabProgetti:
         btn_row.pack(anchor="w", padx=16, pady=12)
         ctk.CTkButton(btn_row, text="+ Importa (merge)",
                       command=lambda: self._import_file("merge"),
-                      fg_color=TC["accent"], hover_color="#B5600A",
+                      fg_color=TC["accent"], hover_color="#1e3a6e",
                       font=("DM Sans",11,"bold"), height=32, corner_radius=6).pack(side="left", padx=(0,8))
         ctk.CTkButton(btn_row, text="Sostituisci tutto",
                       command=lambda: self._import_file("replace"),
@@ -2261,7 +2299,7 @@ class TabProgetti:
             self._render_quick_sidebar()
         entry.bind("<Return>", _add_qt)
         ctk.CTkButton(inp, text="+ Aggiungi", command=_add_qt,
-                      fg_color=TC["accent"], hover_color="#B5600A",
+                      fg_color=TC["accent"], hover_color="#1e3a6e",
                       font=("DM Sans",10,"bold"), height=26, corner_radius=5).pack(fill="x", pady=3)
 
         # Lista task
@@ -2329,7 +2367,7 @@ class TabProgetti:
                     body = _j.dumps({
                         "progetto_id":     project["id"],
                         "progetto_nome":   project.get("name", ""),
-                        "progetto_colore": project.get("color", "#1D5FAD")
+                        "progetto_colore": project.get("color", "#0d2d5e")
                     }).encode()
                     req = urllib.request.Request(f"{base}/api/pallet/{new_pallet}/assegna-progetto",
                         data=body, headers={"Content-Type": "application/json"}, method="PATCH")
@@ -2515,11 +2553,11 @@ class TabProgetti:
                 # Stato badge
                 stato = pgm.get("stato","da_fare")
                 STATO_LABEL = {
-                    "da_fare":    ("Da fare",    "#9A978E","#F0EEE8"),
-                    "in_macchina":("In macchina","#1D5FAD","#DBEAFE"),
+                    "da_fare":    ("Da fare",    "#94a3b8","#f8fafc"),
+                    "in_macchina":("In macchina","#0d2d5e","#DBEAFE"),
                     "completato": ("Fatto",      "#166534","#DCFCE7"),
                 }
-                slbl, sfg, sbg = STATO_LABEL.get(stato, ("?", "#9A978E","#F0EEE8"))
+                slbl, sfg, sbg = STATO_LABEL.get(stato, ("?", "#94a3b8","#f8fafc"))
                 tk.Label(row, text=slbl,
                          font=("DM Sans",8,"bold"), fg=sfg, bg=sbg,
                          padx=5, pady=1).pack(side="left", padx=(2,4))
@@ -2554,7 +2592,7 @@ class TabProgetti:
             def _toggle_comp():
                 show_comp.set(not show_comp.get())
                 if show_comp.get():
-                    _render_section("COMPLETATI", "#F0EEE8", completati, dimmed=True)
+                    _render_section("COMPLETATI", "#f8fafc", completati, dimmed=True)
                     toggle_btn.configure(text=f"▲ COMPLETATI — {len(completati)}")
                 else:
                     toggle_btn.configure(text=f"▼ COMPLETATI — {len(completati)}")
@@ -2566,7 +2604,7 @@ class TabProgetti:
 
         # Footer
         tk.Frame(win, height=1, bg=TC["border"]).pack(fill="x")
-        footer = tk.Frame(win, bg="#F5F4F0")
+        footer = tk.Frame(win, bg="#eef2f7")
         footer.pack(fill="x", padx=12, pady=8)
 
         lbl_counter = ctk.CTkLabel(footer, text="Nessun programma selezionato",
@@ -2691,7 +2729,7 @@ class TabProgetti:
             self._refresh()
 
         ctk.CTkButton(win, text="Crea Progetto", command=_create,
-                      fg_color=COLORS_LIST[0], hover_color="#B5600A",
+                      fg_color=COLORS_LIST[0], hover_color="#1e3a6e",
                       font=("DM Sans",12,"bold"), height=36, corner_radius=6).pack(pady=16, padx=20)
 
     # Template actions

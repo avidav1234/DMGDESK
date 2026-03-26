@@ -234,7 +234,7 @@ function classifyTool(alias, toolsDB){
 }
 
 // ── FresaturaPanel ─────────────────────────────────────────────────────────────
-function FresaturaPanel({task,onUpdateTask,toolsDB,projectId}){
+function FresaturaPanel({task,onUpdateTask,toolsDB,projectId,onSelectionChange}){
   const fileInputRef=useRef(null)
   const programs=Array.isArray(task.programs)?task.programs:[]
   const[expanded,setExpanded]=useState(false)
@@ -283,9 +283,9 @@ function FresaturaPanel({task,onUpdateTask,toolsDB,projectId}){
       return next
     }))
   }
-  function toggleSelect(id){ setSelected(s=>{ const n=new Set(s); n.has(id)?n.delete(id):n.add(id); return n }) }
-  function selTutti(lista){ setSelected(s=>{ const n=new Set(s); lista.forEach(p=>n.add(p.id)); return n }) }
-  function deselTutti(){ setSelected(new Set()) }
+  function toggleSelect(id){ setSelected(s=>{ const n=new Set(s); n.has(id)?n.delete(id):n.add(id); if(onSelectionChange) onSelectionChange(n); return n }) }
+  function selTutti(lista){ setSelected(s=>{ const n=new Set(s); lista.forEach(p=>n.add(p.id)); if(onSelectionChange) onSelectionChange(n); return n }) }
+  function deselTutti(){ setSelected(new Set()); if(onSelectionChange) onSelectionChange(new Set()) }
   function massaStato(stato){
     updatePrograms(programs.map(p=>{
       if(!selected.has(p.id)) return p
@@ -294,7 +294,7 @@ function FresaturaPanel({task,onUpdateTask,toolsDB,projectId}){
       if(stato==='completato') next.tempoFine=nowStr()
       return next
     }))
-    setSelected(new Set())
+    setSelected(new Set()); if(onSelectionChange) onSelectionChange(new Set())
   }
   const gruppi=[
     {key:'ipm',label:'Tastatura (IPM)',icon:'📏',color:'#8B2FC9',bgColor:'#F3E8FF',list:ipmPrograms},
@@ -569,7 +569,7 @@ function TaskItem({task,idx,stepId,onToggle,onUpdateTask,onDelete,isNext,onReord
         </div>
       )}
       {task.text?.trim().toLowerCase()==='fresatura'&&(
-        <div style={{marginTop:8}}><FresaturaPanel task={task} onUpdateTask={onUpdateTask} toolsDB={toolsDB} projectId={projectId}/></div>
+        <div style={{marginTop:8}}><FresaturaPanel task={task} onUpdateTask={onUpdateTask} toolsDB={toolsDB} projectId={projectId} onSelectionChange={ids=>setPreselectedIds(new Set(ids))}/></div>
       )}
     </div>
   )
@@ -749,7 +749,7 @@ function SaveAsTemplateModal({project,templates,onSave,onClose}){
 // ── ProjectDetail ──────────────────────────────────────────────────────────────
 
 // ── LancioNCModal ─────────────────────────────────────────────────────────────
-function LancioNCModal({project, toolsDB, onLancia, onClose}){
+function LancioNCModal({project, toolsDB, preselectedIds, onLancia, onClose}){
   // Costruisce mappa fase → programmi, conservando l'info di fase su ogni pgm
   const fasi = (project.steps||[]).map(step=>{
     const fres = (step.tasks||[]).find(t=>t.text?.trim().toLowerCase()==='fresatura')
@@ -762,7 +762,11 @@ function LancioNCModal({project, toolsDB, onLancia, onClose}){
   const in_macchina= allPgm.filter(p=>p.stato==='in_macchina')
   const completati = allPgm.filter(p=>p.stato==='completato')
 
-  const [selected, setSelected] = useState(new Set(da_fare.map(p=>p.id)))
+  // Usa la selezione previa se presente, altrimenti pre-seleziona i "Da fare"
+  const [selected, setSelected] = useState(()=>{
+    if(preselectedIds && preselectedIds.size > 0) return new Set(preselectedIds)
+    return new Set(da_fare.map(p=>p.id))
+  })
   const [showCompletati, setShowCompletati] = useState(false)
   const [faseMistaConfirmata, setFaseMistaConfirmata] = useState(false)
 
@@ -1079,6 +1083,7 @@ function LancioNCModal({project, toolsDB, onLancia, onClose}){
 function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onSaveAsTemplate,onLanciaNC,palletDisponibili=[]}){
   // Carica tools_machine una volta sola per questo progetto
   const [toolsDB, setToolsDB] = useState(null)
+  const [preselectedIds, setPreselectedIds] = useState(new Set())
   const [showLancioModal, setShowLancioModal] = useState(()=>{
     // Apri automaticamente se arrivato dalla Coda con bottone Avvia
     const flag = sessionStorage.getItem('dmgdesk_apri_modal_lancio')
@@ -1269,9 +1274,11 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
       {showLancioModal&&<LancioNCModal
         project={project}
         toolsDB={toolsDB}
+        preselectedIds={preselectedIds}
         onClose={()=>setShowLancioModal(false)}
         onLancia={pgmSelezionati=>{
           setShowLancioModal(false)
+          setPreselectedIds(new Set())
           onLanciaNC(project, pgmSelezionati)
         }}
       />}

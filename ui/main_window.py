@@ -102,8 +102,8 @@ class MainWindow(ctk.CTk):
 
         NAV = [
             ("home",      "🏠", "Home"),
-            ("macchina",  "○",  "Macchina"),
             ("lavori",    "📋", "Lavori"),
+            ("macchina",  "○",  "Macchina"),
             ("analisi",   "📄", "Analisi NC"),
             ("utensili",  "🔧", "Utensili"),
         ]

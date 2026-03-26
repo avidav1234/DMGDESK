@@ -1324,11 +1324,8 @@ class TabProgetti:
                      font=("Inter",9,"bold"), fg="#DC2626", bg="#FEE2E2",
                      padx=6, pady=1).pack(side="left", padx=6)
 
-        # ── Toolbar multi-select — FUORI dal frame scrollabile, sempre visibile ──
-        # Il parent del content area è self._content_body (frame sopra il body)
-        # Usiamo il frame direttamente sopra _body
-        toolbar_parent = self._body.master if hasattr(self._body, 'master') else pf
-        toolbar = tk.Frame(toolbar_parent, bg="#DBEAFE")
+        # ── Toolbar multi-select — nel content_area sopra il body ──
+        toolbar = tk.Frame(self._content_area, bg="#DBEAFE")
         sel_label = tk.Label(toolbar, text="0 selezionati",
                              font=("Inter",9,"bold"), fg="#0d2d5e", bg="#DBEAFE")
         sel_label.pack(side="left", padx=8, pady=4)
@@ -1372,7 +1369,10 @@ class TabProgetti:
             n = len(selected_ids)
             self._has_active_selections = n > 0
             if n > 0:
-                toolbar.pack(fill="x", before=self._body)
+                try:
+                    toolbar.pack(fill="x", before=self._body)
+                except Exception:
+                    toolbar.pack(fill="x")
                 sel_label.configure(text=f"{n} selezionati → segna come:")
             else:
                 toolbar.pack_forget()
@@ -2393,7 +2393,7 @@ class TabProgetti:
             # Notifica il server HTTP così il web vede i cambiamenti
             try:
                 import urllib.request, json as _j
-                data = _j.dumps(project, ensure_ascii=False).encode()
+                data = _j.dumps({"data": project}, ensure_ascii=False).encode()
                 req  = urllib.request.Request(
                     f"http://localhost:8000/api/progetti/{project['id']}",
                     data=data, method="PUT",

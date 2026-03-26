@@ -565,7 +565,7 @@ class TabProgetti:
             d    = get_delivery(p["id"])
             days = days_until(d.get("dueDate")) if d else None
             day_txt = "oggi" if days == 0 else (f"{abs(days)}gg fa" if days and days < 0 else f"tra {days}gg")
-            af = tk.Frame(wrap, bg="#fef2f2", highlightbackground="#dc262633",
+            af = tk.Frame(wrap, bg="#fef2f2", highlightbackground="#F0A0A0",
                           highlightthickness=1, cursor="hand2")
             af.pack(fill="x", pady=(0, 6))
             af.bind("<Button-1>", lambda e, pid=p["id"]: self._apri_progetto(pid))
@@ -577,7 +577,7 @@ class TabProgetti:
                      relief="flat", bd=0, padx=8, pady=2).pack(side="right", padx=10, pady=8)
 
         if da_montare_n or fine_vita_n:
-            uf = tk.Frame(wrap, bg="#fef9c3", highlightbackground="#b4530966",
+            uf = tk.Frame(wrap, bg="#fef9c3", highlightbackground="#D9A050",
                           highlightthickness=1)
             uf.pack(fill="x", pady=(0, 12))
             msg = f"🔧  Utensili — azione richiesta"
@@ -640,7 +640,7 @@ class TabProgetti:
                          fg=TC["text"], bg=bg_c, anchor="w",
                          cursor="hand2").pack(fill="x", padx=10, pady=(2, 4))
                 if pct is not None:
-                    bar_bg = tk.Frame(card, bg="#0000001A", height=5)
+                    bar_bg = tk.Frame(card, bg="#D0CFC8", height=5)
                     bar_bg.pack(fill="x", padx=10, pady=(0, 2))
                     bar_bg.update_idletasks()
                     bar_fill = tk.Frame(bar_bg, bg=fg_c, height=5)

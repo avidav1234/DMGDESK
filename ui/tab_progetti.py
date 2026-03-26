@@ -556,21 +556,21 @@ class TabProgetti:
                 days = days_until(d.get("dueDate")) if d else None
                 day_txt = "oggi" if days == 0 else (f"{abs(days)}gg fa" if days and days < 0 else f"tra {days}gg")
                 af = tk.Frame(alert_row, bg="#fef2f2", highlightbackground="#F0A0A0", highlightthickness=1, cursor="hand2")
-                af.pack(fill="x", pady=2)
+                af.pack(side="left", fill="x", expand=True, padx=(0,4), pady=2)
                 tk.Label(af, text=f"  {p['name']}  —  scadenza {day_txt}",
                          font=("Inter",10,"bold"), fg="#7f1d1d", bg="#fef2f2",
-                         anchor="w", cursor="hand2").pack(side="left", padx=8, pady=6)
+                         anchor="w", cursor="hand2").pack(side="left", padx=8, pady=5)
                 tk.Label(af, text="OGGI" if days == 0 else day_txt.upper(),
                          font=("Inter",9,"bold"), fg="#dc2626", bg="#fff",
                          padx=6, pady=2).pack(side="right", padx=8)
                 for w2 in af.winfo_children(): w2.bind("<Button-1>", lambda e, pid=p["id"]: self._apri_progetto(pid))
                 af.bind("<Button-1>", lambda e, pid=p["id"]: self._apri_progetto(pid))
             if da_montare_n or fine_vita_n:
-                msg = "🔧  Utensili"
+                msg = "🔧"
                 if da_montare_n: msg += f"  {da_montare_n} da montare"
                 if fine_vita_n:  msg += f"  {fine_vita_n} a fine vita"
                 uf = tk.Frame(alert_row, bg="#fef9c3", highlightbackground="#D9A050", highlightthickness=1)
-                uf.pack(fill="x", pady=2)
+                uf.pack(side="left", padx=(0,0), pady=2)
                 tk.Label(uf, text=msg, font=("Inter",10,"bold"), fg="#b45309", bg="#fef9c3",
                          anchor="w").pack(side="left", padx=8, pady=5)
 

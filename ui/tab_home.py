@@ -60,12 +60,11 @@ class TabHome:
         self._canvas.pack(side="left", fill="both", expand=True)
 
         self._inner = tk.Frame(self._canvas, bg=TC["bg"])
-        self._win_id = self._canvas.create_window((0,0), window=self._inner,
+        self._win_id = self._canvas.create_window((24, 16), window=self._inner,
                                                    anchor="nw")
 
         self._inner.bind("<Configure>", self._on_inner_configure)
         self._canvas.bind("<Configure>", self._on_canvas_configure)
-        # Scroll con rotella mouse
         self._canvas.bind("<MouseWheel>",
             lambda e: self._canvas.yview_scroll(int(-e.delta/120), "units"))
         self._inner.bind("<MouseWheel>",
@@ -75,7 +74,9 @@ class TabHome:
         self._canvas.configure(scrollregion=self._canvas.bbox("all"))
 
     def _on_canvas_configure(self, event):
-        self._canvas.itemconfig(self._win_id, width=event.width)
+        # 24px margine sx + 24px margine dx + scrollbar
+        inner_width = max(400, event.width - 48)
+        self._canvas.itemconfig(self._win_id, width=inner_width)
 
     # ══════════════════════════════════════════════════════════════════════════
     # Caricamento dati
@@ -176,8 +177,7 @@ class TabHome:
             key=lambda p: days_until(get_del(p["id"])["dueDate"]) if get_del(p["id"]) else 99
         )
 
-        pad = tk.Frame(self._inner, bg=TC["bg"])
-        pad.pack(fill="both", expand=True, padx=28, pady=18)
+        pad = self._inner  # il margine è già nel canvas offset
 
         # ── Alert strip orizzontale ──────────────────────────────────────────
         if urgenti or da_montare or fine_vita:

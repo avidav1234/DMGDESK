@@ -750,28 +750,32 @@ function SaveAsTemplateModal({project,templates,onSave,onClose}){
 
 // ── LancioNCModal ─────────────────────────────────────────────────────────────
 function LancioNCModal({project, toolsDB, onLancia, onClose}){
-  const allPgm = (project.steps||[])
-    .flatMap(s=>s.tasks||[])
-    .filter(t=>t.text?.trim().toLowerCase()==='fresatura')
-    .flatMap(t=>(t.programs||[]).filter(p=>p.tipoGruppo!=='ipm'))
+  // Costruisce mappa fase → programmi, conservando l'info di fase su ogni pgm
+  const fasi = (project.steps||[]).map(step=>{
+    const fres = (step.tasks||[]).find(t=>t.text?.trim().toLowerCase()==='fresatura')
+    const pgms = fres ? (fres.programs||[]).filter(p=>p.tipoGruppo!=='ipm') : []
+    return { stepId: step.id, stepTitle: step.title, pgms }
+  }).filter(f=>f.pgms.length>0)
 
+  const allPgm = fasi.flatMap(f=>f.pgms.map(p=>({...p, _stepId:f.stepId, _stepTitle:f.stepTitle})))
   const da_fare    = allPgm.filter(p=>p.stato==='da_fare')
   const in_macchina= allPgm.filter(p=>p.stato==='in_macchina')
   const completati = allPgm.filter(p=>p.stato==='completato')
 
-  const [selected, setSelected] = useState(new Set())
+  const [selected, setSelected] = useState(new Set(da_fare.map(p=>p.id)))
   const [showCompletati, setShowCompletati] = useState(false)
-  const [filtro, setFiltro] = useState('da_fare') // 'da_fare' | 'in_macchina' | 'tutti'
-
-  const listaFiltrata = filtro==='da_fare' ? da_fare : filtro==='in_macchina' ? in_macchina : [...da_fare,...in_macchina]
+  const [faseMistaConfirmata, setFaseMistaConfirmata] = useState(false)
 
   function toggle(id){ setSelected(s=>{ const n=new Set(s); n.has(id)?n.delete(id):n.add(id); return n }) }
-  function selezionaDaFare(){ setSelected(new Set(da_fare.map(p=>p.id))) }
-  function selezionaTutti(){ setSelected(new Set([...da_fare,...in_macchina].map(p=>p.id))) }
-  function selezionaFiltro(){ setSelected(new Set(listaFiltrata.map(p=>p.id))) }
+  function selezionaTutti(fase){ setSelected(s=>{ const n=new Set(s); fase.pgms.forEach(p=>n.add(p.id)); return n }) }
+  function deselezionaFase(fase){ setSelected(s=>{ const n=new Set(s); fase.pgms.forEach(p=>n.delete(p.id)); return n }) }
   function deselezionaTutti(){ setSelected(new Set()) }
 
   const pgmSelezionati = allPgm.filter(p=>selected.has(p.id))
+
+  // Rilevamento fasi miste
+  const fasiSelezionate = [...new Set(pgmSelezionati.map(p=>p._stepTitle))]
+  const faseMista = fasiSelezionate.length > 1
   const problemi = pgmSelezionati.filter(p=>{
     const s = classifyTool(p.utensile, toolsDB)
     return s==='mancante'||s==='fin_vita'||s==='disabilitato'
@@ -842,76 +846,178 @@ function LancioNCModal({project, toolsDB, onLancia, onClose}){
     )
   }
 
+  // Colori per fase (fino a 6 fasi)
+  const FASE_COLORS = ['#0d2d5e','#166534','#7C3AED','#C2410C','#0369A1','#B45309']
+
   return(
-    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',
+    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.55)',
       display:'flex',alignItems:'center',justifyContent:'center',zIndex:400}}>
-      <div style={{background:'#FFFFFF',borderRadius:16,width:660,maxWidth:'94vw',
-        maxHeight:'88vh',display:'flex',flexDirection:'column',
-        border:'1px solid #D8D5CC',boxShadow:'0 16px 56px rgba(0,0,0,0.22)'}}>
+      <div style={{background:'#FFFFFF',borderRadius:16,width:700,maxWidth:'96vw',
+        maxHeight:'90vh',display:'flex',flexDirection:'column',
+        border:'1px solid #D8D5CC',boxShadow:'0 20px 60px rgba(0,0,0,0.25)'}}>
 
         {/* Header */}
-        <div style={{padding:'18px 22px 14px',borderBottom:'1px solid #E8E6E0'}}>
-          <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:4}}>
+        <div style={{padding:'16px 22px 12px',borderBottom:'1px solid #E8E6E0'}}>
+          <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:8}}>
             <span style={{fontSize:18}}>📄</span>
             <div style={{flex:1}}>
-              <div style={{fontSize:16,fontWeight:800,color:'#0f172a'}}>Lancia in Analisi NC</div>
-              <div style={{fontSize:12,color:'#94a3b8',marginTop:1}}>{project.name}</div>
+              <div style={{fontSize:15,fontWeight:800,color:'#0f172a'}}>Lancia in Analisi NC</div>
+              <div style={{fontSize:12,color:'#94a3b8'}}>{project.name} · {allPgm.length} programmi totali</div>
             </div>
             <button onClick={onClose} style={{background:'none',border:'1px solid #D8D5CC',
               borderRadius:8,color:'#475569',fontSize:13,padding:'5px 12px',cursor:'pointer'}}>✕</button>
           </div>
-
-          {/* Filtri tab */}
-          <div style={{display:'flex',gap:6,marginTop:10,flexWrap:'wrap',alignItems:'center'}}>
-            {[['da_fare',`Da fare (${da_fare.length})`],['in_macchina',`In macchina (${in_macchina.length})`],['tutti',`Tutti (${da_fare.length+in_macchina.length})`]].map(([k,label])=>(
-              <button key={k} onClick={()=>{setFiltro(k);setSelected(new Set())}}
-                style={{background:filtro===k?'#0d2d5e':'#f8fafc',border:`1.5px solid ${filtro===k?'#0d2d5e':'#e2e8f0'}`,borderRadius:7,
-                  color:filtro===k?'#fff':'#475569',fontSize:12,fontWeight:700,padding:'5px 12px',cursor:'pointer'}}>
-                {label}
-              </button>
-            ))}
-            <div style={{marginLeft:'auto',display:'flex',gap:6}}>
-              <button onClick={selezionaFiltro}
-                style={{background:'#EFF6FF',border:'1px solid #1D5FAD44',borderRadius:7,color:'#0d2d5e',fontSize:12,fontWeight:700,padding:'5px 12px',cursor:'pointer'}}>
-                ☑ Seleziona tutti visibili
-              </button>
-              {selected.size>0&&<button onClick={deselezionaTutti}
-                style={{background:'none',border:'1px solid #D8D5CC',borderRadius:7,color:'#94a3b8',fontSize:12,padding:'5px 12px',cursor:'pointer'}}>
-                Deseleziona ({selected.size})
-              </button>}
-            </div>
+          <div style={{display:'flex',gap:8,alignItems:'center'}}>
+            <button onClick={()=>setSelected(new Set(da_fare.map(p=>p.id)))}
+              style={{background:'#f8fafc',border:'1px solid #e2e8f0',borderRadius:6,
+                color:'#475569',fontSize:11,fontWeight:700,padding:'4px 10px',cursor:'pointer'}}>
+              ○ Seleziona Da fare ({da_fare.length})
+            </button>
+            <button onClick={()=>setSelected(new Set(allPgm.map(p=>p.id)))}
+              style={{background:'#f8fafc',border:'1px solid #e2e8f0',borderRadius:6,
+                color:'#475569',fontSize:11,fontWeight:700,padding:'4px 10px',cursor:'pointer'}}>
+              ☑ Tutti ({allPgm.length})
+            </button>
+            {selected.size>0&&<button onClick={deselezionaTutti}
+              style={{background:'none',border:'1px solid #fca5a5',borderRadius:6,
+                color:'#dc2626',fontSize:11,padding:'4px 10px',cursor:'pointer'}}>
+              ✕ Deseleziona ({selected.size})
+            </button>}
           </div>
         </div>
 
-        {/* Lista programmi */}
-        <div style={{flex:1,overflowY:'auto'}}>
-          {listaFiltrata.length>0?(
-            <div>
-              <div style={{padding:'6px 14px',fontSize:10,fontWeight:700,letterSpacing:'0.07em',
-                background:'#eef2f7',borderBottom:'1px solid #E8E6E0',
-                color:'#94a3b8',display:'flex',alignItems:'center',gap:8}}>
-                <span>{filtro==='da_fare'?'DA FARE':filtro==='in_macchina'?'IN MACCHINA':'TUTTI'} — {listaFiltrata.length}</span>
-                {selected.size>0&&<span style={{color:'#0d2d5e',marginLeft:'auto'}}>{selected.size} selezionati</span>}
-              </div>
-              {listaFiltrata.map(p=><PgmRow key={p.id} pgm={p} dimmed={p.stato==='in_macchina'&&filtro==='tutti'}/>)}
+        {/* ⚠ AVVISO FASI MISTE */}
+        {faseMista&&(
+          <div style={{background:'#fff7ed',borderBottom:'2px solid #f97316',
+            padding:'10px 18px',display:'flex',flexDirection:'column',gap:6}}>
+            <div style={{display:'flex',alignItems:'center',gap:8}}>
+              <span style={{fontSize:18}}>⚠️</span>
+              <span style={{fontSize:13,fontWeight:800,color:'#c2410c'}}>
+                Attenzione: hai selezionato programmi con setup differente
+              </span>
             </div>
-          ):(
-            <div style={{padding:40,textAlign:'center',color:'#94a3b8',fontSize:14}}>
-              {allPgm.length===0?'Nessun programma MPF caricato':'Nessun programma con questo stato'}
+            <div style={{fontSize:12,color:'#9a3412'}}>
+              Fasi selezionate: {fasiSelezionate.map((f,i)=>(
+                <strong key={i} style={{color:FASE_COLORS[i%FASE_COLORS.length]}}>{f}{i<fasiSelezionate.length-1?' + ':''}</strong>
+              ))} — ogni fase può avere utensili, zero-pezzo e staffaggi diversi.
             </div>
-          )}
+            <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',fontSize:12,color:'#9a3412',fontWeight:700}}>
+              <input type="checkbox" checked={faseMistaConfirmata} onChange={e=>setFaseMistaConfirmata(e.target.checked)}/>
+              Ho verificato e confermo che i setup sono compatibili
+            </label>
+          </div>
+        )}
 
-          {/* Completati (collassati, sempre in fondo) */}
+        {/* Lista programmi raggruppata per FASE */}
+        <div style={{flex:1,overflowY:'auto'}}>
+          {fasi.length===0?(
+            <div style={{padding:40,textAlign:'center',color:'#94a3b8',fontSize:14}}>
+              Nessun programma MPF caricato
+            </div>
+          ):fasi.map((fase,fi)=>{
+            const faseColor = FASE_COLORS[fi%FASE_COLORS.length]
+            const faseSelected = fase.pgms.filter(p=>selected.has(p.id))
+            const tuttiSel = faseSelected.length===fase.pgms.length
+            return(
+              <div key={fase.stepId}>
+                {/* Header fase */}
+                <div style={{display:'flex',alignItems:'center',gap:10,
+                  padding:'8px 14px',background:`${faseColor}11`,
+                  borderBottom:`2px solid ${faseColor}44`,
+                  borderTop:fi>0?'1px solid #e2e8f0':'none',position:'sticky',top:0,zIndex:2}}>
+                  <div style={{width:10,height:10,borderRadius:'50%',background:faseColor,flexShrink:0}}/>
+                  <span style={{fontSize:12,fontWeight:800,color:faseColor,flex:1}}>
+                    {fase.stepTitle} — {fase.pgms.length} programmi
+                  </span>
+                  <span style={{fontSize:11,color:faseColor,opacity:0.7}}>
+                    {faseSelected.length}/{fase.pgms.length} sel.
+                  </span>
+                  <button onClick={()=>tuttiSel?deselezionaFase(fase):selezionaTutti(fase)}
+                    style={{background:'none',border:`1px solid ${faseColor}66`,borderRadius:5,
+                      color:faseColor,fontSize:10,fontWeight:700,padding:'2px 8px',cursor:'pointer'}}>
+                    {tuttiSel?'Desel. tutti':'Sel. tutti'}
+                  </button>
+                </div>
+                {/* Righe programmi */}
+                {fase.pgms.map(pgm=>{
+                  const sel=selected.has(pgm.id)
+                  const ts=classifyTool(pgm.utensile,toolsDB)
+                  const rowBg=sel?(ts==='mancante'?'#FEE2E2':ts==='fin_vita'?'#FEF9C3':'#EFF6FF'):'#FFFFFF'
+                  return(
+                    <div key={pgm.id} onClick={()=>toggle(pgm.id)}
+                      style={{display:'flex',alignItems:'center',gap:10,padding:'7px 14px',
+                        cursor:'pointer',background:rowBg,
+                        borderLeft:`3px solid ${sel?faseColor:'transparent'}`,
+                        borderBottom:'1px solid #F0EEE8',transition:'background 0.1s'}}>
+                      <div style={{width:16,height:16,borderRadius:4,flexShrink:0,
+                        border:sel?'none':'2px solid #B0ADA4',
+                        background:sel?faseColor:'transparent',
+                        display:'flex',alignItems:'center',justifyContent:'center'}}>
+                        {sel&&<span style={{color:'#fff',fontSize:11,fontWeight:800}}>✓</span>}
+                      </div>
+                      {/* Stato */}
+                      {(()=>{const s=pgm.stato||'da_fare';const cfg={
+                        da_fare:    {label:'Da fare',    color:'#94a3b8',bg:'#f8fafc'},
+                        in_macchina:{label:'In macchina',color:'#0d2d5e',bg:'#DBEAFE'},
+                        completato: {label:'Fatto',      color:'#166534',bg:'#DCFCE7'},
+                      }[s]||{label:s,color:'#94a3b8',bg:'#f8fafc'};return(
+                        <span style={{fontSize:10,fontWeight:700,color:cfg.color,background:cfg.bg,
+                          padding:'2px 6px',borderRadius:10,flexShrink:0,whiteSpace:'nowrap'}}>
+                          {cfg.label}
+                        </span>
+                      )})()}
+                      <span style={{fontSize:12,fontFamily:'monospace',fontWeight:700,color:'#0d2d5e',
+                        minWidth:140,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                        {pgm.filename?.replace(/\.MPF$/i,'')||`#${pgm.numPgm}`}
+                      </span>
+                      <span style={{fontSize:11,fontFamily:'monospace',color:'#0f172a',
+                        minWidth:100,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                        {pgm.utensile||'—'}
+                      </span>
+                      <span style={{fontSize:11,color:'#94a3b8',flex:1,
+                        overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                        {(pgm.tipoOp||'').replace(/[-–]\s*NESSUN TESTO\s*/gi,'').trim()||''}
+                      </span>
+                      <ToolBadge alias={pgm.utensile}/>
+                    </div>
+                  )
+                })}
+              </div>
+            )
+          })}
+
+          {/* Completati */}
           {completati.length>0&&(
             <div>
               <div onClick={()=>setShowCompletati(v=>!v)}
-                style={{padding:'8px 14px',fontSize:10,fontWeight:700,
-                  color:'#94a3b8',letterSpacing:'0.07em',background:'#FAFAFA',
+                style={{padding:'8px 14px',fontSize:10,fontWeight:700,color:'#94a3b8',
+                  letterSpacing:'0.07em',background:'#FAFAFA',
                   borderBottom:'1px solid #E8E6E0',cursor:'pointer',
                   display:'flex',alignItems:'center',gap:6}}>
                 {showCompletati?'▼':'▶'} COMPLETATI — {completati.length}
               </div>
-              {showCompletati&&completati.map(p=><PgmRow key={p.id} pgm={p} dimmed/>)}
+              {showCompletati&&completati.map(pgm=>{
+                const sel=selected.has(pgm.id)
+                return(
+                  <div key={pgm.id} onClick={()=>toggle(pgm.id)}
+                    style={{display:'flex',alignItems:'center',gap:10,padding:'6px 14px',
+                      cursor:'pointer',background:sel?'#EFF6FF':'#FAFAFA',
+                      borderLeft:`3px solid ${sel?'#0d2d5e':'transparent'}`,
+                      borderBottom:'1px solid #F0EEE8',opacity:sel?1:0.6}}>
+                    <div style={{width:16,height:16,borderRadius:4,flexShrink:0,
+                      border:sel?'none':'2px solid #B0ADA4',
+                      background:sel?'#0d2d5e':'transparent',
+                      display:'flex',alignItems:'center',justifyContent:'center'}}>
+                      {sel&&<span style={{color:'#fff',fontSize:11,fontWeight:800}}>✓</span>}
+                    </div>
+                    <span style={{fontSize:10,fontWeight:700,color:'#166534',background:'#DCFCE7',
+                      padding:'2px 6px',borderRadius:10,flexShrink:0}}>Fatto</span>
+                    <span style={{fontSize:12,fontFamily:'monospace',fontWeight:700,color:'#475569',flex:1}}>
+                      {pgm.filename?.replace(/\.MPF$/i,'')||`#${pgm.numPgm}`}
+                    </span>
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>
@@ -920,45 +1026,48 @@ function LancioNCModal({project, toolsDB, onLancia, onClose}){
         <div style={{borderTop:'1px solid #E8E6E0',padding:'12px 22px',
           background:'#eef2f7',borderRadius:'0 0 16px 16px'}}>
 
-          {/* Avviso problemi */}
           {mancanti.length>0&&(
             <div style={{background:'#FEE2E2',border:'1px solid #DC262633',borderRadius:8,
-              padding:'8px 12px',marginBottom:10,fontSize:12,color:'#DC2626',fontWeight:600}}>
-              ⚠ {mancanti.length} programm{mancanti.length===1?'o':'i'} con utensile mancante —
-              il MAIN verrà generato ma {mancanti.length===1?'quel programma potrebbe':'quei programmi potrebbero'} non essere eseguibil{mancanti.length===1?'e':'i'}.
+              padding:'7px 12px',marginBottom:8,fontSize:12,color:'#DC2626',fontWeight:600}}>
+              ⚠ {mancanti.length} utensil{mancanti.length===1?'e':'i'} mancant{mancanti.length===1?'e':'i'} — verificare prima di procedere
             </div>
           )}
           {problemi.length>0&&mancanti.length===0&&(
             <div style={{background:'#FEF9C3',border:'1px solid #D9770633',borderRadius:8,
-              padding:'8px 12px',marginBottom:10,fontSize:12,color:'#D97706',fontWeight:600}}>
-              ⚠ {problemi.length} programm{problemi.length===1?'o':'i'} con utensile a fine vita — verificare prima di procedere.
+              padding:'7px 12px',marginBottom:8,fontSize:12,color:'#D97706',fontWeight:600}}>
+              ⚠ {problemi.length} utensil{problemi.length===1?'e':'i'} a fine vita
             </div>
           )}
 
           <div style={{display:'flex',alignItems:'center',gap:12}}>
-            {/* Counter */}
             <div style={{flex:1,fontSize:13,color:'#475569'}}>
               {selected.size===0
                 ? <span style={{color:'#94a3b8'}}>Nessun programma selezionato</span>
                 : <><span style={{fontWeight:700,color:'#0f172a'}}>{selected.size} selezionat{selected.size===1?'o':'i'}</span>
-                    {problemi.length===0&&<span style={{color:'#166534',marginLeft:6}}>· tutti ok ✓</span>}
-                    {mancanti.length>0&&<span style={{color:'#DC2626',marginLeft:6}}>· {mancanti.length} mancant{mancanti.length===1?'e':'i'}</span>}
+                    {!faseMista&&problemi.length===0&&<span style={{color:'#166634',marginLeft:6}}>· tutti ok ✓</span>}
+                    {faseMista&&<span style={{color:'#c2410c',marginLeft:6}}>· {fasiSelezionate.length} fasi diverse</span>}
                   </>
               }
             </div>
             <button onClick={onClose}
               style={{background:'none',border:'1px solid #D8D5CC',borderRadius:8,
-                color:'#475569',fontSize:13,padding:'9px 18px',cursor:'pointer',fontWeight:600}}>
+                color:'#475569',fontSize:13,padding:'8px 18px',cursor:'pointer',fontWeight:600}}>
               Annulla
             </button>
             <button
-              disabled={selected.size===0}
+              disabled={selected.size===0||(faseMista&&!faseMistaConfirmata)}
               onClick={()=>onLancia(pgmSelezionati)}
-              style={{background:selected.size===0?'#e2e8f0':'#0d2d5e',border:'none',
-                borderRadius:8,color:'#fff',fontWeight:700,fontSize:14,
-                padding:'9px 22px',cursor:selected.size===0?'default':'pointer',
-                transition:'background 0.15s'}}>
-              📄 Lancia {selected.size>0?selected.size:''} in NC →
+              style={{
+                background: selected.size===0?'#e2e8f0'
+                  : faseMista&&!faseMistaConfirmata?'#fed7aa'
+                  : faseMista?'#ea580c'
+                  : '#0d2d5e',
+                border:'none',borderRadius:8,color:'#fff',fontWeight:700,fontSize:14,
+                padding:'9px 22px',cursor:selected.size===0||(faseMista&&!faseMistaConfirmata)?'default':'pointer',
+                transition:'all 0.15s',
+                opacity:faseMista&&!faseMistaConfirmata?0.6:1
+              }}>
+              {faseMista?'⚠ ':'📄 '}Lancia {selected.size>0?selected.size:''} in NC →
             </button>
           </div>
         </div>

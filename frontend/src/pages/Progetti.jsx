@@ -1908,40 +1908,40 @@ export default function Progetti(){
   const autoBackupTimer=useRef(null)
 
   // ── Carica ──────────────────────────────────────────────────────────────────
-  const load=useCallback(async()=>{\
-    try{\
-      const [r, rd] = await Promise.all([\
-        fetch(API+'/'),\
-        fetch(API+'/deliveries')\
-      ])\
-      if(!r.ok) throw new Error(`Server error ${r.status}`)\
-      const d=await r.json()\
-      const projs = (d.projects||[]).map(p=>({pallet_assegnato:null,...p}))\
-      setProjects(projs)\
-      setTemplates(d.templates||[])\
-      if(rd.ok){ const ds=await rd.json(); setDeliveries(Array.isArray(ds)?ds:[]) }\
-      setError(null)\
-    }catch(e){setError(e.message)}\
-    finally{setLoading(false)}\
-  },[])\
+  const load=useCallback(async()=>{
+    try{
+      const [r, rd] = await Promise.all([
+        fetch(API+'/'),
+        fetch(API+'/deliveries')
+      ])
+      if(!r.ok) throw new Error(`Server error ${r.status}`)
+      const d=await r.json()
+      const projs = (d.projects||[]).map(p=>({pallet_assegnato:null,...p}))
+      setProjects(projs)
+      setTemplates(d.templates||[])
+      if(rd.ok){ const ds=await rd.json(); setDeliveries(Array.isArray(ds)?ds:[]) }
+      setError(null)
+    }catch(e){setError(e.message)}
+    finally{setLoading(false)}
+  },[])
 
   // Polling leggero: ricarica solo i progetti (non deliveries) ogni 8s per sync col desktop
-  const silentRefresh=useCallback(async()=>{\
-    try{\
-      const r=await fetch(API+'/')\
-      if(!r.ok) return\
-      const d=await r.json()\
-      const projs=(d.projects||[]).map(p=>({pallet_assegnato:null,...p}))\
-      // Merge: aggiorna solo i progetti non in editing (nessun selectedId attivo)\
-      setProjects(curr=>{\
-        // Confronta per aggiornamento selettivo — non sovrascrive se uguale\
-        const hasChanges=projs.some(np=>{\
-          const op=curr.find(p=>p.id===np.id)\
-          return op&&JSON.stringify(op.steps)!==JSON.stringify(np.steps)\
-        })\
-        return hasChanges ? projs : curr\
-      })\
-    }catch{}\
+  const silentRefresh=useCallback(async()=>{
+    try{
+      const r=await fetch(API+'/')
+      if(!r.ok) return
+      const d=await r.json()
+      const projs=(d.projects||[]).map(p=>({pallet_assegnato:null,...p}))
+      // Merge: aggiorna solo i progetti non in editing (nessun selectedId attivo)
+      setProjects(curr=>{
+        // Confronta per aggiornamento selettivo — non sovrascrive se uguale
+        const hasChanges=projs.some(np=>{
+          const op=curr.find(p=>p.id===np.id)
+          return op&&JSON.stringify(op.steps)!==JSON.stringify(np.steps)
+        })
+        return hasChanges ? projs : curr
+      })
+    }catch{}
   },[])
   useEffect(()=>{
     load()

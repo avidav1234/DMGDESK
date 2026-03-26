@@ -1056,10 +1056,13 @@ class TabProgetti:
         mpf   = get_mpf_list(project)
 
         # Header FISSO — non scrolla, sempre visibile
+        # Unpack body temporaneamente per inserire header prima
+        self._body.pack_forget()
         hdr = self._detail_header
         for w in hdr.winfo_children():
             w.destroy()
-        hdr.pack(fill="x", before=self._body)
+        hdr.pack(fill="x")
+        self._body.pack(fill="both", expand=True)
 
         # Row 1
         r1 = tk.Frame(hdr, bg=TC["surface"])
@@ -1515,7 +1518,10 @@ class TabProgetti:
             self._has_active_selections = n > 0
             self._selected_ids_lancio = set(selected_ids)
             if n > 0:
-                toolbar.pack(fill="x", before=self._body)
+                # Reinserisce toolbar sopra il body
+                self._body.pack_forget()
+                toolbar.pack(fill="x")
+                self._body.pack(fill="both", expand=True)
                 sel_label.configure(text=f"{n} selezionati → segna come:")
             else:
                 toolbar.pack_forget()

@@ -74,10 +74,8 @@ class TabHome:
         self._canvas.configure(scrollregion=self._canvas.bbox("all"))
 
     def _on_canvas_configure(self, event):
-        print(f"[DEBUG canvas] w={event.width} h={event.height}")
         inner_width = max(400, event.width - 48)
         self._canvas.itemconfig(self._win_id, width=inner_width)
-        print(f"[DEBUG inner] width set to {inner_width}")
 
     # ══════════════════════════════════════════════════════════════════════════
     # Caricamento dati
@@ -139,13 +137,31 @@ class TabHome:
             except Exception: pass
         self._load_async()
 
+    def _bind_click(self, widget, fn):
+        """Applica click ricorsivamente a tutti i figli."""
+        widget.bind("<Button-1>", lambda e: fn())
+        for child in widget.winfo_children():
+            child.bind("<Button-1>", lambda e, f=fn: f())
+
+    def _open_project(self, pid):
+        """Naviga a Lavori e apre il progetto."""
+        tp = getattr(self._mw, "tab_progetti", None)
+        if tp:
+            tp._selected_id = pid
+            tp._page        = "projects"
+            tp._build_topbar()
+            tp._refresh()
+        try:
+            sw = getattr(self._mw, '_switch', None)
+            if sw: sw("lavori")
+        except Exception:
+            pass
+
     # ══════════════════════════════════════════════════════════════════════════
     # Render
     # ══════════════════════════════════════════════════════════════════════════
 
     def _render(self):
-        print(f"[DEBUG render] inner size: {self._inner.winfo_width()}x{self._inner.winfo_height()}")
-        print(f"[DEBUG render] canvas size: {self._canvas.winfo_width()}x{self._canvas.winfo_height()}")
         for w in self._inner.winfo_children():
             w.destroy()
 

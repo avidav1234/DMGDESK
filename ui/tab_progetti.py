@@ -771,6 +771,20 @@ class TabProgetti:
                 row, col = divmod(i, 2)
                 self._project_card(grid, p, row, col)
 
+            # Forza altezza uniforme: aggiorna dopo il pack per misurare
+            def _equalize(g=grid, n=len(section_projects)):
+                g.update_idletasks()
+                n_r = (n + 1) // 2
+                max_h = 0
+                for r in range(n_r):
+                    for c in range(2):
+                        slaves = [w for w in g.grid_slaves(row=r, column=c)]
+                        if slaves:
+                            max_h = max(max_h, slaves[0].winfo_reqheight())
+                for r in range(n_r):
+                    g.rowconfigure(r, minsize=max_h)
+            self._body.after(50, _equalize)
+
     def _is_urgent(self, project):
         d = self._get_delivery(project.get("id",""))
         if d and d.get("dueDate") and not d.get("delivered"):

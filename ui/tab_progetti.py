@@ -276,6 +276,10 @@ class TabProgetti:
 
         tk.Frame(self._content_area, height=1, bg=TC["border"]).pack(fill="x")
 
+        # Toolbar multi-select — container fisso, sempre sopra il body
+        self._toolbar_container = tk.Frame(self._content_area, bg="#DBEAFE")
+        # NON packata di default — appare solo quando ci sono selezioni
+
         # Body
         self._body = ctk.CTkScrollableFrame(self._content_area, fg_color=TC["bg"], corner_radius=0)
         self._body.pack(fill="both", expand=True)
@@ -1324,8 +1328,10 @@ class TabProgetti:
                      font=("Inter",9,"bold"), fg="#DC2626", bg="#FEE2E2",
                      padx=6, pady=1).pack(side="left", padx=6)
 
-        # ── Toolbar multi-select — nel content_area sopra il body ──
-        toolbar = tk.Frame(self._content_area, bg="#DBEAFE")
+        # ── Toolbar multi-select — nel container fisso sopra il body ──
+        toolbar = self._toolbar_container
+        for w in toolbar.winfo_children():
+            w.destroy()
         sel_label = tk.Label(toolbar, text="0 selezionati",
                              font=("Inter",9,"bold"), fg="#0d2d5e", bg="#DBEAFE")
         sel_label.pack(side="left", padx=8, pady=4)
@@ -1369,10 +1375,7 @@ class TabProgetti:
             n = len(selected_ids)
             self._has_active_selections = n > 0
             if n > 0:
-                try:
-                    toolbar.pack(fill="x", before=self._body)
-                except Exception:
-                    toolbar.pack(fill="x")
+                toolbar.pack(fill="x")
                 sel_label.configure(text=f"{n} selezionati → segna come:")
             else:
                 toolbar.pack_forget()

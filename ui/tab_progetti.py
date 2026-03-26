@@ -121,7 +121,18 @@ def _save_progetti(projects: list):
     path = _progetti_path()
     if not path: return
     try:
-        data = {"projects": projects, "ultimo_aggiornamento": datetime.now().isoformat()}
+        def _clean(obj):
+            if isinstance(obj, dict):
+                return {k: _clean(v) for k, v in obj.items()
+                        if not callable(v) and not hasattr(v, 'tk')}
+            if isinstance(obj, list):
+                return [_clean(i) for i in obj
+                        if not callable(i) and not hasattr(i, 'tk')]
+            if isinstance(obj, (str, int, float, bool)) or obj is None:
+                return obj
+            return None  # scarta widget e oggetti non serializzabili
+        clean = _clean(projects)
+        data = {"projects": clean, "ultimo_aggiornamento": datetime.now().isoformat()}
         path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
     except Exception as e:
         print(f"Errore salvataggio progetti: {e}")
@@ -2513,17 +2524,24 @@ class TabProgetti:
         self._projects = [project if p["id"]==project["id"] else p for p in self._projects]
         def _do_save():
             _save_progetti(self._projects)
-            # Notifica il server HTTP così il web vede i cambiamenti
             try:
                 import urllib.request, json as _j
-                data = _j.dumps({"data": project}, ensure_ascii=False).encode()
+                def _clean(obj):
+                    if isinstance(obj, dict):
+                        return {k: _clean(v) for k, v in obj.items() if not callable(v) and not hasattr(v, "tk")}
+                    if isinstance(obj, list):
+                        return [_clean(i) for i in obj if not callable(i) and not hasattr(i, "tk")]
+                    if isinstance(obj, (str, int, float, bool)) or obj is None:
+                        return obj
+                    return None
+                data = _j.dumps(_clean(project), ensure_ascii=False).encode()
                 req  = urllib.request.Request(
                     f"http://localhost:8000/api/progetti/{project['id']}",
                     data=data, method="PUT",
                     headers={"Content-Type":"application/json"})
                 urllib.request.urlopen(req, timeout=1)
             except Exception:
-                pass  # Il file è già salvato — il web lo leggerà al prossimo reload
+                pass
         threading.Thread(target=_do_save, daemon=True).start()
 
     def _set_pallet(self, project, value):

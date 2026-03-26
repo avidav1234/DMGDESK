@@ -769,14 +769,17 @@ class TabProgetti:
 
             # Forza larghezza uguale delle colonne aggiornando dopo il render
             def _fix_width(g=grid):
-                g.update_idletasks()
-                w = g.winfo_width()
-                if w > 10:
-                    half = (w - 12) // 2  # 12 = gap totale tra colonne
-                    g.columnconfigure(0, minsize=half)
-                    g.columnconfigure(1, minsize=half)
+                try:
+                    if not g.winfo_exists(): return
+                    g.update_idletasks()
+                    w = g.winfo_width()
+                    if w > 10:
+                        half = (w - 12) // 2
+                        g.columnconfigure(0, minsize=half)
+                        g.columnconfigure(1, minsize=half)
+                except Exception:
+                    pass
             self._body.after(30, _fix_width)
-            # Rebind su resize finestra
             self._body.bind("<Configure>", lambda e, g=grid: _fix_width(g), add="+")
 
             for i, p in enumerate(section_projects):

@@ -84,7 +84,7 @@ export default function Home() {
 
   return(
     <div style={{flex:1,overflowY:'auto',background:T.bg,fontFamily:'var(--font-display)',height:'100%'}}>
-      <div style={{maxWidth:1200,margin:'0 auto',padding:'14px 32px',display:'flex',flexDirection:'column',gap:12}}>
+      <div style={{padding:'20px 32px',display:'flex',flexDirection:'column',gap:12}}>
 
       {/* ── Alert strip compresso ── */}
       {(urgenti.length>0||daMontare>0||fineVita>0)&&(

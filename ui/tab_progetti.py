@@ -2664,6 +2664,10 @@ class TabProgetti:
                 nc_tab.entry_nome.delete(0,"end")
                 nc_tab.entry_nome.insert(0, nome)
                 self.main.tabview.set("📄 Analisi NC")
+                try:
+                    sw = getattr(self.main, '_switch', None)
+                    if sw: sw("analisi")
+                except Exception: pass
                 mb.showinfo("Caricato", f"{len(found_paths)} file MPF caricati in Analisi NC")
             except Exception as e:
                 mb.showerror("Errore", str(e))

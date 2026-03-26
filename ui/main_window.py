@@ -50,113 +50,218 @@ class MainWindow(ctk.CTk):
         self._load_all_data()
     
     def _create_ui(self):
-        """Crea interfaccia utente."""
-        # Header - BLU come i tab
-        header = ctk.CTkFrame(self, fg_color=COLOR_PRIMARY, height=int(70), corner_radius=0)
-        header.pack(fill="x")
-        header.pack_propagate(False)
-        
-        ctk.CTkLabel(
-            header,
-            text=APP_TITLE,
-            font=get_font("header", bold=True),
-            text_color="white"
-        ).pack(side="left", padx=20)
-        
+        """Crea interfaccia — sidebar verticale navy + content area."""
+        import tkinter as _tk
 
+        NAVY    = "#0d2d5e"
+        NAVY_LT = "#144080"
+        ACCENT  = "#7eb8f5"
+        BG      = "#eef2f7"
+
+        # ── Layout principale: sidebar sx + content dx ──────────────────────
+        root_frame = _tk.Frame(self, bg=BG)
+        root_frame.pack(fill="both", expand=True)
+
+        # ── Sidebar ─────────────────────────────────────────────────────────
+        sidebar = _tk.Frame(root_frame, bg=NAVY, width=88)
+        sidebar.pack(side="left", fill="y")
+        sidebar.pack_propagate(False)
+
+        # Logo
+        logo_frame = _tk.Frame(sidebar, bg=NAVY)
+        logo_frame.pack(pady=(14,4))
+        logo_box = _tk.Frame(logo_frame, bg="#ffffff22", width=48, height=48)
+        logo_box.pack()
+        logo_box.pack_propagate(False)
+        _tk.Label(logo_box, text="DMG", font=("Inter",11,"bold"),
+                  fg="#fff", bg="#ffffff22").place(relx=0.5,rely=0.5,anchor="center")
+        _tk.Label(sidebar, text="LIVE", font=("Inter",7,"bold"),
+                  fg=ACCENT, bg=NAVY).pack(pady=(2,10))
+
+        # Content stack — un Frame per tab, uno alla volta visibile
+        self._content = _tk.Frame(root_frame, bg=BG)
+        self._content.pack(side="left", fill="both", expand=True)
+
+        # Status bar in basso
+        self.status_label = _tk.Label(
+            self._content, text="", font=("Inter",9),
+            fg="#94a3b8", bg=BG, anchor="w")
+        self.status_label.pack(side="bottom", fill="x", padx=12, pady=2)
+
+        # ── Pagine (frame) ──────────────────────────────────────────────────
+        self._pages   = {}   # nome → frame
+        self._current = None
+
+        def make_page(name):
+            f = _tk.Frame(self._content, bg=BG)
+            self._pages[name] = f
+            return f
+
+        # ── Bottoni sidebar ─────────────────────────────────────────────────
+        self._sidebar_btns = {}
+
+        NAV = [
+            ("home",      "🏠", "Home"),
+            ("macchina",  "○",  "Macchina"),
+            ("lavori",    "📋", "Lavori"),
+            ("analisi",   "📄", "Analisi NC"),
+            ("utensili",  "🔧", "Utensili"),
+        ]
+        SEP = ("sep", None, None)
+        UTILITA = [
+            ("generatore","📝","Generatore"),
+            ("scaffale",  "📦","Scaffale"),
+            ("smontati",  "🔩","Smontati"),
+            ("holder",    "⚙", "Holder"),
+        ]
+
+        def switch(name):
+            if self._current and self._current in self._pages:
+                self._pages[self._current].pack_forget()
+            if name in self._pages:
+                self._pages[name].pack(fill="both", expand=True)
+            self._current = name
+            for n, btn_data in self._sidebar_btns.items():
+                active = (n == name)
+                btn_data["frame"].config(
+                    bg="#ffffff2e" if active else NAVY,
+                    highlightbackground=ACCENT if active else NAVY,
+                    highlightthickness=3 if active else 0)
+                btn_data["icon_lbl"].config(
+                    bg="#ffffff2e" if active else NAVY,
+                    fg="#fff" if active else "#ffffff88")
+                btn_data["text_lbl"].config(
+                    bg="#ffffff2e" if active else NAVY,
+                    fg=ACCENT if active else "#ffffff55")
+
+        self._switch = switch
+
+        def make_nav_btn(parent, key, icon, label, small=False):
+            sz  = 60 if not small else 52
+            fsz = 22 if not small else 16
+            lsz = 9  if not small else 8
+            fr  = _tk.Frame(parent, bg=NAVY, width=sz, height=sz if not small else 46,
+                            cursor="hand2", highlightthickness=0)
+            fr.pack(pady=1)
+            fr.pack_propagate(False)
+            il = _tk.Label(fr, text=icon, font=("Arial",fsz), fg="#ffffff88", bg=NAVY)
+            il.place(relx=0.5, rely=0.42, anchor="center")
+            tl = _tk.Label(fr, text=label, font=("Inter",lsz,"bold"),
+                           fg="#ffffff55", bg=NAVY)
+            tl.place(relx=0.5, rely=0.82, anchor="center")
+            fr.bind("<Button-1>", lambda e, k=key: switch(k))
+            il.bind("<Button-1>", lambda e, k=key: switch(k))
+            tl.bind("<Button-1>", lambda e, k=key: switch(k))
+            fr.bind("<Enter>", lambda e: fr.config(bg=NAVY_LT) if self._current!=key else None)
+            fr.bind("<Leave>", lambda e: fr.config(bg="#ffffff2e" if self._current==key else NAVY))
+            self._sidebar_btns[key] = {"frame":fr,"icon_lbl":il,"text_lbl":tl}
+
+        for key, icon, label in NAV:
+            make_nav_btn(sidebar, key, icon, label)
+
+        # Separatore
+        sep = _tk.Frame(sidebar, bg="#ffffff22", height=1, width=50)
+        sep.pack(pady=6)
+
+        # Utilità toggle
+        self._utilita_open = _tk.BooleanVar(value=False)
+
+        uf = _tk.Frame(sidebar, bg=NAVY, width=60, height=56, cursor="hand2", highlightthickness=0)
+        uf.pack(pady=1)
+        uf.pack_propagate(False)
+        uil = _tk.Label(uf, text="⚙", font=("Arial",22), fg="#ffffff88", bg=NAVY)
+        uil.place(relx=0.5, rely=0.38, anchor="center")
+        utl = _tk.Label(uf, text="Utilità ▾", font=("Inter",9,"bold"), fg="#ffffff55", bg=NAVY)
+        utl.place(relx=0.5, rely=0.80, anchor="center")
+
+        util_sub = _tk.Frame(sidebar, bg="#0a2040")
+
+        def toggle_utilita():
+            if self._utilita_open.get():
+                util_sub.pack_forget()
+                self._utilita_open.set(False)
+                utl.config(text="Utilità ▾")
+            else:
+                util_sub.pack(fill="x")
+                self._utilita_open.set(True)
+                utl.config(text="Utilità ▴")
+
+        uf.bind("<Button-1>", lambda e: toggle_utilita())
+        uil.bind("<Button-1>", lambda e: toggle_utilita())
+        utl.bind("<Button-1>", lambda e: toggle_utilita())
+
+        for key, icon, label in UTILITA:
+            make_nav_btn(util_sub, key, icon, label, small=True)
+
+        # ── Crea le pagine e assegna i tab ai frame ─────────────────────────
+        # Usa CTkTabview nascosto per compatibilità con le tab esistenti
+        # In realtà usiamo frame diretti
+        self.tabview = type('FakeTabview', (), {
+            'tab': lambda self_inner, name: self._pages.get(name),
+            'set': lambda self_inner, name: switch(
+                {"🏠 Home":"home","○ Macchina":"macchina","📋 Lavori":"lavori",
+                 "📄 Analisi NC":"analisi","🔧 Utensili":"utensili",
+                 "⚙ Utilità":"lavori"}.get(name, name)),
+            'get': lambda self_inner: self._current,
+        })()
+
+        # Crea i frame per ogni pagina
+        for key in ["home","macchina","lavori","analisi","utensili",
+                    "generatore","scaffale","smontati","holder"]:
+            make_page(key)
+
+        # Remap tab() per i nomi che usano i tab figli
+        _tab_map = {
+            "🏠 Home":       "home",
+            "○ Macchina":    "macchina",
+            "📋 Lavori":     "lavori",
+            "📄 Analisi NC": "analisi",
+            "🔧 Utensili":   "utensili",
+            "📝 Generatore": "generatore",
+            "🏗 Scaffale":   "scaffale",
+            "📦 Smontati":   "smontati",
+            "🔩 Holder & Bussole": "holder",
+        }
+        _pages_ref = self._pages
+
+        class FakeTabview:
+            def tab(self, name):
+                return _pages_ref.get(_tab_map.get(name, name))
+            def set(self, name):
+                switch(_tab_map.get(name, name))
+            def get(self):
+                return self._current
+            def add(self, name):
+                pass  # già creati
+        self.tabview = FakeTabview()
         
-        # Status bar
-        self.status_label = ctk.CTkLabel(
-            self,
-            text="Nessun database caricato",
-            font=get_font("normal"),
-            anchor="w"
-        )
-        self.status_label.pack(fill="x", padx=20, pady=5)
-        
-        # TabView - Tab BIANCHI quando non selezionati, BLU quando selezionati
-        self.tabview = ctk.CTkTabview(
-            self,
-            fg_color=COLOR_BACKGROUND,
-            # TAB BIANCHI/BLU con contrasto perfetto
-            segmented_button_fg_color="#FFFFFF",              # BIANCO per sfondo generale
-            segmented_button_selected_color="#2196F3",        # BLU quando selezionato
-            segmented_button_selected_hover_color="#1976D2",  # BLU scuro hover
-            segmented_button_unselected_color="#FFFFFF",      # BIANCO quando non selezionato
-            segmented_button_unselected_hover_color="#F5F5F5",# Grigio chiarissimo hover
-            text_color="#616161",                             # Grigio scuro per testo
-            text_color_disabled="#9E9E9E",
-            border_width=1,
-            border_color="#E0E0E0"                            # Bordo sottile per separare tab
-        )
-        self.tabview.pack(fill="both", expand=True, padx=10, pady=10)
-        
-        # TAB MOLTO PIÙ GRANDI - 70px height, font 16pt
-        self.tabview._segmented_button.configure(
-            font=(FONT_FAMILY, TAB_FONT_SIZE, "bold"),        # 16pt bold
-            height=TAB_HEIGHT                                 # 70px
-        )
-        
-        # Crea tabs principali
-        self.tabview.add("🏠 Home")
-        self.tabview.add("○ Macchina")
-        self.tabview.add("📋 Lavori")
-        self.tabview.add("📄 Analisi NC")
-        self.tabview.add("🔧 Utensili")
-        self.tabview.add("⚙ Utilità")
-        
-        # Inizializza tabs principali
+        # Inizializza i componenti direttamente sui frame della sidebar
         self.tab_analisi_nc = TabAnalisiNC(
-            self.tabview.tab("📄 Analisi NC"), self)
+            self._pages["analisi"], self)
         
         self.tab_coda = TabCodaLavorazione(
-            self.tabview.tab("○ Macchina"), self)
+            self._pages["macchina"], self)
 
         self.tab_macchina = TabMacchina(
-            self.tabview.tab("🔧 Utensili"), self)
+            self._pages["utensili"], self)
 
         self.tab_progetti = TabProgetti(
-            self.tabview.tab("📋 Lavori"), self)
-
-        # ── Tab Utilità con sotto-tab ─────────────────────────────────────────
-        utilita_frame = self.tabview.tab("⚙ Utilità")
-        self._sub_tabview = ctk.CTkTabview(
-            utilita_frame,
-            fg_color=COLOR_BACKGROUND,
-            segmented_button_fg_color="#FFFFFF",
-            segmented_button_selected_color="#2196F3",
-            segmented_button_selected_hover_color="#1976D2",
-            segmented_button_unselected_color="#FFFFFF",
-            segmented_button_unselected_hover_color="#F5F5F5",
-            text_color="#616161",
-            border_width=1,
-            border_color="#E0E0E0"
-        )
-        self._sub_tabview.pack(fill="both", expand=True)
-        self._sub_tabview._segmented_button.configure(
-            font=(FONT_FAMILY, 12, "bold"), height=44)
-
-        self._sub_tabview.add("📝 Generatore")
-        self._sub_tabview.add("🏗 Scaffale")
-        self._sub_tabview.add("📦 Smontati")
-        self._sub_tabview.add("🔩 Holder & Bussole")
+            self._pages["lavori"], self)
 
         self.tab_generatore = TabGeneratore(
-            self._sub_tabview.tab("📝 Generatore"), self)
+            self._pages["generatore"], self)
         self.tab_scaffale = TabScaffale(
-            self._sub_tabview.tab("🏗 Scaffale"), self)
+            self._pages["scaffale"], self)
         self.tab_smontati = TabSmontati(
-            self._sub_tabview.tab("📦 Smontati"), self)
+            self._pages["smontati"], self)
         self.tab_holder_bussole = TabHolderBussole(
-            self._sub_tabview.tab("🔩 Holder & Bussole"), self)
-
-        self._sub_tabview.set("📝 Generatore")
+            self._pages["holder"], self)
 
         self.tab_home = TabHome(
-            self.tabview.tab("🏠 Home"), self)
+            self._pages["home"], self)
 
-        # Imposta Home come tab di default
-        self.tabview.set("🏠 Home")
+        # Avvia su Home
+        switch("home")
     
     def _seleziona_database(self):
         """Obsoleto — i DB vengono trovati automaticamente dalla cartella TOA."""

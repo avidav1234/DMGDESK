@@ -355,7 +355,11 @@ class TabHome:
             tp._refresh()
         # Switcha al tab Lavori
         try:
-            self._mw.tabview.set("📋 Lavori")
+            sw = getattr(self._mw, '_switch', None)
+            if sw:
+                sw("lavori")
+            else:
+                self._mw.tabview.set("📋 Lavori")
         except Exception:
             pass
 

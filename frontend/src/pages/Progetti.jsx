@@ -79,7 +79,11 @@ function parseMpfFile(filename,content){
   const ipmIdx=tokens.findIndex(t=>t.toUpperCase()==='IPM')
   const numPgm=ipmIdx>=0&&tokens[ipmIdx+1]?tokens[ipmIdx+1]:tokens[tokens.length-1]
   const fase=tokens.length>=3?tokens[tokens.length-(isIPM?3:2)]:''
-  return{numPgm,fase,tipoOp,utensile,diametro,dataPost,filename,tipoGruppo}
+  // Legge TEMPO dal commento accanto a M6 — es: "M6 ; TEMPO: 42"
+  const m6Line=lines.find(l=>/\bM6\b/.test(l)&&/TEMPO\s*:/i.test(l))
+  const tempoMatch=m6Line&&m6Line.match(/TEMPO\s*:\s*(\d+)/i)
+  const tempoStimato=tempoMatch?parseInt(tempoMatch[1]):null
+  return{numPgm,fase,tipoOp,utensile,diametro,dataPost,filename,tipoGruppo,tempoStimato}
 }
 
 const STATO_NEXT={da_fare:'in_macchina',in_macchina:'completato',completato:'da_fare'}
@@ -267,7 +271,7 @@ function FresaturaPanel({task,onUpdateTask,toolsDB,projectId}){
       const text=await file.text()
       const info=parseMpfFile(file.name,text)
       if(!programs.find(p=>p.filename===info.filename))
-        parsed.push({id:uid(),...info,stato:'da_fare',operatore:'',tempoStimato:'',tempoInizio:null,tempoFine:null})
+        parsed.push({id:uid(),...info,stato:'da_fare',operatore:'',tempoStimato:info.tempoStimato||'',tempoInizio:null,tempoFine:null})
     }
     if(parsed.length>0){
       const all=[...programs,...parsed].sort((a,b)=>{
@@ -304,6 +308,11 @@ function FresaturaPanel({task,onUpdateTask,toolsDB,projectId}){
     {key:'ipm',label:'Tastatura (IPM)',icon:'📏',color:'#8B2FC9',bgColor:'#F3E8FF',list:ipmPrograms},
     {key:'fresatura',label:'Fresatura',icon:'⚙️',color:'#0d2d5e',bgColor:'#E8F0FA',list:fresPrograms},
   ].filter(g=>g.list.length>0)
+  // Calcolo ETA
+  const fmtTempo=(min)=>{if(!min) return null; const h=Math.floor(min/60); const m=min%60; return h>0?`${h}h ${m>0?m+'m':''}`:`${m}m`}
+  const totaleStimato=fresPrograms.reduce((acc,p)=>acc+(parseInt(p.tempoStimato)||0),0)
+  const rimanente=fresPrograms.filter(p=>p.stato!=='completato').reduce((acc,p)=>acc+(parseInt(p.tempoStimato)||0),0)
+  const haTempi=fresPrograms.some(p=>p.tempoStimato)
   return(
     <div style={{marginTop:8,background:T.surface,border:'1.5px solid #1D5FAD33',borderRadius:10}}>
       <div onClick={()=>setExpanded(v=>!v)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',cursor:'pointer',background:'#E8F0FA',userSelect:'none'}}>
@@ -317,6 +326,13 @@ function FresaturaPanel({task,onUpdateTask,toolsDB,projectId}){
             </span>
           ):null
         })()}
+        {/* ETA totale */}
+        {haTempi&&<span style={{fontSize:11,fontWeight:700,color:'#475569',background:'#fff',padding:'2px 9px',borderRadius:20,border:'1px solid #e2e8f0'}}>
+          ⏱ {fmtTempo(totaleStimato)} tot
+        </span>}
+        {haTempi&&rimanente>0&&rimanente<totaleStimato&&<span style={{fontSize:11,fontWeight:700,color:'#0d2d5e',background:'#eef4fb',padding:'2px 9px',borderRadius:20,border:'1px solid #c5d9f0'}}>
+          {fmtTempo(rimanente)} rim.
+        </span>}
         {inMacchina>0&&<span style={{fontSize:11,fontWeight:700,color:'#0d2d5e',background:'#fff',padding:'2px 9px',borderRadius:20,border:'1px solid #1D5FAD44'}}>⚙ {inMacchina} in macchina</span>}
         {total>0&&<span style={{fontSize:12,fontWeight:700,color:allDone?'#166534':'#0d2d5e',background:allDone?'#dcfce7':'#fff',padding:'2px 10px',borderRadius:20,border:`1px solid ${allDone?'#166534':'#0d2d5e'}44`}}>{doneTotal}/{total} {allDone?'✓':'completati'}</span>}
         <span style={{fontSize:11,color:'#0d2d5e',fontWeight:700}}>{expanded?'▲':'▼'}</span>

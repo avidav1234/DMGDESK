@@ -162,6 +162,30 @@ def uid():
 def now_str():
     return datetime.now().strftime("%d/%m/%Y %H:%M")
 
+def parse_tempo_mpf(fpath: str):
+    """Legge TEMPO dal commento accanto a M6 — es: 'M6 ; TEMPO: 42'"""
+    import re
+    try:
+        with open(fpath, encoding="utf-8", errors="ignore") as f:
+            for line in f:
+                if "M6" in line.upper() and "TEMPO" in line.upper():
+                    m = re.search(r"TEMPO\s*:\s*(\d+)", line, re.IGNORECASE)
+                    if m:
+                        return int(m.group(1))
+    except Exception:
+        pass
+    return None
+
+def fmt_tempo(min_val):
+    """Formatta minuti in '1h 30m' o '45m'"""
+    if not min_val: return None
+    try:
+        m = int(min_val)
+        h = m // 60; rm = m % 60
+        return f"{h}h {rm}m" if h > 0 else f"{rm}m"
+    except Exception:
+        return None
+
 def get_progress(project: dict) -> int:
     tasks = [t for s in project.get("steps", []) for t in s.get("tasks", [])]
     if not tasks: return 0
@@ -1440,6 +1464,11 @@ class TabProgetti:
         done_tot = sum(1 for p in programs if p.get("stato") == "completato")
         in_mac   = sum(1 for p in programs if p.get("stato") == "in_macchina")
 
+        # ETA
+        tot_min = sum(int(p.get("tempoStimato") or 0) for p in fres_pgm)
+        rim_min = sum(int(p.get("tempoStimato") or 0) for p in fres_pgm if p.get("stato") != "completato")
+        ha_tempi = any(p.get("tempoStimato") for p in fres_pgm)
+
         pf = tk.Frame(parent, bg="#eef4fb",
                       highlightbackground="#0d2d5e", highlightthickness=1)
         pf.pack(fill="x", padx=(28,0), pady=(3,6))
@@ -1459,6 +1488,15 @@ class TabProgetti:
             ck = TC["green"] if done_tot == len(programs) else TC["blue"]
             tk.Label(ph, text=f"{done_tot}/{len(programs)} completati",
                      font=("Inter",9,"bold"), fg=ck, bg="#eef4fb").pack(side="left")
+        # Badge ETA
+        if ha_tempi and tot_min > 0:
+            tk.Label(ph, text=f"⏱ {fmt_tempo(tot_min)} tot",
+                     font=("Inter",9,"bold"), fg="#475569", bg="#f8fafc",
+                     padx=5, pady=1, relief="flat").pack(side="left", padx=(6,2))
+        if ha_tempi and rim_min > 0 and rim_min < tot_min:
+            tk.Label(ph, text=f"{fmt_tempo(rim_min)} rim.",
+                     font=("Inter",9,"bold"), fg="#0d2d5e", bg="#eef4fb",
+                     padx=5, pady=1).pack(side="left", padx=2)
 
         # Badge anomalie (solo fresatura)
         tools_db = getattr(self, "_tools_db_cache", {})
@@ -1551,17 +1589,17 @@ class TabProgetti:
             for fpath in files:
                 fn = os.path.basename(fpath)
                 if not any(p.get("filename")==fn for p in programs):
-                    # Determina tipo automaticamente (IPM se contiene _IPM_)
                     is_ipm = "_IPM_" in fn.upper()
                     tokens = fn.replace(".MPF","").replace(".mpf","").split("_")
                     ipm_idx = next((i for i,t in enumerate(tokens) if t.upper()=="IPM"), -1)
                     num_pgm = tokens[ipm_idx+1] if ipm_idx >= 0 and ipm_idx+1 < len(tokens) else tokens[-1]
+                    tempo = parse_tempo_mpf(fpath)  # legge TEMPO dal commento M6
                     programs.append({
                         "id":uid(),"filename":fn,
                         "numPgm":num_pgm,
                         "tipoGruppo":"ipm" if is_ipm else "fresatura",
                         "utensile":"","diametro":"","tipoOp":"","dataPost":"",
-                        "stato":"da_fare","operatore":"","tempoStimato":"",
+                        "stato":"da_fare","operatore":"","tempoStimato":tempo or "",
                         "tempoInizio":None,"tempoFine":None,
                     })
             task["programs"] = programs
@@ -1773,6 +1811,12 @@ class TabProgetti:
             tk.Label(row, text=f"■{pgm['tempoFine']}", font=("Consolas",8), fg=TC["green"], bg=row_bg).pack(side="right", padx=3)
         elif pgm.get("tempoInizio"):
             tk.Label(row, text=f"▶{pgm['tempoInizio']}", font=("Consolas",8), fg=TC["blue"], bg=row_bg).pack(side="right", padx=3)
+        # Badge tempo stimato
+        if pgm.get("tempoStimato"):
+            t_fmt = fmt_tempo(pgm["tempoStimato"])
+            if t_fmt:
+                tk.Label(row, text=f"⏱{t_fmt}", font=("Inter",8,"bold"),
+                         fg="#475569", bg=row_bg).pack(side="right", padx=(0,3))
 
     # ── Log ────────────────────────────────────────────────────────────────────
 

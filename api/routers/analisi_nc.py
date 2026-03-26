@@ -27,6 +27,21 @@ from pydantic import BaseModel
 
 from api.deps import get_db_principale, get_db_smontati, get_db_bussole
 from logic.nc_analyzer import estrai_tutti_utensili_da_file, confronta_utensili_logica
+
+
+def _parse_tempo_mpf(path: str) -> int | None:
+    """Legge il tempo stimato dal commento accanto a M6 — es: 'M6 ; TEMPO: 42'"""
+    import re as _re
+    try:
+        with open(path, encoding="utf-8", errors="ignore") as f:
+            for line in f:
+                if "M6" in line.upper() and "TEMPO" in line.upper():
+                    m = _re.search(r"TEMPO\s*:\s*(\d+)", line, _re.IGNORECASE)
+                    if m:
+                        return int(m.group(1))
+    except Exception:
+        pass
+    return None
 from logic.calibra_only_logic import get_calibra_logic
 from utils.logger import get_logger
 
@@ -734,6 +749,7 @@ async def analizza_da_disco(body: dict):
                     "can_run":              len(mancanti) == 0 and len(disabilitati) == 0,
                     "fonte_db":             fonte_db,
                     "file_path":            path,
+                    "tempo_stimato":        _parse_tempo_mpf(path),
                 }
             })
         except Exception as e:

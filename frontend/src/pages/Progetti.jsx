@@ -326,7 +326,10 @@ function FresaturaPanel({task,onUpdateTask,toolsDB,projectId}){
 
           {/* Toolbar multi-select */}
           {selected.size>0&&(
-            <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 14px',background:'#EFF6FF',borderBottom:`1px solid #1D5FAD33`,flexWrap:'wrap'}}>
+            <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 14px',
+              background:'#EFF6FF',borderBottom:`1px solid #0d2d5e33`,flexWrap:'wrap',
+              position:'sticky',top:0,zIndex:10,
+              boxShadow:'0 2px 8px rgba(13,45,94,0.12)'}}>
               <span style={{fontSize:12,fontWeight:700,color:'#0d2d5e',marginRight:4}}>{selected.size} selezionati</span>
               <span style={{fontSize:11,color:'#0d2d5e',marginRight:8}}>→ Segna come:</span>
               {[['da_fare','○ Da fare','#f8fafc','#475569'],['in_macchina','⚙ In macchina','#DBEAFE','#0d2d5e'],['completato','✓ Completato','#DCFCE7','#166534']].map(([stato,label,bg,color])=>(

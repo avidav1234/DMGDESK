@@ -246,14 +246,18 @@ export default function AnalisiNC() {
       // Aggiorna stato programmi → in_macchina nel progetto di origine
       try {
         const lancio = sessionStorage.getItem('dmgdesk_lancio_nc')
+        console.log('[MAIN] lancio sessionStorage:', lancio)
         if (lancio) {
           const { projectId, mpfFiles } = JSON.parse(lancio)
+          console.log('[MAIN] projectId:', projectId, 'filenames:', done.map(e => e.file.name))
           if (projectId && mpfFiles?.length) {
-            await fetch(`/api/progetti/${projectId}/segna-in-macchina`, {
+            const r = await fetch(`/api/progetti/${projectId}/segna-in-macchina`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ filenames: done.map(e => e.file.name) })
             })
+            const result = await r.json()
+            console.log('[MAIN] segna-in-macchina result:', result)
           }
         }
       } catch {}

@@ -988,14 +988,15 @@ class TabProgetti:
 
         # Row 1
         r1 = tk.Frame(hdr, bg=TC["surface"])
-        r1.pack(fill="x", padx=20, pady=(12,4))
+        r1.pack(fill="x", padx=16, pady=(10,4))
 
+        # ── SINISTRA: azioni primarie ──────────────────────────────────────
         tk.Button(r1, text="← Indietro", command=self._back,
-                  font=("Inter",10), fg=TC["sub"], bg=TC["surface2"],
-                  relief="flat", padx=10, pady=4, cursor="hand2").pack(side="left")
+                  font=("Inter",9), fg=TC["sub"], bg=TC["surface2"],
+                  relief="flat", padx=8, pady=3, cursor="hand2").pack(side="left")
 
         nome_lbl = tk.Label(r1, text=f"● {project.get('name','?')}",
-                 font=("Inter",16,"bold"), fg=TC["text"], bg=TC["surface"])
+                 font=("Inter",14,"bold"), fg=TC["text"], bg=TC["surface"])
         nome_lbl.pack(side="left", padx=(8,2))
 
         def _rinomina():
@@ -1010,66 +1011,64 @@ class TabProgetti:
                 self._save_project(project)
 
         tk.Button(r1, text="✏️", command=_rinomina,
-                  font=("Inter",10), fg=TC["muted"], bg=TC["surface"],
+                  font=("Inter",9), fg=TC["muted"], bg=TC["surface"],
                   relief="flat", cursor="hand2").pack(side="left")
 
-        # Pallet — legge da pallet_state (fonte di verità)
-        # Scadenza consegna
+        # Badge scadenza
         delivery = self._get_delivery(project.get("id",""))
         due_var = tk.StringVar(value=delivery.get("dueDate","")[:10] if delivery else "")
-        tk.Label(r1, text="Scadenza:", font=("Inter",10), fg=TC["muted"], bg=TC["surface"]).pack(side="left", padx=(0,3))
-        due_entry = tk.Entry(r1, textvariable=due_var, width=11,
-                             font=("Inter",10), relief="flat",
-                             bg="#F0FBF4" if (delivery and delivery.get("dueDate")) else "#eef2f7",
-                             fg=TC["text"])
-        due_entry.pack(side="left")
-        due_entry.bind("<FocusOut>", lambda e: self._save_due_date(project, due_var.get()))
-        due_entry.bind("<Return>",   lambda e: self._save_due_date(project, due_var.get()))
         if delivery and delivery.get("dueDate"):
             days = days_until(delivery["dueDate"])
             lbl2, urg_col, urg_bg, _ = delivery_urgency(days)
             if not delivery.get("delivered"):
                 tk.Label(r1, text=lbl2, font=("Inter",9,"bold"),
-                         fg=urg_col, bg=urg_bg, padx=4, pady=1).pack(side="left", padx=(3,8))
+                         fg=urg_col, bg=urg_bg, padx=6, pady=2).pack(side="left", padx=(6,2))
             else:
                 tk.Label(r1, text="✓ Consegnato", font=("Inter",9,"bold"),
-                         fg=TC["green"], bg=TC["greenBg"], padx=4, pady=1).pack(side="left", padx=(3,8))
-        else:
-            tk.Label(r1, text="gg/mm/aaaa", font=("Inter",9), fg=TC["muted"], bg=TC["surface"]).pack(side="left", padx=(2,8))
+                         fg=TC["green"], bg=TC["greenBg"], padx=6, pady=2).pack(side="left", padx=(6,2))
 
-        tk.Label(r1, text="Pallet:", font=("Inter",10), fg=TC["muted"], bg=TC["surface"]).pack(side="left", padx=(0,3))
+        # Pallet — prominente
         _pv = _get_pallet_assegnato(project.get("id")) or project.get("pallet_assegnato")
         pallet_var = tk.StringVar(value=str(_pv) if _pv is not None else "—")
-        _combo_pallet = ttk.Combobox(r1, textvariable=pallet_var,
+        pf = tk.Frame(r1, bg="#eef4fb", highlightbackground="#c5d9f0", highlightthickness=1)
+        pf.pack(side="left", padx=(8,2))
+        tk.Label(pf, text="P:", font=("Inter",9,"bold"), fg="#0d2d5e", bg="#eef4fb").pack(side="left", padx=(6,2))
+        _combo_pallet = ttk.Combobox(pf, textvariable=pallet_var,
                      values=["—","1","2","3","4","5","6"],
-                     width=4, state="readonly")
-        _combo_pallet.pack(side="left")
-        # Usa <<ComboboxSelected>> che scatta solo su selezione utente
+                     width=3, state="readonly")
+        _combo_pallet.pack(side="left", pady=3, padx=(0,6))
         _combo_pallet.bind("<<ComboboxSelected>>",
                            lambda e: self._set_pallet(project, pallet_var.get()))
 
-        # Lancia NC
+        # Lancia in NC — CTA principale
         if mpf:
-            tk.Button(r1, text=f"📄 Lancia in NC →",
+            tk.Button(r1, text="📄 Lancia in NC →",
                       command=lambda: self._apri_modal_lancio(project),
                       font=("Inter",10,"bold"), fg="#fff", bg=TC["blue"],
-                      relief="flat", padx=10, pady=4, cursor="hand2").pack(side="left", padx=8)
+                      relief="flat", padx=12, pady=5, cursor="hand2").pack(side="left", padx=8)
 
-        # Salva come template
-        tk.Button(r1, text="💾 Salva come Template",
-                  command=lambda: self._salva_come_template(project),
-                  font=("Inter",10), fg=TC["blue"], bg=TC["blueBg"],
-                  relief="flat", padx=8, pady=4, cursor="hand2").pack(side="left", padx=4)
-
-        # Archivia / Elimina
-        tk.Button(r1, text="📦 Archivia" if not project.get("archived") else "📤 Riattiva",
-                  command=lambda: self._archivia(project),
-                  font=("Inter",10), fg=TC["sub"], bg=TC["surface2"],
-                  relief="flat", padx=8, pady=4, cursor="hand2").pack(side="right", padx=3)
-        tk.Button(r1, text="🗑 Elimina",
+        # ── DESTRA: azioni secondarie piccole ─────────────────────────────
+        tk.Button(r1, text="🗑",
                   command=lambda: self._elimina_id(project["id"]),
-                  font=("Inter",10), fg=TC["red"], bg=TC["redBg"],
-                  relief="flat", padx=8, pady=4, cursor="hand2").pack(side="right", padx=3)
+                  font=("Inter",10), fg=TC["red"], bg=TC["surface"],
+                  relief="flat", padx=6, pady=3, cursor="hand2").pack(side="right", padx=2)
+        tk.Button(r1, text="📦" if not project.get("archived") else "📤",
+                  command=lambda: self._archivia(project),
+                  font=("Inter",10), fg=TC["sub"], bg=TC["surface"],
+                  relief="flat", padx=6, pady=3, cursor="hand2").pack(side="right", padx=2)
+        tk.Button(r1, text="💾 Tmpl",
+                  command=lambda: self._salva_come_template(project),
+                  font=("Inter",9), fg=TC["muted"], bg=TC["surface"],
+                  relief="flat", padx=6, pady=3, cursor="hand2").pack(side="right", padx=2)
+
+        # Scadenza editabile — piccola, secondaria
+        due_entry = tk.Entry(r1, textvariable=due_var, width=11,
+                             font=("Inter",9), relief="flat",
+                             bg=TC["surface2"], fg=TC["muted"])
+        due_entry.pack(side="right", padx=(2,8))
+        tk.Label(r1, text="📅", font=("Inter",9), fg=TC["muted"], bg=TC["surface"]).pack(side="right")
+        due_entry.bind("<FocusOut>", lambda e: self._save_due_date(project, due_var.get()))
+        due_entry.bind("<Return>",   lambda e: self._save_due_date(project, due_var.get()))
 
         # Progress bar
         r2 = tk.Frame(hdr, bg=TC["surface"])

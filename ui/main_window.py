@@ -124,36 +124,36 @@ class MainWindow(ctk.CTk):
             for n, btn_data in self._sidebar_btns.items():
                 active = (n == name)
                 btn_data["frame"].config(
-                    bg="#1e4a82" if active else NAVY,
-                    highlightbackground=ACCENT if active else NAVY,
-                    highlightthickness=3 if active else 0)
+                    bg="#1a5599" if active else NAVY,
+                    highlightbackground=ACCENT if active else "#1a3060",
+                    highlightthickness=4 if active else 1)
                 btn_data["icon_lbl"].config(
-                    bg="#1e4a82" if active else NAVY,
-                    fg="#fff" if active else "#a0bcd8")
+                    bg="#1a5599" if active else NAVY,
+                    fg="#ffffff" if active else "#c8dff4")
                 btn_data["text_lbl"].config(
-                    bg="#1e4a82" if active else NAVY,
-                    fg=ACCENT if active else "#7096b8")
+                    bg="#1a5599" if active else NAVY,
+                    fg=ACCENT if active else "#a0c4e8")
 
         self._switch = switch
 
         def make_nav_btn(parent, key, icon, label, small=False):
-            sz  = 60 if not small else 52
-            fsz = 22 if not small else 16
-            lsz = 9  if not small else 8
+            sz  = 68 if not small else 56
+            fsz = 26 if not small else 18
+            lsz = 10 if not small else 9
             fr  = _tk.Frame(parent, bg=NAVY, width=sz, height=sz if not small else 46,
                             cursor="hand2", highlightthickness=0)
             fr.pack(pady=1)
             fr.pack_propagate(False)
-            il = _tk.Label(fr, text=icon, font=("Arial",fsz), fg="#a0bcd8", bg=NAVY)
+            il = _tk.Label(fr, text=icon, font=("Arial",fsz), fg="#c8dff4", bg=NAVY)
             il.place(relx=0.5, rely=0.42, anchor="center")
             tl = _tk.Label(fr, text=label, font=("Inter",lsz,"bold"),
-                           fg="#7096b8", bg=NAVY)
+                           fg="#a0c4e8", bg=NAVY)
             tl.place(relx=0.5, rely=0.82, anchor="center")
             fr.bind("<Button-1>", lambda e, k=key: switch(k))
             il.bind("<Button-1>", lambda e, k=key: switch(k))
             tl.bind("<Button-1>", lambda e, k=key: switch(k))
             fr.bind("<Enter>", lambda e: fr.config(bg=NAVY_LT) if self._current!=key else None)
-            fr.bind("<Leave>", lambda e: fr.config(bg="#1e4a82" if self._current==key else NAVY))
+            fr.bind("<Leave>", lambda e: fr.config(bg="#1a5599" if self._current==key else NAVY))
             self._sidebar_btns[key] = {"frame":fr,"icon_lbl":il,"text_lbl":tl}
 
         for key, icon, label in NAV:
@@ -169,9 +169,9 @@ class MainWindow(ctk.CTk):
         uf = _tk.Frame(sidebar, bg=NAVY, width=60, height=56, cursor="hand2", highlightthickness=0)
         uf.pack(pady=1)
         uf.pack_propagate(False)
-        uil = _tk.Label(uf, text="⚙", font=("Arial",22), fg="#a0bcd8", bg=NAVY)
+        uil = _tk.Label(uf, text="⚙", font=("Arial",22), fg="#c8dff4", bg=NAVY)
         uil.place(relx=0.5, rely=0.38, anchor="center")
-        utl = _tk.Label(uf, text="Utilità ▾", font=("Inter",9,"bold"), fg="#7096b8", bg=NAVY)
+        utl = _tk.Label(uf, text="Utilità ▾", font=("Inter",9,"bold"), fg="#a0c4e8", bg=NAVY)
         utl.place(relx=0.5, rely=0.80, anchor="center")
 
         util_sub = _tk.Frame(sidebar, bg="#0d2d5e")

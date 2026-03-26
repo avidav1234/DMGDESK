@@ -291,6 +291,10 @@ class TabProgetti:
         self._toolbar_container = tk.Frame(self._content_area, bg="#DBEAFE")
         # NON packata di default — appare solo quando ci sono selezioni
 
+        # Header dettaglio progetto — fisso, non scrolla
+        self._detail_header = tk.Frame(self._content_area, bg=TC["surface"])
+        # NON packata di default — appare solo nel dettaglio progetto
+
         # Body
         self._body = ctk.CTkScrollableFrame(self._content_area, fg_color=TC["bg"], corner_radius=0)
         self._body.pack(fill="both", expand=True)
@@ -343,6 +347,10 @@ class TabProgetti:
     def _clear_body(self):
         for w in self._body.winfo_children():
             w.destroy()
+        # Pulisce e nasconde l'header fisso del dettaglio
+        for w in self._detail_header.winfo_children():
+            w.destroy()
+        self._detail_header.pack_forget()
 
     # ══════════════════════════════════════════════════════════════════════════
     # Caricamento
@@ -1047,9 +1055,11 @@ class TabProgetti:
         s_next, t_next = get_next_task(project)
         mpf   = get_mpf_list(project)
 
-        # Header
-        hdr = tk.Frame(self._body, bg=TC["surface"])
-        hdr.pack(fill="x")
+        # Header FISSO — non scrolla, sempre visibile
+        hdr = self._detail_header
+        for w in hdr.winfo_children():
+            w.destroy()
+        hdr.pack(fill="x", before=self._body)
 
         # Row 1
         r1 = tk.Frame(hdr, bg=TC["surface"])
@@ -1503,9 +1513,9 @@ class TabProgetti:
         def _update_toolbar():
             n = len(selected_ids)
             self._has_active_selections = n > 0
-            self._selected_ids_lancio = set(selected_ids)  # salva per il modal
+            self._selected_ids_lancio = set(selected_ids)
             if n > 0:
-                toolbar.pack(fill="x")
+                toolbar.pack(fill="x", before=self._body)
                 sel_label.configure(text=f"{n} selezionati → segna come:")
             else:
                 toolbar.pack_forget()

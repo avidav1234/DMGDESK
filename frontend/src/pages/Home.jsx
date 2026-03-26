@@ -108,7 +108,7 @@ export default function Home() {
             {urgenti.map(p=>{
               const d=getDelivery(p.id); const days=daysUntil(d?.dueDate)
               return(
-                <div key={p.id} onClick={()=>nav('/progetti')}
+                <div key={p.id} onClick={()=>{sessionStorage.setItem('dmgdesk_apri_progetto_id',p.id);nav('/progetti')}}
                   style={{display:'flex',alignItems:'center',gap:12,background:'#fef2f2',
                     border:'1px solid #C0392B33',borderRadius:10,padding:'10px 16px',cursor:'pointer'}}>
                   <div style={{width:8,height:8,borderRadius:'50%',background:'#dc2626',flexShrink:0}}/>
@@ -157,7 +157,7 @@ export default function Home() {
               const bg=STATO_BG[stato]||'#eef2f7'
               const isEmpty=stato==='vuoto'&&!nome
               return(
-                <div key={n} onClick={pid?()=>nav('/progetti'):undefined}
+                <div key={n} onClick={pid?()=>{sessionStorage.setItem('dmgdesk_apri_progetto_id',pid);nav('/progetti')}:undefined}
                   style={{background:bg,border:`1.5px solid ${isUrgent?'#dc2626':isEmpty?T.border:color+'66'}`,
                     borderRadius:12,padding:'14px 16px',cursor:pid?'pointer':'default',
                     transition:'all 0.15s',minHeight:isEmpty?72:110}}>
@@ -224,7 +224,7 @@ export default function Home() {
                 const days=d&&d.dueDate&&!d.delivered?daysUntil(d.dueDate):null
                 const pNum=palletState.find(x=>x.progetto_id===p.id)?.numero
                 return(
-                  <div key={p.id} onClick={()=>nav('/progetti')}
+                  <div key={p.id} onClick={()=>{sessionStorage.setItem('dmgdesk_apri_progetto_id',p.id);nav('/progetti')}}
                     style={{display:'flex',alignItems:'center',gap:12,background:T.surface,
                       border:`1px solid ${T.border}`,borderRadius:10,padding:'10px 14px',
                       cursor:'pointer',borderLeft:`4px solid ${p.color||T.accent}`}}>

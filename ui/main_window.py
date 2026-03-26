@@ -18,6 +18,7 @@ from .tab_scaffale import TabScaffale
 from .tab_smontati import TabSmontati
 from .tab_holder_bussole import TabHolderBussole
 from .tab_analisi_nc import TabAnalisiNC
+from .tab_home import TabHome
 from .tab_generatore import TabGeneratore
 
 
@@ -151,58 +152,12 @@ class MainWindow(ctk.CTk):
 
         self._sub_tabview.set("📝 Generatore")
 
-        # Home — usa il _render_home di TabProgetti già implementato,
-        # ma montato nel tab globale corretto
-        self._build_home_tab()
-        
+        self.tab_home = TabHome(
+            self.tabview.tab("🏠 Home"), self)
+
         # Imposta Home come tab di default
         self.tabview.set("🏠 Home")
     
-    def _build_home_tab(self):
-        """Crea un frame scrollabile nel tab Home e avvia il primo render."""
-        import customtkinter as ctk
-        home_tab = self.tabview.tab("🏠 Home")
-        # Crea frame scrollabile che riempie il tab
-        self._home_scroll = ctk.CTkScrollableFrame(home_tab, fg_color="#F5F4F0", corner_radius=0)
-        self._home_scroll.pack(fill="both", expand=True)
-        self._home_tab_frame = self._home_scroll
-        self.after(800, self._refresh_home)
-
-    def _refresh_home(self):
-        """Aggiorna il contenuto della Home tab in background."""
-        import threading
-        threading.Thread(target=self._home_worker, daemon=True).start()
-
-    def _home_worker(self):
-        """Carica i dati per la Home in background poi renderizza."""
-        import urllib.request as _ur, json as _jj
-        pallet_list, setup_data = [], {}
-        try:
-            r = _ur.urlopen("http://localhost:8000/api/pallet/", timeout=2)
-            pallet_list = _jj.loads(r.read()).get("pallet", [])
-        except Exception:
-            pass
-        try:
-            r = _ur.urlopen("http://localhost:8000/api/progetti/analisi-setup/non-utilizzati", timeout=2)
-            setup_data = _jj.loads(r.read())
-        except Exception:
-            pass
-        self.after(0, lambda: self._home_render(pallet_list, setup_data))
-
-    def _home_render(self, pallet_list, setup_data):
-        """Renderizza la Home con i dati già caricati."""
-        if not hasattr(self, '_home_tab_frame'):
-            return
-        tp = getattr(self, 'tab_progetti', None)
-        if not tp:
-            return
-        # Pulisce il frame
-        for w in self._home_tab_frame.winfo_children():
-            w.destroy()
-        tp._pallet_list_cache = pallet_list
-        tp._setup_data_cache = setup_data
-        tp._render_home_in(self._home_tab_frame, pallet_list, setup_data)
-
     def _seleziona_database(self):
         """Obsoleto — i DB vengono trovati automaticamente dalla cartella TOA."""
         pass

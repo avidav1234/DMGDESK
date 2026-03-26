@@ -47,10 +47,11 @@ class TabHome:
 
     def _build_skeleton(self):
         self._frame = tk.Frame(self._parent, bg=TC["bg"])
-        self._frame.pack(fill="both", expand=True)
+        self._frame.pack(fill="both", expand=True, padx=4, pady=4)
 
         self._canvas = tk.Canvas(self._frame, bg=TC["bg"],
-                                  highlightthickness=0, bd=0)
+                                  highlightthickness=0, bd=0,
+                                  width=600)  # larghezza minima iniziale
         self._vsb    = tk.Scrollbar(self._frame, orient="vertical",
                                      command=self._canvas.yview)
         self._canvas.configure(yscrollcommand=self._vsb.set)
@@ -176,7 +177,7 @@ class TabHome:
         )
 
         pad = tk.Frame(self._inner, bg=TC["bg"])
-        pad.pack(fill="both", expand=True, padx=16, pady=12)
+        pad.pack(fill="both", expand=True, padx=28, pady=18)
 
         # ── Alert strip orizzontale ──────────────────────────────────────────
         if urgenti or da_montare or fine_vita:

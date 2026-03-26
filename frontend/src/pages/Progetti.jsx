@@ -1018,10 +1018,12 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
   return(
     <div style={{display:'flex',flexDirection:'column',height:'100%',background:T.bg,fontFamily:"var(--font-display)"}}>
       {/* Header */}
-      <div style={{padding:'20px 28px 0',borderBottom:`1px solid ${T.border}`,flexShrink:0,background:T.surface}}>
-        <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:16,flexWrap:'wrap'}}>
-          <button onClick={onBack} style={{background:T.surface2,border:`1px solid ${T.border}`,borderRadius:8,color:T.textSub,fontSize:14,padding:'7px 14px',cursor:'pointer',fontWeight:600}}>← Indietro</button>
-          <div style={{width:14,height:14,borderRadius:'50%',background:project.color,flexShrink:0}}/>
+      <div style={{padding:'10px 20px 0',borderBottom:`1px solid ${T.border}`,flexShrink:0,background:T.surface}}>
+        <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
+
+          {/* ── SINISTRA: primari ── */}
+          <button onClick={onBack} style={{background:'none',border:`1px solid ${T.border}`,borderRadius:7,color:T.textSub,fontSize:12,padding:'5px 10px',cursor:'pointer',fontWeight:600,flexShrink:0}}>← Indietro</button>
+          <div style={{width:10,height:10,borderRadius:'50%',background:project.color,flexShrink:0}}/>
           {editingName
             ? <div style={{display:'flex',gap:6,flex:1,alignItems:'center'}}>
                 <input autoFocus value={editNameVal}
@@ -1030,78 +1032,60 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
                     if(e.key==='Enter'){onUpdate({...project,name:editNameVal.trim()||project.name});setEditingName(false)}
                     if(e.key==='Escape')setEditingName(false)
                   }}
-                  style={{fontSize:18,fontWeight:800,color:T.text,background:T.surface2,
-                    border:`2px solid ${project.color}`,borderRadius:8,padding:'4px 10px',
-                    outline:'none',flex:1}}/>
+                  style={{fontSize:16,fontWeight:800,color:T.text,background:T.surface2,
+                    border:`2px solid ${project.color}`,borderRadius:8,padding:'4px 10px',outline:'none',flex:1}}/>
                 <button onClick={()=>{onUpdate({...project,name:editNameVal.trim()||project.name});setEditingName(false)}}
-                  style={{background:project.color,border:'none',borderRadius:7,color:'#fff',
-                    fontWeight:700,fontSize:13,padding:'5px 12px',cursor:'pointer'}}>✓</button>
+                  style={{background:project.color,border:'none',borderRadius:7,color:'#fff',fontWeight:700,fontSize:12,padding:'4px 10px',cursor:'pointer'}}>✓</button>
                 <button onClick={()=>setEditingName(false)}
-                  style={{background:'none',border:`1px solid ${T.border}`,borderRadius:7,
-                    color:T.textSub,fontSize:13,padding:'5px 10px',cursor:'pointer'}}>✕</button>
+                  style={{background:'none',border:`1px solid ${T.border}`,borderRadius:7,color:T.textSub,fontSize:12,padding:'4px 8px',cursor:'pointer'}}>✕</button>
               </div>
-            : <div style={{display:'flex',alignItems:'center',gap:6,flex:1}}>
-                <div style={{fontSize:20,fontWeight:800,color:T.text}}>{project.name}</div>
+            : <div style={{display:'flex',alignItems:'center',gap:4,flex:1,minWidth:0}}>
+                <div style={{fontSize:17,fontWeight:800,color:T.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{project.name}</div>
                 <button onClick={()=>{setEditNameVal(project.name);setEditingName(true)}}
-                  title="Rinomina progetto"
-                  style={{background:'none',border:'none',cursor:'pointer',
-                    color:T.textMuted,fontSize:13,opacity:0.5,padding:'2px 4px',
-                    lineHeight:1}}>✏️</button>
+                  title="Rinomina" style={{background:'none',border:'none',cursor:'pointer',color:T.textMuted,fontSize:11,opacity:0.4,padding:'2px 3px',flexShrink:0}}>✏️</button>
               </div>
           }
           <StatusBadge progress={progress}/>
-          <button onClick={()=>setShowSaveTemplate(true)} style={{background:T.blueBg,border:`1px solid ${T.blue}44`,borderRadius:8,color:T.blue,fontSize:13,padding:'7px 14px',cursor:'pointer',fontWeight:600}}>💾 Salva come Template</button>
-          {/* Pallet */}
-          <div style={{display:'flex',alignItems:'center',gap:6}}>
-            <span style={{fontSize:12,color:T.textMuted}}>Pallet:</span>
-            <select
-              value={project.pallet_assegnato||''}
-              onChange={async e=>{
-                const val = e.target.value ? parseInt(e.target.value) : null
-                const old = project.pallet_assegnato
-                // Rimuovi dal vecchio
-                if(old && old!==val){
-                  await fetch('/api/pallet/'+old+'/assegna-progetto',{
-                    method:'PATCH',headers:{'Content-Type':'application/json'},
-                    body:JSON.stringify({progetto_id:null,progetto_nome:null,progetto_colore:null})
-                  })
-                }
-                // Assegna al nuovo
-                if(val){
-                  const r = await fetch('/api/pallet/'+val+'/assegna-progetto',{
-                    method:'PATCH',headers:{'Content-Type':'application/json'},
-                    body:JSON.stringify({progetto_id:project.id,progetto_nome:project.name,progetto_colore:project.color||'#0d2d5e'})
-                  })
-                  if(!r.ok){
-                    const err = await r.json().catch(()=>({}))
-                    alert(err.detail||'Errore assegnazione pallet')
-                    return
-                  }
-                }
-                // Aggiorna lo state locale immediatamente
-                onUpdate({...project, pallet_assegnato: val})
 
+          {/* Pallet — prominente */}
+          <div style={{display:'flex',alignItems:'center',gap:4,background:'#eef4fb',border:'1px solid #c5d9f0',borderRadius:8,padding:'4px 10px',flexShrink:0}}>
+            <span style={{fontSize:11,fontWeight:700,color:'#0d2d5e'}}>P:</span>
+            <select value={project.pallet_assegnato||''}
+              onChange={async e=>{
+                const val=e.target.value?parseInt(e.target.value):null
+                const old=project.pallet_assegnato
+                if(old&&old!==val){await fetch('/api/pallet/'+old+'/assegna-progetto',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({progetto_id:null,progetto_nome:null,progetto_colore:null})})}
+                if(val){const r=await fetch('/api/pallet/'+val+'/assegna-progetto',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({progetto_id:project.id,progetto_nome:project.name,progetto_colore:project.color||'#0d2d5e'})});if(!r.ok){const err=await r.json().catch(()=>({}));alert(err.detail||'Errore');return}}
+                onUpdate({...project,pallet_assegnato:val})
               }}
-              style={{fontSize:12,fontWeight:700,background:'#F0F4FF',color:'#0d2d5e',
-                border:'1px solid #BFDBFE',borderRadius:6,padding:'4px 8px',cursor:'pointer'}}>
+              style={{fontSize:12,fontWeight:700,background:'transparent',color:'#0d2d5e',border:'none',padding:'0 2px',cursor:'pointer',outline:'none'}}>
               <option value=''>—</option>
-              {[1,2,3,4,5,6].map(n=>{
-                const disp = palletDisponibili.find(p=>p.numero===n)
-                const isAssegnato = project.pallet_assegnato===n
-                // Mostra: assegnato a questo progetto (sempre) o VUOTO libero
-                if(!disp && !isAssegnato) return null
-                return <option key={n} value={n}>P{n}{isAssegnato?' ✓':''}</option>
-              })}
+              {[1,2,3,4,5,6].map(n=>{const disp=palletDisponibili.find(p=>p.numero===n);const isAss=project.pallet_assegnato===n;if(!disp&&!isAss)return null;return <option key={n} value={n}>P{n}{isAss?' ✓':''}</option>})}
             </select>
-            {project.pallet_assegnato&&(
-              <span onClick={()=>window.location.href='/coda'}
-                style={{fontSize:11,color:'#0d2d5e',cursor:'pointer',
-                  textDecoration:'underline',textDecorationStyle:'dotted'}}>→ Coda</span>
-            )}
+            {project.pallet_assegnato&&<span onClick={()=>window.location.href='/coda'} style={{fontSize:10,color:'#0d2d5e',cursor:'pointer',opacity:0.6}}>→</span>}
           </div>
-          {mpfList.length>0&&<button onClick={()=>setShowLancioModal(true)} style={{background:'#0d2d5e',border:'none',borderRadius:8,color:'#fff',fontWeight:700,fontSize:13,padding:'8px 16px',cursor:'pointer'}}>📄 Lancia in NC →</button>}
-          <button onClick={()=>setConfirm('archive')} style={{background:T.surface2,border:`1px solid ${T.border}`,borderRadius:8,color:T.textSub,fontSize:14,padding:'7px 14px',cursor:'pointer',fontWeight:600}}>{project.archived?'📤 Riattiva':'📦 Archivia'}</button>
-          <button onClick={()=>setConfirm('delete')} style={{background:T.redBg,border:`1px solid ${T.red}44`,borderRadius:8,color:T.red,fontSize:14,padding:'7px 14px',cursor:'pointer',fontWeight:600}}>🗑️ Elimina</button>
+
+          {/* Lancia in NC — CTA principale */}
+          {mpfList.length>0&&<button onClick={()=>setShowLancioModal(true)}
+            style={{background:'#0d2d5e',border:'none',borderRadius:8,color:'#fff',fontWeight:800,fontSize:13,padding:'7px 16px',cursor:'pointer',flexShrink:0}}>
+            📄 Lancia in NC →
+          </button>}
+
+          {/* ── DESTRA: secondari piccoli ── */}
+          <div style={{marginLeft:'auto',display:'flex',gap:5,flexShrink:0}}>
+            <button onClick={()=>setShowSaveTemplate(true)}
+              style={{background:'none',border:`1px solid ${T.border}`,borderRadius:6,color:T.textMuted,fontSize:11,padding:'4px 9px',cursor:'pointer'}} title="Salva come Template">
+              💾 Template
+            </button>
+            <button onClick={()=>setConfirm('archive')}
+              style={{background:'none',border:`1px solid ${T.border}`,borderRadius:6,color:T.textMuted,fontSize:11,padding:'4px 9px',cursor:'pointer'}} title={project.archived?'Riattiva':'Archivia'}>
+              {project.archived?'📤':'📦'}
+            </button>
+            <button onClick={()=>setConfirm('delete')}
+              style={{background:'none',border:`1px solid ${T.red}44`,borderRadius:6,color:T.red,fontSize:11,padding:'4px 9px',cursor:'pointer'}} title="Elimina">
+              🗑️
+            </button>
+          </div>
         </div>
         <div style={{marginBottom:14}}>
           <div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}>

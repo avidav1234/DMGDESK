@@ -534,7 +534,7 @@ class TabProgetti:
             return next((d for d in self._deliveries if d.get("projectId") == pid), None)
 
         urgenti = sorted(
-            [p for p in in_progress if (lambda d, dy: d and dy is not None and dy <= 7)(
+            [p for p in in_progress if (lambda d, dy: d and not d.get("delivered") and dy is not None and dy <= 7)(
                 get_delivery(p["id"]),
                 days_until(get_delivery(p["id"])["dueDate"])
                 if get_delivery(p["id"]) and get_delivery(p["id"]).get("dueDate") else None)],

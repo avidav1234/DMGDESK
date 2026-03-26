@@ -283,9 +283,11 @@ function FresaturaPanel({task,onUpdateTask,toolsDB,projectId,onSelectionChange})
       return next
     }))
   }
-  function toggleSelect(id){ setSelected(s=>{ const n=new Set(s); n.has(id)?n.delete(id):n.add(id); if(onSelectionChange) onSelectionChange(n); return n }) }
-  function selTutti(lista){ setSelected(s=>{ const n=new Set(s); lista.forEach(p=>n.add(p.id)); if(onSelectionChange) onSelectionChange(n); return n }) }
-  function deselTutti(){ setSelected(new Set()); if(onSelectionChange) onSelectionChange(new Set()) }
+  function toggleSelect(id){ setSelected(s=>{ const n=new Set(s); n.has(id)?n.delete(id):n.add(id); return n }) }
+  function selTutti(lista){ setSelected(s=>{ const n=new Set(s); lista.forEach(p=>n.add(p.id)); return n }) }
+  function deselTutti(){ setSelected(new Set()) }
+  // Notifica il parent della selezione DOPO il render, non durante il setter
+  useEffect(()=>{ if(onSelectionChange) onSelectionChange(selected) },[selected])
   function massaStato(stato){
     updatePrograms(programs.map(p=>{
       if(!selected.has(p.id)) return p
@@ -294,7 +296,7 @@ function FresaturaPanel({task,onUpdateTask,toolsDB,projectId,onSelectionChange})
       if(stato==='completato') next.tempoFine=nowStr()
       return next
     }))
-    setSelected(new Set()); if(onSelectionChange) onSelectionChange(new Set())
+    setSelected(new Set())
   }
   const gruppi=[
     {key:'ipm',label:'Tastatura (IPM)',icon:'📏',color:'#8B2FC9',bgColor:'#F3E8FF',list:ipmPrograms},

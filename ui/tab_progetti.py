@@ -186,10 +186,10 @@ def delivery_urgency(days):
     if days is None:    return ("Nessuna data", "#94a3b8", "#f8fafc", "⚪")
     if days < 0:        return ("SCADUTA",       "#FFFFFF", "#dc2626", "💀")
     if days == 0:       return ("OGGI",           "#FFFFFF", "#dc2626", "🚨")
-    if days <= 3:       return (f"{days}gg",      "#dc2626", "#fef2f2", "🔴")
+    if days <= 3:       return (f"{days}gg",      "#dc2626", "#fdf4f4", "🔴")
     if days <= 7:       return (f"{days}gg",      "#C2720A", "#FFF0DC", "🟠")
-    if days <= 21:      return (f"{days}gg",      "#0d2d5e", "#e6f1fb", "🟡")
-    return              (f"{days}gg",             "#16a34a", "#f0fdf4", "🟢")
+    if days <= 21:      return (f"{days}gg",      "#0d2d5e", "#eef4fb", "🟡")
+    return              (f"{days}gg",             "#16a34a", "#f0f9f4", "🟢")
 
 def clone_template_to_steps(tmpl: dict) -> list:
     return [
@@ -205,14 +205,14 @@ TC = {
     "bg":      "#eef2f7", "surface": "#FFFFFF", "surface2": "#f8fafc",
     "border":  "#e2e8f0", "borderStrong": "#cbd5e1",
     "text":    "#0f172a", "sub":     "#475569",  "muted":   "#94a3b8",
-    "accent":  "#0d2d5e", "accentBg": "#e6f1fb",
-    "green":   "#16a34a", "greenBg": "#f0fdf4",
-    "red":     "#dc2626", "redBg":   "#fef2f2",
-    "blue":    "#0d2d5e", "blueBg":  "#e6f1fb",
+    "accent":  "#0d2d5e", "accentBg": "#eef4fb",
+    "green":   "#2d8a55", "greenBg": "#f0f9f4",
+    "red":     "#c0392b", "redBg":   "#fdf4f4",
+    "blue":    "#0d2d5e", "blueBg":  "#eef4fb",
     # stati pallet — semantici
-    "grezzo_bg": "#fef9c3", "grezzo_fg": "#b45309",
-    "finito_bg": "#f0fdf4", "finito_fg": "#16a34a",
-    "guasto_bg": "#fef2f2", "guasto_fg": "#dc2626",
+    "grezzo_bg": "#fdf8ee", "grezzo_fg": "#b07030",
+    "finito_bg": "#f0f9f4", "finito_fg": "#2d8a55",
+    "guasto_bg": "#fdf2f2", "guasto_fg": "#c0392b",
     "vuoto_bg":  "#f8fafc", "vuoto_fg":  "#94a3b8",
 }
 
@@ -222,14 +222,14 @@ ICONS_LIST  = ["🌐","📱","📣","🏗️","📦","🎯","🔧","📊","✍�
 STATO_NEXT = {"da_fare":"in_macchina","in_macchina":"completato","completato":"da_fare"}
 STATO_CFG  = {
     "da_fare":     ("○ Da fare",     "#94a3b8","#f8fafc"),
-    "in_macchina": ("⚙ In macchina","#0d2d5e","#e6f1fb"),
-    "completato":  ("✓ Completato",  "#16a34a","#f0fdf4"),
+    "in_macchina": ("⚙ In macchina","#0d2d5e","#eef4fb"),
+    "completato":  ("✓ Completato",  "#16a34a","#f0f9f4"),
 }
 
 PRIORITY_CFG = {
-    "alta":  ("Alta",  "#dc2626","#fef2f2","🔴"),
-    "media": ("Media", "#0d2d5e","#e6f1fb","🟡"),
-    "bassa": ("Bassa", "#16a34a","#f0fdf4","🟢"),
+    "alta":  ("Alta",  "#dc2626","#fdf4f4","🔴"),
+    "media": ("Media", "#0d2d5e","#eef4fb","🟡"),
+    "bassa": ("Bassa", "#16a34a","#f0f9f4","🟢"),
 }
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -555,10 +555,10 @@ class TabProgetti:
                 d    = get_delivery(p["id"])
                 days = days_until(d.get("dueDate")) if d else None
                 day_txt = "oggi" if days == 0 else (f"{abs(days)}gg fa" if days and days < 0 else f"tra {days}gg")
-                af = tk.Frame(alert_row, bg="#fef2f2", highlightbackground="#F0A0A0", highlightthickness=1, cursor="hand2")
+                af = tk.Frame(alert_row, bg="#fdf4f4", highlightbackground="#dda0a0", highlightthickness=1, cursor="hand2")
                 af.pack(side="left", fill="x", expand=True, padx=(0,4), pady=2)
                 tk.Label(af, text=f"  {p['name']}  —  scadenza {day_txt}",
-                         font=("Inter",10,"bold"), fg="#7f1d1d", bg="#fef2f2",
+                         font=("Inter",10,"bold"), fg="#6b2929", bg="#fdf4f4",
                          anchor="w", cursor="hand2").pack(side="left", padx=8, pady=5)
                 tk.Label(af, text="OGGI" if days == 0 else day_txt.upper(),
                          font=("Inter",9,"bold"), fg="#dc2626", bg="#fff",
@@ -569,9 +569,9 @@ class TabProgetti:
                 msg = "🔧"
                 if da_montare_n: msg += f"  {da_montare_n} da montare"
                 if fine_vita_n:  msg += f"  {fine_vita_n} a fine vita"
-                uf = tk.Frame(alert_row, bg="#fef9c3", highlightbackground="#D9A050", highlightthickness=1)
+                uf = tk.Frame(alert_row, bg="#fdf6e3", highlightbackground="#c8953a", highlightthickness=1)
                 uf.pack(side="left", padx=(0,0), pady=2)
-                tk.Label(uf, text=msg, font=("Inter",10,"bold"), fg="#b45309", bg="#fef9c3",
+                tk.Label(uf, text=msg, font=("Inter",10,"bold"), fg="#b45309", bg="#fdf6e3",
                          anchor="w").pack(side="left", padx=8, pady=5)
 
         # ── Pallet 3×2 compatti ──────────────────────────────────────────────
@@ -612,7 +612,7 @@ class TabProgetti:
                      fg="#C8C5BE" if is_empty else fg_c, bg=bg_c).pack(side="left", padx=4)
             if is_urgent:
                 tk.Label(top, text="OGGI" if days == 0 else f"{days}gg",
-                         font=("Inter",8,"bold"), fg="#dc2626", bg="#fef2f2", padx=3).pack(side="right")
+                         font=("Inter",8,"bold"), fg="#dc2626", bg="#fdf4f4", padx=3).pack(side="right")
 
             if nome:
                 tk.Label(card, text=nome, font=("Inter",11,"bold"),
@@ -641,12 +641,12 @@ class TabProgetti:
         mf.grid(row=0, column=0, sticky="n", padx=(0,14))
         metrics = [
             (len(da_fare),    "Da fare",         f"{len(in_progress)} lavori", TC["muted"],  TC["surface2"]),
-            (len(in_mac),     "In macchina",      "pgm attivi",                "#0d2d5e",    "#e6f1fb"),
-            (len(oggi_pgm),   "Completati oggi",  f"{len(completati)} tot.",   "#16a34a",    "#f0fdf4"),
+            (len(in_mac),     "In macchina",      "pgm attivi",                "#0d2d5e",    "#eef4fb"),
+            (len(oggi_pgm),   "Completati oggi",  f"{len(completati)} tot.",   "#16a34a",    "#f0f9f4"),
             (da_montare_n+fine_vita_n, "Utensili critici",
              f"{da_montare_n} da montare" if da_montare_n else "tutto ok",
              "#dc2626" if (da_montare_n+fine_vita_n)>0 else "#16a34a",
-             "#fef0ee" if (da_montare_n+fine_vita_n)>0 else "#f0fdf4"),
+             "#fdf4f3" if (da_montare_n+fine_vita_n)>0 else "#f0f9f4"),
         ]
         for mi, (val, label, sub, color, bg_m) in enumerate(metrics):
             mc = tk.Frame(mf, bg=bg_m, width=118, height=70)
@@ -682,7 +682,7 @@ class TabProgetti:
                      fg=TC["text"], bg=TC["surface"]).pack(side="left")
             if pnum:
                 tk.Label(top_row, text=f"P{pnum}", font=("Inter",8,"bold"),
-                         fg="#0d2d5e", bg="#e6f1fb", padx=4).pack(side="left", padx=4)
+                         fg="#0d2d5e", bg="#eef4fb", padx=4).pack(side="left", padx=4)
 
             bar2 = tk.Frame(inner, bg=TC["surface2"], height=3)
             bar2.pack(fill="x", pady=(2,2))
@@ -737,13 +737,13 @@ class TabProgetti:
         # Banner urgenza
         urgent = [p for p in in_progress if self._is_urgent(p)]
         if urgent:
-            ub = tk.Frame(self._body, bg="#fef2f2",
+            ub = tk.Frame(self._body, bg="#fdf4f4",
                           highlightbackground="#dc2626", highlightthickness=1)
             ub.pack(fill="x", padx=20, pady=(12,0))
             tk.Label(ub, text=f"🎯 FOCUS — {len(urgent)} CONSEGN{'A' if len(urgent)==1 else 'E'} ENTRO 7 GIORNI",
-                     font=("Inter",10,"bold"), fg="#dc2626", bg="#fef2f2").pack(side="left", padx=10, pady=6)
+                     font=("Inter",10,"bold"), fg="#dc2626", bg="#fdf4f4").pack(side="left", padx=10, pady=6)
             names = " · ".join(p.get("name","?") for p in urgent[:4])
-            tk.Label(ub, text=names, font=("Inter",10), fg="#475569", bg="#fef2f2").pack(side="left", padx=4)
+            tk.Label(ub, text=names, font=("Inter",10), fg="#475569", bg="#fdf4f4").pack(side="left", padx=4)
 
         if not projects:
             txt = "Nessun progetto. Clicca '+ Nuovo Progetto' per iniziare." if not archived else "Nessun progetto archiviato."
@@ -815,7 +815,7 @@ class TabProgetti:
                  font=("Inter",12,"bold"), fg=TC["text"], bg=TC["surface"]).pack(side="left", padx=4)
         if project.get("pallet_assegnato"):
             tk.Label(row1, text=f"P{project['pallet_assegnato']}",
-                     font=("Inter",9,"bold"), fg="#0d2d5e", bg="#e6f1fb",
+                     font=("Inter",9,"bold"), fg="#0d2d5e", bg="#eef4fb",
                      padx=6, pady=1).pack(side="left", padx=4)
 
         if project.get("description"):
@@ -884,11 +884,11 @@ class TabProgetti:
 
         # Prossimo step
         if t_next:
-            nf = tk.Frame(body, bg="#e6f1fb")
+            nf = tk.Frame(body, bg="#eef4fb")
             nf.pack(fill="x", pady=(4,0))
-            tk.Label(nf, text="📍", bg="#e6f1fb", font=("Arial",10)).pack(side="left", padx=(4,2))
+            tk.Label(nf, text="📍", bg="#eef4fb", font=("Arial",10)).pack(side="left", padx=(4,2))
             tk.Label(nf, text=f"{s_next.get('title','?')} › {t_next.get('text','?')}",
-                     font=("Inter",11), fg=TC["text"], bg="#e6f1fb").pack(side="left")
+                     font=("Inter",11), fg=TC["text"], bg="#eef4fb").pack(side="left")
 
         # Click
         for w in [card, body, row1, stats]:
@@ -1060,12 +1060,12 @@ class TabProgetti:
 
         # Prossimo step
         if t_next:
-            nf = tk.Frame(hdr, bg="#e6f1fb")
+            nf = tk.Frame(hdr, bg="#eef4fb")
             nf.pack(fill="x", padx=20, pady=(0,8))
             tk.Label(nf, text="📍 RIPRENDI DA QUI",
-                     font=("Inter",9,"bold"), fg=TC["accent"], bg="#e6f1fb").pack(anchor="w", padx=10, pady=(5,0))
+                     font=("Inter",9,"bold"), fg=TC["accent"], bg="#eef4fb").pack(anchor="w", padx=10, pady=(5,0))
             tk.Label(nf, text=f"{s_next.get('title','?')} › {t_next.get('text','?')}",
-                     font=("Inter",12), fg=TC["text"], bg="#e6f1fb").pack(anchor="w", padx=10, pady=(0,6))
+                     font=("Inter",12), fg=TC["text"], bg="#eef4fb").pack(anchor="w", padx=10, pady=(0,6))
 
         # Tab switcher
         tab_row = tk.Frame(hdr, bg=TC["surface"])
@@ -1183,7 +1183,7 @@ class TabProgetti:
 
         # Sfondo: completato=verde chiaro, prossimo=arancio chiaro, normale=bianco
         if is_next:
-            bg = "#e6f1fb"
+            bg = "#eef4fb"
         elif is_done:
             bg = "#F0FBF4"   # verde tenue
         else:
@@ -1244,10 +1244,10 @@ class TabProgetti:
         if not notes and task.get("note"):
             notes = [{"id": f"legacy_{task['id']}", "text": task["note"], "createdAt": ""}]
         for note in notes:
-            nrow = tk.Frame(parent, bg="#e6f1fb")
+            nrow = tk.Frame(parent, bg="#eef4fb")
             nrow.pack(fill="x", padx=(28,0), pady=1)
             tk.Label(nrow, text=f"💬 {note['text']}",
-                     font=("Inter",9,"italic"), fg=TC["accent"], bg="#e6f1fb").pack(side="left", padx=6)
+                     font=("Inter",9,"italic"), fg=TC["accent"], bg="#eef4fb").pack(side="left", padx=6)
 
         # FresaturaPanel
         if task.get("text","").strip().lower() == "fresatura":
@@ -1260,7 +1260,7 @@ class TabProgetti:
         done_tot = sum(1 for p in programs if p.get("stato") == "completato")
         in_mac   = sum(1 for p in programs if p.get("stato") == "in_macchina")
 
-        pf = tk.Frame(parent, bg="#e6f1fb",
+        pf = tk.Frame(parent, bg="#eef4fb",
                       highlightbackground="#0d2d5e", highlightthickness=1)
         pf.pack(fill="x", padx=(28,0), pady=(3,6))
 
@@ -1268,17 +1268,17 @@ class TabProgetti:
         selected_ids = set()
 
         # ── Header principale ─────────────────────────────────────────────────
-        ph = tk.Frame(pf, bg="#e6f1fb")
+        ph = tk.Frame(pf, bg="#eef4fb")
         ph.pack(fill="x", padx=8, pady=5)
         tk.Label(ph, text="⚙️ PROGRAMMI FRESATURA",
-                 font=("Inter",9,"bold"), fg=TC["blue"], bg="#e6f1fb").pack(side="left")
+                 font=("Inter",9,"bold"), fg=TC["blue"], bg="#eef4fb").pack(side="left")
         if in_mac > 0:
             tk.Label(ph, text=f"⚙ {in_mac} in macchina",
-                     font=("Inter",9,"bold"), fg=TC["blue"], bg="#e6f1fb").pack(side="left", padx=6)
+                     font=("Inter",9,"bold"), fg=TC["blue"], bg="#eef4fb").pack(side="left", padx=6)
         if programs:
             ck = TC["green"] if done_tot == len(programs) else TC["blue"]
             tk.Label(ph, text=f"{done_tot}/{len(programs)} completati",
-                     font=("Inter",9,"bold"), fg=ck, bg="#e6f1fb").pack(side="left")
+                     font=("Inter",9,"bold"), fg=ck, bg="#eef4fb").pack(side="left")
 
         # Badge anomalie (solo fresatura)
         tools_db = getattr(self, "_tools_db_cache", {})
@@ -1444,7 +1444,7 @@ class TabProgetti:
         # ── Sezione FRESATURA (blu) ────────────────────────────────────────────
         if fres_pgm and ipm_pgm:
             # Header separatore solo se ci sono entrambi i gruppi
-            fres_header = tk.Frame(pf, bg="#E8F0FA")
+            fres_header = tk.Frame(pf, bg="#eef4fb")
             fres_header.pack(fill="x")
             done_fres = sum(1 for p in fres_pgm if p.get("stato")=="completato")
 
@@ -1462,14 +1462,14 @@ class TabProgetti:
                     toggle_fres_btn.configure(text="▲")
 
             tk.Label(fres_header, text="⚙️", font=("Arial",9),
-                     bg="#E8F0FA").pack(side="left", padx=(6,2), pady=3)
+                     bg="#eef4fb").pack(side="left", padx=(6,2), pady=3)
             tk.Label(fres_header, text="FRESATURA",
-                     font=("Inter",8,"bold"), fg="#0d2d5e", bg="#E8F0FA").pack(side="left")
+                     font=("Inter",8,"bold"), fg="#0d2d5e", bg="#eef4fb").pack(side="left")
             tk.Label(fres_header, text=f"{done_fres}/{len(fres_pgm)}",
-                     font=("Inter",8), fg="#0d2d5e", bg="#E8F0FA").pack(side="left", padx=4)
+                     font=("Inter",8), fg="#0d2d5e", bg="#eef4fb").pack(side="left", padx=4)
             toggle_fres_btn = tk.Button(fres_header, text="▲",
                      command=_toggle_fres,
-                     font=("Inter",8), fg="#0d2d5e", bg="#E8F0FA",
+                     font=("Inter",8), fg="#0d2d5e", bg="#eef4fb",
                      relief="flat", cursor="hand2")
             toggle_fres_btn.pack(side="right", padx=4)
 
@@ -1928,10 +1928,10 @@ class TabProgetti:
 
         # Banner urgenza
         if urgent:
-            ub = tk.Frame(self._body, bg="#fef2f2")
+            ub = tk.Frame(self._body, bg="#fdf4f4")
             ub.pack(fill="x", padx=20, pady=(14,4))
             tk.Label(ub, text=f"🎯 FOCUS DEL GIORNO — {len(urgent)} CONSEGN{'A' if len(urgent)==1 else 'E'} URGENTI",
-                     font=("Inter",10,"bold"), fg="#dc2626", bg="#fef2f2").pack(anchor="w", padx=10, pady=6)
+                     font=("Inter",10,"bold"), fg="#dc2626", bg="#fdf4f4").pack(anchor="w", padx=10, pady=6)
 
         # Header
         hdr = tk.Frame(self._body, bg=TC["bg"])
@@ -2577,7 +2577,7 @@ class TabProgetti:
                          bg=row_bg).pack(side="left", padx=4)
 
         _render_section("DA FARE", "#F0F4FF", da_fare)
-        _render_section("IN MACCHINA", "#E8F0FA", in_macchina, dimmed=True)
+        _render_section("IN MACCHINA", "#eef4fb", in_macchina, dimmed=True)
         # Completati collassati
         if completati:
             show_comp = tk.BooleanVar(value=False)

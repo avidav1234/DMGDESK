@@ -190,10 +190,10 @@ class TabHome:
                 d    = get_del(p["id"])
                 days = days_until(d.get("dueDate")) if d else None
                 txt  = "oggi" if days == 0 else (f"{abs(days)}gg fa" if days and days < 0 else f"tra {days}gg")
-                af   = tk.Frame(ar, bg="#fef2f2", highlightbackground="#F0A0A0", highlightthickness=1, cursor="hand2")
+                af   = tk.Frame(ar, bg="#fdf4f4", highlightbackground="#dda0a0", highlightthickness=1, cursor="hand2")
                 af.pack(side="left", fill="x", expand=True, padx=(0,4))
                 tk.Label(af, text=f"  {p['name']}  —  scadenza {txt}",
-                         font=("Inter",10,"bold"), fg="#7f1d1d", bg="#fef2f2", anchor="w").pack(side="left", padx=8, pady=6)
+                         font=("Inter",10,"bold"), fg="#6b2929", bg="#fdf4f4", anchor="w").pack(side="left", padx=8, pady=6)
                 tk.Label(af, text="OGGI" if days == 0 else txt.upper(),
                          font=("Inter",9,"bold"), fg="#dc2626", bg="#fff", padx=6, pady=2).pack(side="right", padx=8)
                 self._bind_click(af, lambda pid=p["id"]: self._open_project(pid))
@@ -201,10 +201,10 @@ class TabHome:
                 msg = "🔧"
                 if da_montare: msg += f"  {da_montare} da montare"
                 if fine_vita:  msg += f"  {fine_vita} a fine vita"
-                uf = tk.Frame(ar, bg="#fef9c3", highlightbackground="#D9A050", highlightthickness=1)
+                uf = tk.Frame(ar, bg="#fdf6e3", highlightbackground="#c8953a", highlightthickness=1)
                 uf.pack(side="left", padx=(0,0))
-                tk.Label(uf, text=msg, font=("Inter",10,"bold"), fg="#b45309",
-                         bg="#fef9c3", anchor="w").pack(padx=10, pady=6)
+                tk.Label(uf, text=msg, font=("Inter",10,"bold"), fg="#9a6b2e",
+                         bg="#fdf6e3", anchor="w").pack(padx=10, pady=6)
 
         # ── Label pallet ─────────────────────────────────────────────────────
         tk.Label(pad, text="PALLET MACCHINA", font=("Inter",8,"bold"),
@@ -247,7 +247,7 @@ class TabHome:
                      fg="#C8C5BE" if is_empty else fg_c, bg=bg_c).pack(side="left", padx=4)
             if is_urg:
                 tk.Label(top, text="OGGI" if days == 0 else f"{days}gg",
-                         font=("Inter",8,"bold"), fg="#dc2626", bg="#fef2f2", padx=3).pack(side="right")
+                         font=("Inter",8,"bold"), fg="#dc2626", bg="#fdf4f4", padx=3).pack(side="right")
 
             if nome:
                 tk.Label(card, text=nome, font=("Inter",11,"bold"),
@@ -273,12 +273,12 @@ class TabHome:
         mf.grid(row=0, column=0, sticky="n", padx=(0,14))
         for mi, (val, label, sub, color, bg_m) in enumerate([
             (len(da_fare),    "Da fare",         f"{len(in_progress)} lavori", TC["muted"],  TC["surface2"]),
-            (len(in_mac),     "In macchina",      "pgm attivi",                "#0d2d5e",    "#e6f1fb"),
-            (len(oggi_pgm),   "Completati oggi",  f"{len(completati)} tot.",   "#16a34a",    "#f0fdf4"),
+            (len(in_mac),     "In macchina",      "pgm attivi",                "#0d2d5e",    "#eef4fb"),
+            (len(oggi_pgm),   "Completati oggi",  f"{len(completati)} tot.",   "#16a34a",    "#f0f9f4"),
             (da_montare+fine_vita, "Critici",
              f"{da_montare} da montare" if da_montare else "tutto ok",
              "#dc2626" if (da_montare+fine_vita) > 0 else "#16a34a",
-             "#fef0ee" if (da_montare+fine_vita) > 0 else "#f0fdf4"),
+             "#fdf4f3" if (da_montare+fine_vita) > 0 else "#f0f9f4"),
         ]):
             mc = tk.Frame(mf, bg=bg_m, width=118, height=68)
             mc.grid(row=mi//2, column=mi%2, padx=3, pady=3, sticky="nsew")
@@ -300,7 +300,7 @@ class TabHome:
             pnum  = next((x.get("numero") for x in pallet_list if x.get("progetto_id") == p.get("id")), None)
             color = p.get("color", TC["accent"])
 
-            rf = tk.Frame(lf, bg=TC["surface"], highlightbackground=TC["border"],
+            rf = tk.Frame(lf, bg=TC["surface"], highlightbackground="#dde3ec",
                           highlightthickness=1, cursor="hand2")
             rf.pack(fill="x", pady=2)
             tk.Frame(rf, bg=color, width=3).pack(side="left", fill="y")
@@ -313,7 +313,7 @@ class TabHome:
                      fg=TC["text"], bg=TC["surface"]).pack(side="left")
             if pnum:
                 tk.Label(tr, text=f"P{pnum}", font=("Inter",8,"bold"),
-                         fg="#0d2d5e", bg="#e6f1fb", padx=4).pack(side="left", padx=4)
+                         fg="#0d2d5e", bg="#eef4fb", padx=4).pack(side="left", padx=4)
 
             bbar = tk.Frame(inn, bg=TC["surface2"], height=3)
             bbar.pack(fill="x", pady=(2,1))
@@ -326,7 +326,7 @@ class TabHome:
             tk.Label(ir, text=f"{pct2}%", font=("Inter",10,"bold"),
                      fg=pct_c, bg=TC["surface"]).pack(side="right")
             if days2 is not None:
-                dc = "#dc2626" if days2 <= 3 else ("#b45309" if days2 <= 7 else TC["muted"])
+                dc = "#dc2626" if days2 <= 3 else ("#9a6b2e" if days2 <= 7 else TC["muted"])
                 dt = "oggi" if days2 == 0 else (f"{abs(days2)}gg fa" if days2 < 0 else f"{days2}gg")
                 tk.Label(ir, text=dt, font=("Inter",8,"bold"),
                          fg=dc, bg=TC["surface"]).pack(side="right", padx=6)

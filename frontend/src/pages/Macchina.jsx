@@ -35,7 +35,7 @@ export default function Macchina() {
   // ── Popup Analisi Setup (componente interno) ──────────────────────────────
   const SetupPannel = () => {
     if (!setupPopup || !setupData) return null
-    const {non_utilizzati, da_montare, fin_vita} = setupData
+    const {non_utilizzati, da_montare, fin_vita, previsione_vita=[]} = setupData
     const [q, setQ] = useState('')
     const filter = items => q.trim()
       ? items.filter(i => i.alias?.toLowerCase().includes(q.toLowerCase()))
@@ -137,6 +137,56 @@ export default function Macchina() {
                 {item.life_percent!=null&&<span style={{fontSize:11,color:'#9A978E'}}>{item.life_percent}%</span>}
               </>}
             />
+            {/* ── PREVISIONE FINE VITA ── */}
+            {previsione_vita.length>0&&(
+              <div style={{marginBottom:20}}>
+                <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10,padding:'8px 12px',
+                  background:'#fff3e0',border:'1px solid #ff9800',borderRadius:8}}>
+                  <span style={{fontSize:16}}>🔮</span>
+                  <span style={{fontSize:13,fontWeight:800,color:'#e65100'}}>
+                    PREVISIONE FINE VITA — {previsione_vita.length} utensil{previsione_vita.length===1?'e':'i'} a rischio
+                  </span>
+                  <span style={{fontSize:11,color:'#bf360c',marginLeft:'auto'}}>
+                    basato sui tempi stimati nei file MPF
+                  </span>
+                </div>
+                {previsione_vita.map((alert,i)=>{
+                  const cr = alert.programma_critico
+                  const pct = Math.round((alert.vita_rimanente / alert.consumo_totale)*100)
+                  return(
+                    <div key={i} style={{background:'#fff8f0',border:'1.5px solid #ffb74d',
+                      borderRadius:10,padding:'12px 16px',marginBottom:8}}>
+                      <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:8}}>
+                        <span style={{fontSize:13,fontFamily:'monospace',fontWeight:800,color:'#bf360c'}}>
+                          {alert.alias}
+                        </span>
+                        <div style={{flex:1,height:6,background:'#ffe0b2',borderRadius:3,overflow:'hidden'}}>
+                          <div style={{height:6,width:`${Math.min(pct,100)}%`,
+                            background:pct<50?'#f44336':'#ff9800',borderRadius:3}}/>
+                        </div>
+                        <span style={{fontSize:12,fontWeight:700,color:'#e65100',flexShrink:0}}>
+                          {alert.vita_rimanente}min rim. / {alert.consumo_totale}min req.
+                        </span>
+                      </div>
+                      {cr&&<div style={{background:'#ffecb3',border:'1px solid #ffc107',
+                        borderRadius:7,padding:'8px 12px',fontSize:12}}>
+                        <div style={{fontWeight:800,color:'#e65100',marginBottom:3}}>
+                          ⚠ Finisce durante: <span style={{fontFamily:'monospace'}}>{cr.filename?.replace(/\.MPF$/i,'')}</span>
+                          <span style={{color:'#9a6b2e',marginLeft:6,fontWeight:600}}>({cr.fase})</span>
+                        </div>
+                        <div style={{color:'#5d4037'}}>
+                          Vita esaurita dopo <strong>{cr.minuto_rottura}min</strong> su questo programma
+                          {' '}— mancano ancora <strong>{alert.surplus_mancante}min</strong> di lavorazione
+                        </div>
+                        <div style={{marginTop:4,color:'#bf360c',fontWeight:700}}>
+                          💡 Sostituire prima del programma <span style={{fontFamily:'monospace'}}>{cr.numPgm}</span> di {cr.progetto}
+                        </div>
+                      </div>}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
           <div style={{padding:'12px 24px',borderTop:'1px solid #D8D5CC',
             display:'flex',gap:10,justifyContent:'flex-end',
@@ -275,7 +325,7 @@ export default function Macchina() {
               padding:'9px 18px', borderRadius:8, fontSize:13, cursor:'pointer',
               background: setupPopup
                 ? '#B45309'
-                : setupData && ((setupData.da_montare||[]).length + (setupData.fin_vita||[]).length) > 0
+                : setupData && ((setupData.da_montare||[]).length + (setupData.fin_vita||[]).length + (setupData.previsione_vita||[]).length) > 0
                   ? '#D97706'
                   : '#1D5FAD',
               color: 'white',
@@ -288,7 +338,7 @@ export default function Macchina() {
             {setupLoading
               ? '⏳ Analisi...'
               : setupData
-                ? `🔧 Setup (${(setupData.da_montare||[]).length + (setupData.fin_vita||[]).length})`
+                ? `🔧 Setup (${(setupData.da_montare||[]).length + (setupData.fin_vita||[]).length + (setupData.previsione_vita||[]).length})`
                 : '🔧 Analisi Setup'}
           </button>
           <button onClick={handleSync} disabled={syncing} style={{

@@ -460,6 +460,102 @@ async def check_utensili_progetto(project_id: str):
     return {"project_id": project_id, "utensili": result, "summary": summary}
 
 
+def _calcola_previsione_vita(projects: list, tools_db: dict, classify_fn) -> list:
+    """
+    Per ogni utensile con vita_rimanente (minuti), simula il consumo
+    scorrendo i programmi 'da_fare' in ordine e trova il punto di rottura.
+
+    Restituisce lista di alert:
+    {
+      alias, vita_rimanente, consumo_totale, programmi_analizzati,
+      programma_critico: {progetto, fase, filename, numPgm, minuto_rottura},
+      surplus_mancante,   # minuti che mancano
+      ok: bool
+    }
+    """
+    # Raccoglie tutti i programmi da fare con tempo stimato, raggruppati per utensile
+    # Struttura: alias → [ {progetto, fase, filename, numPgm, tempo} ]
+    utensile_queue: dict[str, list] = {}
+
+    for project in projects:
+        p_name = project.get("name", "?")
+        for step in project.get("steps", []):
+            s_title = step.get("title", "")
+            for task in step.get("tasks", []):
+                if task.get("text", "").strip().lower() != "fresatura":
+                    continue
+                for pgm in task.get("programs", []):
+                    if pgm.get("tipoGruppo") == "ipm":
+                        continue
+                    if pgm.get("stato") == "completato":
+                        continue
+                    alias = (pgm.get("utensile") or "").upper().strip()
+                    tempo = pgm.get("tempoStimato")
+                    if not alias or not tempo:
+                        continue
+                    try:
+                        tempo_int = int(tempo)
+                    except (ValueError, TypeError):
+                        continue
+                    if alias not in utensile_queue:
+                        utensile_queue[alias] = []
+                    utensile_queue[alias].append({
+                        "progetto":  p_name,
+                        "fase":      s_title,
+                        "filename":  pgm.get("filename", ""),
+                        "numPgm":    pgm.get("numPgm", ""),
+                        "stato":     pgm.get("stato", "da_fare"),
+                        "tempo":     tempo_int,
+                    })
+
+    alerts = []
+    for alias, pgm_list in utensile_queue.items():
+        # Trova vita rimanente in minuti (life_percent è già in minuti)
+        vita_rim = None
+        abilitati = [
+            t for t in tools_db.values()
+            if (t.get("name") or "").upper().strip() == alias
+            and t.get("is_enabled", True)
+            and not t.get("is_worn", False)
+        ]
+        if abilitati:
+            vita_rim = max(
+                (t.get("life_percent") or 0) for t in abilitati
+            )
+
+        if vita_rim is None:
+            continue  # utensile non in macchina — già gestito da da_montare
+
+        # Simula consumo in ordine
+        consumo = 0
+        critico = None
+        for pgm in pgm_list:
+            consumo += pgm["tempo"]
+            if consumo > vita_rim and critico is None:
+                critico = {
+                    **pgm,
+                    "minuto_rottura": vita_rim - (consumo - pgm["tempo"]),
+                    "consumo_al_punto": consumo,
+                }
+
+        total_consumo = consumo
+        ok = critico is None
+
+        if not ok:
+            alerts.append({
+                "alias":              alias,
+                "vita_rimanente":     vita_rim,
+                "consumo_totale":     total_consumo,
+                "surplus_mancante":   total_consumo - vita_rim,
+                "programmi_n":        len(pgm_list),
+                "programma_critico":  critico,
+                "ok":                 False,
+            })
+        # Non includiamo gli ok per non sovraccaricare — solo i problematici
+
+    return sorted(alerts, key=lambda x: x["surplus_mancante"], reverse=True)
+
+
 @router.get("/analisi-setup/non-utilizzati")
 async def get_analisi_setup():
     """
@@ -472,6 +568,11 @@ async def get_analisi_setup():
     config      = carica_configurazione()
     alias_map   = estrai_alias_da_progetti(config)
     alias_attivi = set(alias_map.keys())
+
+    # Carica progetti attivi per la previsione vita
+    data_proj = _load_progetti(config)
+    projects  = [p for p in data_proj.get("projects", [])
+                 if not p.get("archived")]
 
     tools_folder = (config.get("tools_toa_folder") or "").strip()
     tools_db, sync_time = {}, None
@@ -569,6 +670,7 @@ async def get_analisi_setup():
         "da_montare":     da_montare,
         "fin_vita":       sorted(fin_vita, key=lambda x: x.get("life_percent") or 0),
         "sync_time":      sync_time,
+        "previsione_vita": _calcola_previsione_vita(projects, tools_db, _ct),
     }
 
 

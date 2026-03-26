@@ -97,7 +97,7 @@ export default function AnalisiNC() {
       try {
         const raw = sessionStorage.getItem('dmgdesk_lancio_nc')
         if (raw) {
-          sessionStorage.removeItem('dmgdesk_lancio_nc')  // consuma subito
+          // NON rimuovere qui — serve a handleGeneraMain per aggiornare gli stati
           const lancio = JSON.parse(raw)
           setLancioProgetto(lancio)
           if (lancio.nomeCartella) {
@@ -258,6 +258,8 @@ export default function AnalisiNC() {
             })
             const result = await r.json()
             console.log('[MAIN] segna-in-macchina result:', result)
+            // Consuma il sessionStorage solo dopo successo
+            sessionStorage.removeItem('dmgdesk_lancio_nc')
           }
         }
       } catch {}

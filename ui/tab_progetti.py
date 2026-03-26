@@ -343,13 +343,40 @@ class TabProgetti:
             t = _load_templates()
             d = _load_deliveries()
             p = _inject_pallet_assegnati(p)
-            self.parent.after(0, lambda: self._set_data(p, t, d))
+            # Carica quick tasks via API
+            try:
+                import urllib.request, json as _j
+                res = urllib.request.urlopen("http://localhost:8000/api/progetti/quick-tasks", timeout=1)
+                qt = _j.loads(res.read()).get("tasks", [])
+            except Exception:
+                qt = []
+            self.parent.after(0, lambda: self._set_data(p, t, d, qt))
         threading.Thread(target=_worker, daemon=True).start()
 
-    def _set_data(self, projects, templates, deliveries):
+    def _save_quick_tasks(self):
+        """Salva i quick tasks via API in background."""
+        tasks = list(self._quick_tasks)
+        def _do():
+            try:
+                import urllib.request, json as _j
+                data = _j.dumps({"tasks": tasks}, ensure_ascii=False).encode()
+                req = urllib.request.Request(
+                    "http://localhost:8000/api/progetti/quick-tasks",
+                    data=data, method="PUT",
+                    headers={"Content-Type": "application/json"})
+                urllib.request.urlopen(req, timeout=1)
+            except Exception:
+                pass
+        threading.Thread(target=_do, daemon=True).start()
+
+    def _set_data(self, projects, templates, deliveries, quick_tasks=None):
         self._projects   = projects
         self._templates  = templates
         self._deliveries = deliveries
+        if quick_tasks is not None:
+            self._quick_tasks = quick_tasks
+            self._save_quick_tasks()
+            self._render_quick_sidebar()
         self._refresh()
         # Avvia auto-reload dal disco ogni 15 secondi (sincronizzazione con web)
         self._schedule_reload()
@@ -365,13 +392,29 @@ class TabProgetti:
             t = _load_templates()
             d = _load_deliveries()
             p = _inject_pallet_assegnati(p)
-            self.parent.after(0, lambda: self._apply_silent(p, t, d))
+            # Ricarica quick tasks
+            try:
+                import urllib.request, json as _j
+                res = urllib.request.urlopen("http://localhost:8000/api/progetti/quick-tasks", timeout=1)
+                qt = _j.loads(res.read()).get("tasks", [])
+            except Exception:
+                qt = None
+            self.parent.after(0, lambda: self._apply_silent(p, t, d, qt))
         threading.Thread(target=_worker, daemon=True).start()
 
-    def _apply_silent(self, projects, templates, deliveries):
+    def _apply_silent(self, projects, templates, deliveries, quick_tasks=None):
         """Applica i nuovi dati senza refresh se niente è cambiato sul progetto aperto."""
         self._templates  = templates
         self._deliveries = deliveries
+
+        # Aggiorna quick tasks se cambiati
+        if quick_tasks is not None:
+            import json as _jq
+            new_qt_hash = hash(_jq.dumps(quick_tasks, sort_keys=True, default=str))
+            if getattr(self, '_qt_hash', None) != new_qt_hash:
+                self._qt_hash = new_qt_hash
+                self._quick_tasks = quick_tasks
+                self._render_quick_sidebar()
 
         # Hash per evitare ridisegni se i dati non sono cambiati
         import json as _json
@@ -2344,6 +2387,7 @@ class TabProgetti:
                 "createdAt": datetime.now().isoformat()
             })
             entry.delete(0, "end")
+            self._save_quick_tasks()
             self._render_quick_sidebar()
         entry.bind("<Return>", _add_qt)
         ctk.CTkButton(inp, text="+ Aggiungi", command=_add_qt,
@@ -2376,6 +2420,7 @@ class TabProgetti:
 
             def _del_qt(t=task):
                 self._quick_tasks = [x for x in self._quick_tasks if x["id"] != t["id"]]
+                self._save_quick_tasks()
                 self._render_quick_sidebar()
             tk.Button(tr, text="✕", command=_del_qt,
                       font=("Inter",8), fg=TC["red"], bg=tr.cget("bg"),

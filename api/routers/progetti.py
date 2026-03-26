@@ -733,3 +733,25 @@ async def riparsing_utensili(project_id: str):
                                    ensure_ascii=False, indent=2), encoding="utf-8")
 
     return {"aggiornati": aggiornati, "project_id": project_id}
+
+
+# ── Quick Tasks ────────────────────────────────────────────────────────────────
+
+def _qt_path(config):
+    folder = (config.get("tools_toa_folder") or "").strip()
+    return Path(folder) / "quick_tasks.json" if folder else Path("quick_tasks.json")
+
+@router.get("/quick-tasks")
+async def get_quick_tasks():
+    config = carica_configurazione()
+    p = _qt_path(config)
+    if p.exists():
+        return json.loads(p.read_text(encoding="utf-8"))
+    return {"tasks": []}
+
+@router.put("/quick-tasks")
+async def put_quick_tasks(body: dict):
+    config = carica_configurazione()
+    p = _qt_path(config)
+    p.write_text(json.dumps(body, ensure_ascii=False, indent=2), encoding="utf-8")
+    return {"ok": True}

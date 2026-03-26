@@ -1616,6 +1616,24 @@ function QuickTasksSidebar({collapsed,onToggleCollapse}){
   const[filter,setFilter]=useState('tutti')
   const inputRef=useRef(null)
   const pendingCount=tasks.filter(t=>!t.done).length
+
+  // Carica da API all'avvio e ogni 15s
+  useEffect(()=>{
+    const load=()=>fetch('/api/progetti/quick-tasks').then(r=>r.ok?r.json():{tasks:[]}).then(d=>setTasks(d.tasks||[])).catch(()=>{})
+    load()
+    const t=setInterval(load,15000)
+    return()=>clearInterval(t)
+  },[])
+
+  // Salva su API ogni volta che tasks cambia
+  const saveRef=useRef(null)
+  useEffect(()=>{
+    if(saveRef.current) clearTimeout(saveRef.current)
+    saveRef.current=setTimeout(()=>{
+      fetch('/api/progetti/quick-tasks',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({tasks})}).catch(()=>{})
+    },400)
+  },[tasks])
+
   const filtered=tasks.filter(t=>{
     if(filter==='da_fare') return !t.done
     if(filter==='fatti')   return t.done

@@ -286,7 +286,7 @@ class TabProgetti:
 
         # Logo
         tk.Label(self._topbar, text="◈ WorkTrack",
-                 font=("DM Sans",14,"bold"), fg=TC["text"], bg=TC["surface"]).pack(side="left", padx=12, pady=10)
+                 font=("Inter",14,"bold"), fg=TC["text"], bg=TC["surface"]).pack(side="left", padx=12, pady=10)
         tk.Frame(self._topbar, width=1, bg=TC["border"]).pack(side="left", fill="y", pady=6)
 
         # Nav
@@ -296,7 +296,7 @@ class TabProgetti:
         for nav_id, label in nav_items:
             is_active = self._page == nav_id and not self._selected_id and not self._editing_template
             btn = tk.Label(self._topbar, text=label,
-                           font=("DM Sans",11,"bold"),
+                           font=("Inter",11,"bold"),
                            fg=TC["accent"] if is_active else TC["sub"],
                            bg=TC["surface"], cursor="hand2", padx=12)
             btn.pack(side="left")
@@ -309,7 +309,7 @@ class TabProgetti:
 
         self._btn_nuovo = ctk.CTkButton(right, text="+ Nuovo Progetto",
             command=self._nuovo_progetto, fg_color=TC["accent"], hover_color="#1e3a6e",
-            font=("DM Sans",11,"bold"), height=30, corner_radius=6)
+            font=("Inter",11,"bold"), height=30, corner_radius=6)
         self._btn_nuovo.pack(side="right", padx=4, pady=8)
 
         self._entry_search = ctk.CTkEntry(right, width=170, height=30,
@@ -771,14 +771,14 @@ class TabProgetti:
                           highlightbackground="#dc2626", highlightthickness=1)
             ub.pack(fill="x", padx=20, pady=(12,0))
             tk.Label(ub, text=f"🎯 FOCUS — {len(urgent)} CONSEGN{'A' if len(urgent)==1 else 'E'} ENTRO 7 GIORNI",
-                     font=("DM Sans",10,"bold"), fg="#dc2626", bg="#fef2f2").pack(side="left", padx=10, pady=6)
+                     font=("Inter",10,"bold"), fg="#dc2626", bg="#fef2f2").pack(side="left", padx=10, pady=6)
             names = " · ".join(p.get("name","?") for p in urgent[:4])
-            tk.Label(ub, text=names, font=("DM Sans",10), fg="#475569", bg="#fef2f2").pack(side="left", padx=4)
+            tk.Label(ub, text=names, font=("Inter",10), fg="#475569", bg="#fef2f2").pack(side="left", padx=4)
 
         if not projects:
             txt = "Nessun progetto. Clicca '+ Nuovo Progetto' per iniziare." if not archived else "Nessun progetto archiviato."
             ctk.CTkLabel(self._body, text=txt,
-                         font=("DM Sans",13), text_color=TC["muted"]).pack(pady=60)
+                         font=("Inter",13), text_color=TC["muted"]).pack(pady=60)
             return
 
         for section_label, section_projects in [
@@ -790,7 +790,7 @@ class TabProgetti:
             hdr = tk.Frame(self._body, bg=TC["bg"])
             hdr.pack(fill="x", padx=20, pady=(16,4))
             tk.Label(hdr, text=f"{section_label} — {len(section_projects)}",
-                     font=("DM Sans",10,"bold"), fg=TC["muted"], bg=TC["bg"]).pack(side="left")
+                     font=("Inter",10,"bold"), fg=TC["muted"], bg=TC["bg"]).pack(side="left")
 
             grid = tk.Frame(self._body, bg=TC["bg"])
             grid.pack(fill="x", padx=16, pady=0)
@@ -842,14 +842,15 @@ class TabProgetti:
         row1.pack(fill="x", pady=(0,2))
         tk.Label(row1, text="●", fg=color, bg=TC["surface"], font=("Arial",9)).pack(side="left")
         tk.Label(row1, text=project.get("name","?"),
-                 font=("DM Sans",12,"bold"), fg=TC["text"], bg=TC["surface"]).pack(side="left", padx=4)
+                 font=("Inter",12,"bold"), fg=TC["text"], bg=TC["surface"]).pack(side="left", padx=4)
         if project.get("pallet_assegnato"):
             tk.Label(row1, text=f"P{project['pallet_assegnato']}",
-                     font=("DM Sans",10,"bold"), fg=color, bg=TC["surface"]).pack(side="left")
+                     font=("Inter",9,"bold"), fg="#0d2d5e", bg="#e6f1fb",
+                     padx=6, pady=1).pack(side="left", padx=4)
 
         if project.get("description"):
             tk.Label(body, text=project["description"],
-                     font=("DM Sans",10), fg=TC["sub"], bg=TC["surface"]).pack(anchor="w")
+                     font=("Inter",10), fg=TC["sub"], bg=TC["surface"]).pack(anchor="w")
 
         # Scadenza badge
         if delivery and delivery.get("dueDate"):
@@ -862,16 +863,41 @@ class TabProgetti:
                 badge_text = f"{urg_dot} {label}"
                 badge_fg, badge_bg = urg_color, urg_bg
             tk.Label(body, text=badge_text,
-                     font=("DM Sans",10,"bold"), fg=badge_fg, bg=badge_bg,
+                     font=("Inter",10,"bold"), fg=badge_fg, bg=badge_bg,
                      padx=6, pady=1).pack(anchor="w", pady=(2,0))
 
-        # Barra progresso
-        bar_bg = tk.Frame(body, height=4, bg=TC["surface2"])
-        bar_bg.pack(fill="x", pady=(4,4))
+        # Barra preparazione
+        prep_row = tk.Frame(body, bg=TC["surface"])
+        prep_row.pack(fill="x", pady=(4,1))
+        tk.Label(prep_row, text="PREP.", font=("Inter",8,"bold"),
+                 fg=TC["muted"], bg=TC["surface"], width=7, anchor="w").pack(side="left")
+        bar_bg = tk.Frame(prep_row, height=5, bg=TC["surface2"])
+        bar_bg.pack(side="left", fill="x", expand=True, padx=(4,4))
         bar_bg.update_idletasks()
-        w = bar_bg.winfo_width() or 200
-        tk.Frame(bar_bg, width=max(1, int(w*pct/100)), height=4,
+        w = bar_bg.winfo_width() or 180
+        tk.Frame(bar_bg, width=max(1,int(w*pct/100)), height=5,
                  bg=TC["green"] if pct==100 else color).pack(side="left")
+        tk.Label(prep_row, text=f"{pct}%", font=("Inter",9,"bold"),
+                 fg=TC["green"] if pct==100 else color, bg=TC["surface"], width=5, anchor="e").pack(side="left")
+
+        # Barra NC fresatura
+        if mpf:
+            mpf_done = sum(1 for p2 in mpf if p2.get("stato")=="completato")
+            mpf_mac  = sum(1 for p2 in mpf if p2.get("stato")=="in_macchina")
+            nc_pct   = mpf_done / len(mpf)
+            mac_pct  = mpf_mac  / len(mpf)
+            nc_row = tk.Frame(body, bg=TC["surface"])
+            nc_row.pack(fill="x", pady=(0,4))
+            tk.Label(nc_row, text="NC", font=("Inter",8,"bold"),
+                     fg=TC["muted"], bg=TC["surface"], width=7, anchor="w").pack(side="left")
+            bar2_bg = tk.Frame(nc_row, height=5, bg=TC["surface2"])
+            bar2_bg.pack(side="left", fill="x", expand=True, padx=(4,4))
+            bar2_bg.update_idletasks()
+            w2 = bar2_bg.winfo_width() or 180
+            tk.Frame(bar2_bg, width=max(1,int(w2*nc_pct)), height=5, bg="#16a34a").pack(side="left")
+            tk.Frame(bar2_bg, width=max(1,int(w2*mac_pct)), height=5, bg="#0d2d5e").pack(side="left")
+            tk.Label(nc_row, text=f"{mpf_done}/{len(mpf)}", font=("Inter",9,"bold"),
+                     fg="#16a34a", bg=TC["surface"], width=5, anchor="e").pack(side="left")
 
         # Stats
         stats = tk.Frame(body, bg=TC["surface"])
@@ -879,15 +905,12 @@ class TabProgetti:
         tasks_all  = [t for s in project.get("steps",[]) for t in s.get("tasks",[])]
         tasks_done = sum(1 for t in tasks_all if t.get("done"))
         tk.Label(stats, text=f"{tasks_done}/{len(tasks_all)} task",
-                 font=("DM Sans",10), fg=TC["sub"], bg=TC["surface"]).pack(side="left")
-        if mpf:
-            mpf_done = sum(1 for p in mpf if p.get("stato")=="completato")
-            tk.Label(stats, text=f"  ⚙ {mpf_done}/{len(mpf)} MPF",
-                     font=("DM Sans",10,"bold"), fg=TC["blue"], bg=TC["surface"]).pack(side="left")
+                 font=("Inter",10), fg=TC["sub"], bg=TC["surface"]).pack(side="left")
 
         status_color = TC["green"] if pct==100 else (TC["accent"] if pct>0 else TC["muted"])
-        tk.Label(stats, text=("✓ Completato" if pct==100 else f"{pct}%"),
-                 font=("DM Sans",10,"bold"), fg=status_color, bg=TC["surface"]).pack(side="right")
+        status_text  = "✓ Completato" if pct==100 else (f"{pct}% — In corso" if pct>0 else "Non iniziato")
+        tk.Label(stats, text=status_text,
+                 font=("Inter",10,"bold"), fg=status_color, bg=TC["surface"]).pack(side="right")
 
         # Prossimo step
         if t_next:
@@ -895,7 +918,7 @@ class TabProgetti:
             nf.pack(fill="x", pady=(4,0))
             tk.Label(nf, text="📍", bg="#e6f1fb", font=("Arial",10)).pack(side="left", padx=(4,2))
             tk.Label(nf, text=f"{s_next.get('title','?')} › {t_next.get('text','?')}",
-                     font=("DM Sans",11), fg=TC["text"], bg="#e6f1fb").pack(side="left")
+                     font=("Inter",11), fg=TC["text"], bg="#e6f1fb").pack(side="left")
 
         # Click
         for w in [card, body, row1, stats]:
@@ -970,11 +993,11 @@ class TabProgetti:
         r1.pack(fill="x", padx=20, pady=(12,4))
 
         tk.Button(r1, text="← Indietro", command=self._back,
-                  font=("DM Sans",10), fg=TC["sub"], bg=TC["surface2"],
+                  font=("Inter",10), fg=TC["sub"], bg=TC["surface2"],
                   relief="flat", padx=10, pady=4, cursor="hand2").pack(side="left")
 
         nome_lbl = tk.Label(r1, text=f"● {project.get('name','?')}",
-                 font=("DM Sans",16,"bold"), fg=TC["text"], bg=TC["surface"])
+                 font=("Inter",16,"bold"), fg=TC["text"], bg=TC["surface"])
         nome_lbl.pack(side="left", padx=(8,2))
 
         def _rinomina():
@@ -989,16 +1012,16 @@ class TabProgetti:
                 self._save_project(project)
 
         tk.Button(r1, text="✏️", command=_rinomina,
-                  font=("DM Sans",10), fg=TC["muted"], bg=TC["surface"],
+                  font=("Inter",10), fg=TC["muted"], bg=TC["surface"],
                   relief="flat", cursor="hand2").pack(side="left")
 
         # Pallet — legge da pallet_state (fonte di verità)
         # Scadenza consegna
         delivery = self._get_delivery(project.get("id",""))
         due_var = tk.StringVar(value=delivery.get("dueDate","")[:10] if delivery else "")
-        tk.Label(r1, text="Scadenza:", font=("DM Sans",10), fg=TC["muted"], bg=TC["surface"]).pack(side="left", padx=(0,3))
+        tk.Label(r1, text="Scadenza:", font=("Inter",10), fg=TC["muted"], bg=TC["surface"]).pack(side="left", padx=(0,3))
         due_entry = tk.Entry(r1, textvariable=due_var, width=11,
-                             font=("DM Sans",10), relief="flat",
+                             font=("Inter",10), relief="flat",
                              bg="#F0FBF4" if (delivery and delivery.get("dueDate")) else "#eef2f7",
                              fg=TC["text"])
         due_entry.pack(side="left")
@@ -1008,15 +1031,15 @@ class TabProgetti:
             days = days_until(delivery["dueDate"])
             lbl2, urg_col, urg_bg, _ = delivery_urgency(days)
             if not delivery.get("delivered"):
-                tk.Label(r1, text=lbl2, font=("DM Sans",9,"bold"),
+                tk.Label(r1, text=lbl2, font=("Inter",9,"bold"),
                          fg=urg_col, bg=urg_bg, padx=4, pady=1).pack(side="left", padx=(3,8))
             else:
-                tk.Label(r1, text="✓ Consegnato", font=("DM Sans",9,"bold"),
+                tk.Label(r1, text="✓ Consegnato", font=("Inter",9,"bold"),
                          fg=TC["green"], bg=TC["greenBg"], padx=4, pady=1).pack(side="left", padx=(3,8))
         else:
-            tk.Label(r1, text="gg/mm/aaaa", font=("DM Sans",9), fg=TC["muted"], bg=TC["surface"]).pack(side="left", padx=(2,8))
+            tk.Label(r1, text="gg/mm/aaaa", font=("Inter",9), fg=TC["muted"], bg=TC["surface"]).pack(side="left", padx=(2,8))
 
-        tk.Label(r1, text="Pallet:", font=("DM Sans",10), fg=TC["muted"], bg=TC["surface"]).pack(side="left", padx=(0,3))
+        tk.Label(r1, text="Pallet:", font=("Inter",10), fg=TC["muted"], bg=TC["surface"]).pack(side="left", padx=(0,3))
         _pv = _get_pallet_assegnato(project.get("id")) or project.get("pallet_assegnato")
         pallet_var = tk.StringVar(value=str(_pv) if _pv is not None else "—")
         _combo_pallet = ttk.Combobox(r1, textvariable=pallet_var,
@@ -1031,23 +1054,23 @@ class TabProgetti:
         if mpf:
             tk.Button(r1, text=f"📄 Lancia in NC →",
                       command=lambda: self._apri_modal_lancio(project),
-                      font=("DM Sans",10,"bold"), fg="#fff", bg=TC["blue"],
+                      font=("Inter",10,"bold"), fg="#fff", bg=TC["blue"],
                       relief="flat", padx=10, pady=4, cursor="hand2").pack(side="left", padx=8)
 
         # Salva come template
         tk.Button(r1, text="💾 Salva come Template",
                   command=lambda: self._salva_come_template(project),
-                  font=("DM Sans",10), fg=TC["blue"], bg=TC["blueBg"],
+                  font=("Inter",10), fg=TC["blue"], bg=TC["blueBg"],
                   relief="flat", padx=8, pady=4, cursor="hand2").pack(side="left", padx=4)
 
         # Archivia / Elimina
         tk.Button(r1, text="📦 Archivia" if not project.get("archived") else "📤 Riattiva",
                   command=lambda: self._archivia(project),
-                  font=("DM Sans",10), fg=TC["sub"], bg=TC["surface2"],
+                  font=("Inter",10), fg=TC["sub"], bg=TC["surface2"],
                   relief="flat", padx=8, pady=4, cursor="hand2").pack(side="right", padx=3)
         tk.Button(r1, text="🗑 Elimina",
                   command=lambda: self._elimina_id(project["id"]),
-                  font=("DM Sans",10), fg=TC["red"], bg=TC["redBg"],
+                  font=("Inter",10), fg=TC["red"], bg=TC["redBg"],
                   relief="flat", padx=8, pady=4, cursor="hand2").pack(side="right", padx=3)
 
         # Progress bar
@@ -1056,7 +1079,7 @@ class TabProgetti:
         all_tasks = [t for s in project.get("steps",[]) for t in s.get("tasks",[])]
         done_tasks = sum(1 for t in all_tasks if t.get("done"))
         tk.Label(r2, text=f"Avanzamento  {pct}% — {done_tasks} di {len(all_tasks)} task completati",
-                 font=("DM Sans",11), fg=color, bg=TC["surface"]).pack(side="left")
+                 font=("Inter",11), fg=color, bg=TC["surface"]).pack(side="left")
 
         bar_bg = tk.Frame(hdr, height=5, bg=TC["surface2"])
         bar_bg.pack(fill="x", padx=20, pady=(0,6))
@@ -1070,9 +1093,9 @@ class TabProgetti:
             nf = tk.Frame(hdr, bg="#e6f1fb")
             nf.pack(fill="x", padx=20, pady=(0,8))
             tk.Label(nf, text="📍 RIPRENDI DA QUI",
-                     font=("DM Sans",9,"bold"), fg=TC["accent"], bg="#e6f1fb").pack(anchor="w", padx=10, pady=(5,0))
+                     font=("Inter",9,"bold"), fg=TC["accent"], bg="#e6f1fb").pack(anchor="w", padx=10, pady=(5,0))
             tk.Label(nf, text=f"{s_next.get('title','?')} › {t_next.get('text','?')}",
-                     font=("DM Sans",12), fg=TC["text"], bg="#e6f1fb").pack(anchor="w", padx=10, pady=(0,6))
+                     font=("Inter",12), fg=TC["text"], bg="#e6f1fb").pack(anchor="w", padx=10, pady=(0,6))
 
         # Tab switcher
         tab_row = tk.Frame(hdr, bg=TC["surface"])
@@ -1080,7 +1103,7 @@ class TabProgetti:
         for tab_id, label in [("tasks","Task"), ("log",f"Log ({len(project.get('log',[]))})")]:
             active = self._active_detail_tab == tab_id
             lbl = tk.Label(tab_row, text=label,
-                           font=("DM Sans",12,"bold"),
+                           font=("Inter",12,"bold"),
                            fg=color if active else TC["sub"],
                            bg=TC["surface"], cursor="hand2", padx=0, pady=8)
             lbl.pack(side="left", padx=(0,20))
@@ -1115,7 +1138,7 @@ class TabProgetti:
 
     def _render_tasks(self, parent, project):
         info_lbl = tk.Label(parent, text="Trascina ⣿ per riordinare · click checkbox per completare",
-                            font=("DM Sans",9), fg=TC["muted"], bg=TC["bg"])
+                            font=("Inter",9), fg=TC["muted"], bg=TC["bg"])
         info_lbl.pack(anchor="w", pady=(0,6))
 
         for step in project.get("steps", []):
@@ -1135,7 +1158,7 @@ class TabProgetti:
         entry.bind("<Return>", _add_step)
         ctk.CTkButton(add_row, text="+ Fase", command=_add_step,
                       fg_color=TC["accent"], hover_color="#1e3a6e",
-                      font=("DM Sans",10,"bold"), height=30, width=70, corner_radius=6).pack(side="left", padx=5)
+                      font=("Inter",10,"bold"), height=30, width=70, corner_radius=6).pack(side="left", padx=5)
 
     def _render_step(self, parent, project, step):
         color = project.get("color", TC["accent"])
@@ -1155,12 +1178,12 @@ class TabProgetti:
         # Header step
         sh = tk.Frame(sc, bg=TC["surface"])
         sh.pack(fill="x", pady=(0,6))
-        tk.Label(sh, text=step.get("title",""), font=("DM Sans",12,"bold"),
+        tk.Label(sh, text=step.get("title",""), font=("Inter",12,"bold"),
                  fg=TC["text"], bg=TC["surface"]).pack(side="left")
         tk.Label(sh, text=f"  {done}/{total}",
-                 font=("DM Sans",10), fg=TC["muted"], bg=TC["surface"]).pack(side="left")
+                 font=("Inter",10), fg=TC["muted"], bg=TC["surface"]).pack(side="left")
         tk.Button(sh, text="🗑", command=lambda s=step: self._delete_step(project, s["id"]),
-                  font=("DM Sans",9), fg=TC["red"], bg=TC["surface"],
+                  font=("Inter",9), fg=TC["red"], bg=TC["surface"],
                   relief="flat", cursor="hand2").pack(side="right")
 
         # Tasks
@@ -1180,7 +1203,7 @@ class TabProgetti:
             self._save_project(project)
         te.bind("<Return>", _add_task)
         tk.Button(ar, text="+ Task", command=_add_task,
-                  font=("DM Sans",9), fg=TC["blue"], bg=TC["surface"],
+                  font=("Inter",9), fg=TC["blue"], bg=TC["surface"],
                   relief="flat", cursor="hand2").pack(side="left", padx=5)
 
     def _render_task(self, parent, project, step, task):
@@ -1230,20 +1253,20 @@ class TabProgetti:
             fg_col = TC["green"]
             # Testo con barrato simulato usando overstrike
             lbl = tk.Label(row, text="✓  " + task.get("text",""),
-                     font=("DM Sans",11,"overstrike"), fg=TC["muted"], bg=bg)
+                     font=("Inter",11,"overstrike"), fg=TC["muted"], bg=bg)
         else:
             lbl = tk.Label(row, text=task.get("text",""),
-                     font=("DM Sans",11), fg=TC["text"], bg=bg)
+                     font=("Inter",11), fg=TC["text"], bg=bg)
         lbl.pack(side="left", padx=3)
 
         if task.get("done") and task.get("doneAt"):
             tk.Label(row, text=task["doneAt"][:10],
-                     font=("DM Sans",9), fg=TC["muted"], bg=bg).pack(side="left", padx=3)
+                     font=("Inter",9), fg=TC["muted"], bg=bg).pack(side="left", padx=3)
 
         # Elimina
         tk.Button(row, text="✕",
                   command=lambda t=task, s=step: self._delete_task(project, s["id"], t["id"]),
-                  font=("DM Sans",9), fg=TC["muted"], bg=bg,
+                  font=("Inter",9), fg=TC["muted"], bg=bg,
                   relief="flat", cursor="hand2").pack(side="right", padx=3)
 
         # Note
@@ -1254,7 +1277,7 @@ class TabProgetti:
             nrow = tk.Frame(parent, bg="#e6f1fb")
             nrow.pack(fill="x", padx=(28,0), pady=1)
             tk.Label(nrow, text=f"💬 {note['text']}",
-                     font=("DM Sans",9,"italic"), fg=TC["accent"], bg="#e6f1fb").pack(side="left", padx=6)
+                     font=("Inter",9,"italic"), fg=TC["accent"], bg="#e6f1fb").pack(side="left", padx=6)
 
         # FresaturaPanel
         if task.get("text","").strip().lower() == "fresatura":
@@ -1278,14 +1301,14 @@ class TabProgetti:
         ph = tk.Frame(pf, bg="#e6f1fb")
         ph.pack(fill="x", padx=8, pady=5)
         tk.Label(ph, text="⚙️ PROGRAMMI FRESATURA",
-                 font=("DM Sans",9,"bold"), fg=TC["blue"], bg="#e6f1fb").pack(side="left")
+                 font=("Inter",9,"bold"), fg=TC["blue"], bg="#e6f1fb").pack(side="left")
         if in_mac > 0:
             tk.Label(ph, text=f"⚙ {in_mac} in macchina",
-                     font=("DM Sans",9,"bold"), fg=TC["blue"], bg="#e6f1fb").pack(side="left", padx=6)
+                     font=("Inter",9,"bold"), fg=TC["blue"], bg="#e6f1fb").pack(side="left", padx=6)
         if programs:
             ck = TC["green"] if done_tot == len(programs) else TC["blue"]
             tk.Label(ph, text=f"{done_tot}/{len(programs)} completati",
-                     font=("DM Sans",9,"bold"), fg=ck, bg="#e6f1fb").pack(side="left")
+                     font=("Inter",9,"bold"), fg=ck, bg="#e6f1fb").pack(side="left")
 
         # Badge anomalie (solo fresatura)
         tools_db = getattr(self, "_tools_db_cache", {})
@@ -1294,13 +1317,13 @@ class TabProgetti:
                     and self._classify_tool(p.get("utensile",""), tools_db) in ("mancante","fin_vita","disabilitato")]
         if anomalie:
             tk.Label(ph, text=f"⚠ {len(anomalie)} utensili problematici",
-                     font=("DM Sans",9,"bold"), fg="#DC2626", bg="#FEE2E2",
+                     font=("Inter",9,"bold"), fg="#DC2626", bg="#FEE2E2",
                      padx=6, pady=1).pack(side="left", padx=6)
 
         # ── Toolbar multi-select (appare quando ci sono selezioni) ────────────
         toolbar = tk.Frame(pf, bg="#DBEAFE")
         sel_label = tk.Label(toolbar, text="0 selezionati",
-                             font=("DM Sans",9,"bold"), fg="#0d2d5e", bg="#DBEAFE")
+                             font=("Inter",9,"bold"), fg="#0d2d5e", bg="#DBEAFE")
         sel_label.pack(side="left", padx=8, pady=4)
 
         def _massa_stato(nuovo_stato):
@@ -1328,11 +1351,11 @@ class TabProgetti:
             ("completato",  "✓ Completato",  "#DCFCE7", "#166534"),
         ]:
             tk.Button(toolbar, text=label, command=lambda s=stato: _massa_stato(s),
-                      font=("DM Sans",9,"bold"), fg=fg_btn, bg=bg_btn,
+                      font=("Inter",9,"bold"), fg=fg_btn, bg=bg_btn,
                       relief="flat", padx=6, pady=2, cursor="hand2").pack(side="left", padx=2, pady=3)
 
         tk.Button(toolbar, text="✕ Deseleziona", command=lambda: _desel_tutti(),
-                  font=("DM Sans",9), fg=TC["muted"], bg="#DBEAFE",
+                  font=("Inter",9), fg=TC["muted"], bg="#DBEAFE",
                   relief="flat", padx=4, pady=2, cursor="hand2").pack(side="right", padx=6, pady=3)
 
         # Funzioni per aggiornare toolbar e righe
@@ -1389,7 +1412,7 @@ class TabProgetti:
             self._save_project(project)
 
         tk.Button(ph, text="📂 Carica .MPF", command=_carica,
-                  font=("DM Sans",9,"bold"), fg="#fff", bg=TC["blue"],
+                  font=("Inter",9,"bold"), fg="#fff", bg=TC["blue"],
                   relief="flat", padx=6, pady=2, cursor="hand2").pack(side="right")
 
         # Bottone "Segna tutti in macchina" — solo se ci sono da_fare
@@ -1405,7 +1428,7 @@ class TabProgetti:
                 self._save_project(project)
             tk.Button(ph, text=f"⚙ Segna {len(da_fare_pgm)} in macchina",
                       command=_segna_tutti_in_macchina,
-                      font=("DM Sans",9,"bold"), fg="#fff", bg="#0d2d5e",
+                      font=("Inter",9,"bold"), fg="#fff", bg="#0d2d5e",
                       relief="flat", padx=6, pady=2, cursor="hand2").pack(side="right", padx=(0,4))
 
         # ── Sezione TASTATURA IPM (viola) ─────────────────────────────────────
@@ -1434,12 +1457,12 @@ class TabProgetti:
             tk.Label(ipm_header, text="📏", font=("Arial",9),
                      bg="#F3E8FF").pack(side="left", padx=(6,2), pady=3)
             tk.Label(ipm_header, text="TASTATURA (IPM)",
-                     font=("DM Sans",8,"bold"), fg="#6B21A8", bg="#F3E8FF").pack(side="left")
+                     font=("Inter",8,"bold"), fg="#6B21A8", bg="#F3E8FF").pack(side="left")
             tk.Label(ipm_header, text=f"{done_ipm}/{len(ipm_pgm)}",
-                     font=("DM Sans",8), fg="#6B21A8", bg="#F3E8FF").pack(side="left", padx=4)
+                     font=("Inter",8), fg="#6B21A8", bg="#F3E8FF").pack(side="left", padx=4)
             toggle_ipm_btn = tk.Button(ipm_header, text="▼",
                      command=_toggle_ipm,
-                     font=("DM Sans",8), fg="#6B21A8", bg="#F3E8FF",
+                     font=("Inter",8), fg="#6B21A8", bg="#F3E8FF",
                      relief="flat", cursor="hand2")
             toggle_ipm_btn.pack(side="right", padx=4)
 
@@ -1471,12 +1494,12 @@ class TabProgetti:
             tk.Label(fres_header, text="⚙️", font=("Arial",9),
                      bg="#E8F0FA").pack(side="left", padx=(6,2), pady=3)
             tk.Label(fres_header, text="FRESATURA",
-                     font=("DM Sans",8,"bold"), fg="#0d2d5e", bg="#E8F0FA").pack(side="left")
+                     font=("Inter",8,"bold"), fg="#0d2d5e", bg="#E8F0FA").pack(side="left")
             tk.Label(fres_header, text=f"{done_fres}/{len(fres_pgm)}",
-                     font=("DM Sans",8), fg="#0d2d5e", bg="#E8F0FA").pack(side="left", padx=4)
+                     font=("Inter",8), fg="#0d2d5e", bg="#E8F0FA").pack(side="left", padx=4)
             toggle_fres_btn = tk.Button(fres_header, text="▲",
                      command=_toggle_fres,
-                     font=("DM Sans",8), fg="#0d2d5e", bg="#E8F0FA",
+                     font=("Inter",8), fg="#0d2d5e", bg="#E8F0FA",
                      relief="flat", cursor="hand2")
             toggle_fres_btn.pack(side="right", padx=4)
 
@@ -1571,7 +1594,7 @@ class TabProgetti:
         btn_bg = TOOL_BG.get(tool_status, bg)
         btn_fg = TOOL_FG.get(tool_status, fg)
         _btn = tk.Button(row, text=lbl, command=_adv,
-                  font=("DM Sans",9,"bold"), fg=btn_fg, bg=btn_bg,
+                  font=("Inter",9,"bold"), fg=btn_fg, bg=btn_bg,
                   relief="flat", padx=6, pady=2, cursor="hand2", width=13)
         _btn.pack(side="left", padx=3)
         _adv.__defaults__[0][0] = _btn  # salva riferimento nel btn_ref
@@ -1587,7 +1610,7 @@ class TabProgetti:
                  fg=TOOL_FG.get(tool_status, TC["text"]),
                  bg=row_bg, width=20, anchor="w").pack(side="left")
         op = (pgm.get("tipoOp","") or "").replace("- NESSUN TESTO","").strip()[:38]
-        tk.Label(row, text=op or "—", font=("DM Sans",9), fg=TC["sub"], bg=row_bg).pack(side="left", padx=3)
+        tk.Label(row, text=op or "—", font=("Inter",9), fg=TC["sub"], bg=row_bg).pack(side="left", padx=3)
         if pgm.get("tempoFine"):
             tk.Label(row, text=f"■{pgm['tempoFine']}", font=("Consolas",8), fg=TC["green"], bg=row_bg).pack(side="right", padx=3)
         elif pgm.get("tempoInizio"):
@@ -1604,7 +1627,7 @@ class TabProgetti:
 
         if not log:
             ctk.CTkLabel(log_frame, text="Nessun aggiornamento ancora.",
-                         font=("DM Sans",12), text_color=TC["muted"]).pack(pady=30)
+                         font=("Inter",12), text_color=TC["muted"]).pack(pady=30)
 
         for entry in log:
             ef = tk.Frame(log_frame, bg=TC["surface"])
@@ -1617,12 +1640,12 @@ class TabProgetti:
             eh = tk.Frame(ec, bg=TC["surface"])
             eh.pack(fill="x")
             tk.Label(eh, text=entry.get("user","?"),
-                     font=("DM Sans",10,"bold"), fg=color, bg=TC["surface"]).pack(side="left")
+                     font=("Inter",10,"bold"), fg=color, bg=TC["surface"]).pack(side="left")
             tk.Label(eh, text=f"  {entry.get('time','')}",
-                     font=("DM Sans",9), fg=TC["muted"], bg=TC["surface"]).pack(side="left")
+                     font=("Inter",9), fg=TC["muted"], bg=TC["surface"]).pack(side="left")
             if entry.get("editedAt"):
                 tk.Label(eh, text=f" · mod. {entry['editedAt']}",
-                         font=("DM Sans",9,"italic"), fg=TC["muted"], bg=TC["surface"]).pack(side="left")
+                         font=("Inter",9,"italic"), fg=TC["muted"], bg=TC["surface"]).pack(side="left")
 
             # Azioni modifica/elimina
             def _edit_log(e=entry, p=project):
@@ -1637,14 +1660,14 @@ class TabProgetti:
                     self._save_project(p)
 
             tk.Button(eh, text="✏️", command=_edit_log,
-                      font=("DM Sans",9), fg=TC["sub"], bg=TC["surface"],
+                      font=("Inter",9), fg=TC["sub"], bg=TC["surface"],
                       relief="flat", cursor="hand2").pack(side="right")
             tk.Button(eh, text="🗑", command=_del_log,
-                      font=("DM Sans",9), fg=TC["red"], bg=TC["surface"],
+                      font=("Inter",9), fg=TC["red"], bg=TC["surface"],
                       relief="flat", cursor="hand2").pack(side="right")
 
             tk.Label(ec, text=entry.get("text",""),
-                     font=("DM Sans",11), fg=TC["text"], bg=TC["surface"],
+                     font=("Inter",11), fg=TC["text"], bg=TC["surface"],
                      wraplength=480, justify="left").pack(anchor="w", pady=(2,0))
 
         # Aggiungi entry
@@ -1665,7 +1688,7 @@ class TabProgetti:
             self._save_project(project)
         text_e.bind("<Return>", _add_log)
         ctk.CTkButton(add_frame, text="→", command=_add_log,
-                      fg_color=color, font=("DM Sans",12,"bold"),
+                      fg_color=color, font=("Inter",12,"bold"),
                       height=32, width=38, corner_radius=6).pack(side="right", padx=6, pady=6)
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -1676,15 +1699,15 @@ class TabProgetti:
         hdr = tk.Frame(self._body, bg=TC["bg"])
         hdr.pack(fill="x", padx=20, pady=(14,8))
         tk.Label(hdr, text=f"TEMPLATE SALVATI — {len(self._templates)}",
-                 font=("DM Sans",11,"bold"), fg=TC["sub"], bg=TC["bg"]).pack(side="left")
+                 font=("Inter",11,"bold"), fg=TC["sub"], bg=TC["bg"]).pack(side="left")
         ctk.CTkButton(hdr, text="+ Nuovo Template",
                       command=self._nuovo_template,
                       fg_color=TC["accent"], hover_color="#1e3a6e",
-                      font=("DM Sans",10,"bold"), height=28, corner_radius=6).pack(side="right")
+                      font=("Inter",10,"bold"), height=28, corner_radius=6).pack(side="right")
 
         if not self._templates:
             ctk.CTkLabel(self._body, text="Nessun template. Creane uno!",
-                         font=("DM Sans",13), text_color=TC["muted"]).pack(pady=40)
+                         font=("Inter",13), text_color=TC["muted"]).pack(pady=40)
             return
 
         grid = tk.Frame(self._body, bg=TC["bg"])
@@ -1713,41 +1736,41 @@ class TabProgetti:
         hrow.pack(fill="x", pady=(0,6))
         tk.Label(hrow, text=tmpl.get("icon","🚀"), font=("Arial",16), bg=TC["surface"]).pack(side="left")
         tk.Label(hrow, text=tmpl.get("name","?"),
-                 font=("DM Sans",12,"bold"), fg=TC["text"], bg=TC["surface"]).pack(side="left", padx=6)
+                 font=("Inter",12,"bold"), fg=TC["text"], bg=TC["surface"]).pack(side="left", padx=6)
 
         if tmpl.get("description"):
             tk.Label(body, text=tmpl["description"],
-                     font=("DM Sans",10), fg=TC["sub"], bg=TC["surface"]).pack(anchor="w")
+                     font=("Inter",10), fg=TC["sub"], bg=TC["surface"]).pack(anchor="w")
 
         # Fasi preview
         pf = tk.Frame(body, bg=TC["surface2"])
         pf.pack(fill="x", pady=6)
         for j, step in enumerate(tmpl.get("steps",[])[:4]):
             tk.Label(pf, text=f"{j+1}. {step.get('title','')}  ({len(step.get('tasks',[]))} task)",
-                     font=("DM Sans",10), fg=TC["text"], bg=TC["surface2"]).pack(anchor="w", padx=6, pady=1)
+                     font=("Inter",10), fg=TC["text"], bg=TC["surface2"]).pack(anchor="w", padx=6, pady=1)
 
         total_t = sum(len(s.get("tasks",[])) for s in tmpl.get("steps",[]))
         tk.Label(body, text=f"{total_t} task totali · {len(tmpl.get('steps',[]))} fasi",
-                 font=("DM Sans",9), fg=TC["muted"], bg=TC["surface"]).pack(anchor="w", pady=(0,6))
+                 font=("Inter",9), fg=TC["muted"], bg=TC["surface"]).pack(anchor="w", pady=(0,6))
 
         # Azioni
         btn_row = tk.Frame(body, bg=TC["surface"])
         btn_row.pack(fill="x")
         tk.Button(btn_row, text="▶ Usa",
                   command=lambda t=tmpl: self._usa_template(t),
-                  font=("DM Sans",10,"bold"), fg="#fff", bg=color,
+                  font=("Inter",10,"bold"), fg="#fff", bg=color,
                   relief="flat", padx=10, pady=4, cursor="hand2").pack(side="left")
         tk.Button(btn_row, text="⧉",
                   command=lambda t=tmpl: self._duplica_template(t),
-                  font=("DM Sans",10), fg=TC["sub"], bg=TC["surface2"],
+                  font=("Inter",10), fg=TC["sub"], bg=TC["surface2"],
                   relief="flat", padx=6, pady=4, cursor="hand2").pack(side="left", padx=4)
         tk.Button(btn_row, text="✏️",
                   command=lambda t=tmpl: self._modifica_template(t),
-                  font=("DM Sans",10), fg=TC["sub"], bg=TC["surface2"],
+                  font=("Inter",10), fg=TC["sub"], bg=TC["surface2"],
                   relief="flat", padx=6, pady=4, cursor="hand2").pack(side="left")
         tk.Button(btn_row, text="🗑️",
                   command=lambda t=tmpl: self._elimina_template(t["id"]),
-                  font=("DM Sans",10), fg=TC["red"], bg=TC["redBg"],
+                  font=("Inter",10), fg=TC["red"], bg=TC["redBg"],
                   relief="flat", padx=6, pady=4, cursor="hand2").pack(side="left", padx=4)
 
     def _render_template_editor(self, template):
@@ -1761,10 +1784,10 @@ class TabProgetti:
 
         tk.Button(hdr_inner, text="← Annulla",
                   command=lambda: self._cancel_template_edit(),
-                  font=("DM Sans",10), fg=TC["sub"], bg=TC["surface2"],
+                  font=("Inter",10), fg=TC["sub"], bg=TC["surface2"],
                   relief="flat", padx=10, pady=4, cursor="hand2").pack(side="left")
         tk.Label(hdr_inner, text="Nuovo Template" if template.get("id","").startswith("new_") else f"Modifica: {template.get('name','')}",
-                 font=("DM Sans",14,"bold"), fg=TC["text"], bg=TC["surface"]).pack(side="left", padx=10)
+                 font=("Inter",14,"bold"), fg=TC["text"], bg=TC["surface"]).pack(side="left", padx=10)
 
         def _save():
             self._templates = [template if t["id"]==template["id"] else t for t in self._templates]
@@ -1776,7 +1799,7 @@ class TabProgetti:
 
         ctk.CTkButton(hdr_inner, text="💾 Salva Template", command=_save,
                       fg_color=color, hover_color="#1e3a6e",
-                      font=("DM Sans",11,"bold"), height=30, corner_radius=6).pack(side="right")
+                      font=("Inter",11,"bold"), height=30, corner_radius=6).pack(side="right")
 
         tk.Frame(hdr, height=1, bg=TC["border"]).pack(fill="x")
 
@@ -1790,7 +1813,7 @@ class TabProgetti:
         for label, key, w in [("NOME TEMPLATE","name",220),("DESCRIZIONE","description",280)]:
             f = tk.Frame(fields, bg=TC["bg"])
             f.pack(side="left", padx=(0,16))
-            tk.Label(f, text=label, font=("DM Sans",9,"bold"), fg=TC["sub"], bg=TC["bg"]).pack(anchor="w")
+            tk.Label(f, text=label, font=("Inter",9,"bold"), fg=TC["sub"], bg=TC["bg"]).pack(anchor="w")
             e = ctk.CTkEntry(f, width=w, height=30, corner_radius=6)
             e.insert(0, template.get(key,""))
             e.pack()
@@ -1799,7 +1822,7 @@ class TabProgetti:
             e.bind("<KeyRelease>", _update)
 
         # Colore
-        tk.Label(form, text="COLORE", font=("DM Sans",9,"bold"), fg=TC["sub"], bg=TC["bg"]).pack(anchor="w")
+        tk.Label(form, text="COLORE", font=("Inter",9,"bold"), fg=TC["sub"], bg=TC["bg"]).pack(anchor="w")
         color_row = tk.Frame(form, bg=TC["bg"])
         color_row.pack(anchor="w", pady=(4,12))
         for c in COLORS_LIST:
@@ -1814,7 +1837,7 @@ class TabProgetti:
             btn.bind("<Button-1>", lambda e, cc=c: _set_color(cc))
 
         # Fasi
-        tk.Label(form, text="FASI E TASK", font=("DM Sans",9,"bold"), fg=TC["sub"], bg=TC["bg"]).pack(anchor="w", pady=(0,6))
+        tk.Label(form, text="FASI E TASK", font=("Inter",9,"bold"), fg=TC["sub"], bg=TC["bg"]).pack(anchor="w", pady=(0,6))
 
         for idx, step in enumerate(template.get("steps",[])):
             sf = tk.Frame(form, bg=TC["surface"],
@@ -1827,7 +1850,7 @@ class TabProgetti:
 
             sh = tk.Frame(sc, bg=TC["surface"])
             sh.pack(fill="x", pady=(0,6))
-            tk.Label(sh, text=f"FASE {idx+1}", font=("DM Sans",9,"bold"), fg=color, bg=TC["surface"]).pack(side="left")
+            tk.Label(sh, text=f"FASE {idx+1}", font=("Inter",9,"bold"), fg=color, bg=TC["surface"]).pack(side="left")
 
             step_entry = ctk.CTkEntry(sh, height=26, corner_radius=6)
             step_entry.insert(0, step.get("title",""))
@@ -1842,16 +1865,16 @@ class TabProgetti:
             if idx > 0:
                 tk.Button(move_col, text="▲",
                           command=lambda i=idx: self._move_template_step(template, i, -1),
-                          font=("DM Sans",8), relief="flat", bg=TC["surface2"],
+                          font=("Inter",8), relief="flat", bg=TC["surface2"],
                           cursor="hand2", padx=3).pack()
             if idx < len(template.get("steps",[]))-1:
                 tk.Button(move_col, text="▼",
                           command=lambda i=idx: self._move_template_step(template, i, 1),
-                          font=("DM Sans",8), relief="flat", bg=TC["surface2"],
+                          font=("Inter",8), relief="flat", bg=TC["surface2"],
                           cursor="hand2", padx=3).pack()
 
             tk.Button(sh, text="✕", command=lambda s=step: self._remove_template_step(template, s["id"]),
-                      font=("DM Sans",9), fg=TC["red"], bg=TC["surface"], relief="flat", cursor="hand2").pack(side="right")
+                      font=("Inter",9), fg=TC["red"], bg=TC["surface"], relief="flat", cursor="hand2").pack(side="right")
 
             # Task del template
             for task in step.get("tasks",[]):
@@ -1866,17 +1889,17 @@ class TabProgetti:
                 te.bind("<KeyRelease>", _upd_task)
                 tk.Button(tr, text="✕",
                           command=lambda s=step, t=task: self._remove_template_task(template, s["id"], t["id"]),
-                          font=("DM Sans",9), fg=TC["red"], bg=TC["surface"], relief="flat", cursor="hand2").pack(side="right")
+                          font=("Inter",9), fg=TC["red"], bg=TC["surface"], relief="flat", cursor="hand2").pack(side="right")
 
             tk.Button(sc, text="+ Aggiungi task",
                       command=lambda s=step: self._add_template_task(template, s["id"]),
-                      font=("DM Sans",9), fg=TC["muted"], bg=TC["surface"],
+                      font=("Inter",9), fg=TC["muted"], bg=TC["surface"],
                       relief="flat", cursor="hand2").pack(anchor="w", pady=(3,0))
 
         # Aggiungi fase
         tk.Button(form, text="+ Aggiungi fase",
                   command=lambda: self._add_template_step(template),
-                  font=("DM Sans",11), fg=color, bg=TC["bg"],
+                  font=("Inter",11), fg=color, bg=TC["bg"],
                   relief="flat", cursor="hand2", pady=8).pack(fill="x", pady=6)
 
     def _move_template_step(self, template, idx, direction):
@@ -1938,21 +1961,21 @@ class TabProgetti:
             ub = tk.Frame(self._body, bg="#fef2f2")
             ub.pack(fill="x", padx=20, pady=(14,4))
             tk.Label(ub, text=f"🎯 FOCUS DEL GIORNO — {len(urgent)} CONSEGN{'A' if len(urgent)==1 else 'E'} URGENTI",
-                     font=("DM Sans",10,"bold"), fg="#dc2626", bg="#fef2f2").pack(anchor="w", padx=10, pady=6)
+                     font=("Inter",10,"bold"), fg="#dc2626", bg="#fef2f2").pack(anchor="w", padx=10, pady=6)
 
         # Header
         hdr = tk.Frame(self._body, bg=TC["bg"])
         hdr.pack(fill="x", padx=20, pady=(12,8))
         tk.Label(hdr, text=f"CONSEGNE — {len(pending)} IN ATTESA",
-                 font=("DM Sans",11,"bold"), fg=TC["sub"], bg=TC["bg"]).pack(side="left")
+                 font=("Inter",11,"bold"), fg=TC["sub"], bg=TC["bg"]).pack(side="left")
         ctk.CTkButton(hdr, text="+ Nuova consegna",
                       command=lambda: self._nuovo_delivery(active_projects),
                       fg_color=TC["accent"], hover_color="#1e3a6e",
-                      font=("DM Sans",10,"bold"), height=28, corner_radius=6).pack(side="right")
+                      font=("Inter",10,"bold"), height=28, corner_radius=6).pack(side="right")
 
         if not pending:
             ctk.CTkLabel(self._body, text="📅  Nessuna consegna programmata",
-                         font=("DM Sans",13), text_color=TC["muted"]).pack(pady=40)
+                         font=("Inter",13), text_color=TC["muted"]).pack(pady=40)
         else:
             for d in pending:
                 self._delivery_row(d)
@@ -1966,7 +1989,7 @@ class TabProgetti:
             tk.Button(self._body,
                       text=f"▼ CONSEGNATE — {len(delivered)}" if not show_delivered.get() else f"▲ CONSEGNATE — {len(delivered)}",
                       command=_toggle_delivered,
-                      font=("DM Sans",10,"bold"), fg=TC["sub"], bg=TC["bg"],
+                      font=("Inter",10,"bold"), fg=TC["sub"], bg=TC["bg"],
                       relief="flat", cursor="hand2").pack(anchor="w", padx=20, pady=(12,4))
 
     def _delivery_row(self, d):
@@ -1990,11 +2013,11 @@ class TabProgetti:
         nr.pack(fill="x")
         tk.Label(nr, text="●", fg=color, bg=TC["surface"], font=("Arial",9)).pack(side="left")
         tk.Label(nr, text=proj.get("name","Progetto eliminato") if proj else "Progetto eliminato",
-                 font=("DM Sans",12,"bold"), fg=TC["text"] if proj else TC["muted"],
+                 font=("Inter",12,"bold"), fg=TC["text"] if proj else TC["muted"],
                  bg=TC["surface"]).pack(side="left", padx=4)
 
         if d.get("note"):
-            tk.Label(nr, text=d["note"], font=("DM Sans",10), fg=TC["sub"], bg=TC["surface"]).pack(side="left", padx=4)
+            tk.Label(nr, text=d["note"], font=("Inter",10), fg=TC["sub"], bg=TC["surface"]).pack(side="left", padx=4)
 
         # Badge urgenza
         if not d.get("delivered"):
@@ -2004,7 +2027,7 @@ class TabProgetti:
             urg_bg, urg_fg = TC["greenBg"], TC["green"]
 
         tk.Label(nr, text=badge_text,
-                 font=("DM Sans",10,"bold"), fg=urg_fg, bg=urg_bg,
+                 font=("Inter",10,"bold"), fg=urg_fg, bg=urg_bg,
                  padx=6, pady=1).pack(side="right")
 
         # Data e azioni
@@ -2014,7 +2037,7 @@ class TabProgetti:
             try:
                 dt = datetime.fromisoformat(d["dueDate"])
                 tk.Label(dr, text=dt.strftime("%d/%m/%Y"),
-                         font=("DM Sans",10), fg=TC["muted"], bg=TC["surface"]).pack(side="left")
+                         font=("Inter",10), fg=TC["muted"], bg=TC["surface"]).pack(side="left")
             except Exception:
                 pass
 
@@ -2025,7 +2048,7 @@ class TabProgetti:
             pb_bg.pack(side="left", padx=8)
             pb_bg.update_idletasks()
             tk.Frame(pb_bg, width=max(1,int(60*pct/100)), height=4, bg=color).pack(side="left")
-            tk.Label(dr, text=f"{pct}%", font=("DM Sans",9), fg=TC["sub"], bg=TC["surface"]).pack(side="left")
+            tk.Label(dr, text=f"{pct}%", font=("Inter",9), fg=TC["sub"], bg=TC["surface"]).pack(side="left")
 
         # Toggle consegnato
         def _toggle(dd=d):
@@ -2036,19 +2059,19 @@ class TabProgetti:
             self._refresh()
 
         tk.Button(dr, text="✓ Consegnato" if not d.get("delivered") else "↩ Riapri",
-                  command=_toggle, font=("DM Sans",9,"bold"),
+                  command=_toggle, font=("Inter",9,"bold"),
                   fg=TC["green"] if not d.get("delivered") else TC["sub"],
                   bg=TC["surface"], relief="flat", cursor="hand2").pack(side="right", padx=4)
 
         if proj:
             tk.Button(dr, text="Apri →",
                       command=lambda pid=proj["id"]: self._open_project(pid),
-                      font=("DM Sans",9), fg=TC["blue"], bg=TC["surface"],
+                      font=("Inter",9), fg=TC["blue"], bg=TC["surface"],
                       relief="flat", cursor="hand2").pack(side="right")
 
         tk.Button(dr, text="🗑",
                   command=lambda dd=d: self._elimina_delivery(dd.get("id","")),
-                  font=("DM Sans",9), fg=TC["red"], bg=TC["surface"],
+                  font=("Inter",9), fg=TC["red"], bg=TC["surface"],
                   relief="flat", cursor="hand2").pack(side="right")
 
     def _nuovo_delivery(self, active_projects):
@@ -2058,17 +2081,17 @@ class TabProgetti:
         win.grab_set()
         win.configure(bg=TC["bg"])
 
-        tk.Label(win, text="PROGETTO", font=("DM Sans",10,"bold"), fg=TC["sub"], bg=TC["bg"]).pack(anchor="w", padx=20, pady=(14,2))
+        tk.Label(win, text="PROGETTO", font=("Inter",10,"bold"), fg=TC["sub"], bg=TC["bg"]).pack(anchor="w", padx=20, pady=(14,2))
         proj_var = tk.StringVar()
         proj_names = [p.get("name","?") for p in active_projects]
         ttk.Combobox(win, textvariable=proj_var, values=proj_names, state="readonly", width=30).pack(anchor="w", padx=20)
         if proj_names: proj_var.set(proj_names[0])
 
-        tk.Label(win, text="DATA DI CONSEGNA", font=("DM Sans",10,"bold"), fg=TC["sub"], bg=TC["bg"]).pack(anchor="w", padx=20, pady=(10,2))
+        tk.Label(win, text="DATA DI CONSEGNA", font=("Inter",10,"bold"), fg=TC["sub"], bg=TC["bg"]).pack(anchor="w", padx=20, pady=(10,2))
         date_e = ctk.CTkEntry(win, width=200, height=30, placeholder_text="YYYY-MM-DD", corner_radius=6)
         date_e.pack(anchor="w", padx=20)
 
-        tk.Label(win, text="NOTE (opzionale)", font=("DM Sans",10,"bold"), fg=TC["sub"], bg=TC["bg"]).pack(anchor="w", padx=20, pady=(10,2))
+        tk.Label(win, text="NOTE (opzionale)", font=("Inter",10,"bold"), fg=TC["sub"], bg=TC["bg"]).pack(anchor="w", padx=20, pady=(10,2))
         note_e = ctk.CTkEntry(win, width=300, height=30, corner_radius=6)
         note_e.pack(anchor="w", padx=20)
 
@@ -2086,7 +2109,7 @@ class TabProgetti:
 
         ctk.CTkButton(win, text="Aggiungi", command=_save,
                       fg_color=TC["accent"], hover_color="#1e3a6e",
-                      font=("DM Sans",11,"bold"), height=32, corner_radius=6).pack(pady=12)
+                      font=("Inter",11,"bold"), height=32, corner_radius=6).pack(pady=12)
 
     def _elimina_delivery(self, did):
         self._deliveries = [d for d in self._deliveries if d.get("id") != did]
@@ -2099,9 +2122,9 @@ class TabProgetti:
 
     def _render_backup(self):
         ctk.CTkLabel(self._body, text="🗄️ Backup & Importazione",
-                     font=("DM Sans",18,"bold"), text_color=TC["text"]).pack(anchor="w", padx=24, pady=(18,4))
+                     font=("Inter",18,"bold"), text_color=TC["text"]).pack(anchor="w", padx=24, pady=(18,4))
         ctk.CTkLabel(self._body, text="Importa backup da WorkTrack o esporta i dati correnti.",
-                     font=("DM Sans",11), text_color=TC["muted"]).pack(anchor="w", padx=24, pady=(0,18))
+                     font=("Inter",11), text_color=TC["muted"]).pack(anchor="w", padx=24, pady=(0,18))
 
         # Stato attuale
         state_f = ctk.CTkFrame(self._body, fg_color=TC["surface"], corner_radius=10)
@@ -2118,31 +2141,31 @@ class TabProgetti:
             sf.pack(side="left", padx=6)
             sf.pack_propagate(False)
             tk.Label(sf, text=icon, font=("Arial",16), bg=TC["surface2"]).pack(pady=(8,0))
-            tk.Label(sf, text=str(val), font=("DM Sans",16,"bold"), fg=TC["text"], bg=TC["surface2"]).pack()
-            tk.Label(sf, text=label, font=("DM Sans",8), fg=TC["muted"], bg=TC["surface2"]).pack()
+            tk.Label(sf, text=str(val), font=("Inter",16,"bold"), fg=TC["text"], bg=TC["surface2"]).pack()
+            tk.Label(sf, text=label, font=("Inter",8), fg=TC["muted"], bg=TC["surface2"]).pack()
 
         # Export
         exp_f = ctk.CTkFrame(self._body, fg_color=TC["surface"], corner_radius=10)
         exp_f.pack(fill="x", padx=24, pady=(0,12))
         ctk.CTkLabel(exp_f, text="📤 ESPORTA FILE DI BACKUP",
-                     font=("DM Sans",12,"bold"), text_color=TC["sub"]).pack(anchor="w", padx=16, pady=(12,4))
+                     font=("Inter",12,"bold"), text_color=TC["sub"]).pack(anchor="w", padx=16, pady=(12,4))
         ctk.CTkLabel(exp_f, text="Salva tutti i progetti e template come file .json compatibile con WorkTrack.",
-                     font=("DM Sans",11), text_color=TC["muted"]).pack(anchor="w", padx=16)
+                     font=("Inter",11), text_color=TC["muted"]).pack(anchor="w", padx=16)
         ctk.CTkButton(exp_f, text=f"📤 Scarica backup completo ({len(self._projects)} progetti · {len(self._templates)} template)",
                       command=self._export_file,
                       fg_color=TC["accent"], hover_color="#1e3a6e",
-                      font=("DM Sans",11,"bold"), height=32, corner_radius=6).pack(anchor="w", padx=16, pady=12)
+                      font=("Inter",11,"bold"), height=32, corner_radius=6).pack(anchor="w", padx=16, pady=12)
 
         # Import
         imp_f = ctk.CTkFrame(self._body, fg_color=TC["surface"], corner_radius=10)
         imp_f.pack(fill="x", padx=24, pady=(0,20))
         ctk.CTkLabel(imp_f, text="📥 IMPORTA DA FILE",
-                     font=("DM Sans",12,"bold"), text_color=TC["sub"]).pack(anchor="w", padx=16, pady=(12,4))
+                     font=("Inter",12,"bold"), text_color=TC["sub"]).pack(anchor="w", padx=16, pady=(12,4))
         ctk.CTkLabel(imp_f, text="Carica un file .json esportato da WorkTrack. Puoi unire o sostituire i dati.",
-                     font=("DM Sans",11), text_color=TC["muted"]).pack(anchor="w", padx=16)
+                     font=("Inter",11), text_color=TC["muted"]).pack(anchor="w", padx=16)
 
         self._import_status = ctk.CTkLabel(imp_f, text="",
-                                            font=("DM Sans",11), text_color=TC["green"])
+                                            font=("Inter",11), text_color=TC["green"])
         self._import_status.pack(anchor="w", padx=16, pady=(4,0))
 
         btn_row = ctk.CTkFrame(imp_f, fg_color="transparent")
@@ -2150,15 +2173,15 @@ class TabProgetti:
         ctk.CTkButton(btn_row, text="+ Importa (merge)",
                       command=lambda: self._import_file("merge"),
                       fg_color=TC["accent"], hover_color="#1e3a6e",
-                      font=("DM Sans",11,"bold"), height=32, corner_radius=6).pack(side="left", padx=(0,8))
+                      font=("Inter",11,"bold"), height=32, corner_radius=6).pack(side="left", padx=(0,8))
         ctk.CTkButton(btn_row, text="Sostituisci tutto",
                       command=lambda: self._import_file("replace"),
                       fg_color="transparent", hover_color=TC["surface2"],
                       border_width=1, border_color=TC["border"], text_color=TC["sub"],
-                      font=("DM Sans",11), height=32, corner_radius=6).pack(side="left")
+                      font=("Inter",11), height=32, corner_radius=6).pack(side="left")
         ctk.CTkLabel(imp_f,
                      text="Merge: aggiunge senza cancellare (consigliato)\nSostituisci: cancella tutto e importa il backup",
-                     font=("DM Sans",10), text_color=TC["muted"]).pack(anchor="w", padx=16, pady=(0,14))
+                     font=("Inter",10), text_color=TC["muted"]).pack(anchor="w", padx=16, pady=(0,14))
 
     def _import_file(self, mode):
         path = fd.askopenfilename(title="Seleziona backup WorkTrack",
@@ -2245,7 +2268,7 @@ class TabProgetti:
             lbl.bind("<Button-1>", lambda e: self._toggle_sidebar())
             if pending > 0:
                 tk.Label(self._sidebar_frame, text=str(pending),
-                         font=("DM Sans",9,"bold"), fg="#fff", bg=TC["accent"],
+                         font=("Inter",9,"bold"), fg="#fff", bg=TC["accent"],
                          padx=4, pady=1).pack()
             return
 
@@ -2255,13 +2278,13 @@ class TabProgetti:
         sh = tk.Frame(self._sidebar_frame, bg=TC["surface"])
         sh.pack(fill="x", padx=8, pady=(8,4))
         tk.Label(sh, text="⚡ Task Rapidi",
-                 font=("DM Sans",11,"bold"), fg=TC["text"], bg=TC["surface"]).pack(side="left")
+                 font=("Inter",11,"bold"), fg=TC["text"], bg=TC["surface"]).pack(side="left")
         if pending > 0:
             tk.Label(sh, text=str(pending),
-                     font=("DM Sans",9,"bold"), fg="#fff", bg=TC["accent"],
+                     font=("Inter",9,"bold"), fg="#fff", bg=TC["accent"],
                      padx=5, pady=1).pack(side="left", padx=4)
         tk.Button(sh, text="✕", command=self._toggle_sidebar,
-                  font=("DM Sans",9), fg=TC["muted"], bg=TC["surface"],
+                  font=("Inter",9), fg=TC["muted"], bg=TC["surface"],
                   relief="flat", cursor="hand2").pack(side="right")
 
         # Input nuovo task
@@ -2278,7 +2301,7 @@ class TabProgetti:
         for key, (label, fg, bg, dot) in PRIORITY_CFG.items():
             sel = key == prio_var.get()
             btn = tk.Label(prio_row, text=f"{dot} {label}",
-                           font=("DM Sans",9,"bold" if sel else "normal"),
+                           font=("Inter",9,"bold" if sel else "normal"),
                            fg=fg, bg=bg if sel else TC["surface"],
                            cursor="hand2", padx=4, pady=2)
             btn.pack(side="left", padx=1)
@@ -2300,7 +2323,7 @@ class TabProgetti:
         entry.bind("<Return>", _add_qt)
         ctk.CTkButton(inp, text="+ Aggiungi", command=_add_qt,
                       fg_color=TC["accent"], hover_color="#1e3a6e",
-                      font=("DM Sans",10,"bold"), height=26, corner_radius=5).pack(fill="x", pady=3)
+                      font=("Inter",10,"bold"), height=26, corner_radius=5).pack(fill="x", pady=3)
 
         # Lista task
         tasks_frame = ctk.CTkScrollableFrame(self._sidebar_frame, fg_color=TC["surface"],
@@ -2322,7 +2345,7 @@ class TabProgetti:
                            bg=tr.cget("bg"), relief="flat", cursor="hand2").pack(side="left", padx=2)
 
             tk.Label(tr, text=task.get("text",""),
-                     font=("DM Sans",10), fg=TC["muted"] if task.get("done") else TC["text"],
+                     font=("Inter",10), fg=TC["muted"] if task.get("done") else TC["text"],
                      bg=tr.cget("bg"),
                      wraplength=160, justify="left").pack(side="left", fill="x", expand=True, padx=2)
 
@@ -2330,7 +2353,7 @@ class TabProgetti:
                 self._quick_tasks = [x for x in self._quick_tasks if x["id"] != t["id"]]
                 self._render_quick_sidebar()
             tk.Button(tr, text="✕", command=_del_qt,
-                      font=("DM Sans",8), fg=TC["red"], bg=tr.cget("bg"),
+                      font=("Inter",8), fg=TC["red"], bg=tr.cget("bg"),
                       relief="flat", cursor="hand2").pack(side="right", padx=2)
 
     def _toggle_sidebar(self):
@@ -2457,9 +2480,9 @@ class TabProgetti:
         hdr = tk.Frame(win, bg=TC["surface"])
         hdr.pack(fill="x")
         tk.Label(hdr, text=f"📄 Lancia in Analisi NC — {project.get('name','')}",
-                 font=("DM Sans",13,"bold"), fg=TC["text"], bg=TC["surface"]).pack(side="left", padx=14, pady=10)
+                 font=("Inter",13,"bold"), fg=TC["text"], bg=TC["surface"]).pack(side="left", padx=14, pady=10)
         tk.Button(hdr, text="✕", command=win.destroy,
-                  font=("DM Sans",10), fg=TC["sub"], bg=TC["surface"],
+                  font=("Inter",10), fg=TC["sub"], bg=TC["surface"],
                   relief="flat", cursor="hand2").pack(side="right", padx=8)
         tk.Frame(win, height=1, bg=TC["border"]).pack(fill="x")
 
@@ -2504,18 +2527,18 @@ class TabProgetti:
         ctk.CTkButton(sel_frame, text=f"☑ Seleziona da fare ({len(da_fare)})",
                       command=_sel_da_fare,
                       fg_color=TC["blue"], hover_color="#1552A0",
-                      font=("DM Sans",10,"bold"), height=28, corner_radius=6).pack(side="left", padx=3)
+                      font=("Inter",10,"bold"), height=28, corner_radius=6).pack(side="left", padx=3)
         if in_macchina:
             ctk.CTkButton(sel_frame, text=f"Seleziona tutti ({len(da_fare)+len(in_macchina)})",
                           command=_sel_tutti,
                           fg_color=TC["surface2"], hover_color=TC["border"],
                           text_color=TC["sub"],
-                          font=("DM Sans",10), height=28, corner_radius=6).pack(side="left", padx=3)
+                          font=("Inter",10), height=28, corner_radius=6).pack(side="left", padx=3)
         ctk.CTkButton(sel_frame, text="Deseleziona",
                       command=_desel_tutti,
                       fg_color="transparent", hover_color=TC["surface2"],
                       text_color=TC["muted"], border_width=1, border_color=TC["border"],
-                      font=("DM Sans",10), height=28, corner_radius=6).pack(side="left", padx=3)
+                      font=("Inter",10), height=28, corner_radius=6).pack(side="left", padx=3)
 
         # Lista programmi
         TOOL_BG = {"mancante":"#FEE2E2","fin_vita":"#FEF9C3","disabilitato":"#EDE9FE"}
@@ -2529,7 +2552,7 @@ class TabProgetti:
             sh = tk.Frame(list_frame, bg=color)
             sh.pack(fill="x", pady=(4,0))
             tk.Label(sh, text=f"  {label} — {len(items)}",
-                     font=("DM Sans",8,"bold"), fg=TC["text"], bg=color).pack(side="left", pady=3)
+                     font=("Inter",8,"bold"), fg=TC["text"], bg=color).pack(side="left", pady=3)
 
             for pgm in items:
                 fn = pgm.get("filename","")
@@ -2559,7 +2582,7 @@ class TabProgetti:
                 }
                 slbl, sfg, sbg = STATO_LABEL.get(stato, ("?", "#94a3b8","#f8fafc"))
                 tk.Label(row, text=slbl,
-                         font=("DM Sans",8,"bold"), fg=sfg, bg=sbg,
+                         font=("Inter",8,"bold"), fg=sfg, bg=sbg,
                          padx=5, pady=1).pack(side="left", padx=(2,4))
 
                 # Filename (primario, blu)
@@ -2580,7 +2603,7 @@ class TabProgetti:
                 # Operazione
                 op = (pgm.get("tipoOp","") or "").replace("- NESSUN TESTO","").strip()[:35]
                 tk.Label(row, text=op,
-                         font=("DM Sans",9), fg=TC["sub"] if not dimmed else TC["muted"],
+                         font=("Inter",9), fg=TC["sub"] if not dimmed else TC["muted"],
                          bg=row_bg).pack(side="left", padx=4)
 
         _render_section("DA FARE", "#F0F4FF", da_fare)
@@ -2598,7 +2621,7 @@ class TabProgetti:
                     toggle_btn.configure(text=f"▼ COMPLETATI — {len(completati)}")
             toggle_btn = tk.Button(list_frame, text=f"▼ COMPLETATI — {len(completati)}",
                                    command=_toggle_comp,
-                                   font=("DM Sans",8,"bold"), fg=TC["muted"], bg=TC["bg"],
+                                   font=("Inter",8,"bold"), fg=TC["muted"], bg=TC["bg"],
                                    relief="flat", cursor="hand2")
             toggle_btn.pack(anchor="w", padx=8, pady=4)
 
@@ -2608,11 +2631,11 @@ class TabProgetti:
         footer.pack(fill="x", padx=12, pady=8)
 
         lbl_counter = ctk.CTkLabel(footer, text="Nessun programma selezionato",
-                                    font=("DM Sans",11), text_color=TC["muted"])
+                                    font=("Inter",11), text_color=TC["muted"])
         lbl_counter.pack(side="left")
 
         tk.Button(footer, text="Annulla", command=win.destroy,
-                  font=("DM Sans",11), fg=TC["sub"], bg=TC["surface2"],
+                  font=("Inter",11), fg=TC["sub"], bg=TC["surface2"],
                   relief="flat", padx=12, pady=6, cursor="hand2").pack(side="right", padx=4)
 
         btn_lancia = ctk.CTkButton(footer, text="📄 Lancia in NC →",
@@ -2621,7 +2644,7 @@ class TabProgetti:
                                         [p for p in all_pgm if selected.get(p.get("filename","")) and selected[p.get("filename","")].get()],
                                         win),
                                     fg_color=TC["border"], state="disabled",
-                                    font=("DM Sans",11,"bold"), height=34, corner_radius=6)
+                                    font=("Inter",11,"bold"), height=34, corner_radius=6)
         btn_lancia.pack(side="right", padx=4)
 
         # Seleziona da fare di default
@@ -2686,17 +2709,17 @@ class TabProgetti:
         win.grab_set()
         win.configure(bg=TC["bg"])
 
-        tk.Label(win, text="NOME PROGETTO *", font=("DM Sans",10,"bold"), fg=TC["sub"], bg=TC["bg"]).pack(anchor="w", padx=20, pady=(14,2))
+        tk.Label(win, text="NOME PROGETTO *", font=("Inter",10,"bold"), fg=TC["sub"], bg=TC["bg"]).pack(anchor="w", padx=20, pady=(14,2))
         name_e = ctk.CTkEntry(win, width=400, height=32, corner_radius=6)
         name_e.pack(anchor="w", padx=20)
         name_e.focus()
 
-        tk.Label(win, text="TEMPLATE", font=("DM Sans",10,"bold"), fg=TC["sub"], bg=TC["bg"]).pack(anchor="w", padx=20, pady=(10,2))
+        tk.Label(win, text="TEMPLATE", font=("Inter",10,"bold"), fg=TC["sub"], bg=TC["bg"]).pack(anchor="w", padx=20, pady=(10,2))
         tmpl_var = tk.StringVar(value="(nessuno)")
         tmpl_names = ["(nessuno)"] + [t.get("name","?") for t in self._templates]
         ttk.Combobox(win, textvariable=tmpl_var, values=tmpl_names, state="readonly", width=35).pack(anchor="w", padx=20)
 
-        tk.Label(win, text="COLORE", font=("DM Sans",10,"bold"), fg=TC["sub"], bg=TC["bg"]).pack(anchor="w", padx=20, pady=(10,2))
+        tk.Label(win, text="COLORE", font=("Inter",10,"bold"), fg=TC["sub"], bg=TC["bg"]).pack(anchor="w", padx=20, pady=(10,2))
         color_var = tk.StringVar(value=COLORS_LIST[0])
         color_row = tk.Frame(win, bg=TC["bg"])
         color_row.pack(anchor="w", padx=20)
@@ -2730,7 +2753,7 @@ class TabProgetti:
 
         ctk.CTkButton(win, text="Crea Progetto", command=_create,
                       fg_color=COLORS_LIST[0], hover_color="#1e3a6e",
-                      font=("DM Sans",12,"bold"), height=36, corner_radius=6).pack(pady=16, padx=20)
+                      font=("Inter",12,"bold"), height=36, corner_radius=6).pack(pady=16, padx=20)
 
     # Template actions
     def _nuovo_template(self):

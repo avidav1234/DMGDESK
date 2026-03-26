@@ -103,7 +103,7 @@ class MainWindow(ctk.CTk):
         NAV = [
             ("home",      "🏠", "Home"),
             ("lavori",    "📋", "Lavori"),
-            ("macchina",  "○",  "Macchina"),
+            ("macchina",  "⚙️",  "Macchina"),
             ("analisi",   "📄", "Analisi NC"),
             ("utensili",  "🔧", "Utensili"),
         ]
@@ -112,7 +112,7 @@ class MainWindow(ctk.CTk):
             ("generatore","📝","Generatore"),
             ("scaffale",  "📦","Scaffale"),
             ("smontati",  "🔩","Smontati"),
-            ("holder",    "⚙", "Holder"),
+            ("holder",    "⚙️", "Holder"),
         ]
 
         def switch(name):

@@ -1320,15 +1320,90 @@ class TabProgetti:
                   font=("Inter",9), fg=TC["muted"], bg=bg,
                   relief="flat", cursor="hand2").pack(side="right", padx=3)
 
-        # Note
+        # Note con bottone aggiungi + edit + elimina
         notes = task.get("notes", [])
         if not notes and task.get("note"):
             notes = [{"id": f"legacy_{task['id']}", "text": task["note"], "createdAt": ""}]
+
+        def _save_notes(new_notes, t=task, p=project):
+            t["notes"] = new_notes
+            t["note"] = ""
+            self._save_project(p)
+
+        # Bottone aggiungi commento
+        def _add_note_ui(par=parent, t=task, p=project, bg_row=bg):
+            nf = tk.Frame(par, bg="#eef4fb")
+            nf.pack(fill="x", padx=(28,0), pady=2)
+            e = ctk.CTkEntry(nf, width=340, height=24, placeholder_text="Scrivi commento...", corner_radius=5)
+            e.pack(side="left", padx=4)
+            def _confirm():
+                txt = e.get().strip()
+                if not txt: nf.destroy(); return
+                cur = list(t.get("notes") or [])
+                if not cur and t.get("note"):
+                    cur = [{"id": f"legacy_{t['id']}", "text": t["note"], "createdAt": ""}]
+                cur.append({"id": uid(), "text": txt, "createdAt": now_str()})
+                _save_notes(cur, t, p)
+                nf.destroy()
+                # Refresh del dettaglio
+                self._save_project(p)
+            e.bind("<Return>", lambda ev: _confirm())
+            e.bind("<Escape>", lambda ev: nf.destroy())
+            tk.Button(nf, text="✓", command=_confirm,
+                      font=("Inter",9,"bold"), fg="#fff", bg=TC["accent"],
+                      relief="flat", cursor="hand2", padx=6).pack(side="left")
+            tk.Button(nf, text="✕", command=nf.destroy,
+                      font=("Inter",9), fg=TC["muted"], bg="#eef4fb",
+                      relief="flat", cursor="hand2").pack(side="left", padx=2)
+            e.focus_set()
+
         for note in notes:
             nrow = tk.Frame(parent, bg="#eef4fb")
             nrow.pack(fill="x", padx=(28,0), pady=1)
-            tk.Label(nrow, text=f"💬 {note['text']}",
-                     font=("Inter",9,"italic"), fg=TC["accent"], bg="#eef4fb").pack(side="left", padx=6)
+            tk.Label(nrow, text="💬", bg="#eef4fb", font=("Arial",9)).pack(side="left", padx=(6,2))
+            tk.Label(nrow, text=note["text"],
+                     font=("Inter",9,"italic"), fg=TC["accent"], bg="#eef4fb",
+                     wraplength=500, anchor="w", justify="left").pack(side="left", padx=2)
+            if note.get("createdAt"):
+                tk.Label(nrow, text=note["createdAt"][:16],
+                         font=("Inter",7), fg=TC["muted"], bg="#eef4fb").pack(side="left", padx=4)
+            # Modifica
+            def _edit_note(n=note, t=task, p=project, nr=nrow):
+                for w in nr.winfo_children(): w.destroy()
+                e = ctk.CTkEntry(nr, width=340, height=22, corner_radius=4)
+                e.insert(0, n["text"])
+                e.pack(side="left", padx=4)
+                def _save_edit():
+                    new_text = e.get().strip()
+                    if not new_text: return
+                    cur = [x if x["id"]!=n["id"] else {**x,"text":new_text} for x in (t.get("notes") or [])]
+                    _save_notes(cur, t, p)
+                    nr.destroy()
+                    self._save_project(p)
+                e.bind("<Return>", lambda ev: _save_edit())
+                e.bind("<Escape>", lambda ev: nr.destroy())
+                tk.Button(nr, text="✓", command=_save_edit,
+                          font=("Inter",9,"bold"), fg="#fff", bg=TC["accent"],
+                          relief="flat", cursor="hand2", padx=6).pack(side="left")
+                e.focus_set()
+            tk.Button(nrow, text="✏️", command=_edit_note,
+                      font=("Inter",8), fg=TC["muted"], bg="#eef4fb",
+                      relief="flat", cursor="hand2").pack(side="right", padx=2)
+            # Elimina
+            def _del_note(n=note, t=task, p=project, nr=nrow):
+                cur = [x for x in (t.get("notes") or []) if x["id"]!=n["id"]]
+                _save_notes(cur, t, p)
+                nr.destroy()
+            tk.Button(nrow, text="✕", command=_del_note,
+                      font=("Inter",8), fg=TC["red"], bg="#eef4fb",
+                      relief="flat", cursor="hand2").pack(side="right")
+
+        # Bottone + commento sulla riga task
+        n_count = len(notes)
+        note_btn_text = f"💬 {n_count}" if n_count > 0 else "💬"
+        tk.Button(row, text=note_btn_text, command=_add_note_ui,
+                  font=("Inter",9), fg=TC["accent"] if n_count>0 else TC["muted"],
+                  bg=bg, relief="flat", cursor="hand2", padx=3).pack(side="right", padx=2)
 
         # FresaturaPanel
         if task.get("text","").strip().lower() == "fresatura":

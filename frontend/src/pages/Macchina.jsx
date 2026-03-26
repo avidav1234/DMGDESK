@@ -398,12 +398,12 @@ export default function Macchina() {
           borderRadius: 10, border: '1px solid var(--border)' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
-              <tr style={{ borderBottom: '1px solid var(--border)' }}>
+              <tr style={{ borderBottom: '2px solid var(--border)', background: '#f8fafc' }}>
                 {['Pos', 'Nome utensile', 'Duplo', 'L (mm)', 'R (mm)', 'Vita %', 'Stato'].map(h => (
-                  <th key={h} style={{ padding: '9px 14px', textAlign: 'left', fontSize: 11,
+                  <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontSize: 10,
                     fontFamily: 'var(--font-mono)', color: 'var(--text-dim)',
-                    fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em',
-                    position: 'sticky', top: 0, background: 'var(--bg-surface)' }}>{h}</th>
+                    fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em',
+                    position: 'sticky', top: 0, background: '#f8fafc', zIndex: 1 }}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -413,36 +413,52 @@ export default function Macchina() {
                 const isDis    = !t.is_enabled || t.is_worn
                 const isWorn   = t.life_percent !== null && t.life_percent < 10
                 const rowBg    = fuoriMag ? 'rgba(0,0,0,0.02)' : isDis ? 'rgba(255,68,85,0.04)' : isWorn ? 'rgba(109,40,217,0.04)' : 'transparent'
-                const posFmt = t.magazine != null && t.position != null
-                  ? `M${t.magazine}·${String(t.position).padStart(3,'0')}` : '—'
+                const mag  = t.magazine != null ? `M${t.magazine}` : null
+                const pos  = t.position != null ? String(t.position).padStart(3,'0') : null
                 return (
                   <tr key={t.tool_id}
                     style={{ borderBottom: '1px solid var(--border)', background: rowBg }}
                     onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
                     onMouseLeave={e => e.currentTarget.style.background = rowBg}>
-                    <td style={{ padding: '8px 14px', fontFamily: 'var(--font-mono)', fontSize: 11,
-                      color: 'var(--navy-accent)', opacity: 0.8 }}>{posFmt}</td>
-                    <td style={{ padding: '8px 14px', fontFamily: 'var(--font-mono)', fontSize: 13,
-                      color: isDis ? 'var(--text-dim)' : 'var(--text-primary)', fontWeight: 600 }}>{t.name}</td>
-                    <td style={{ padding: '8px 14px', fontFamily: 'var(--font-mono)', fontSize: 12,
-                      color: 'var(--text-dim)' }}>#{t.duplo}</td>
-                    <td style={{ padding: '8px 14px', fontFamily: 'var(--font-mono)', fontSize: 12,
+                    {/* POS — prominente */}
+                    <td style={{ padding: '9px 14px', whiteSpace: 'nowrap' }}>
+                      {mag
+                        ? <span style={{ display:'inline-flex', alignItems:'center', gap:2 }}>
+                            <span style={{ fontSize:12, fontFamily:'var(--font-mono)', fontWeight:800,
+                              color:'#0d2d5e', background:'#eef4fb', padding:'3px 7px',
+                              borderRadius:5, letterSpacing:'0.03em' }}>{mag}</span>
+                            <span style={{ fontSize:13, fontFamily:'var(--font-mono)', fontWeight:700,
+                              color:'#0f172a' }}>·{pos}</span>
+                          </span>
+                        : <span style={{ fontSize:12, color:'var(--text-dim)' }}>—</span>}
+                    </td>
+                    {/* Nome */}
+                    <td style={{ padding: '9px 14px', fontFamily: 'var(--font-mono)', fontSize: 13,
+                      color: isDis ? 'var(--text-dim)' : 'var(--text-primary)', fontWeight: 700 }}>{t.name}</td>
+                    {/* Duplo */}
+                    <td style={{ padding: '9px 14px', fontFamily: 'var(--font-mono)', fontSize: 12,
+                      fontWeight: 700, color: '#475569' }}>#{t.duplo}</td>
+                    {/* L mm */}
+                    <td style={{ padding: '9px 14px', fontFamily: 'var(--font-mono)', fontSize: 12,
                       color: 'var(--text-secondary)' }}>{t.length?.toFixed(3)}</td>
-                    <td style={{ padding: '8px 14px', fontFamily: 'var(--font-mono)', fontSize: 12,
+                    {/* R mm */}
+                    <td style={{ padding: '9px 14px', fontFamily: 'var(--font-mono)', fontSize: 12,
                       color: 'var(--text-secondary)' }}>{t.radius?.toFixed(3)}</td>
-                    <td style={{ padding: '8px 14px' }}><LifeBar pct={t.life_percent} /></td>
-                    <td style={{ padding: '8px 14px' }}>
+                    {/* Vita */}
+                    <td style={{ padding: '9px 14px' }}><LifeBar pct={t.life_percent} /></td>
+                    {/* Stato */}
+                    <td style={{ padding: '9px 14px' }}>
                       {fuoriMag
                         ? <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)',
-                            background: 'rgba(0,0,0,0.05)', padding: '2px 7px', borderRadius: 3 }}>FUORI MAG.</span>
+                            background: 'rgba(0,0,0,0.05)', padding: '2px 8px', borderRadius: 4 }}>FUORI MAG.</span>
                         : isDis
                         ? <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--red)',
-                            background: 'rgba(255,68,85,0.1)', padding: '2px 7px', borderRadius: 3 }}>DISAB.</span>
+                            background: 'rgba(255,68,85,0.1)', padding: '2px 8px', borderRadius: 4, fontWeight:700 }}>DISAB.</span>
                         : isWorn
                         ? <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: '#6d28d9',
-                            background: 'rgba(109,40,217,0.1)', padding: '2px 7px', borderRadius: 3 }}>VITA BASSA</span>
+                            background: 'rgba(109,40,217,0.1)', padding: '2px 8px', borderRadius: 4, fontWeight:700 }}>VITA BASSA</span>
                         : <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--green)',
-                            background: 'rgba(22,163,74,0.08)', padding: '2px 7px', borderRadius: 3 }}>OK</span>}
+                            background: 'rgba(22,163,74,0.08)', padding: '2px 8px', borderRadius: 4 }}>OK</span>}
                     </td>
                   </tr>
                 )

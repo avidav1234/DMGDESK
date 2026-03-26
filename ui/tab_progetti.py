@@ -2786,7 +2786,6 @@ class TabProgetti:
 
         _render_section("DA FARE", "#F0F4FF", da_fare)
         _render_section("IN MACCHINA", "#eef4fb", in_macchina, dimmed=True)
-        _aggiorna_counter()  # aggiorna counter con pre-selezione
         # Completati collassati
         if completati:
             show_comp = tk.BooleanVar(value=False)
@@ -2826,8 +2825,11 @@ class TabProgetti:
                                     font=("Inter",11,"bold"), height=34, corner_radius=6)
         btn_lancia.pack(side="right", padx=4)
 
-        # Seleziona da fare di default
-        _sel_da_fare()
+        # Se c'erano pre-selezioni aggiorna counter, altrimenti seleziona da fare
+        if pre_selected_ids:
+            _aggiorna_counter()
+        else:
+            _sel_da_fare()
 
     def _esegui_lancio(self, project, pgm_selezionati, win):
         """Esegue il lancio in NC con i programmi selezionati."""

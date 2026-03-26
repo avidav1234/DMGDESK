@@ -1717,6 +1717,15 @@ class TabProgetti:
             row, col = divmod(i, 2)
             self._template_card(grid, tmpl, row, col)
 
+        def _fix_w(g=grid):
+            g.update_idletasks()
+            w = g.winfo_width()
+            if w > 10:
+                half = (w - 12) // 2
+                g.columnconfigure(0, minsize=half)
+                g.columnconfigure(1, minsize=half)
+        self._body.after(30, _fix_w)
+
     def _template_card(self, parent, tmpl, row, col):
         color = tmpl.get("color", TC["accent"])
         card = tk.Frame(parent, bg=TC["surface"],

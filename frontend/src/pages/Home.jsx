@@ -67,7 +67,7 @@ export default function Home(){
           <div style={{display:'flex',gap:10,flexWrap:'wrap'}}>
             {urgenti.map(p=>{
               const d=getDel(p.id);const days=daysUntil(d?.dueDate)
-              const txt=days===0?'oggi':days<0?`${Math.abs(days)}gg fa`:`tra ${days}gg`
+              const txt=days===0?'oggi':days<0?`scaduta ${Math.abs(days)}gg fa`:`tra ${days}gg`
               return(
                 <div key={p.id} onClick={()=>apri(p.id)}
                   style={{display:'flex',alignItems:'center',gap:12,background:'#fdf4f4',
@@ -79,7 +79,7 @@ export default function Home(){
                   </span>
                   <span style={{fontSize:12,fontWeight:800,color:'#dc2626',background:'#fff',
                     padding:'3px 12px',borderRadius:20,border:'1px solid #fca5a5',flexShrink:0}}>
-                    {days===0?'OGGI':days<0?`${Math.abs(days)}gg fa`:`${days}gg`}
+                    {days===0?'OGGI':days<0?`scaduta ${Math.abs(days)}gg fa`:`${days}gg`}
                   </span>
                 </div>
               )
@@ -201,7 +201,7 @@ export default function Home(){
                       <div style={{fontSize:14,fontWeight:800,color:pct===100?'#16a34a':p.color||T.accent}}>{pct}%</div>
                       {days!==null&&<div style={{fontSize:11,fontWeight:700,
                         color:days<=3?'#dc2626':days<=7?'#9a6b2e':'#94a3b8'}}>
-                        {days===0?'oggi':days<0?`${Math.abs(days)}gg fa`:`${days}gg`}
+                        {days===0?'oggi':days<0?`scaduta ${Math.abs(days)}gg fa`:`${days}gg`}
                       </div>}
                     </div>
                   </div>

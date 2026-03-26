@@ -183,13 +183,13 @@ def days_until(date_str: str):
         return None
 
 def delivery_urgency(days):
-    if days is None:    return ("Nessuna data", "#94a3b8", "#f8fafc",  "⚪")
-    if days < 0:        return ("SCADUTA",       "#FFFFFF", "#c0392b",  "💀")
-    if days == 0:       return ("OGGI",           "#FFFFFF", "#c0392b",  "🚨")
-    if days <= 3:       return (f"{days}gg",      "#c0392b", "#fdf4f4", "🔴")
-    if days <= 7:       return (f"{days}gg",      "#9a6b2e", "#fdf6e3", "🟠")
-    if days <= 21:      return (f"{days}gg",      "#0d2d5e", "#eef4fb", "🟡")
-    return              (f"{days}gg",             "#2d8a55", "#f0f9f4", "🟢")
+    if days is None:    return ("Nessuna data",              "#94a3b8", "#f8fafc",  "⚪")
+    if days < 0:        return (f"Scaduta {abs(days)}gg fa", "#FFFFFF", "#c0392b",  "💀")
+    if days == 0:       return ("OGGI",                       "#FFFFFF", "#c0392b",  "🚨")
+    if days <= 3:       return (f"{days}gg",                  "#c0392b", "#fdf4f4", "🔴")
+    if days <= 7:       return (f"{days}gg",                  "#9a6b2e", "#fdf6e3", "🟠")
+    if days <= 21:      return (f"{days}gg",                  "#0d2d5e", "#eef4fb", "🟡")
+    return              (f"{days}gg",                         "#2d8a55", "#f0f9f4", "🟢")
 
 def clone_template_to_steps(tmpl: dict) -> list:
     return [

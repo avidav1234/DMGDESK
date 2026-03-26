@@ -47,8 +47,9 @@ function daysUntil(dateStr){
   return Math.round((target-today)/86400000)
 }
 function deliveryUrgency(days){
-  if(days===null) return {label:'Nessuna data',color:T.textMuted,bg:T.surface2,dot:'⚪',rank:4}
-  if(days<0)     return {label:'SCADUTA',      color:'#fff',    bg:T.red,     dot:'💀',rank:0}
+  if(days===null) return {label:'Nessuna data',         color:T.textMuted, bg:T.surface2, dot:'⚪',rank:4}
+  if(days<0)     return {label:`Scaduta ${Math.abs(days)}gg fa`, color:'#fff', bg:T.red, dot:'💀',rank:0}
+  if(days===0)   return {label:'OGGI',                  color:'#fff',      bg:T.red,     dot:'🚨',rank:0}
   if(days===0)   return {label:'OGGI',          color:'#fff',    bg:T.red,     dot:'🚨',rank:0}
   if(days<=3)    return {label:`${days}gg`,     color:T.red,     bg:T.redBg,   dot:'🔴',rank:1}
   if(days<=7)    return {label:`${days}gg`,     color:'#1e40af', bg:'#FFF0DC', dot:'🟠',rank:2}
@@ -2225,7 +2226,7 @@ export default function Progetti(){
               {inProgress.length>0&&(
                 <>
                   <div style={{fontSize:13,color:T.textSub,fontWeight:700,letterSpacing:'0.06em',marginBottom:14}}>IN CORSO — {inProgress.length} · ordinati per priorità</div>
-                  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(480px, 1fr))',gap:14,marginBottom:32}}>
+                  <div style={{display:'grid',gridTemplateColumns:'repeat(2, 1fr)',gap:14,marginBottom:32}}>
                     {inProgress.map((p,i)=>{
                       const d=getDelivery(p.id)
                       const isLast = i===inProgress.length-1 && inProgress.length%2!==0
@@ -2240,7 +2241,7 @@ export default function Progetti(){
               {completed.length>0&&(
                 <>
                   <div style={{fontSize:13,color:T.textSub,fontWeight:700,letterSpacing:'0.06em',marginBottom:14}}>COMPLETATI — {completed.length}</div>
-                  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(480px, 1fr))',gap:14}}>
+                  <div style={{display:'grid',gridTemplateColumns:'repeat(2, 1fr)',gap:14}}>
                     {completed.map((p,i)=>{
                       const d=getDelivery(p.id)
                       const isLast = i===completed.length-1 && completed.length%2!==0

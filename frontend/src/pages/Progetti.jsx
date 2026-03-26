@@ -2225,12 +2225,14 @@ export default function Progetti(){
               {inProgress.length>0&&(
                 <>
                   <div style={{fontSize:13,color:T.textSub,fontWeight:700,letterSpacing:'0.06em',marginBottom:14}}>IN CORSO — {inProgress.length} · ordinati per priorità</div>
-                  <div style={{display:'grid',gridTemplateColumns:'repeat(2, 1fr)',gap:14,marginBottom:32}}>
+                  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(480px, 1fr))',gap:14,marginBottom:32}}>
                     {inProgress.map((p,i)=>{
                       const d=getDelivery(p.id)
                       const isLast = i===inProgress.length-1 && inProgress.length%2!==0
-                      return <div key={p.id} style={{gridColumn:isLast?'1 / -1':undefined}}><ProjectCard project={p} onClick={()=>setSelectedId(p.id)} onDelete={deleteProject} onArchive={archiveProject} delivery={d}
-                        onSetDelivery={(pid,date,toggle)=>{if(toggle!==undefined&&d)setDelivery(d.id,{delivered:toggle,deliveredAt:toggle?nowStr():null},true);else if(date!==null)d?setDelivery(d.id,{dueDate:date},true):setDelivery(uid(),{projectId:pid,dueDate:date,delivered:false},false);else if(d)setDelivery(d.id,{dueDate:''},true)}}/></div>
+                      return <div key={p.id} style={{gridColumn:isLast?'1 / -1':undefined, maxWidth:isLast?'calc(50% - 7px)':undefined}}>
+                        <ProjectCard project={p} onClick={()=>setSelectedId(p.id)} onDelete={deleteProject} onArchive={archiveProject} delivery={d}
+                          onSetDelivery={(pid,date,toggle)=>{if(toggle!==undefined&&d)setDelivery(d.id,{delivered:toggle,deliveredAt:toggle?nowStr():null},true);else if(date!==null)d?setDelivery(d.id,{dueDate:date},true):setDelivery(uid(),{projectId:pid,dueDate:date,delivered:false},false);else if(d)setDelivery(d.id,{dueDate:''},true)}}/>
+                      </div>
                     })}
                     })}
                   </div>
@@ -2239,12 +2241,14 @@ export default function Progetti(){
               {completed.length>0&&(
                 <>
                   <div style={{fontSize:13,color:T.textSub,fontWeight:700,letterSpacing:'0.06em',marginBottom:14}}>COMPLETATI — {completed.length}</div>
-                  <div style={{display:'grid',gridTemplateColumns:'repeat(2, 1fr)',gap:14}}>
+                  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(480px, 1fr))',gap:14}}>
                     {completed.map((p,i)=>{
                       const d=getDelivery(p.id)
                       const isLast = i===completed.length-1 && completed.length%2!==0
-                      return <div key={p.id} style={{gridColumn:isLast?'1 / -1':undefined}}><ProjectCard project={p} onClick={()=>setSelectedId(p.id)} onDelete={deleteProject} onArchive={archiveProject} delivery={d}
-                        onSetDelivery={(pid,date,toggle)=>{if(toggle!==undefined&&d)setDelivery(d.id,{delivered:toggle,deliveredAt:toggle?nowStr():null},true);else if(date!==null)d?setDelivery(d.id,{dueDate:date},true):setDelivery(uid(),{projectId:pid,dueDate:date,delivered:false},false);else if(d)setDelivery(d.id,{dueDate:''},true)}}/></div>
+                      return <div key={p.id} style={{gridColumn:isLast?'1 / -1':undefined, maxWidth:isLast?'calc(50% - 7px)':undefined}}>
+                        <ProjectCard project={p} onClick={()=>setSelectedId(p.id)} onDelete={deleteProject} onArchive={archiveProject} delivery={d}
+                          onSetDelivery={(pid,date,toggle)=>{if(toggle!==undefined&&d)setDelivery(d.id,{delivered:toggle,deliveredAt:toggle?nowStr():null},true);else if(date!==null)d?setDelivery(d.id,{dueDate:date},true):setDelivery(uid(),{projectId:pid,dueDate:date,delivered:false},false);else if(d)setDelivery(d.id,{dueDate:''},true)}}/>
+                      </div>
                     })}
                     })}
                   </div>

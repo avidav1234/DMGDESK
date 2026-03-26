@@ -1,10 +1,14 @@
 // Progetti.jsx — WorkTrack porting fedele COMPLETO per DMGDesk
 // Persistenza su file via /api/progetti — identico all'app originale
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, createContext, useContext } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 const API = '/api/progetti'
+
+
+// ── Context selezione programmi ─────────────────────────────────────────────
+const PgmSelContext = createContext({ selectedIds: new Set(), setSelectedIds: ()=>{} })
 
 // ── Tema allineato al sistema blu navy ────────────────────────────────────────
 const T = {
@@ -239,7 +243,7 @@ function FresaturaPanel({task,onUpdateTask,toolsDB,projectId}){
   const programs=Array.isArray(task.programs)?task.programs:[]
   const[expanded,setExpanded]=useState(false)
   const[collapsedGroups,setCollapsedGroups]=useState({ipm:true,fresatura:true})
-  const[selected,setSelected]=useState(new Set())
+  const { selectedIds: selected, setSelectedIds: setSelected } = useContext(PgmSelContext)
   const TOOL_BADGE={
     ok:          {dot:'✓',color:'#166534',bg:'#dcfce7'},
     fin_vita:    {dot:'⚠',color:'#B45309',bg:'#FEF3C7'},
@@ -286,7 +290,9 @@ function FresaturaPanel({task,onUpdateTask,toolsDB,projectId}){
   function toggleSelect(id){ setSelected(s=>{ const n=new Set(s); n.has(id)?n.delete(id):n.add(id); return n }) }
   function selTutti(lista){ setSelected(s=>{ const n=new Set(s); lista.forEach(p=>n.add(p.id)); return n }) }
   function deselTutti(){ setSelected(new Set()) }
-  // Notifica il parent della selezione DOPO il render, non durante il setter
+  // Propaga la selezione al context (per passarla al LancioNCModal)
+  const pgmSelCtx = useContext(PgmSelContext)
+  useEffect(()=>{ pgmSelCtx.setSelectedIds(selected) }, [selected])
   function massaStato(stato){
     updatePrograms(programs.map(p=>{
       if(!selected.has(p.id)) return p
@@ -750,7 +756,7 @@ function SaveAsTemplateModal({project,templates,onSave,onClose}){
 // ── ProjectDetail ──────────────────────────────────────────────────────────────
 
 // ── LancioNCModal ─────────────────────────────────────────────────────────────
-function LancioNCModal({project, toolsDB, onLancia, onClose}){
+function LancioNCModal({project, toolsDB, initialSelectedIds, onLancia, onClose}){
   // Costruisce mappa fase → programmi, conservando l'info di fase su ogni pgm
   const fasi = (project.steps||[]).map(step=>{
     const fres = (step.tasks||[]).find(t=>t.text?.trim().toLowerCase()==='fresatura')
@@ -763,7 +769,14 @@ function LancioNCModal({project, toolsDB, onLancia, onClose}){
   const in_macchina= allPgm.filter(p=>p.stato==='in_macchina')
   const completati = allPgm.filter(p=>p.stato==='completato')
 
-  const [selected, setSelected] = useState(new Set(da_fare.map(p=>p.id)))
+  const [selected, setSelected] = useState(()=>{
+    if(initialSelectedIds && initialSelectedIds.size > 0){
+      // Filtra solo gli ID che esistono in allPgm (sicurezza)
+      const valid = new Set([...initialSelectedIds].filter(id=>allPgm.some(p=>p.id===id)))
+      if(valid.size > 0) return valid
+    }
+    return new Set(da_fare.map(p=>p.id))
+  })
   const [showCompletati, setShowCompletati] = useState(false)
   const [faseMistaConfirmata, setFaseMistaConfirmata] = useState(false)
 
@@ -1080,6 +1093,7 @@ function LancioNCModal({project, toolsDB, onLancia, onClose}){
 function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onSaveAsTemplate,onLanciaNC,palletDisponibili=[]}){
   // Carica tools_machine una volta sola per questo progetto
   const [toolsDB, setToolsDB] = useState(null)
+  const [selectedIds, setSelectedIds] = useState(new Set())
   const [showLancioModal, setShowLancioModal] = useState(()=>{
     // Apri automaticamente se arrivato dalla Coda con bottone Avvia
     const flag = sessionStorage.getItem('dmgdesk_apri_modal_lancio')
@@ -1271,6 +1285,7 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
         project={project}
         toolsDB={toolsDB}
 
+        initialSelectedIds={selectedIds}
         onClose={()=>setShowLancioModal(false)}
         onLancia={pgmSelezionati=>{
           setShowLancioModal(false)

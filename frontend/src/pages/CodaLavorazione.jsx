@@ -77,27 +77,10 @@ export default function CodaLavorazione() {
     fetchAll()
   }
 
-  async function avviaProgetto(palletNum) {
-    try {
-      // 1. Porta questo pallet in cima alla coda esecuzione
-      const nuovoOrdine = [palletNum, ...codaOrdine.filter(n => n !== palletNum)]
-      await fetch('/api/pallet/ordine-esecuzione', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ordine: nuovoOrdine })
-      })
-      setCodaOrdine(nuovoOrdine)
-      // 2. Segna i programmi da_fare come in_macchina tramite API
-      const proj = progettiPallet[palletNum]
-      if (proj?.id) {
-        await fetch(`/api/progetti/${proj.id}/avvia-tutti`, { method: 'POST' })
-      }
-      // 3. Ricarica tutto
-      await fetchAll()
-      await caricaPgmInMacchina()
-    } catch(e) {
-      console.error('Avvia errore:', e)
-    }
+  function avviaProgetto(palletNum) {
+    // Naviga a Progetti con il pallet preselezionato nel sessionStorage
+    sessionStorage.setItem('dmgdesk_avvia_pallet', JSON.stringify({palletNum}));
+    window.location.href = '/progetti';
   }
 
   const fetchAll = useCallback(async () => {
@@ -399,13 +382,11 @@ export default function CodaLavorazione() {
   return (
     <div style={{
       display: "flex",
-      flexDirection: "row",
-      gap: 16,
-      padding: 16,
+      gap: 20,
+      padding: 20,
       height: "100%",
       boxSizing: "border-box",
       background: "var(--bg-base, #eef2f7)",
-      overflow: "hidden",
     }}>
 
       {/* ── Banner live context (programma in esecuzione) ───────── */}
@@ -465,8 +446,9 @@ export default function CodaLavorazione() {
         </div>
       )}
 
+      <div style={{ flex: '0 0 calc(50% - 8px)', minWidth: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
       {/* ── Griglia 2×3 pallet ─────────────────────────────────── */}
-      <div style={{ flex: '0 0 calc(50% - 8px)', minWidth: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ flexShrink: 0 }}>
         <div style={{
           display: "flex",
           justifyContent: "space-between",
@@ -476,13 +458,15 @@ export default function CodaLavorazione() {
           <span style={{ fontSize: 12, fontWeight: 700, color: "#0d2d5e", letterSpacing: 1 }}>
             PALLET
           </span>
+          {lastUpdate && (
+            <span style={{ fontSize: 10, color: "#94a3b8" }}>{lastUpdate}</span>
+          )}
         </div>
 
         <div style={{
           display: "grid",
-          gridTemplateColumns: "repeat(3, 1fr)",
+          gridTemplateColumns: "repeat(2, 200px)",
           gridTemplateRows: "auto",
-          maxWidth: 900,
           gap: 10,
           alignItems: "start",
         }}>
@@ -492,25 +476,19 @@ export default function CodaLavorazione() {
             const isLav    = p.stato === "IN LAVORAZIONE";
             const hasProj  = !!progettiPallet[p.id];
             const isEmpty  = !hasProj && p.stato === "VUOTO";
-            const proj     = progettiPallet[p.id];
-            const isAvviato = proj && proj.in_macchina > 0 && proj.pct < 100;
-            const isCompleto = proj && proj.pct === 100;
-            const cardBg     = isCompleto ? "#dcfce7" : isAvviato ? "#dbeafe" : isEmpty ? "#F8F7F5" : s.bg;
-            const cardBorder = isCompleto ? "#16a34a" : isAvviato ? "#1D5FAD" : isActive ? "#f59e0b" : isEmpty ? "#E8E6E0" : s.border;
-            const cardFg     = isCompleto ? "#14532d" : isAvviato ? "#0d2d5e" : isEmpty ? "#B0ADA4" : s.fg;
 
             return (
               <div
                 key={p.id}
                 title={isLav ? "Gestito automaticamente dalla macchina" : "Click per cambiare stato"}
                 style={{
-                  background:   cardBg,
-                  border:       `2px solid ${cardBorder}`,
+                  background:   isEmpty ? '#F8F7F5' : s.bg,
+                  border:       `${isEmpty ? 1 : 2}px solid ${isActive ? "#f59e0b" : isEmpty ? '#E8E6E0' : s.border}`,
                   borderRadius: 10,
                   padding:      isEmpty ? "8px 10px" : "10px 12px",
                   cursor:       isLav ? "default" : "pointer",
                   position:     "relative",
-                  height:       isEmpty ? 80 : 185,
+                  height:       isEmpty ? 80 : 155,
                   boxShadow:    isActive
                     ? "0 0 0 3px rgba(245,158,11,0.25), 0 2px 6px rgba(0,0,0,0.12)"
                     : isEmpty ? "none" : "0 1px 3px rgba(0,0,0,0.07)",
@@ -519,7 +497,7 @@ export default function CodaLavorazione() {
                   justifyContent: "space-between",
                   transition: "all 0.2s",
                   userSelect: "none",
-                  opacity: isEmpty ? 0.5 : 1,
+                  opacity: isEmpty ? 0.6 : 1,
                 }}
                 onClick={(e) => {
                   if (isLav) return;
@@ -528,7 +506,7 @@ export default function CodaLavorazione() {
               >
                 {/* Numero + stato */}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                  <span style={{ fontSize: isEmpty ? 22 : 36, fontWeight: 900, color: cardFg, lineHeight: 1 }}>
+                  <span style={{ fontSize: isEmpty ? 22 : 36, fontWeight: 900, color: isEmpty ? '#B0ADA4' : s.fg, lineHeight: 1 }}>
                     P{p.id}
                   </span>
                   {isActive && (
@@ -563,15 +541,12 @@ export default function CodaLavorazione() {
                           <span style={{fontSize:10,color:s.fg,opacity:0.7}}>{progettiPallet[p.id].completati}/{progettiPallet[p.id].totale} pgm</span>
                           <span style={{fontSize:11,fontWeight:800,color:s.fg}}>{progettiPallet[p.id].pct}%</span>
                         </div>
-                        {progettiPallet[p.id].da_fare > 0 && !isAvviato && (
+                        {progettiPallet[p.id].da_fare > 0 && (
                           <button onClick={e=>{e.stopPropagation();avviaProgetto(p.id)}}
                             style={{marginTop:4,width:'100%',background:'#1D5FAD',border:'none',borderRadius:4,
-                              color:'#fff',fontWeight:700,fontSize:10,padding:'4px 0',cursor:'pointer'}}>
+                              color:'#fff',fontWeight:700,fontSize:9,padding:'3px 0',cursor:'pointer'}}>
                             ▶ Avvia ({progettiPallet[p.id].da_fare})
                           </button>
-                        )}
-                        {isAvviato && (
-                          <div style={{marginTop:3,fontSize:9,fontWeight:700,color:'#1D5FAD',textAlign:'center'}}>⚙ IN MACCHINA</div>
                         )}
                         {progettiPallet[p.id].pct===100 && p.stato!=='FINITO' && (
                           <button onClick={e=>{e.stopPropagation();setPalletStato(p.id,'FINITO')}}
@@ -604,7 +579,6 @@ export default function CodaLavorazione() {
           }
         `}</style>
       </div>
-
 
         {/* Stato macchina + programma + utensile — tutto in un blocco compatto */}
         <div style={{
@@ -747,8 +721,6 @@ export default function CodaLavorazione() {
           </div>
         )}
 
-      </div>
-
       {/* Menu selezione stato pallet manuale */}
       {palletMenu && createPortal(
         <div style={{ position: 'fixed', inset: 0, zIndex: 9998 }}
@@ -853,9 +825,9 @@ export default function CodaLavorazione() {
           </div>
         </div>
       , document.body)}
+      </div>
 
-      {/* ── Pannello destro — Coda + Programmi ──── */}
-      <div style={{ flex: '0 0 calc(50% - 8px)', display: "flex", flexDirection: "column", gap: 10, minWidth: 0, overflowY: 'auto' }}>
+      <div style={{ flex: '0 0 calc(50% - 8px)', display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0, overflowY: 'auto' }}>
 
 
         {/* ── Coda Esecuzione ───────────────────────────────────── */}
@@ -987,16 +959,17 @@ export default function CodaLavorazione() {
                             {/* Numero programma */}
                             <span style={{ fontSize: 12, fontWeight: 800, color: col,
                               fontFamily: 'monospace', minWidth: 32 }}>{pgm.numPgm}</span>
-                            {/* Nome file */}
-                            <span style={{ fontSize: 11, fontWeight: 700, color: '#0d2d5e',
+                            {/* Utensile */}
+                            <span style={{ fontSize: 11, fontWeight: 600, color: '#1e293b',
                               fontFamily: 'monospace', flex: 1, overflow: 'hidden',
                               textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {pgm.filename?.replace(/\.MPF$/i,'').replace(/\.mpf$/i,'')}
-                            </span>
-                            {/* Utensile */}
-                            <span style={{ fontSize: 11, color: '#475569', flexShrink: 0,
-                              fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
                               {pgm.utensile || '—'}
+                            </span>
+                            {/* Nome file */}
+                            <span style={{ fontSize: 10, color: '#94a3b8', fontFamily: 'monospace',
+                              flexShrink: 0, maxWidth: 160, overflow: 'hidden',
+                              textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {pgm.filename}
                             </span>
                             {/* Tempo */}
                             {pgm.tempoStimato && (

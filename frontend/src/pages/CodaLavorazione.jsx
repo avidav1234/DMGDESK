@@ -476,19 +476,25 @@ export default function CodaLavorazione() {
             const isLav    = p.stato === "IN LAVORAZIONE";
             const hasProj  = !!progettiPallet[p.id];
             const isEmpty  = !hasProj && p.stato === "VUOTO";
+            const proj     = progettiPallet[p.id];
+            const isAvviato  = proj && proj.in_macchina > 0 && proj.pct < 100;
+            const isCompleto = proj && proj.pct === 100;
+            const cardBg     = isCompleto ? "#dcfce7" : isAvviato ? "#dbeafe" : isEmpty ? "#F8F7F5" : s.bg;
+            const cardBorder = isCompleto ? "#16a34a" : isAvviato ? "#1D5FAD" : isActive ? "#f59e0b" : isEmpty ? "#E8E6E0" : s.border;
+            const cardFg     = isCompleto ? "#14532d" : isAvviato ? "#0d2d5e" : isEmpty ? "#B0ADA4" : s.fg;
 
             return (
               <div
                 key={p.id}
                 title={isLav ? "Gestito automaticamente dalla macchina" : "Click per cambiare stato"}
                 style={{
-                  background:   isEmpty ? '#F8F7F5' : s.bg,
-                  border:       `${isEmpty ? 1 : 2}px solid ${isActive ? "#f59e0b" : isEmpty ? '#E8E6E0' : s.border}`,
+                  background:   cardBg,
+                  border:       `2px solid ${cardBorder}`,
                   borderRadius: 10,
                   padding:      isEmpty ? "8px 10px" : "10px 12px",
                   cursor:       isLav ? "default" : "pointer",
                   position:     "relative",
-                  height:       isEmpty ? 80 : 155,
+                  height:       isEmpty ? 80 : 185,
                   boxShadow:    isActive
                     ? "0 0 0 3px rgba(245,158,11,0.25), 0 2px 6px rgba(0,0,0,0.12)"
                     : isEmpty ? "none" : "0 1px 3px rgba(0,0,0,0.07)",
@@ -506,7 +512,7 @@ export default function CodaLavorazione() {
               >
                 {/* Numero + stato */}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                  <span style={{ fontSize: isEmpty ? 22 : 36, fontWeight: 900, color: isEmpty ? '#B0ADA4' : s.fg, lineHeight: 1 }}>
+                  <span style={{ fontSize: isEmpty ? 22 : 36, fontWeight: 900, color: cardFg, lineHeight: 1 }}>
                     P{p.id}
                   </span>
                   {isActive && (
@@ -523,7 +529,7 @@ export default function CodaLavorazione() {
                   <div style={{fontSize:10, color:'#B0ADA4', fontWeight:600, letterSpacing:1}}>VUOTO</div>
                 ) : (
                   <div style={{flex:1,minHeight:0,display:'flex',flexDirection:'column',justifyContent:'flex-end',gap:2}}>
-                    <div style={{fontSize:11,fontWeight:700,color:s.fg,opacity:0.9,letterSpacing:1,textTransform:'uppercase'}}>
+                    <div style={{fontSize:11,fontWeight:700,color:cardFg,opacity:0.9,letterSpacing:1,textTransform:'uppercase'}}>
                       {p.stato}
                     </div>
                     {progettiPallet[p.id] ? (
@@ -541,10 +547,10 @@ export default function CodaLavorazione() {
                           <span style={{fontSize:10,color:s.fg,opacity:0.7}}>{progettiPallet[p.id].completati}/{progettiPallet[p.id].totale} pgm</span>
                           <span style={{fontSize:11,fontWeight:800,color:s.fg}}>{progettiPallet[p.id].pct}%</span>
                         </div>
-                        {progettiPallet[p.id].da_fare > 0 && (
+                        {progettiPallet[p.id].da_fare > 0 && !isAvviato && (
                           <button onClick={e=>{e.stopPropagation();avviaProgetto(p.id)}}
                             style={{marginTop:4,width:'100%',background:'#1D5FAD',border:'none',borderRadius:4,
-                              color:'#fff',fontWeight:700,fontSize:9,padding:'3px 0',cursor:'pointer'}}>
+                              color:'#fff',fontWeight:700,fontSize:10,padding:'4px 0',cursor:'pointer'}}>
                             ▶ Avvia ({progettiPallet[p.id].da_fare})
                           </button>
                         )}

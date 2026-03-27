@@ -2,7 +2,7 @@
 // Persistenza su file via /api/progetti — identico all'app originale
 
 import { useState, useEffect, useCallback, useRef, createContext, useContext } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 
 const API = '/api/progetti'
 
@@ -2270,6 +2270,7 @@ function NewProjectModal({onClose,onCreate,templates,preselectedTemplate}){
 // ── App principale ─────────────────────────────────────────────────────────────
 export default function Progetti(){
   const navigate=useNavigate()
+  const location=useLocation()
   const[projects,setProjects]=useState([])
   const[templates,setTemplates]=useState([])
   const[palletDisponibili,setPalletDisponibili]=useState([])
@@ -2358,9 +2359,15 @@ export default function Progetti(){
     return()=>{clearInterval(t);clearInterval(t2);clearInterval(t3)}
   },[load,silentRefresh])
 
-  // Apre il progetto giusto dopo il caricamento (da sessionStorage)
+  // Apre il progetto giusto dopo il caricamento (da sessionStorage o navigation state)
   useEffect(()=>{
     if(!projects.length) return
+    // Apertura da navigation state (da Home → click pallet/progetto)
+    const openId = location.state?.openId
+    if(openId){
+      navigate(location.pathname,{replace:true,state:{}}) // pulisce lo state
+      if(projects.find(p=>p.id===openId)){ setSelectedId(openId); setPage('projects'); return }
+    }
     // Apertura diretta per ID (da Coda → "Apri progetto")
     const pid = sessionStorage.getItem('dmgdesk_apri_progetto_id')
     if(pid){
@@ -2377,7 +2384,7 @@ export default function Progetti(){
         sessionStorage.setItem('dmgdesk_apri_modal_lancio','1')
       }
     }
-  },[projects])
+  },[projects, location.state])
 
   // ── Salva progetti (debounced) ───────────────────────────────────────────────
   const persistProjects=useCallback((projs)=>{

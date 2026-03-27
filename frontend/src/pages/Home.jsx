@@ -153,7 +153,7 @@ export default function Home(){
               const isLav= c.label==='IN LAV.'
               return(
                 <div key={n}
-                  onClick={info?()=>nav('/projects',{state:{openId:info.proj.id}}):undefined}
+                  onClick={info?()=>nav('/progetti',{state:{openId:info.proj.id}}):undefined}
                   style={{background:c.bg,border:`2px solid ${c.border}`,borderRadius:10,
                     padding:'10px 12px',cursor:info?'pointer':'default',
                     minHeight:115,display:'flex',flexDirection:'column',
@@ -201,7 +201,7 @@ export default function Home(){
               PROGETTO IN LAVORAZIONE
             </div>
             {progettoLav&&lavInfo?(
-              <div style={{cursor:'pointer'}} onClick={()=>nav('/projects',{state:{openId:progettoLav.id}})}>
+              <div style={{cursor:'pointer'}} onClick={()=>nav('/progetti',{state:{openId:progettoLav.id}})}>
                 <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:8}}>
                   <div style={{width:10,height:10,borderRadius:'50%',
                     background:progettoLav.color||'#1D5FAD',flexShrink:0}}/>
@@ -252,7 +252,7 @@ export default function Home(){
                   const bg=over?'#fef2f2':today?'#fffbeb':soon?'#fff7ed':'#f8fafc'
                   const badge=over?`${Math.abs(days)}gg fa`:today?'OGGI':`${days}gg`
                   return(
-                    <div key={p.id} onClick={()=>nav('/projects',{state:{openId:p.id}})}
+                    <div key={p.id} onClick={()=>nav('/progetti',{state:{openId:p.id}})}
                       style={{display:'flex',alignItems:'center',gap:10,background:bg,
                         borderRadius:8,padding:'7px 12px',cursor:'pointer',
                         border:`1px solid ${color}33`}}>

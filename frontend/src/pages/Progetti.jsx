@@ -399,6 +399,11 @@ function FresaturaPanel({task,onUpdateTask,toolsDB,projectId}){
     }))
     setSelected(new Set())
   }
+  function eliminaSelezionati(){
+    if(!window.confirm(`Eliminare ${selected.size} programm${selected.size===1?'o':'i'}?`)) return
+    updatePrograms(programs.filter(p=>!selected.has(p.id)))
+    setSelected(new Set())
+  }
   const gruppi=[
     {key:'ipm',label:'Tastatura (IPM)',icon:'📏',color:'#8B2FC9',bgColor:'#F3E8FF',list:ipmPrograms},
     {key:'fresatura',label:'Fresatura',icon:'⚙️',color:'#0d2d5e',bgColor:'#E8F0FA',list:fresPrograms},
@@ -526,6 +531,12 @@ function FresaturaPanel({task,onUpdateTask,toolsDB,projectId}){
                   {label}
                 </button>
               ))}
+              <div style={{width:1,background:'#0d2d5e33',alignSelf:'stretch',margin:'0 4px'}}/>
+              <button onClick={eliminaSelezionati}
+                style={{background:'#fef2f2',border:'1.5px solid #fca5a5',borderRadius:6,
+                  color:'#dc2626',fontSize:11,fontWeight:700,padding:'4px 10px',cursor:'pointer'}}>
+                🗑 Elimina
+              </button>
               <button onClick={deselTutti} style={{marginLeft:'auto',background:'none',border:`1px solid ${T.border}`,borderRadius:6,color:T.textMuted,fontSize:11,padding:'4px 8px',cursor:'pointer'}}>✕ Deseleziona</button>
             </div>
           )}

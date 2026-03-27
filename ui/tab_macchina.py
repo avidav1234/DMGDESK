@@ -1084,25 +1084,35 @@ class TabMacchina:
         row.pack(fill="x")
 
         for i, p in enumerate(in_coda):
-            card = tk.Frame(row, bg="#eef4fb",
-                            highlightbackground="#1D5FAD", highlightthickness=1)
+            is_lav = p.get("stato", "").upper() == "IN LAVORAZIONE"
+            card_bg = "#e8f5e9" if is_lav else "#eef4fb"
+            card_border = "#2e7d32" if is_lav else "#1D5FAD"
+            card = tk.Frame(row, bg=card_bg,
+                            highlightbackground=card_border, highlightthickness=1)
             card.pack(side="left", padx=(0, 6), pady=2)
             tk.Label(card, text=f"{i+1}°  P{p['numero']}",
-                     font=("Inter", 8, "bold"), fg="#0d2d5e", bg="#eef4fb").pack(side="left", padx=(6,2), pady=4)
+                     font=("Inter", 8, "bold"), fg=card_border, bg=card_bg).pack(side="left", padx=(6,2), pady=4)
             tk.Label(card, text=p.get("progetto_nome","?"),
-                     font=("Inter", 9, "bold"), fg="#0d2d5e", bg="#eef4fb").pack(side="left", padx=(0,4))
+                     font=("Inter", 9, "bold"), fg=card_border, bg=card_bg).pack(side="left", padx=(0,4))
+            # Pulsante Avvia (solo se non già in lavorazione)
+            if not is_lav and p.get("progetto_id"):
+                tk.Button(card, text="▶ Avvia",
+                          font=("Inter", 7, "bold"), fg="#fff", bg="#0d6e2e",
+                          relief="flat", cursor="hand2", padx=4, pady=1,
+                          command=lambda n=p["numero"], pid=p.get("progetto_id"): self._avvia_pallet(n, pid)
+                          ).pack(side="left", padx=(0,4))
             # Frecce su/giù
-            btns = tk.Frame(card, bg="#eef4fb")
+            btns = tk.Frame(card, bg=card_bg)
             btns.pack(side="left", padx=(0,4))
             if i > 0:
-                tk.Button(btns, text="◀", font=("Inter",7), fg="#0d2d5e", bg="#eef4fb",
+                tk.Button(btns, text="◀", font=("Inter",7), fg="#0d2d5e", bg=card_bg,
                           relief="flat", cursor="hand2", padx=2,
                           command=lambda idx=i: self._sposta_coda(idx, -1)).pack(side="left")
             if i < len(in_coda) - 1:
-                tk.Button(btns, text="▶", font=("Inter",7), fg="#0d2d5e", bg="#eef4fb",
+                tk.Button(btns, text="▶", font=("Inter",7), fg="#0d2d5e", bg=card_bg,
                           relief="flat", cursor="hand2", padx=2,
                           command=lambda idx=i: self._sposta_coda(idx, +1)).pack(side="left")
-            tk.Button(card, text="✕", font=("Inter",7), fg="#9e9e9e", bg="#eef4fb",
+            tk.Button(card, text="✕", font=("Inter",7), fg="#9e9e9e", bg=card_bg,
                       relief="flat", cursor="hand2",
                       command=lambda n=p["numero"]: self._rimuovi_da_coda(n)).pack(side="left", padx=(0,3))
 
@@ -1148,4 +1158,33 @@ class TabMacchina:
                 self.parent.after(0, self._render_coda)
             except Exception as e:
                 print(f"[CODA] Errore salvataggio: {e}")
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _avvia_pallet(self, num_pallet: int, progetto_id: str):
+        """Avvia pallet: mette in cima alla coda + segna tutti i da_fare → in_macchina."""
+        import threading, json, urllib.request
+        def _worker():
+            try:
+                # 1. Metti in cima alla coda
+                ordine = list(self._coda_ordine)
+                ordine = [num_pallet] + [n for n in ordine if n != num_pallet]
+                data = json.dumps({"ordine": ordine}).encode()
+                req = urllib.request.Request(
+                    "http://localhost:8000/api/pallet/ordine-esecuzione",
+                    data=data, method="PUT",
+                    headers={"Content-Type": "application/json"})
+                urllib.request.urlopen(req, timeout=3)
+                self._coda_ordine = ordine
+
+                # 2. Segna tutti da_fare → in_macchina
+                req2 = urllib.request.Request(
+                    f"http://localhost:8000/api/progetti/{progetto_id}/avvia-tutti",
+                    data=b"", method="POST",
+                    headers={"Content-Type": "application/json"})
+                urllib.request.urlopen(req2, timeout=3)
+
+                self.parent.after(0, self._render_coda)
+                self.parent.after(0, self._load_coda)
+            except Exception as e:
+                print(f"[AVVIA] Errore: {e}")
         threading.Thread(target=_worker, daemon=True).start()

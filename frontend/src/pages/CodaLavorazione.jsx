@@ -40,6 +40,10 @@ export default function CodaLavorazione() {
   const [codaOrdine, setCodaOrdine] = useState([]);   // [3,4,5]
   const [codaSaving, setCodaSaving] = useState(false);
   const dragCodaIdx = useRef(null);
+  // Programmi in macchina per pallet
+  const [pgmInMacchina, setPgmInMacchina] = useState({}); // {palletNum: {progetto, programmi}}
+  const [pgmSelezionati, setPgmSelezionati] = useState({}); // {palletNum: Set(ids)}
+  const [pgmSaving, setPgmSaving] = useState(false);
 
   const fetchLiveContext = async () => {
     try {
@@ -143,14 +147,21 @@ export default function CodaLavorazione() {
 
   useEffect(() => {
     fetchAll()
-    // Carica ordine coda
     fetch('/api/pallet/ordine-esecuzione')
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d) setCodaOrdine(d.ordine || []) })
       .catch(() => {})
-    const t = setInterval(fetchAll, REFRESH_MS);
+    const t = setInterval(() => {
+      fetchAll()
+      caricaPgmInMacchina()
+    }, REFRESH_MS);
     return () => clearInterval(t);
   }, [fetchAll]);
+
+  // Carica programmi in macchina quando cambiano i pallet assegnati
+  useEffect(() => {
+    caricaPgmInMacchina()
+  }, [JSON.stringify(Object.keys(progettiPallet))]);
 
   const setPalletStato = async (id, stato) => {
     if (stato === "IN LAVORAZIONE") return;
@@ -296,6 +307,46 @@ export default function CodaLavorazione() {
       </div>
     )
   }
+
+  // ── Funzioni programmi in macchina ───────────────────────────
+  async function caricaPgmInMacchina() {
+    const nums = pallets.filter(p => progettiPallet[p.id]).map(p => p.id)
+    if (!nums.length) return
+    const results = {}
+    await Promise.all(nums.map(async n => {
+      try {
+        const r = await fetch(`/api/pallet/${n}/programmi-in-macchina`)
+        if (r.ok) results[n] = await r.json()
+      } catch {}
+    }))
+    setPgmInMacchina(results)
+  }
+
+  async function completaPgm(palletNum) {
+    const sel = pgmSelezionati[palletNum]
+    if (!sel || sel.size === 0) return
+    setPgmSaving(true)
+    try {
+      await fetch(`/api/pallet/${palletNum}/programmi-completa`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: [...sel] })
+      })
+      setPgmSelezionati(prev => ({ ...prev, [palletNum]: new Set() }))
+      await caricaPgmInMacchina()
+    } finally { setPgmSaving(false) }
+  }
+
+  function togglePgm(palletNum, id) {
+    setPgmSelezionati(prev => {
+      const cur = new Set(prev[palletNum] || [])
+      cur.has(id) ? cur.delete(id) : cur.add(id)
+      return { ...prev, [palletNum]: cur }
+    })
+  }
+
+  // Colori fissi per progetto (basati sul numero pallet)
+  const PAL_COLORS = ['#0d2d5e','#0891b2','#7c3aed','#059669','#d97706','#dc2626']
 
   // ── Funzioni coda esecuzione ──────────────────────────────────
   const assegnatiCoda = pallets
@@ -583,6 +634,115 @@ export default function CodaLavorazione() {
             )}
           </div>
         )}
+
+        {/* ── Programmi in macchina ─────────────────────────────── */}
+        {(() => {
+          // Pallet con almeno un programma in_macchina, nell'ordine della coda
+          const ordineEffettivo = codaOrdine.length > 0
+            ? codaOrdine
+            : pallets.filter(p => progettiPallet[p.id]).map(p => p.id)
+          const blocchi = ordineEffettivo
+            .map(n => pgmInMacchina[n])
+            .filter(d => d?.programmi?.length > 0)
+          if (!blocchi.length) return null
+          const totSel = Object.values(pgmSelezionati).reduce((acc, s) => acc + (s?.size || 0), 0)
+          return (
+            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '12px 16px' }}>
+              {/* Header */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                <span style={{ fontSize: 13, fontWeight: 800, color: '#0d2d5e' }}>⚙ PROGRAMMI IN MACCHINA</span>
+                <span style={{ fontSize: 11, color: '#94a3b8' }}>
+                  {blocchi.reduce((a, b) => a + b.programmi.length, 0)} programmi attivi
+                </span>
+                {totSel > 0 && (
+                  <button onClick={() => {
+                    // Completa per tutti i pallet con selezioni
+                    Object.entries(pgmSelezionati).forEach(([n, s]) => {
+                      if (s?.size > 0) completaPgm(parseInt(n))
+                    })
+                  }}
+                    disabled={pgmSaving}
+                    style={{ marginLeft: 'auto', background: '#166534', border: 'none', borderRadius: 7,
+                      color: '#fff', fontWeight: 700, fontSize: 12, padding: '5px 14px', cursor: 'pointer' }}>
+                    ✓ Segna {totSel} completat{totSel === 1 ? 'o' : 'i'}
+                  </button>
+                )}
+              </div>
+
+              {/* Blocchi per progetto */}
+              {blocchi.map((d, bi) => {
+                const col = PAL_COLORS[(d.pallet - 1) % PAL_COLORS.length]
+                const sel = pgmSelezionati[d.pallet] || new Set()
+                const tuttiSel = d.programmi.every(p => sel.has(p.id))
+                return (
+                  <div key={d.pallet} style={{ marginBottom: bi < blocchi.length - 1 ? 10 : 0 }}>
+                    {/* Header progetto */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6,
+                      padding: '4px 10px', background: col + '12', borderRadius: 7,
+                      borderLeft: `3px solid ${col}` }}>
+                      <input type='checkbox' checked={tuttiSel}
+                        onChange={() => {
+                          const newSel = tuttiSel ? new Set() : new Set(d.programmi.map(p => p.id))
+                          setPgmSelezionati(prev => ({ ...prev, [d.pallet]: newSel }))
+                        }}
+                        style={{ accentColor: col, cursor: 'pointer', width: 14, height: 14 }} />
+                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: col, flexShrink: 0 }} />
+                      <span style={{ fontSize: 12, fontWeight: 800, color: col }}>P{d.pallet} — {d.progetto.nome}</span>
+                      <span style={{ fontSize: 11, color: '#94a3b8', marginLeft: 4 }}>
+                        {d.programmi.length} in macchina
+                      </span>
+                    </div>
+
+                    {/* Lista programmi */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, paddingLeft: 8 }}>
+                      {d.programmi.map(pgm => {
+                        const checked = sel.has(pgm.id)
+                        return (
+                          <div key={pgm.id}
+                            onClick={() => togglePgm(d.pallet, pgm.id)}
+                            style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 8px',
+                              borderRadius: 7, cursor: 'pointer', userSelect: 'none',
+                              background: checked ? '#dcfce7' : '#f8fafc',
+                              border: `1px solid ${checked ? '#166534' : '#e2e8f0'}`,
+                              transition: 'all 0.12s' }}>
+                            <input type='checkbox' checked={checked} onChange={() => togglePgm(d.pallet, pgm.id)}
+                              onClick={e => e.stopPropagation()}
+                              style={{ accentColor: '#166534', cursor: 'pointer', width: 14, height: 14, flexShrink: 0 }} />
+                            {/* Numero programma */}
+                            <span style={{ fontSize: 12, fontWeight: 800, color: col,
+                              fontFamily: 'monospace', minWidth: 32 }}>{pgm.numPgm}</span>
+                            {/* Utensile */}
+                            <span style={{ fontSize: 11, fontWeight: 600, color: '#1e293b',
+                              fontFamily: 'monospace', flex: 1, overflow: 'hidden',
+                              textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {pgm.utensile || '—'}
+                            </span>
+                            {/* Nome file */}
+                            <span style={{ fontSize: 10, color: '#94a3b8', fontFamily: 'monospace',
+                              flexShrink: 0, maxWidth: 160, overflow: 'hidden',
+                              textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {pgm.filename}
+                            </span>
+                            {/* Tempo */}
+                            {pgm.tempoStimato && (
+                              <span style={{ fontSize: 10, fontWeight: 700, color: '#475569',
+                                flexShrink: 0, whiteSpace: 'nowrap' }}>⏱ {pgm.tempoStimato}m</span>
+                            )}
+                            {/* Orario inizio */}
+                            {pgm.tempoInizio && (
+                              <span style={{ fontSize: 10, color: '#0d2d5e', fontFamily: 'monospace',
+                                flexShrink: 0, whiteSpace: 'nowrap' }}>▶ {pgm.tempoInizio}</span>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )
+        })()}
 
         {/* Stato macchina + programma + utensile — tutto in un blocco compatto */}
         <div style={{

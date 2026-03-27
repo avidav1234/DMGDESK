@@ -379,6 +379,87 @@ async def get_progetto_info(numero: int):
         }
     }
 
+
+@router.get("/{numero}/programmi-in-macchina")
+async def get_programmi_in_macchina(numero: int):
+    """
+    Restituisce i programmi in stato 'in_macchina' per il progetto assegnato al pallet.
+    Ordinati numericamente. Usato dal pannello stato programmi.
+    """
+    from api.routers.progetti import _load_progetti, _save_progetti
+    config  = carica_configurazione()
+    state   = _load(config)
+    pallet  = next((p for p in state["pallet"] if p["numero"] == numero), None)
+    if not pallet or not pallet.get("progetto_id"):
+        return {"pallet": numero, "programmi": [], "progetto": None}
+
+    pid  = pallet["progetto_id"]
+    data = _load_progetti(config)
+    proj = next((p for p in data.get("projects", []) if p.get("id") == pid), None)
+    if not proj:
+        return {"pallet": numero, "programmi": [], "progetto": None}
+
+    programmi = []
+    for step in proj.get("steps", []):
+        for task in step.get("tasks", []):
+            if task.get("text", "").strip().lower() != "fresatura":
+                continue
+            for pgm in task.get("programs", []):
+                if pgm.get("tipoGruppo") == "ipm": continue
+                if pgm.get("stato") != "in_macchina": continue
+                programmi.append({
+                    "id":           pgm.get("id"),
+                    "filename":     pgm.get("filename", ""),
+                    "numPgm":       pgm.get("numPgm", ""),
+                    "utensile":     pgm.get("utensile", ""),
+                    "tempoStimato": pgm.get("tempoStimato", ""),
+                    "stato":        pgm.get("stato"),
+                    "tempoInizio":  pgm.get("tempoInizio"),
+                })
+
+    programmi.sort(key=lambda p: str(p["numPgm"]).zfill(6))
+    return {
+        "pallet":    numero,
+        "progetto":  {"id": proj["id"], "nome": proj.get("name"), "colore": proj.get("color", "#1D5FAD")},
+        "programmi": programmi,
+    }
+
+
+@router.patch("/{numero}/programmi-completa")
+async def completa_programmi(numero: int, body: dict):
+    """
+    Segna una lista di programmi come 'completato'.
+    Body: { "ids": ["abc123", "def456"] }
+    """
+    from api.routers.progetti import _load_progetti, _save_progetti
+    from datetime import datetime as _dt
+    config  = carica_configurazione()
+    state   = _load(config)
+    pallet  = next((p for p in state["pallet"] if p["numero"] == numero), None)
+    if not pallet or not pallet.get("progetto_id"):
+        raise HTTPException(404, "Pallet senza progetto")
+
+    pid  = pallet["progetto_id"]
+    data = _load_progetti(config)
+    proj = next((p for p in data.get("projects", []) if p.get("id") == pid), None)
+    if not proj:
+        raise HTTPException(404, "Progetto non trovato")
+
+    ids     = set(body.get("ids", []))
+    ora     = _dt.now().strftime("%d/%m/%Y %H:%M")
+    count   = 0
+    for step in proj.get("steps", []):
+        for task in step.get("tasks", []):
+            for pgm in task.get("programs", []):
+                if pgm.get("id") in ids and pgm.get("stato") == "in_macchina":
+                    pgm["stato"]    = "completato"
+                    pgm["tempoFine"] = ora
+                    count += 1
+
+    _save_progetti(config, data)
+    return {"ok": True, "completati": count}
+
+
 @router.post("/sync-progetti")
 async def sync_pallet_progetti():
     """

@@ -606,7 +606,7 @@ class TabCodaLavorazione:
 
         if info:
             # Barra avanzamento
-            bar_bg = tk.Frame(f, bg="rgba(0,0,0,0)", height=6)
+            bar_bg = tk.Frame(f, bg="#e2e8f0", height=6)
             bar_bg._dmg_pallet_proj = True
             bar_bg.place(x=10, y=70, width=160, height=6)
             bar_bg.configure(bg="#e2e8f0")

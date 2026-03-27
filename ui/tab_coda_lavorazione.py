@@ -245,15 +245,15 @@ class TabCodaLavorazione:
         for i, pid in enumerate([1,2,3,4,5,6]):
             row, col = divmod(i, 2)
             f = tk.Frame(grid, relief="flat", bd=0,
-                         width=155, height=115, cursor="hand2")
+                         width=180, height=200, cursor="hand2")
             f.grid(row=row, column=col, padx=5, pady=5)
             f.pack_propagate(False)
             f.bind("<Button-1>", lambda e, p=pid: self._click_pallet(p))
 
             # Contenuto del frame
             top = tk.Frame(f, bd=0)
-            top.place(x=10, y=8, width=135, height=30)
-            lbl_num = tk.Label(top, text=f"P{pid}", font=("Helvetica", 22, "bold"), bd=0)
+            top.place(x=10, y=8, width=160, height=34)
+            lbl_num = tk.Label(top, text=f"P{pid}", font=("Helvetica", 28, "bold"), bd=0)
             lbl_num.pack(side="left")
             lbl_dot = tk.Label(top, text="●", font=("Helvetica", 9), bd=0)
             lbl_dot.pack(side="right", padx=2)
@@ -261,12 +261,12 @@ class TabCodaLavorazione:
             lbl_stato = tk.Label(f, text="VUOTO",
                                   font=("Helvetica", 9, "bold"), bd=0,
                                   anchor="w")
-            lbl_stato.place(x=10, y=88, width=135, height=14)
+            lbl_stato.place(x=10, y=105, width=160, height=14)
 
             lbl_prog = tk.Label(f, text="",
                                  font=("Helvetica", 8), bd=0,
                                  anchor="w")
-            lbl_prog.place(x=10, y=100, width=135, height=12)
+            lbl_prog.place(x=10, y=118, width=160, height=12)
 
             for w in [f, top, lbl_num, lbl_dot, lbl_stato, lbl_prog]:
                 w.bind("<Button-1>", lambda e, p=pid: self._click_pallet(p))
@@ -354,6 +354,45 @@ class TabCodaLavorazione:
                                         text_color="#92400e")
         self.lbl_errore.pack(padx=12, pady=6)
 
+        # ── Coda Esecuzione ──────────────────────────────────────────────
+        self.card_coda = ctk.CTkFrame(col_dx, fg_color="white",
+                                       corner_radius=10, border_width=1,
+                                       border_color="#e2e8f0")
+        self.card_coda.pack(fill="x", pady=(8, 0))
+        coda_hdr = ctk.CTkFrame(self.card_coda, fg_color="transparent")
+        coda_hdr.pack(fill="x", padx=12, pady=(8, 4))
+        ctk.CTkLabel(coda_hdr, text="📋 CODA ESECUZIONE",
+                     font=get_font("small", bold=True),
+                     text_color=COLOR_PRIMARY).pack(side="left")
+        self.lbl_coda_status2 = ctk.CTkLabel(coda_hdr, text="",
+                                              font=get_font("small"),
+                                              text_color=COLOR_TEXT_SECONDARY)
+        self.lbl_coda_status2.pack(side="right")
+        self.frame_coda_body2 = tk.Frame(self.card_coda, bg="white")
+        self.frame_coda_body2.pack(fill="x", padx=12, pady=(0, 8))
+
+        # ── Programmi in macchina ─────────────────────────────────────────
+        self.card_pgm_mac = ctk.CTkFrame(col_dx, fg_color="white",
+                                          corner_radius=10, border_width=1,
+                                          border_color="#e2e8f0")
+        self.card_pgm_mac.pack(fill="both", expand=True, pady=(8, 0))
+        pgm_hdr = ctk.CTkFrame(self.card_pgm_mac, fg_color="transparent")
+        pgm_hdr.pack(fill="x", padx=12, pady=(8, 4))
+        ctk.CTkLabel(pgm_hdr, text="⚙ PROGRAMMI IN MACCHINA",
+                     font=get_font("small", bold=True),
+                     text_color=COLOR_PRIMARY).pack(side="left")
+        self.lbl_pgm_completa = ctk.CTkLabel(pgm_hdr, text="",
+                                              font=get_font("small"),
+                                              text_color="#166534")
+        self.lbl_pgm_completa.pack(side="right")
+        # Scrollable per la lista programmi
+        self.frame_pgm_mac_body = ctk.CTkScrollableFrame(
+            self.card_pgm_mac, fg_color="transparent", height=200)
+        self.frame_pgm_mac_body.pack(fill="both", expand=True, padx=8, pady=(0, 8))
+        # Selezionati
+        self._pgm_sel = {}   # {pgm_id: (pallet_num, BooleanVar)}
+        self._pgm_data = {}  # {pallet_num: {progetto, programmi}}
+
     def _make_info_block(self, parent, label_text, side="left"):
         """Crea un blocco label/valore stile card."""
         f = ctk.CTkFrame(parent, fg_color="transparent")
@@ -408,6 +447,7 @@ class TabCodaLavorazione:
                         stato_map = {
                             "VUOTO": "VUOTO", "GREZZO": "GREZZO",
                             "IN_LAVORAZIONE": "IN LAVORAZIONE",
+                            "IN LAVORAZIONE": "IN LAVORAZIONE",
                             "FINITO": "FINITO", "GUASTO": "GUASTO"
                         }
                         pallets[pid-1]["stato"]      = stato_map.get(stato_raw, "VUOTO")
@@ -493,14 +533,32 @@ class TabCodaLavorazione:
         for p in pallets:
             self._update_pallet_card(p, pallet_attivo)
 
+        # Coda esecuzione + programmi in macchina
+        self._render_coda_dx(pallets)
+        self._render_pgm_macchina(pallets)
+
         self._schedule_next()
 
     def _update_pallet_card(self, pallet, pallet_attivo_mac):
         pid    = pallet["id"]
         stato  = pallet.get("stato", "VUOTO")
         prog   = pallet.get("programma") or ""
-        colors = STATI_COLORS.get(stato, STATI_COLORS["VUOTO"])
         is_active = (pallet_attivo_mac == pid)
+        is_lav = stato == "IN LAVORAZIONE"
+
+        # Calcola info progetto per colori semantici
+        proj_nome   = pallet.get("progetto_nome") or ""
+        proj_colore = pallet.get("progetto_colore") or "#1D5FAD"
+        info = self._calc_pct(proj_nome) if proj_nome else None
+
+        # Colori semantici: blu=IN LAVORAZIONE, verde=completato, giallo=grezzo
+        is_completo = info and info["pct"] >= 100
+        if is_lav:
+            colors = {"bg": "#dbeafe", "fg": "#0d2d5e", "border": "#1D5FAD"}
+        elif is_completo:
+            colors = {"bg": "#dcfce7", "fg": "#14532d", "border": "#16a34a"}
+        else:
+            colors = STATI_COLORS.get(stato, STATI_COLORS["VUOTO"])
 
         widgets = self._pallet_frames[pid]
         f       = widgets["frame"]
@@ -530,65 +588,290 @@ class TabCodaLavorazione:
         else:
             dot.configure(text="", bg=colors["bg"])
 
-        # ── Progetto assegnato ─────────────────────────────────────────────
-        proj_nome   = pallet.get("progetto_nome") or ""
-        proj_colore = pallet.get("progetto_colore") or "#1D5FAD"
-
-        # Rimuovi eventuali widget progetto precedenti
+        # Rimuovi widget dinamici precedenti
         for w in f.winfo_children():
             if getattr(w, "_dmg_pallet_proj", False):
                 w.destroy()
 
-        if proj_nome:
-            # Nome progetto
-            lbl_proj = tk.Label(f, text=f"● {proj_nome}",
+        if not proj_nome:
+            return
+
+        # Nome progetto
+        lbl_proj = tk.Label(f, text=f"● {proj_nome}",
+                            font=("DM Sans", 9, "bold"),
+                            fg=proj_colore, bg=colors["bg"],
+                            anchor="w")
+        lbl_proj._dmg_pallet_proj = True
+        lbl_proj.place(x=10, y=48, width=160, height=16)
+
+        if info:
+            # Barra avanzamento
+            bar_bg = tk.Frame(f, bg="rgba(0,0,0,0)", height=6)
+            bar_bg._dmg_pallet_proj = True
+            bar_bg.place(x=10, y=70, width=160, height=6)
+            bar_bg.configure(bg="#e2e8f0")
+            pct_w = max(2, int(info["pct"] * 160 / 100))
+            bar_fill = tk.Frame(bar_bg, bg=proj_colore, height=6)
+            bar_fill.place(x=0, y=0, width=pct_w, height=6)
+
+            # Percentuale
+            lbl_pct = tk.Label(f, text=f"{info['done']}/{info['tot']} pgm   {int(info['pct'])}%",
+                               font=("DM Sans", 8), fg=colors["fg"], bg=colors["bg"], anchor="w")
+            lbl_pct._dmg_pallet_proj = True
+            lbl_pct.place(x=10, y=80, width=160, height=14)
+
+            # Pulsante Avvia — solo se non già IN LAVORAZIONE e ci sono pgm rimasti
+            pgm_rimasti = info.get("da_fare", 0) + info.get("in_macchina", 0)
+            if not is_lav and pgm_rimasti > 0:
+                pid_progetto = pallet.get("progetto_id", "")
+                btn = tk.Button(f, text=f"▶ Avvia ({pgm_rimasti})",
                                 font=("DM Sans", 8, "bold"),
-                                fg=proj_colore, bg=colors["bg"],
-                                anchor="w", wraplength=120)
-            lbl_proj._dmg_pallet_proj = True
-            lbl_proj.pack(side="bottom", fill="x", padx=4, pady=(0,2))
-
-            # Calcola avanzamento dal progetto
-            def _calc_pct(pn=proj_nome):
-                try:
-                    cfg = _carica_config()
-                    import json as _j
-                    from pathlib import Path as _P
-                    folder = (cfg.get("tools_toa_folder") or "").strip()
-                    if not folder: return None
-                    pf = _P(folder) / "worktrack_projects.json"
-                    if not pf.exists(): return None
-                    data = _j.loads(pf.read_text(encoding="utf-8"))
-                    proj = next((p for p in data.get("projects",[]) if p.get("name")==pn), None)
-                    if not proj: return None
-                    pgms = [pgm for step in proj.get("steps",[]) for task in step.get("tasks",[])
-                            if task.get("text","").strip().lower()=="fresatura"
-                            for pgm in task.get("programs",[]) if pgm.get("tipoGruppo")!="ipm"]
-                    if not pgms: return None
-                    done = sum(1 for p in pgms if p.get("stato")=="completato")
-                    da_fare = sum(1 for p in pgms if p.get("stato")=="da_fare")
-                    return {"pct": round(done/len(pgms)*100,0), "done": done,
-                            "tot": len(pgms), "da_fare": da_fare}
-                except Exception:
-                    return None
-
-            info = _calc_pct()
-            if info:
-                # Barra avanzamento
-                bar_frame = tk.Frame(f, bg=colors["bg"], height=4)
-                bar_frame._dmg_pallet_proj = True
-                bar_frame.pack(side="bottom", fill="x", padx=4, pady=(0,1))
-                bar_frame.pack_propagate(False)
-                bar_fill = tk.Frame(bar_frame, bg=proj_colore, height=4)
-                pct_w = max(2, int(info["pct"]))
-                bar_fill.place(relx=0, rely=0, relwidth=pct_w/100, relheight=1)
-
-                lbl_pct = tk.Label(f, text=f"{int(info['pct'])}% · {info['done']}/{info['tot']}",
-                                   font=("DM Sans", 7), fg="#666666", bg=colors["bg"])
-                lbl_pct._dmg_pallet_proj = True
-                lbl_pct.pack(side="bottom", fill="x", padx=4)
+                                fg="#fff", bg="#1D5FAD",
+                                relief="flat", cursor="hand2",
+                                command=lambda n=pid, p=pid_progetto: self._avvia_pallet_coda(n, p))
+                btn._dmg_pallet_proj = True
+                btn.place(x=10, y=160, width=160, height=26)
 
     # ── Click pallet ─────────────────────────────────────────────────────────
+
+    def _render_coda_dx(self, pallets):
+        """Renderizza la coda esecuzione nella colonna destra."""
+        for w in self.frame_coda_body2.winfo_children():
+            w.destroy()
+
+        # Legge ordine coda dalla API
+        try:
+            import urllib.request as _ur
+            r = _ur.urlopen("http://localhost:8000/api/pallet/ordine-esecuzione", timeout=2)
+            data = json.loads(r.read())
+            ordine = data.get("ordine", [])
+        except Exception:
+            ordine = []
+
+        assegnati = {p["id"]: p for p in pallets if p.get("progetto_nome")}
+        if not assegnati:
+            tk.Label(self.frame_coda_body2, text="Nessun pallet in coda",
+                     font=("Inter",8), fg="#94a3b8", bg="white").pack(anchor="w")
+            return
+
+        in_coda   = [assegnati[n] for n in ordine if n in assegnati]
+        fuori     = [p for pid, p in assegnati.items() if pid not in ordine]
+
+        row = tk.Frame(self.frame_coda_body2, bg="white")
+        row.pack(fill="x")
+
+        for i, p in enumerate(in_coda):
+            is_lav = p.get("stato","") == "IN LAVORAZIONE"
+            col_bg = "#dbeafe" if is_lav else "#eef4fb"
+            col_border = "#1D5FAD"
+            card = tk.Frame(row, bg=col_bg, highlightbackground=col_border,
+                            highlightthickness=1)
+            card.pack(side="left", padx=(0,4), pady=2)
+            tk.Label(card, text=f"{i+1}° P{p['id']}",
+                     font=("Inter",7,"bold"), fg=col_border, bg=col_bg).pack(
+                     side="left", padx=(4,2), pady=3)
+            tk.Label(card, text=p.get("progetto_nome","?"),
+                     font=("Inter",8,"bold"), fg=col_border, bg=col_bg).pack(
+                     side="left", padx=(0,4))
+
+        for p in fuori:
+            btn = tk.Button(row, text=f"+ P{p['id']} {p.get('progetto_nome','')}",
+                            font=("Inter",7), fg="#475569", bg="#f1f5f9",
+                            relief="flat", cursor="hand2",
+                            command=lambda n=p["id"]: self._aggiungi_coda(n))
+            btn.pack(side="left", padx=2)
+
+        if ordine:
+            self.lbl_coda_status2.configure(
+                text=" → ".join(f"P{n}" for n in ordine))
+
+    def _aggiungi_coda(self, num):
+        """Aggiunge pallet alla coda via API."""
+        import threading, urllib.request as _ur
+        def _w():
+            try:
+                r = _ur.urlopen(
+                    "http://localhost:8000/api/pallet/ordine-esecuzione", timeout=2)
+                data = json.loads(r.read())
+                ordine = data.get("ordine", [])
+                if num not in ordine:
+                    ordine.append(num)
+                    req = _ur.Request(
+                        "http://localhost:8000/api/pallet/ordine-esecuzione",
+                        data=json.dumps({"ordine": ordine}).encode(),
+                        method="PUT",
+                        headers={"Content-Type": "application/json"})
+                    _ur.urlopen(req, timeout=2)
+            except Exception as e:
+                print(f"[CODA] {e}")
+        threading.Thread(target=_w, daemon=True).start()
+
+    def _render_pgm_macchina(self, pallets):
+        """Renderizza la lista programmi in_macchina con checkbox → completa."""
+        for w in self.frame_pgm_mac_body.winfo_children():
+            w.destroy()
+        self._pgm_sel = {}
+        self._pgm_data = {}
+
+        # Carica programmi in_macchina per ogni pallet assegnato
+        PAL_COLORS = ["#0d2d5e","#0891b2","#7c3aed","#059669","#d97706","#dc2626"]
+        has_any = False
+
+        for p in pallets:
+            if not p.get("progetto_nome"): continue
+            info = self._calc_pct(p["progetto_nome"])
+            if not info or info.get("in_macchina", 0) == 0: continue
+
+            # Carica programmi dettagliati
+            try:
+                cfg = _carica_config()
+                from pathlib import Path as _P
+                folder = (cfg.get("tools_toa_folder") or "").strip()
+                pf = _P(folder) / "worktrack_projects.json"
+                data = json.loads(pf.read_text(encoding="utf-8"))
+                proj = next((pr for pr in data.get("projects",[])
+                             if pr.get("name")==p["progetto_nome"]), None)
+                if not proj: continue
+                pgms_in_mac = []
+                for step in proj.get("steps",[]):
+                    for task in step.get("tasks",[]):
+                        if task.get("text","").strip().lower()!="fresatura": continue
+                        for pgm in task.get("programs",[]):
+                            if pgm.get("tipoGruppo")=="ipm": continue
+                            if pgm.get("stato")=="in_macchina":
+                                pgms_in_mac.append(pgm)
+                if not pgms_in_mac: continue
+                pgms_in_mac.sort(key=lambda x: str(x.get("numPgm","")).zfill(6))
+                self._pgm_data[p["id"]] = {"progetto_id": proj["id"],
+                                            "progetto_nome": p["progetto_nome"],
+                                            "programmi": pgms_in_mac}
+            except Exception:
+                continue
+
+            col = PAL_COLORS[(p["id"]-1) % len(PAL_COLORS)]
+            has_any = True
+
+            # Header progetto
+            hdr = tk.Frame(self.frame_pgm_mac_body, bg=col+"22")
+            hdr.pack(fill="x", pady=(4,1))
+            tk.Frame(hdr, bg=col, width=3).pack(side="left", fill="y")
+            tk.Label(hdr, text=f"P{p['id']} — {p['progetto_nome']}",
+                     font=("Inter",8,"bold"), fg=col,
+                     bg=col+"22").pack(side="left", padx=6, pady=2)
+
+            # Righe programma
+            for pgm in self._pgm_data[p["id"]]["programmi"]:
+                pgm_id = pgm.get("id","")
+                var = tk.BooleanVar(value=False)
+                self._pgm_sel[pgm_id] = (p["id"], var)
+
+                row = tk.Frame(self.frame_pgm_mac_body, bg="#f8fafc",
+                               highlightbackground="#e2e8f0", highlightthickness=1)
+                row.pack(fill="x", pady=1)
+
+                chk = tk.Checkbutton(row, variable=var, bg="#f8fafc",
+                                      activebackground="#f8fafc",
+                                      command=self._aggiorna_btn_completa)
+                chk.pack(side="left", padx=2)
+
+                fn = (pgm.get("filename","") or "").replace(".MPF","").replace(".mpf","")
+                tk.Label(row, text=fn or pgm.get("numPgm",""),
+                         font=("Consolas",8,"bold"), fg=col,
+                         bg="#f8fafc").pack(side="left", padx=(0,4))
+                tk.Label(row, text=pgm.get("utensile","—") or "—",
+                         font=("Consolas",8), fg="#475569",
+                         bg="#f8fafc").pack(side="left")
+                if pgm.get("tempoStimato"):
+                    tk.Label(row, text=f"⏱{pgm['tempoStimato']}m",
+                             font=("Inter",7,"bold"), fg="#475569",
+                             bg="#f8fafc").pack(side="right", padx=4)
+
+        if has_any:
+            # Bottone completa
+            self._btn_completa = tk.Button(
+                self.frame_pgm_mac_body,
+                text="✓ Segna selezionati completati",
+                font=("Inter",8,"bold"), fg="white", bg="#166534",
+                relief="flat", cursor="hand2",
+                command=self._completa_selezionati)
+            self._btn_completa.pack(fill="x", pady=(6,0))
+            self._btn_completa.pack_forget()  # nascosto finché nessuna selezione
+        else:
+            tk.Label(self.frame_pgm_mac_body,
+                     text="Nessun programma in macchina",
+                     font=("Inter",8), fg="#94a3b8",
+                     bg="white").pack(anchor="w", pady=4)
+
+    def _aggiorna_btn_completa(self):
+        """Mostra/nasconde il bottone completa in base alle selezioni."""
+        n = sum(1 for pid, var in self._pgm_sel.values() if var.get())
+        if hasattr(self, "_btn_completa") and self._btn_completa.winfo_exists():
+            if n > 0:
+                self._btn_completa.configure(
+                    text=f"✓ Segna {n} completat{'o' if n==1 else 'i'}")
+                self._btn_completa.pack(fill="x", pady=(6,0))
+            else:
+                self._btn_completa.pack_forget()
+
+    def _completa_selezionati(self):
+        """Segna i programmi selezionati come completati via API."""
+        import threading, urllib.request as _ur
+        # Raggruppa per pallet
+        per_pallet = {}
+        for pgm_id, (pallet_num, var) in self._pgm_sel.items():
+            if var.get():
+                per_pallet.setdefault(pallet_num, []).append(pgm_id)
+
+        def _w():
+            for pallet_num, ids in per_pallet.items():
+                try:
+                    req = _ur.Request(
+                        f"http://localhost:8000/api/pallet/{pallet_num}/programmi-completa",
+                        data=json.dumps({"ids": ids}).encode(),
+                        method="PATCH",
+                        headers={"Content-Type": "application/json"})
+                    _ur.urlopen(req, timeout=3)
+                except Exception as e:
+                    print(f"[COMPLETA] {e}")
+        threading.Thread(target=_w, daemon=True).start()
+
+    def _calc_pct(self, proj_nome: str) -> dict | None:
+        """Calcola avanzamento programmi di un progetto per nome."""
+        try:
+            cfg = _carica_config()
+            from pathlib import Path as _P
+            folder = (cfg.get("tools_toa_folder") or "").strip()
+            if not folder: return None
+            pf = _P(folder) / "worktrack_projects.json"
+            if not pf.exists(): return None
+            data = json.loads(pf.read_text(encoding="utf-8"))
+            proj = next((p for p in data.get("projects",[]) if p.get("name")==proj_nome), None)
+            if not proj: return None
+            pgms = [pgm for step in proj.get("steps",[]) for task in step.get("tasks",[])
+                    if task.get("text","").strip().lower()=="fresatura"
+                    for pgm in task.get("programs",[]) if pgm.get("tipoGruppo")!="ipm"]
+            if not pgms: return None
+            done      = sum(1 for p in pgms if p.get("stato")=="completato")
+            da_fare   = sum(1 for p in pgms if p.get("stato")=="da_fare")
+            in_mac    = sum(1 for p in pgms if p.get("stato")=="in_macchina")
+            return {"pct": round(done/len(pgms)*100, 1), "done": done,
+                    "tot": len(pgms), "da_fare": da_fare, "in_macchina": in_mac}
+        except Exception:
+            return None
+
+    def _avvia_pallet_coda(self, num_pallet: int, progetto_id: str):
+        """Avvia pallet tramite API — IN LAVORAZIONE + cima coda."""
+        import threading, urllib.request
+        def _worker():
+            try:
+                req = urllib.request.Request(
+                    f"http://localhost:8000/api/pallet/{num_pallet}/avvia",
+                    data=b"", method="POST",
+                    headers={"Content-Type": "application/json"})
+                urllib.request.urlopen(req, timeout=3)
+            except Exception as e:
+                print(f"[AVVIA] {e}")
+        threading.Thread(target=_worker, daemon=True).start()
 
     def _click_pallet(self, pid):
         pallet = next((p for p in self._pallets if p["id"] == pid), None)

@@ -399,12 +399,13 @@ export default function CodaLavorazione() {
   return (
     <div style={{
       display: "flex",
-      gap: 16,
+      flexDirection: "column",
+      gap: 12,
       padding: 16,
       height: "100%",
       boxSizing: "border-box",
       background: "var(--bg-base, #eef2f7)",
-      overflow: "hidden",
+      overflowY: "auto",
     }}>
 
       {/* ── Banner live context (programma in esecuzione) ───────── */}
@@ -465,7 +466,7 @@ export default function CodaLavorazione() {
       )}
 
       {/* ── Griglia 2×3 pallet ─────────────────────────────────── */}
-      <div style={{ flex: '0 0 calc(50% - 8px)', minWidth: 0, overflowY: 'auto' }}>
+      <div style={{ width: '100%', flexShrink: 0 }}>
         <div style={{
           display: "flex",
           justifyContent: "space-between",
@@ -479,8 +480,9 @@ export default function CodaLavorazione() {
 
         <div style={{
           display: "grid",
-          gridTemplateColumns: "repeat(2, 1fr)",
+          gridTemplateColumns: "repeat(3, 1fr)",
           gridTemplateRows: "auto",
+          maxWidth: 900,
           gap: 10,
           alignItems: "start",
         }}>
@@ -490,19 +492,26 @@ export default function CodaLavorazione() {
             const isLav    = p.stato === "IN LAVORAZIONE";
             const hasProj  = !!progettiPallet[p.id];
             const isEmpty  = !hasProj && p.stato === "VUOTO";
+            const proj     = progettiPallet[p.id];
+            const isAvviato = proj && proj.in_macchina > 0 && proj.pct < 100;
+            const isCompleto = proj && proj.pct === 100;
+            // Colori semantici: blu=avviato, verde=completo, giallo=grezzo
+            const cardBg     = isCompleto ? "#dcfce7" : isAvviato ? "#dbeafe" : isEmpty ? "#F8F7F5" : s.bg;
+            const cardBorder = isCompleto ? "#16a34a" : isAvviato ? "#1D5FAD" : isActive ? "#f59e0b" : isEmpty ? "#E8E6E0" : s.border;
+            const cardFg     = isCompleto ? "#14532d" : isAvviato ? "#0d2d5e" : isEmpty ? "#B0ADA4" : s.fg;
 
             return (
               <div
                 key={p.id}
                 title={isLav ? "Gestito automaticamente dalla macchina" : "Click per cambiare stato"}
                 style={{
-                  background:   isEmpty ? '#F8F7F5' : s.bg,
-                  border:       `${isEmpty ? 1 : 2}px solid ${isActive ? "#f59e0b" : isEmpty ? '#E8E6E0' : s.border}`,
+                  background:   cardBg,
+                  border:       `2px solid ${cardBorder}`,
                   borderRadius: 10,
                   padding:      isEmpty ? "8px 10px" : "10px 12px",
                   cursor:       isLav ? "default" : "pointer",
                   position:     "relative",
-                  height:       isEmpty ? 80 : 155,
+                  height:       isEmpty ? 80 : 185,
                   boxShadow:    isActive
                     ? "0 0 0 3px rgba(245,158,11,0.25), 0 2px 6px rgba(0,0,0,0.12)"
                     : isEmpty ? "none" : "0 1px 3px rgba(0,0,0,0.07)",
@@ -511,7 +520,7 @@ export default function CodaLavorazione() {
                   justifyContent: "space-between",
                   transition: "all 0.2s",
                   userSelect: "none",
-                  opacity: isEmpty ? 0.6 : 1,
+                  opacity: isEmpty ? 0.5 : 1,
                 }}
                 onClick={(e) => {
                   if (isLav) return;
@@ -520,7 +529,7 @@ export default function CodaLavorazione() {
               >
                 {/* Numero + stato */}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                  <span style={{ fontSize: isEmpty ? 22 : 36, fontWeight: 900, color: isEmpty ? '#B0ADA4' : s.fg, lineHeight: 1 }}>
+                  <span style={{ fontSize: isEmpty ? 22 : 36, fontWeight: 900, color: cardFg, lineHeight: 1 }}>
                     P{p.id}
                   </span>
                   {isActive && (
@@ -595,7 +604,7 @@ export default function CodaLavorazione() {
       </div>
 
       {/* ── Pannello destro ─────────────────────────────────────── */}
-      <div style={{ flex: '0 0 calc(50% - 8px)', display: "flex", flexDirection: "column", gap: 10, minWidth: 0, overflowY: 'auto' }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, width: '100%' }}>
 
         {/* Stato macchina + programma + utensile — tutto in un blocco compatto */}
         <div style={{

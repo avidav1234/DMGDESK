@@ -752,12 +752,12 @@ class TabCodaLavorazione:
             has_any = True
 
             # Header progetto
-            hdr = tk.Frame(self.frame_pgm_mac_body, bg=col+"22")
+            hdr = tk.Frame(self.frame_pgm_mac_body, bg="#f0f4ff")
             hdr.pack(fill="x", pady=(4,1))
             tk.Frame(hdr, bg=col, width=3).pack(side="left", fill="y")
             tk.Label(hdr, text=f"P{p['id']} — {p['progetto_nome']}",
                      font=("Inter",8,"bold"), fg=col,
-                     bg=col+"22").pack(side="left", padx=6, pady=2)
+                     bg="#f0f4ff").pack(side="left", padx=6, pady=2)
 
             # Righe programma
             for pgm in self._pgm_data[p["id"]]["programmi"]:

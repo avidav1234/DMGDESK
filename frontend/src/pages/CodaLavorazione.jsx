@@ -955,17 +955,16 @@ export default function CodaLavorazione() {
                             {/* Numero programma */}
                             <span style={{ fontSize: 12, fontWeight: 800, color: col,
                               fontFamily: 'monospace', minWidth: 32 }}>{pgm.numPgm}</span>
+                            {/* Nome file */}
+                            <span style={{ fontSize: 11, fontWeight: 700, color: '#0d2d5e',
+                              fontFamily: 'monospace', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                              {pgm.filename?.replace(/\.MPF$/i,'').replace(/\.mpf$/i,'')}
+                            </span>
                             {/* Utensile */}
-                            <span style={{ fontSize: 11, fontWeight: 600, color: '#1e293b',
+                            <span style={{ fontSize: 11, color: '#475569',
                               fontFamily: 'monospace', flex: 1, overflow: 'hidden',
                               textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                               {pgm.utensile || '—'}
-                            </span>
-                            {/* Nome file */}
-                            <span style={{ fontSize: 10, color: '#94a3b8', fontFamily: 'monospace',
-                              flexShrink: 0, maxWidth: 160, overflow: 'hidden',
-                              textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {pgm.filename}
                             </span>
                             {/* Tempo */}
                             {pgm.tempoStimato && (

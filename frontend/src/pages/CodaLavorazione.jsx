@@ -479,7 +479,7 @@ export default function CodaLavorazione() {
 
         <div style={{
           display: "grid",
-          gridTemplateColumns: "repeat(2, 200px)",
+          gridTemplateColumns: "repeat(2, 1fr)",
           gridTemplateRows: "auto",
           gap: 10,
           alignItems: "start",
@@ -505,10 +505,10 @@ export default function CodaLavorazione() {
                   background:   cardBg,
                   border:       `2px solid ${cardBorder}`,
                   borderRadius: 10,
-                  padding:      isEmpty ? "8px 10px" : "10px 12px",
+                  padding:      isEmpty ? "10px 14px" : "14px 16px",
                   cursor:       isLav ? "default" : "pointer",
                   position:     "relative",
-                  height:       isEmpty ? 80 : 185,
+                  height:       isEmpty ? 90 : 200,
                   boxShadow:    isActive
                     ? "0 0 0 3px rgba(245,158,11,0.25), 0 2px 6px rgba(0,0,0,0.12)"
                     : isEmpty ? "none" : "0 1px 3px rgba(0,0,0,0.07)",
@@ -526,7 +526,7 @@ export default function CodaLavorazione() {
               >
                 {/* Numero + stato */}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                  <span style={{ fontSize: isEmpty ? 22 : 36, fontWeight: 900, color: cardFg, lineHeight: 1 }}>
+                  <span style={{ fontSize: isEmpty ? 24 : 42, fontWeight: 900, color: cardFg, lineHeight: 1 }}>
                     P{p.id}
                   </span>
                   {isActive && (
@@ -540,26 +540,26 @@ export default function CodaLavorazione() {
 
                 {/* Stato label */}
                 {isEmpty ? (
-                  <div style={{fontSize:10, color:'#B0ADA4', fontWeight:600, letterSpacing:1}}>VUOTO</div>
+                  <div style={{fontSize:11, color:'#B0ADA4', fontWeight:700, letterSpacing:1}}>VUOTO</div>
                 ) : (
                   <div style={{flex:1,minHeight:0,display:'flex',flexDirection:'column',justifyContent:'flex-end',gap:2}}>
-                    <div style={{fontSize:11,fontWeight:700,color:cardFg,opacity:0.9,letterSpacing:1,textTransform:'uppercase'}}>
+                    <div style={{fontSize:11,fontWeight:800,color:cardFg,letterSpacing:1,textTransform:'uppercase'}}>
                       {p.stato}
                     </div>
                     {progettiPallet[p.id] ? (
                       <div style={{marginTop:2}}>
                         <div style={{display:'flex',alignItems:'center',gap:4,marginBottom:3}}>
                           <div style={{width:7,height:7,borderRadius:'50%',background:progettiPallet[p.id].colore,flexShrink:0}}/>
-                          <span style={{fontSize:12,fontWeight:800,color:s.fg,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:130}}>
+                          <span style={{fontSize:13,fontWeight:800,color:cardFg,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
                             {progettiPallet[p.id].nome}
                           </span>
                         </div>
-                        <div style={{height:5,background:'rgba(0,0,0,0.1)',borderRadius:3,overflow:'hidden'}}>
+                        <div style={{height:6,background:'rgba(0,0,0,0.12)',borderRadius:3,overflow:'hidden'}}>
                           <div style={{height:'100%',background:progettiPallet[p.id].colore,width:`${progettiPallet[p.id].pct}%`,borderRadius:2}}/>
                         </div>
                         <div style={{display:'flex',justifyContent:'space-between',marginTop:2}}>
-                          <span style={{fontSize:10,color:s.fg,opacity:0.7}}>{progettiPallet[p.id].completati}/{progettiPallet[p.id].totale} pgm</span>
-                          <span style={{fontSize:11,fontWeight:800,color:s.fg}}>{progettiPallet[p.id].pct}%</span>
+                          <span style={{fontSize:10,color:cardFg,opacity:0.8}}>{progettiPallet[p.id].completati}/{progettiPallet[p.id].totale} pgm</span>
+                          <span style={{fontSize:12,fontWeight:800,color:cardFg}}>{progettiPallet[p.id].pct}%</span>
                         </div>
                         {(progettiPallet[p.id].da_fare > 0 || progettiPallet[p.id].in_macchina > 0) && !isAvviato && (
                           <button onClick={e=>{e.stopPropagation();avviaProgetto(p.id)}}

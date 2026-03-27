@@ -181,8 +181,9 @@ class TabHome:
         in_mac     = [x for x in all_pgm if x.get("stato") == "in_macchina"]
         completati = [x for x in all_pgm if x.get("stato") == "completato"]
         oggi_pgm   = [x for x in all_pgm if (x.get("tempoFine") or "").startswith(today)]
-        da_montare = len(setup_data.get("da_montare", []))
-        fine_vita  = len(setup_data.get("fin_vita",   []))
+        da_montare    = len(setup_data.get("da_montare", []))
+        fine_vita     = len(setup_data.get("fin_vita",   []))
+        prev_vita     = setup_data.get("previsione_vita", [])
 
         def get_del(pid):
             return next((d for d in deliveries if d.get("projectId") == pid), None)
@@ -254,7 +255,7 @@ class TabHome:
                 self._bind_click(card, lambda p2=pid: self._open_project(p2))
 
         # ══ 2° PIANO — ALERT ════════════════════════════════════════════════
-        if urgenti or da_montare or fine_vita:
+        if urgenti or da_montare or fine_vita or prev_vita:
             ar = tk.Frame(pad, bg=BG)
             ar.pack(fill="x", pady=(0, 16))
             for p in urgenti:
@@ -273,9 +274,16 @@ class TabHome:
                 if da_montare: msg += f"  {da_montare} da montare"
                 if fine_vita:  msg += f"  {fine_vita} a fine vita"
                 uf = tk.Frame(ar, bg="#fdf6e3", highlightbackground="#c8953a", highlightthickness=1)
-                uf.pack(side="left", padx=(0,0))
+                uf.pack(side="left", padx=(0,4))
                 tk.Label(uf, text=msg, font=("Inter",10,"bold"), fg="#9a6b2e",
                          bg="#fdf6e3", anchor="w").pack(padx=10, pady=6)
+            if prev_vita:
+                pf2 = tk.Frame(ar, bg="#fff3e0", highlightbackground="#ff9800", highlightthickness=1,
+                               cursor="hand2")
+                pf2.pack(side="left", padx=(0,0))
+                tk.Label(pf2, text=f"🔮  {len(prev_vita)} a rischio fine vita",
+                         font=("Inter",10,"bold"), fg="#e65100",
+                         bg="#fff3e0", anchor="w").pack(padx=10, pady=6)
 
         # ══ 3° PIANO — METRICHE + LAVORI ════════════════════════════════════
         bot = tk.Frame(pad, bg=BG)
@@ -289,10 +297,10 @@ class TabHome:
             (len(da_fare),    "Da fare",   f"{len(in_progress)} lavori", TC["muted"],  TC["surface2"]),
             (len(in_mac),     "In macchina","attivi",                    "#0d2d5e",    "#eef4fb"),
             (len(oggi_pgm),   "Oggi",       f"{len(completati)} tot.",   "#2d8a55",    "#f0f9f4"),
-            (da_montare+fine_vita, "Critici",
-             f"{da_montare} da montare" if da_montare else "ok",
-             "#c0392b" if (da_montare+fine_vita) > 0 else "#2d8a55",
-             "#fdf4f4" if (da_montare+fine_vita) > 0 else "#f0f9f4"),
+            (da_montare+fine_vita+len(prev_vita), "Critici",
+             f"{da_montare} da montare" if da_montare else f"{len(prev_vita)} a rischio" if prev_vita else "ok",
+             "#c0392b" if (da_montare+fine_vita+len(prev_vita)) > 0 else "#2d8a55",
+             "#fdf4f4" if (da_montare+fine_vita+len(prev_vita)) > 0 else "#f0f9f4"),
         ]):
             mc = tk.Frame(mf, bg=bg_m, width=110, height=62)
             mc.grid(row=mi//2, column=mi%2, padx=3, pady=3, sticky="nsew")

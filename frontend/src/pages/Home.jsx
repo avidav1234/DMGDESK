@@ -49,6 +49,7 @@ export default function Home(){
   const ogg   =pgm.filter(x=>(x.tempoFine||'').startsWith(today))
   const daM   =(setup?.da_montare||[]).length
   const fV    =(setup?.fin_vita||[]).length
+  const prev  =(setup?.previsione_vita||[])
 
   function getDel(pid){return deliveries.find(d=>d.projectId===pid)||null}
   const urgenti=ip.filter(p=>{const d=getDel(p.id);const dy=d&&d.dueDate&&!d.delivered?daysUntil(d.dueDate):null;return dy!==null&&dy<=7}).sort((a,b)=>(daysUntil(getDel(a.id)?.dueDate)||99)-(daysUntil(getDel(b.id)?.dueDate)||99))
@@ -118,7 +119,7 @@ export default function Home(){
         </div>
 
         {/* ══ 2° PIANO — ALERT ═══════════════════════════════════════════ */}
-        {(urgenti.length>0||daM>0||fV>0)&&(
+        {(urgenti.length>0||daM>0||fV>0||prev.length>0)&&(
           <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
             {urgenti.map(p=>{
               const d=getDel(p.id);const days=daysUntil(d?.dueDate)
@@ -147,6 +148,17 @@ export default function Home(){
                 {fV>0&&<span style={{fontSize:12,fontWeight:600,color:'#9a6b2e'}}>{fV} a fine vita</span>}
               </div>
             )}
+            {prev.length>0&&(
+              <div style={{display:'flex',alignItems:'center',gap:8,background:'#fff3e0',
+                border:'1px solid #ff9800',borderRadius:8,padding:'8px 14px',flexShrink:0,cursor:'pointer'}}
+                onClick={()=>window.location.href='/macchina'}>
+                <span style={{fontSize:13}}>🔮</span>
+                <span style={{fontSize:12,fontWeight:700,color:'#e65100'}}>
+                  {prev.length} utensil{prev.length===1?'e':'i'} a rischio fine vita
+                </span>
+                <span style={{fontSize:10,color:'#bf360c'}}>→ Analisi Setup</span>
+              </div>
+            )}
           </div>
         )}
 
@@ -159,8 +171,8 @@ export default function Home(){
               {val:daFare.length,  label:'Da fare',   sub:`${ip.length} lavori`, color:'#475569', bg:T.surface2},
               {val:inMac.length,   label:'In macchina',sub:'attivi',             color:'#0d2d5e', bg:'#eef4fb'},
               {val:ogg.length,     label:'Oggi',       sub:`${comp.length} tot.`,color:'#2d8a55', bg:'#f0f9f4'},
-              {val:daM+fV,         label:'Critici',    sub:daM>0?`${daM} da montare`:'ok',
-               color:(daM+fV)>0?'#c0392b':'#2d8a55', bg:(daM+fV)>0?'#fdf4f4':'#f0f9f4'},
+              {val:daM+fV+prev.length, label:'Critici', sub:daM>0?`${daM} da montare`:prev.length>0?`${prev.length} a rischio`:'ok',
+               color:(daM+fV+prev.length)>0?'#c0392b':'#2d8a55', bg:(daM+fV+prev.length)>0?'#fdf4f4':'#f0f9f4'},
             ].map(({val,label,sub,color,bg})=>(
               <div key={label} style={{background:bg,borderRadius:10,padding:'10px 12px'}}>
                 <div style={{fontSize:22,fontWeight:700,color,lineHeight:1,marginBottom:2}}>{val}</div>

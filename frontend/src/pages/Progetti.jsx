@@ -322,6 +322,36 @@ function FresaturaPanel({task,onUpdateTask,toolsDB,projectId}){
   const totaleStimato=fresPrograms.reduce((acc,p)=>acc+(parseInt(p.tempoStimato)||0),0)
   const rimanente=fresPrograms.filter(p=>p.stato!=='completato').reduce((acc,p)=>acc+(parseInt(p.tempoStimato)||0),0)
   const haTempi=fresPrograms.some(p=>p.tempoStimato)
+
+  // Previsione fine vita — calcola per ogni utensile il punto di rottura
+  const previsioneVita = (() => {
+    if(!toolsDB||!haTempi) return []
+    // Raggruppa programmi da fare per utensile in ordine
+    const perUtensile = {}
+    for(const p of fresPrograms){
+      if(p.stato==='completato') continue
+      const alias=(p.utensile||'').toUpperCase().trim()
+      const tempo=parseInt(p.tempoStimato)||0
+      if(!alias||!tempo) continue
+      if(!perUtensile[alias]) perUtensile[alias]=[]
+      perUtensile[alias].push(p)
+    }
+    const alerts=[]
+    for(const [alias, pgms] of Object.entries(perUtensile)){
+      // Trova vita rimanente (life_percent = minuti)
+      const utensili=Object.values(toolsDB).filter(t=>
+        (t.name||'').toUpperCase().trim()===alias && t.is_enabled && !t.is_worn)
+      if(!utensili.length) continue
+      const vitaRim=Math.max(...utensili.map(t=>t.life_percent||0))
+      let consumo=0, critico=null
+      for(const p of pgms){
+        consumo+=parseInt(p.tempoStimato)||0
+        if(consumo>vitaRim && !critico) critico={...p, minutiRottura: vitaRim-(consumo-(parseInt(p.tempoStimato)||0))}
+      }
+      if(critico) alerts.push({alias, vitaRim, consumoTot:consumo, critico, mancanti:consumo-vitaRim})
+    }
+    return alerts.sort((a,b)=>b.mancanti-a.mancanti)
+  })()
   return(
     <div style={{marginTop:8,background:T.surface,border:'1.5px solid #1D5FAD33',borderRadius:10}}>
       <div onClick={()=>setExpanded(v=>!v)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',cursor:'pointer',background:'#E8F0FA',userSelect:'none'}}>
@@ -342,6 +372,9 @@ function FresaturaPanel({task,onUpdateTask,toolsDB,projectId}){
         {haTempi&&rimanente>0&&rimanente<totaleStimato&&<span style={{fontSize:11,fontWeight:700,color:'#0d2d5e',background:'#eef4fb',padding:'2px 9px',borderRadius:20,border:'1px solid #c5d9f0'}}>
           {fmtTempo(rimanente)} rim.
         </span>}
+        {previsioneVita.length>0&&<span style={{fontSize:11,fontWeight:700,color:'#e65100',background:'#fff3e0',padding:'2px 9px',borderRadius:20,border:'1px solid #ffb74d'}}>
+          🔮 {previsioneVita.length} a rischio
+        </span>}
         {inMacchina>0&&<span style={{fontSize:11,fontWeight:700,color:'#0d2d5e',background:'#fff',padding:'2px 9px',borderRadius:20,border:'1px solid #1D5FAD44'}}>⚙ {inMacchina} in macchina</span>}
         {total>0&&<span style={{fontSize:12,fontWeight:700,color:allDone?'#166534':'#0d2d5e',background:allDone?'#dcfce7':'#fff',padding:'2px 10px',borderRadius:20,border:`1px solid ${allDone?'#166534':'#0d2d5e'}44`}}>{doneTotal}/{total} {allDone?'✓':'completati'}</span>}
         <span style={{fontSize:11,color:'#0d2d5e',fontWeight:700}}>{expanded?'▲':'▼'}</span>
@@ -353,6 +386,39 @@ function FresaturaPanel({task,onUpdateTask,toolsDB,projectId}){
             <button onClick={()=>fileInputRef.current.click()} style={{background:'#0d2d5e',border:'none',borderRadius:7,color:'#fff',fontWeight:700,fontSize:13,padding:'7px 14px',cursor:'pointer'}}>📂 Carica .mpf</button>
             {total>0&&<span style={{fontSize:12,color:T.textMuted}}>{ipmPrograms.length>0&&`📏 ${ipmPrograms.length} IPM · `}⚙️ {fresPrograms.length} fresatura</span>}
           </div>
+
+          {/* ── Previsione fine vita ── */}
+          {previsioneVita.length>0&&(
+            <div style={{background:'#fff8f0',borderBottom:`1px solid #ffb74d`,padding:'10px 14px'}}>
+              <div style={{fontSize:11,fontWeight:800,color:'#e65100',marginBottom:8,display:'flex',alignItems:'center',gap:6}}>
+                <span>🔮</span>
+                <span>PREVISIONE FINE VITA — {previsioneVita.length} utensil{previsioneVita.length===1?'e':'i'} a rischio in questa fase</span>
+              </div>
+              {previsioneVita.map((a,i)=>(
+                <div key={i} style={{background:'#fff',border:'1px solid #ffcc80',borderRadius:8,
+                  padding:'8px 12px',marginBottom:6,fontSize:12}}>
+                  <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:4}}>
+                    <span style={{fontFamily:'monospace',fontWeight:800,color:'#bf360c'}}>{a.alias}</span>
+                    <div style={{flex:1,height:5,background:'#ffe0b2',borderRadius:3,overflow:'hidden'}}>
+                      <div style={{height:5,width:`${Math.min(Math.round(a.vitaRim/a.consumoTot*100),100)}%`,
+                        background:'#ff9800',borderRadius:3}}/>
+                    </div>
+                    <span style={{fontSize:11,color:'#e65100',flexShrink:0,fontWeight:700}}>
+                      {a.vitaRim}min / {a.consumoTot}min
+                    </span>
+                  </div>
+                  <div style={{background:'#fff3e0',borderRadius:6,padding:'6px 10px',fontSize:11}}>
+                    <span style={{fontWeight:700,color:'#bf360c'}}>⚠ Finisce durante: </span>
+                    <span style={{fontFamily:'monospace',fontWeight:700}}>{a.critico.filename?.replace(/\.MPF$/i,'')}</span>
+                    <span style={{color:'#9a3412'}}> — vita esaurita dopo {a.critico.minutiRottura}min, mancano ancora {a.mancanti}min</span>
+                    <div style={{marginTop:3,fontWeight:700,color:'#e65100'}}>
+                      💡 Sostituire prima del programma <span style={{fontFamily:'monospace'}}>{a.critico.numPgm}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* Toolbar multi-select */}
           {selected.size>0&&(

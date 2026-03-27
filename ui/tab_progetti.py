@@ -551,6 +551,14 @@ class TabProgetti:
         self._refresh()
 
     def _refresh(self):
+        # Debounce: cancella il refresh pendente e ripianifica tra 30ms
+        if getattr(self, '_refresh_pending', None):
+            try: self.parent.after_cancel(self._refresh_pending)
+            except Exception: pass
+        self._refresh_pending = self.parent.after(30, self._do_refresh)
+
+    def _do_refresh(self):
+        self._refresh_pending = None
         self._clear_body()
         try:
             if self._editing_template:

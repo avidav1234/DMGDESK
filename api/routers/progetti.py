@@ -28,11 +28,24 @@ def _templates_path(config: dict) -> Path:
         base = "."
     return Path(base) / "worktrack_templates.json"
 
+_progetti_cache: dict = {"data": None, "path": None, "mtime": 0}
+
+
 def _load_progetti(config: dict) -> dict:
+    import os as _os
     path = _progetti_path(config)
     if path.exists():
         try:
-            return json.loads(path.read_text(encoding="utf-8"))
+            mtime = _os.path.getmtime(path)
+            if (_progetti_cache["path"] == str(path) and
+                    _progetti_cache["mtime"] == mtime and
+                    _progetti_cache["data"] is not None):
+                return _progetti_cache["data"]
+            data = json.loads(path.read_text(encoding="utf-8"))
+            _progetti_cache["data"]  = data
+            _progetti_cache["path"]  = str(path)
+            _progetti_cache["mtime"] = mtime
+            return data
         except Exception:
             pass
     return {"projects": [], "ultimo_aggiornamento": None}
@@ -41,6 +54,9 @@ def _save_progetti(config: dict, data: dict):
     path = _progetti_path(config)
     data["ultimo_aggiornamento"] = datetime.now().isoformat()
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    # Invalida cache — il file è cambiato
+    _progetti_cache["mtime"] = 0
+    _invalidate_analisi_cache()
 
 def _load_templates(config: dict) -> list:
     path = _templates_path(config)
@@ -678,12 +694,28 @@ def _calcola_previsione_vita(projects: list, tools_db: dict, classify_fn, ordine
     return sorted(alerts, key=lambda x: x["surplus_mancante"], reverse=True)
 
 
+# Cache per analisi-setup — TTL 60 secondi
+_analisi_setup_cache: dict = {"data": None, "ts": 0}
+_ANALISI_SETUP_TTL = 60  # secondi
+
+
+def _invalidate_analisi_cache():
+    """Invalida la cache di analisi-setup (chiamare dopo sync/modifiche)."""
+    _analisi_setup_cache["data"] = None
+    _analisi_setup_cache["ts"]   = 0
+
+
 @router.get("/analisi-setup/non-utilizzati")
 async def get_analisi_setup():
     """
     Confronta utensili in macchina con richiesti dai progetti attivi.
-    Legge alias anche dai file MPF su disco.
+    Cache TTL 60s per evitare calcoli ripetuti.
     """
+    import time as _time
+    global _analisi_setup_cache
+    now = _time.time()
+    if _analisi_setup_cache["data"] and (now - _analisi_setup_cache["ts"]) < _ANALISI_SETUP_TTL:
+        return _analisi_setup_cache["data"]
     from api.routers.progetti_utensili import estrai_alias_da_progetti
     from database.db_handler import auto_find_db_paths, carica_database, carica_database_utensili_smontati
 
@@ -801,7 +833,7 @@ async def get_analisi_setup():
             "progetti":  [{"progetto": r[0], "file": r[1]} for r in refs[:5]],
         })
 
-    return {
+    result = {
         "non_utilizzati": sorted(non_utilizzati, key=lambda x: x["alias"]),
         "da_montare":     da_montare,
         "fin_vita":       sorted(fin_vita, key=lambda x: x.get("life_percent") or 0),
@@ -811,6 +843,10 @@ async def get_analisi_setup():
             ordine_pallet=pallet_state_data.get("ordine_esecuzione", [])
         ),
     }
+    import time as _time
+    _analisi_setup_cache["data"] = result
+    _analisi_setup_cache["ts"]   = _time.time()
+    return result
 
 
 # ── Segna programmi in_macchina ────────────────────────────────────────────

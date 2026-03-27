@@ -457,6 +457,10 @@ async def completa_programmi(numero: int, body: dict):
                     count += 1
 
     _save_progetti(config, data)
+    try:
+        from api.routers.progetti import _invalidate_analisi_cache
+        _invalidate_analisi_cache()
+    except Exception: pass
     return {"ok": True, "completati": count}
 
 
@@ -568,6 +572,10 @@ async def avvia_pallet(numero: int):
     pallet_target["aggiornato"] = now
 
     _save(config, state)
+    try:
+        from api.routers.progetti import _invalidate_analisi_cache
+        _invalidate_analisi_cache()
+    except Exception: pass
     return {"ok": True, "pallet": numero, "stato": "in_lavorazione"}
 
 @router.get("/ordine-esecuzione")

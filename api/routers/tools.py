@@ -187,14 +187,28 @@ def _save_tools_db(tools: dict, sync_time: str, positions=None, format_used: str
         json.dump(data, f, indent=2, ensure_ascii=False)
 
 
+_tools_db_cache: dict = {"data": None, "sync_time": None, "format": "", "mtime": 0}
+
+
 def _load_tools_db() -> tuple[dict, str | None, str]:
-    """Carica il DB utensili dal JSON locale. Restituisce (tools_dict, sync_time, format_used)."""
+    """Carica il DB utensili dal JSON locale con cache mtime."""
+    import os as _os
     db_path = _get_tools_db_path()
     if not db_path.exists():
         return {}, None, ""
-    with open(db_path, encoding="utf-8") as f:
-        data = json.load(f)
-    return data.get("tools", {}), data.get("sync_time"), data.get("format_used", "")
+    try:
+        mtime = _os.path.getmtime(db_path)
+        if _tools_db_cache["data"] is not None and _tools_db_cache["mtime"] == mtime:
+            return _tools_db_cache["data"], _tools_db_cache["sync_time"], _tools_db_cache["format"]
+        with open(db_path, encoding="utf-8") as f:
+            data = json.load(f)
+        _tools_db_cache["data"]      = data.get("tools", {})
+        _tools_db_cache["sync_time"] = data.get("sync_time")
+        _tools_db_cache["format"]    = data.get("format_used", "")
+        _tools_db_cache["mtime"]     = mtime
+        return _tools_db_cache["data"], _tools_db_cache["sync_time"], _tools_db_cache["format"]
+    except Exception:
+        return {}, None, ""
 
 
 # ---------------------------------------------------------------------------
@@ -237,6 +251,12 @@ async def sync_tools():
         raise HTTPException(status_code=500, detail=f"Errore salvataggio DB: {e}")
 
     log.info(f"Sync OK: {len(tools)} utensili via {result['format_used'].upper()} — {result['reason']}")
+
+    try:
+        from api.routers.progetti import _invalidate_analisi_cache
+        _invalidate_analisi_cache()
+    except Exception:
+        pass
 
     return {
         "ok":              True,

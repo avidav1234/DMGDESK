@@ -193,37 +193,68 @@ function ProgramRow({pgm,gruppo,onStato,onOperatore,onTempo,onRemove,toolStatus,
         <div onClick={()=>setExpanded(v=>!v)} style={{flexShrink:0,width:32,borderLeft:`1px solid ${T.border}`,alignSelf:'stretch',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',color:T.textMuted,fontSize:11}}>{expanded?'▲':'▼'}</div>
       </div>
       {expanded&&(
-        <div style={{padding:'12px 14px',background:T.surface2,borderTop:`1px solid ${T.border}`,display:'flex',flexWrap:'wrap',gap:16,alignItems:'flex-start'}}>
+        <div style={{padding:'10px 14px',background:T.surface2,borderTop:`1px solid ${T.border}`,
+          display:'grid',gridTemplateColumns:'160px 160px 1fr auto auto',gap:16,alignItems:'end'}}>
+          {/* OPERATORE */}
           <div>
             <div style={{fontSize:10,color:T.textMuted,fontWeight:700,letterSpacing:'0.06em',marginBottom:4}}>OPERATORE</div>
-            <select value={pgm.operatore||''} onChange={e=>onOperatore(e.target.value)} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:6,color:pgm.operatore?T.text:T.textMuted,fontSize:12,padding:'4px 10px',outline:'none',cursor:'pointer'}}>
+            <select value={pgm.operatore||''} onChange={e=>onOperatore(e.target.value)}
+              style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:6,
+                color:pgm.operatore?T.text:T.textMuted,fontSize:12,padding:'4px 10px',outline:'none',cursor:'pointer',width:'100%'}}>
               <option value=''>— Seleziona</option>
               {OPERATORI.map(o=><option key={o} value={o}>{o}</option>)}
             </select>
           </div>
+          {/* TEMPO STIMATO */}
           <div>
             <div style={{fontSize:10,color:T.textMuted,fontWeight:700,letterSpacing:'0.06em',marginBottom:4}}>TEMPO STIMATO</div>
             {editingT?(
               <div style={{display:'flex',gap:5}}>
-                <input value={editTempo} onChange={e=>setEditTempo(e.target.value)} placeholder='es. 2h30m' autoFocus
-                  style={{width:90,background:T.surface,border:'1.5px solid #1D5FAD44',borderRadius:6,padding:'4px 8px',color:T.text,fontSize:12,outline:'none'}}
+                <input value={editTempo} onChange={e=>setEditTempo(e.target.value)} placeholder='es. 45 o 00:35:00' autoFocus
+                  style={{flex:1,background:T.surface,border:'1.5px solid #1D5FAD44',borderRadius:6,padding:'4px 8px',color:T.text,fontSize:12,outline:'none'}}
                   onKeyDown={e=>{if(e.key==='Enter'){onTempo(editTempo);setEditingT(false)}if(e.key==='Escape')setEditingT(false)}}/>
-                <button onClick={()=>{onTempo(editTempo);setEditingT(false)}} style={{background:'#0d2d5e',border:'none',borderRadius:5,color:'#fff',fontSize:11,fontWeight:700,padding:'4px 9px',cursor:'pointer'}}>OK</button>
+                <button onClick={()=>{onTempo(editTempo);setEditingT(false)}}
+                  style={{background:'#0d2d5e',border:'none',borderRadius:5,color:'#fff',fontSize:11,fontWeight:700,padding:'4px 9px',cursor:'pointer'}}>OK</button>
               </div>
             ):(
-              <button onClick={()=>setEditingT(true)} style={{background:'none',border:`1px dashed ${T.border}`,borderRadius:6,color:pgm.tempoStimato?T.text:T.textMuted,fontSize:12,padding:'4px 10px',cursor:'pointer'}}>⏱ {pgm.tempoStimato||'Aggiungi'}</button>
+              <button onClick={()=>setEditingT(true)}
+                style={{background:'none',border:`1px dashed ${T.border}`,borderRadius:6,
+                  color:pgm.tempoStimato?T.text:T.textMuted,fontSize:12,padding:'4px 10px',cursor:'pointer'}}>
+                ⏱ {pgm.tempoStimato||'Aggiungi'}
+              </button>
             )}
           </div>
-          {pgm.dataPost&&!/^\d+$/.test(pgm.dataPost.toString().trim())&&<div style={{fontSize:10,color:T.textMuted,fontFamily:'monospace',marginLeft:'auto',flexShrink:0,alignSelf:'flex-end'}}>📅 {pgm.dataPost}</div>}
-          <div><div style={{fontSize:10,color:T.textMuted,fontWeight:700,letterSpacing:'0.06em',marginBottom:4}}>FILE</div><div style={{fontSize:11,color:T.textMuted,fontFamily:'monospace'}}>{pgm.filename}</div></div>
-          <div style={{marginLeft:'auto'}}>
+          {/* FILE + data post */}
+          <div>
+            <div style={{fontSize:10,color:T.textMuted,fontWeight:700,letterSpacing:'0.06em',marginBottom:4}}>FILE</div>
+            <div style={{display:'flex',alignItems:'center',gap:8}}>
+              <span style={{fontSize:11,color:T.textMuted,fontFamily:'monospace'}}>{pgm.filename}</span>
+              {pgm.dataPost&&<span style={{fontSize:10,color:T.textMuted,fontFamily:'monospace',flexShrink:0}}>📅 {pgm.dataPost}</span>}
+            </div>
+          </div>
+          {/* STATO */}
+          <div>
             <div style={{fontSize:10,color:T.textMuted,fontWeight:700,letterSpacing:'0.06em',marginBottom:4}}>STATO</div>
             <div style={{display:'flex',gap:4}}>
               {Object.entries(STATO_CFG).map(([key,s])=>(
-                <button key={key} onClick={()=>onStato(key)} style={{background:pgm.stato===key?s.bg:'transparent',border:`1.5px solid ${pgm.stato===key?s.border:T.border}`,borderRadius:6,color:pgm.stato===key?s.color:T.textMuted,fontSize:11,fontWeight:700,padding:'3px 10px',cursor:'pointer'}}>{s.dot} {s.label}</button>
+                <button key={key} onClick={()=>onStato(key)}
+                  style={{background:pgm.stato===key?s.bg:'transparent',
+                    border:`1.5px solid ${pgm.stato===key?s.border:T.border}`,
+                    borderRadius:6,color:pgm.stato===key?s.color:T.textMuted,
+                    fontSize:11,fontWeight:700,padding:'3px 10px',cursor:'pointer'}}>
+                  {s.dot} {s.label}
+                </button>
               ))}
-              <button onClick={onRemove} style={{marginLeft:8,background:'none',border:`1px solid ${T.red}44`,borderRadius:6,color:T.red,fontSize:11,padding:'3px 8px',cursor:'pointer'}}>🗑 Rimuovi</button>
             </div>
+          </div>
+          {/* RIMUOVI */}
+          <div>
+            <div style={{fontSize:10,color:'transparent',marginBottom:4}}>_</div>
+            <button onClick={onRemove}
+              style={{background:'none',border:`1px solid ${T.red}44`,borderRadius:6,
+                color:T.red,fontSize:11,padding:'3px 10px',cursor:'pointer'}}>
+              🗑 Rimuovi
+            </button>
           </div>
         </div>
       )}

@@ -387,6 +387,7 @@ export default function CodaLavorazione() {
       height: "100%",
       boxSizing: "border-box",
       background: "var(--bg-base, #eef2f7)",
+      overflow: "hidden",
     }}>
 
       {/* ── Banner live context (programma in esecuzione) ───────── */}
@@ -447,7 +448,7 @@ export default function CodaLavorazione() {
       )}
 
       {/* ── Griglia 2×3 pallet ─────────────────────────────────── */}
-      <div style={{ flex: 1, minWidth: 0, overflowY: 'auto' }}>
+      <div style={{ flex: '0 0 calc(50% - 8px)', minWidth: 0, overflowY: 'auto' }}>
         <div style={{
           display: "flex",
           justifyContent: "space-between",
@@ -577,7 +578,7 @@ export default function CodaLavorazione() {
       </div>
 
       {/* ── Pannello destro ─────────────────────────────────────── */}
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 10, minWidth: 0, overflowY: 'auto' }}>
+      <div style={{ flex: '0 0 calc(50% - 8px)', display: "flex", flexDirection: "column", gap: 10, minWidth: 0, overflowY: 'auto' }}>
 
         {/* Stato macchina + programma + utensile — tutto in un blocco compatto */}
         <div style={{

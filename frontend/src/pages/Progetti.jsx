@@ -214,7 +214,7 @@ function ProgramRow({pgm,gruppo,onStato,onOperatore,onTempo,onRemove,toolStatus,
               <button onClick={()=>setEditingT(true)} style={{background:'none',border:`1px dashed ${T.border}`,borderRadius:6,color:pgm.tempoStimato?T.text:T.textMuted,fontSize:12,padding:'4px 10px',cursor:'pointer'}}>⏱ {pgm.tempoStimato||'Aggiungi'}</button>
             )}
           </div>
-          {pgm.dataPost&&<div style={{fontSize:10,color:T.textMuted,fontFamily:'monospace',marginLeft:'auto',flexShrink:0,alignSelf:'flex-end'}}>📅 {pgm.dataPost}</div>}
+          {pgm.dataPost&&!/^\d+$/.test(pgm.dataPost.toString().trim())&&<div style={{fontSize:10,color:T.textMuted,fontFamily:'monospace',marginLeft:'auto',flexShrink:0,alignSelf:'flex-end'}}>📅 {pgm.dataPost}</div>}
           <div><div style={{fontSize:10,color:T.textMuted,fontWeight:700,letterSpacing:'0.06em',marginBottom:4}}>FILE</div><div style={{fontSize:11,color:T.textMuted,fontFamily:'monospace'}}>{pgm.filename}</div></div>
           <div style={{marginLeft:'auto'}}>
             <div style={{fontSize:10,color:T.textMuted,fontWeight:700,letterSpacing:'0.06em',marginBottom:4}}>STATO</div>
@@ -2174,7 +2174,14 @@ export default function Progetti(){
       ])
       if(!r.ok) throw new Error(`Server error ${r.status}`)
       const d=await r.json()
-      const projs = (d.projects||[]).map(p=>({pallet_assegnato:null,...p}))
+      const projs = (d.projects||[]).map(p=>({pallet_assegnato:null,...p,
+        // Pulizia dataPost corrotti (valori numerici puri come "35" dal vecchio parser)
+        steps:(p.steps||[]).map(s=>({...s,tasks:(s.tasks||[]).map(t=>({...t,
+          programs:(t.programs||[]).map(pgm=>{
+            const dp=pgm.dataPost
+            return dp&&/^\d+$/.test(dp.toString().trim())?{...pgm,dataPost:''}:pgm
+          })
+        }))}))}))
       setProjects(projs)
       setTemplates(d.templates||[])
       if(rd.ok){ const ds=await rd.json(); setDeliveries(Array.isArray(ds)?ds:[]) }

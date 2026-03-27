@@ -116,7 +116,6 @@ export default function CodaLavorazione() {
         const saved = palletArr.find(s => s.numero === p.id) || {};
         // Backend usa minuscolo, UI usa maiuscolo
         let stato = (saved.stato || "vuoto").toUpperCase().replace("_", " ");
-        if (stato === "IN LAVORAZIONE") stato = "VUOTO"; // non sovrascrivere con dato stale
 
         // Sovrascrive con IN LAVORAZIONE se macchina lo conferma live
         if (

@@ -564,11 +564,11 @@ async def avvia_pallet(numero: int):
                 p["stato"] = "grezzo"
 
     # Imposta il pallet target IN LAVORAZIONE
-    pallet_target["stato"]      = "IN LAVORAZIONE"
+    pallet_target["stato"]      = "in_lavorazione"
     pallet_target["aggiornato"] = now
 
     _save(config, state)
-    return {"ok": True, "pallet": numero, "stato": "IN LAVORAZIONE"}
+    return {"ok": True, "pallet": numero, "stato": "in_lavorazione"}
 
 @router.get("/ordine-esecuzione")
 async def get_ordine_esecuzione():

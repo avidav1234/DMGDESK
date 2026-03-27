@@ -1487,6 +1487,40 @@ class TabProgetti:
         rim_min = sum(int(p.get("tempoStimato") or 0) for p in fres_pgm if p.get("stato") != "completato")
         ha_tempi = any(p.get("tempoStimato") for p in fres_pgm)
 
+        # Previsione fine vita — calcola localmente con life_remaining (minuti)
+        tools_db_local = getattr(self, "_tools_db_cache", {})
+        prev_vita_locale = []
+        if ha_tempi and tools_db_local:
+            from collections import defaultdict
+            per_utensile = defaultdict(list)
+            for p in fres_pgm:
+                if p.get("stato") == "completato": continue
+                alias = (p.get("utensile") or "").upper().strip()
+                try: tempo = int(p.get("tempoStimato") or 0)
+                except: tempo = 0
+                if alias and tempo: per_utensile[alias].append(p)
+            for alias, pgms in per_utensile.items():
+                abilitati = [t for t in tools_db_local.values()
+                             if (t.get("name") or "").upper().strip() == alias
+                             and t.get("is_enabled", True) and not t.get("is_worn", False)]
+                if not abilitati: continue
+                best = max(abilitati, key=lambda t: t.get("life_remaining") or 0)
+                vita_rim = best.get("life_remaining")  # minuti
+                if not vita_rim or vita_rim <= 0:
+                    # fallback a percentuale × totale
+                    lp = best.get("life_percent"); lt = best.get("life_total")
+                    if lp and lt: vita_rim = round((lp/100)*lt)
+                if not vita_rim or vita_rim <= 0: continue
+                consumo = 0; critico = None
+                for p in pgms:
+                    consumo += int(p.get("tempoStimato") or 0)
+                    if consumo > vita_rim and not critico:
+                        critico = {**p, "minuto_rottura": max(0, vita_rim-(consumo-int(p.get("tempoStimato") or 0)))}
+                if critico:
+                    prev_vita_locale.append({"alias": alias, "vita_rim": vita_rim,
+                                              "consumo": consumo, "critico": critico,
+                                              "mancanti": consumo-vita_rim})
+
         pf = tk.Frame(parent, bg="#eef4fb",
                       highlightbackground="#0d2d5e", highlightthickness=1)
         pf.pack(fill="x", padx=(28,0), pady=(3,6))
@@ -1515,6 +1549,28 @@ class TabProgetti:
             tk.Label(ph, text=f"{fmt_tempo(rim_min)} rim.",
                      font=("Inter",9,"bold"), fg="#0d2d5e", bg="#eef4fb",
                      padx=5, pady=1).pack(side="left", padx=2)
+        if prev_vita_locale:
+            tk.Label(ph, text=f"🔮 {len(prev_vita_locale)} a rischio",
+                     font=("Inter",9,"bold"), fg="#e65100", bg="#fff3e0",
+                     padx=5, pady=1).pack(side="left", padx=2)
+
+        # Pannello previsione fine vita
+        if prev_vita_locale:
+            pvf = tk.Frame(pf, bg="#fff8f0", highlightbackground="#ffb74d", highlightthickness=1)
+            pvf.pack(fill="x", padx=4, pady=(0,2))
+            tk.Label(pvf, text="🔮  PREVISIONE FINE VITA",
+                     font=("Inter",8,"bold"), fg="#e65100", bg="#fff8f0").pack(anchor="w", padx=8, pady=(4,2))
+            for a in prev_vita_locale:
+                cr = a["critico"]
+                af = tk.Frame(pvf, bg="#fff3e0", highlightbackground="#ffcc80", highlightthickness=1)
+                af.pack(fill="x", padx=8, pady=2)
+                tk.Label(af, text=f"{a['alias']}  —  {a['vita_rim']}min rim. / {a['consumo']}min req.",
+                         font=("Consolas",8,"bold"), fg="#bf360c", bg="#fff3e0").pack(anchor="w", padx=6, pady=(3,1))
+                fn = (cr.get("filename") or "").replace(".MPF","").replace(".mpf","")
+                tk.Label(af, text=f"⚠ Finisce durante: {fn}  —  vita esaurita dopo {cr['minuto_rottura']}min, mancano {a['mancanti']}min",
+                         font=("Inter",8), fg="#9a3412", bg="#fff3e0").pack(anchor="w", padx=6)
+                tk.Label(af, text=f"💡 Sostituire prima del pgm {cr.get('numPgm','')} di {cr.get('progetto',cr.get('tipoOp',''))}",
+                         font=("Inter",8,"bold"), fg="#e65100", bg="#fff3e0").pack(anchor="w", padx=6, pady=(1,4))
 
         # Badge anomalie (solo fresatura)
         tools_db = getattr(self, "_tools_db_cache", {})

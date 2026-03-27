@@ -1982,7 +1982,6 @@ function HomePage({projects,deliveries,palletState,setupData,onNavigateProject,o
   )
 }
 
-}
 // ── App principale ─────────────────────────────────────────────────────────────
 export default function Progetti(){
   const navigate=useNavigate()

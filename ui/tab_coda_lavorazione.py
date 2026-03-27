@@ -240,6 +240,83 @@ class TabCodaLavorazione:
         grid = ctk.CTkFrame(col_sx, fg_color="transparent")
         grid.pack(fill="both", expand=True)
 
+        # ── Info macchina (sotto pallet) ──────────────────────────
+        # Card stato macchina
+        self.card_stato = ctk.CTkFrame(col_sx, fg_color="#f8fafc",
+                                        corner_radius=12, border_width=1,
+                                        border_color="#e2e8f0")
+        self.card_stato.pack(fill="x", pady=(0, 8))
+        stato_inner = ctk.CTkFrame(self.card_stato, fg_color="transparent")
+        stato_inner.pack(fill="x", padx=16, pady=12)
+        self.canvas_dot = tk.Canvas(stato_inner, width=14, height=14,
+                                     bg="#f8fafc", bd=0, highlightthickness=0)
+        self.canvas_dot.pack(side="left", padx=(0, 10))
+        self._dot = self.canvas_dot.create_oval(2, 2, 12, 12, fill="#94a3b8", outline="")
+        self.lbl_stato_mac = ctk.CTkLabel(stato_inner, text="FERMA",
+                                           font=get_font("medium", bold=True),
+                                           text_color="#374151")
+        self.lbl_stato_mac.pack(side="left")
+        self.lbl_pallet_mac = ctk.CTkLabel(stato_inner, text="",
+                                            font=get_font("small"),
+                                            text_color=COLOR_TEXT_SECONDARY)
+        self.lbl_pallet_mac.pack(side="left", padx=8)
+
+        # Card programma
+        self.card_prog = ctk.CTkFrame(col_sx, fg_color="white",
+                                       corner_radius=12, border_width=1,
+                                       border_color="#e2e8f0")
+        self.card_prog.pack(fill="x", pady=(0, 8))
+        ctk.CTkLabel(self.card_prog, text="PROGRAMMA",
+                     font=get_font("small"), text_color=COLOR_TEXT_SECONDARY).pack(
+                     anchor="w", padx=16, pady=(10, 4))
+        prog_inner = ctk.CTkFrame(self.card_prog, fg_color="transparent")
+        prog_inner.pack(fill="x", padx=16, pady=(0, 12))
+
+        self.lbl_commessa  = self._make_info_block(prog_inner, "COMMESSA",  side="left")
+        self.lbl_posizione = self._make_info_block(prog_inner, "POSIZIONE", side="left")
+        self.lbl_fase      = self._make_info_block(prog_inner, "FASE",      side="left")
+
+        # Card utensile
+        self.card_utensile = ctk.CTkFrame(col_sx, fg_color="white",
+                                           corner_radius=12, border_width=1,
+                                           border_color="#e2e8f0")
+        self.card_utensile.pack(fill="x", pady=(0, 8))
+        ctk.CTkLabel(self.card_utensile, text="UTENSILE ATTIVO",
+                     font=get_font("small"), text_color=COLOR_TEXT_SECONDARY).pack(
+                     anchor="w", padx=16, pady=(10, 4))
+        self.lbl_utensile = ctk.CTkLabel(self.card_utensile, text="—",
+                                          font=get_font("title", bold=True),
+                                          text_color=COLOR_PRIMARY)
+        self.lbl_utensile.pack(anchor="w", padx=16)
+        self.lbl_tnum = ctk.CTkLabel(self.card_utensile, text="",
+                                      font=get_font("small"),
+                                      text_color=COLOR_TEXT_SECONDARY)
+        self.lbl_tnum.pack(anchor="w", padx=16, pady=(0, 10))
+
+        # Card allarme (nascosta se nessun allarme)
+        self.card_allarme = ctk.CTkFrame(col_sx, fg_color="#fef2f2",
+                                          corner_radius=12, border_width=1,
+                                          border_color="#fca5a5")
+        ctk.CTkLabel(self.card_allarme, text="ALLARME",
+                     font=get_font("small"), text_color="#991b1b").pack(
+                     anchor="w", padx=16, pady=(10, 2))
+        self.lbl_allarme = ctk.CTkLabel(self.card_allarme, text="",
+                                         font=get_font("body"),
+                                         text_color="#991b1b", anchor="w",
+                                         wraplength=300, justify="left")
+        self.lbl_allarme.pack(anchor="w", padx=16, pady=(0, 10))
+
+        # Errore connessione
+        self.card_errore = ctk.CTkFrame(col_sx, fg_color="#fef3c7",
+                                         corner_radius=8, border_width=1,
+                                         border_color="#fcd34d")
+        self.lbl_errore = ctk.CTkLabel(self.card_errore, text="",
+                                        font=get_font("small"),
+                                        text_color="#92400e")
+        self.lbl_errore.pack(padx=12, pady=6)
+
+
+
         self._pallet_frames = {}
         self._pallet_labels = {}
         for i, pid in enumerate([1,2,3,4,5,6]):
@@ -276,83 +353,9 @@ class TabCodaLavorazione:
                 "lbl_stato": lbl_stato, "lbl_prog": lbl_prog
             }
 
-        # ── Pannello stato macchina (destra) ──────────────────────────────
-        col_dx = ctk.CTkFrame(body, fg_color="transparent")
+        # ── Pannello destro: coda + programmi ────────────────────────────
+        col_dx = ctk.CTkScrollableFrame(body, fg_color="transparent")
         col_dx.pack(side="left", fill="both", expand=True)
-
-        # Card stato macchina
-        self.card_stato = ctk.CTkFrame(col_dx, fg_color="#f8fafc",
-                                        corner_radius=12, border_width=1,
-                                        border_color="#e2e8f0")
-        self.card_stato.pack(fill="x", pady=(0, 8))
-        stato_inner = ctk.CTkFrame(self.card_stato, fg_color="transparent")
-        stato_inner.pack(fill="x", padx=16, pady=12)
-        self.canvas_dot = tk.Canvas(stato_inner, width=14, height=14,
-                                     bg="#f8fafc", bd=0, highlightthickness=0)
-        self.canvas_dot.pack(side="left", padx=(0, 10))
-        self._dot = self.canvas_dot.create_oval(2, 2, 12, 12, fill="#94a3b8", outline="")
-        self.lbl_stato_mac = ctk.CTkLabel(stato_inner, text="FERMA",
-                                           font=get_font("medium", bold=True),
-                                           text_color="#374151")
-        self.lbl_stato_mac.pack(side="left")
-        self.lbl_pallet_mac = ctk.CTkLabel(stato_inner, text="",
-                                            font=get_font("small"),
-                                            text_color=COLOR_TEXT_SECONDARY)
-        self.lbl_pallet_mac.pack(side="left", padx=8)
-
-        # Card programma
-        self.card_prog = ctk.CTkFrame(col_dx, fg_color="white",
-                                       corner_radius=12, border_width=1,
-                                       border_color="#e2e8f0")
-        self.card_prog.pack(fill="x", pady=(0, 8))
-        ctk.CTkLabel(self.card_prog, text="PROGRAMMA",
-                     font=get_font("small"), text_color=COLOR_TEXT_SECONDARY).pack(
-                     anchor="w", padx=16, pady=(10, 4))
-        prog_inner = ctk.CTkFrame(self.card_prog, fg_color="transparent")
-        prog_inner.pack(fill="x", padx=16, pady=(0, 12))
-
-        self.lbl_commessa  = self._make_info_block(prog_inner, "COMMESSA",  side="left")
-        self.lbl_posizione = self._make_info_block(prog_inner, "POSIZIONE", side="left")
-        self.lbl_fase      = self._make_info_block(prog_inner, "FASE",      side="left")
-
-        # Card utensile
-        self.card_utensile = ctk.CTkFrame(col_dx, fg_color="white",
-                                           corner_radius=12, border_width=1,
-                                           border_color="#e2e8f0")
-        self.card_utensile.pack(fill="x", pady=(0, 8))
-        ctk.CTkLabel(self.card_utensile, text="UTENSILE ATTIVO",
-                     font=get_font("small"), text_color=COLOR_TEXT_SECONDARY).pack(
-                     anchor="w", padx=16, pady=(10, 4))
-        self.lbl_utensile = ctk.CTkLabel(self.card_utensile, text="—",
-                                          font=get_font("title", bold=True),
-                                          text_color=COLOR_PRIMARY)
-        self.lbl_utensile.pack(anchor="w", padx=16)
-        self.lbl_tnum = ctk.CTkLabel(self.card_utensile, text="",
-                                      font=get_font("small"),
-                                      text_color=COLOR_TEXT_SECONDARY)
-        self.lbl_tnum.pack(anchor="w", padx=16, pady=(0, 10))
-
-        # Card allarme (nascosta se nessun allarme)
-        self.card_allarme = ctk.CTkFrame(col_dx, fg_color="#fef2f2",
-                                          corner_radius=12, border_width=1,
-                                          border_color="#fca5a5")
-        ctk.CTkLabel(self.card_allarme, text="ALLARME",
-                     font=get_font("small"), text_color="#991b1b").pack(
-                     anchor="w", padx=16, pady=(10, 2))
-        self.lbl_allarme = ctk.CTkLabel(self.card_allarme, text="",
-                                         font=get_font("body"),
-                                         text_color="#991b1b", anchor="w",
-                                         wraplength=300, justify="left")
-        self.lbl_allarme.pack(anchor="w", padx=16, pady=(0, 10))
-
-        # Errore connessione
-        self.card_errore = ctk.CTkFrame(col_dx, fg_color="#fef3c7",
-                                         corner_radius=8, border_width=1,
-                                         border_color="#fcd34d")
-        self.lbl_errore = ctk.CTkLabel(self.card_errore, text="",
-                                        font=get_font("small"),
-                                        text_color="#92400e")
-        self.lbl_errore.pack(padx=12, pady=6)
 
         # ── Coda Esecuzione ──────────────────────────────────────────────
         self.card_coda = ctk.CTkFrame(col_dx, fg_color="white",

@@ -1589,6 +1589,7 @@ class TabProgetti:
         sel_label = tk.Label(toolbar, text="0 selezionati",
                              font=("Inter",9,"bold"), fg="#0d2d5e", bg="#DBEAFE")
         sel_label.pack(side="left", padx=8, pady=4)
+        self._sel_label_ref = sel_label  # mantieni riferimento sull'istanza
 
         def _massa_stato(nuovo_stato):
             ts = now_str()
@@ -1630,13 +1631,14 @@ class TabProgetti:
             self._has_active_selections = n > 0
             self._selected_ids_lancio = set(selected_ids)
             try:
-                if not toolbar.winfo_exists() or not sel_label.winfo_exists():
-                    return
+                if not toolbar.winfo_exists(): return
+                sl = getattr(self, '_sel_label_ref', None)
                 if n > 0:
                     self._body.pack_forget()
                     toolbar.pack(fill="x")
                     self._body.pack(fill="both", expand=True)
-                    sel_label.configure(text=f"{n} selezionati → segna come:")
+                    if sl and sl.winfo_exists():
+                        sl.configure(text=f"{n} selezionati → segna come:")
                 else:
                     toolbar.pack_forget()
             except Exception:

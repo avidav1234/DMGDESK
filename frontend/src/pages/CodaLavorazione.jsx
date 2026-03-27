@@ -747,6 +747,8 @@ export default function CodaLavorazione() {
           </div>
         )}
 
+      </div>
+
       {/* Menu selezione stato pallet manuale */}
       {palletMenu && createPortal(
         <div style={{ position: 'fixed', inset: 0, zIndex: 9998 }}
@@ -851,7 +853,6 @@ export default function CodaLavorazione() {
           </div>
         </div>
       , document.body)}
-      </div>
 
       {/* ── Pannello destro — Coda + Programmi ──── */}
       <div style={{ flex: '0 0 calc(50% - 8px)', display: "flex", flexDirection: "column", gap: 10, minWidth: 0, overflowY: 'auto' }}>

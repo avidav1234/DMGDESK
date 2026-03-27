@@ -64,7 +64,8 @@ function deliveryUrgency(days){
 // ── MPF parser ─────────────────────────────────────────────────────────────────
 function parseMpfFile(filename,content){
   const lines=content.split(/\r?\n/)
-  const get=(label)=>{const l=lines.find(l=>l.includes(label));return l?l.replace(/.*:\s*/,'').trim():''}
+  // get() prende tutto dopo il primo ':' — NON greedy per non troncare timestamp HH:MM:SS
+  const get=(label)=>{const l=lines.find(l=>l.includes(label));return l?(l.indexOf(':')>=0?l.slice(l.indexOf(':')+1).trim():''):''}
   const opLine=lines.find(l=>/N\d+;/.test(l)&&!l.includes('DIAMETER')&&!l.includes('TOOL COMMENT')&&!l.includes('CIMATRON')&&!l.includes('DOCUMENTO')&&!l.includes('UTENTE')&&!l.includes('POST')&&!l.includes('REVISIONE')&&!l.includes('DATA')&&!l.includes('N.UT')&&l.includes(';')&&l.replace(/N\d+;\s*/,'').trim().length>3)
   const tipoOp=opLine?opLine.replace(/N\d+;\s*/,'').trim():''
   const toolLine=lines.find(l=>l.includes('TOOL COMMENT:'))

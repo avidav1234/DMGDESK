@@ -1629,14 +1629,18 @@ class TabProgetti:
             n = len(selected_ids)
             self._has_active_selections = n > 0
             self._selected_ids_lancio = set(selected_ids)
-            if n > 0:
-                # Reinserisce toolbar sopra il body
-                self._body.pack_forget()
-                toolbar.pack(fill="x")
-                self._body.pack(fill="both", expand=True)
-                sel_label.configure(text=f"{n} selezionati → segna come:")
-            else:
-                toolbar.pack_forget()
+            try:
+                if not toolbar.winfo_exists() or not sel_label.winfo_exists():
+                    return
+                if n > 0:
+                    self._body.pack_forget()
+                    toolbar.pack(fill="x")
+                    self._body.pack(fill="both", expand=True)
+                    sel_label.configure(text=f"{n} selezionati → segna come:")
+                else:
+                    toolbar.pack_forget()
+            except Exception:
+                pass
 
         def _update_all_rows():
             for pid, (row_frame, btn, check_var) in row_refs.items():

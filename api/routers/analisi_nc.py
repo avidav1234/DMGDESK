@@ -29,16 +29,34 @@ from api.deps import get_db_principale, get_db_smontati, get_db_bussole
 from logic.nc_analyzer import estrai_tutti_utensili_da_file, confronta_utensili_logica
 
 
-def _parse_tempo_mpf(path: str) -> int | None:
-    """Legge il tempo stimato dal commento accanto a M6 — es: 'M6 ; TEMPO: 42'"""
+def _parse_tempo_val(raw: str):
+    """Converte stringa TEMPO in minuti interi. Supporta '42' e '00:35:16'"""
+    raw = raw.strip()
+    if ':' in raw:
+        parts = raw.split(':')
+        try:
+            if len(parts) == 3:
+                return int(parts[0])*60 + int(parts[1]) + round(int(parts[2])/60)
+            elif len(parts) == 2:
+                return int(parts[0]) + round(int(parts[1])/60)
+        except (ValueError, IndexError):
+            return None
+    else:
+        try:
+            return int(raw)
+        except ValueError:
+            return None
+
+def _parse_tempo_mpf(path: str):
+    """Legge TEMPO dal commento accanto a M6 — es: 'M6 ; TEMPO: 42' o 'M6 ; TEMPO: 00:35:16'"""
     import re as _re
     try:
         with open(path, encoding="utf-8", errors="ignore") as f:
             for line in f:
                 if "M6" in line.upper() and "TEMPO" in line.upper():
-                    m = _re.search(r"TEMPO\s*:\s*(\d+)", line, _re.IGNORECASE)
+                    m = _re.search(r"TEMPO\s*:\s*([\d:]+)", line, _re.IGNORECASE)
                     if m:
-                        return int(m.group(1))
+                        return _parse_tempo_val(m.group(1))
     except Exception:
         pass
     return None

@@ -162,16 +162,34 @@ def uid():
 def now_str():
     return datetime.now().strftime("%d/%m/%Y %H:%M")
 
+def _parse_tempo_val(raw):
+    """Converte stringa TEMPO in minuti interi. Supporta '42' e '00:35:16'"""
+    raw = str(raw).strip()
+    if ':' in raw:
+        parts = raw.split(':')
+        try:
+            if len(parts) == 3:
+                return int(parts[0])*60 + int(parts[1]) + round(int(parts[2])/60)
+            elif len(parts) == 2:
+                return int(parts[0]) + round(int(parts[1])/60)
+        except (ValueError, IndexError):
+            return None
+    else:
+        try:
+            return int(raw)
+        except ValueError:
+            return None
+
 def parse_tempo_mpf(fpath: str):
-    """Legge TEMPO dal commento accanto a M6 — es: 'M6 ; TEMPO: 42'"""
+    """Legge TEMPO dal commento accanto a M6 — es: 'M6 ; TEMPO: 42' o '00:35:16'"""
     import re
     try:
         with open(fpath, encoding="utf-8", errors="ignore") as f:
             for line in f:
                 if "M6" in line.upper() and "TEMPO" in line.upper():
-                    m = re.search(r"TEMPO\s*:\s*(\d+)", line, re.IGNORECASE)
+                    m = re.search(r"TEMPO\s*:\s*([\d:]+)", line, re.IGNORECASE)
                     if m:
-                        return int(m.group(1))
+                        return _parse_tempo_val(m.group(1))
     except Exception:
         pass
     return None

@@ -79,10 +79,19 @@ function parseMpfFile(filename,content){
   const ipmIdx=tokens.findIndex(t=>t.toUpperCase()==='IPM')
   const numPgm=ipmIdx>=0&&tokens[ipmIdx+1]?tokens[ipmIdx+1]:tokens[tokens.length-1]
   const fase=tokens.length>=3?tokens[tokens.length-(isIPM?3:2)]:''
-  // Legge TEMPO dal commento accanto a M6 — es: "M6 ; TEMPO: 42"
+  // Legge TEMPO dal commento accanto a M6 — es: "M6 ; TEMPO: 42" o "M6 ; TEMPO: 00:35:16"
   const m6Line=lines.find(l=>/\bM6\b/.test(l)&&/TEMPO\s*:/i.test(l))
-  const tempoMatch=m6Line&&m6Line.match(/TEMPO\s*:\s*(\d+)/i)
-  const tempoStimato=tempoMatch?parseInt(tempoMatch[1]):null
+  const tempoRaw=m6Line&&(m6Line.match(/TEMPO\s*:\s*([\d:]+)/i)||[])[1]
+  function parseTempo(raw){
+    if(!raw) return null
+    if(raw.includes(':')){
+      const p=raw.split(':').map(Number)
+      if(p.length===3) return p[0]*60+p[1]+Math.round(p[2]/60)
+      if(p.length===2) return p[0]+Math.round(p[1]/60)
+    }
+    const n=parseInt(raw); return isNaN(n)?null:n
+  }
+  const tempoStimato=parseTempo(tempoRaw)
   return{numPgm,fase,tipoOp,utensile,diametro,dataPost,filename,tipoGruppo,tempoStimato}
 }
 

@@ -527,15 +527,14 @@ async def get_pallet_disponibili():
 @router.post("/{numero}/avvia")
 async def avvia_pallet(numero: int):
     """
-    Avvia un pallet:
-    1. Il pallet diventa IN LAVORAZIONE
-    2. Tutti i programmi da_fare → in_macchina
-    3. Se c'era un altro pallet IN LAVORAZIONE:
-       - se ha ancora programmi in_macchina → torna GREZZO
-       - se tutti completati → rimane FINITO (già impostato)
+    Avvia un pallet — lo segna IN LAVORAZIONE.
+    NON cambia lo stato dei programmi (quello avviene quando si genera il MAIN).
+    Gestisce il pallet precedentemente IN LAVORAZIONE:
+      - ha ancora programmi in_macchina → torna GREZZO
+      - tutti completati → FINITO
     Solo un pallet IN LAVORAZIONE alla volta.
     """
-    from api.routers.progetti import _load_progetti, _save_progetti
+    from api.routers.progetti import _load_progetti
     from datetime import datetime as _dt
     config = carica_configurazione()
     state  = _load(config)
@@ -559,42 +558,17 @@ async def avvia_pallet(numero: int):
                                if t.get("text","").strip().lower()=="fresatura"
                                for pg in t.get("programs",[])
                                if pg.get("tipoGruppo")!="ipm"]
-                    has_in_mac = any(pg.get("stato")=="in_macchina" for pg in all_pgm)
-                    all_done   = all_pgm and all(pg.get("stato")=="completato" for pg in all_pgm)
-                    if all_done:
-                        p["stato"] = "finito"
-                    else:
-                        p["stato"] = "grezzo"  # rimette a grezzo se ancora in corso
+                    all_done = all_pgm and all(pg.get("stato")=="completato" for pg in all_pgm)
+                    p["stato"] = "finito" if all_done else "grezzo"
             else:
                 p["stato"] = "grezzo"
 
     # Imposta il pallet target IN LAVORAZIONE
-    pallet_target["stato"]     = "IN LAVORAZIONE"
+    pallet_target["stato"]      = "IN LAVORAZIONE"
     pallet_target["aggiornato"] = now
 
-    # Segna tutti i programmi da_fare → in_macchina
-    pid = pallet_target.get("progetto_id")
-    aggiornati = 0
-    if pid:
-        proj = next((p for p in data.get("projects",[]) if p.get("id")==pid), None)
-        if proj:
-            for step in proj.get("steps", []):
-                for task in step.get("tasks", []):
-                    if task.get("text","").strip().lower() != "fresatura": continue
-                    for pgm in task.get("programs", []):
-                        if pgm.get("tipoGruppo") == "ipm": continue
-                        if pgm.get("stato") == "da_fare":
-                            pgm["stato"] = "in_macchina"
-                            if not pgm.get("tempoInizio"):
-                                pgm["tempoInizio"] = now
-                            aggiornati += 1
-
     _save(config, state)
-    if aggiornati > 0:
-        _save_progetti(config, data)
-
-    return {"ok": True, "pallet": numero, "stato": "IN LAVORAZIONE", "programmi_avviati": aggiornati}
-
+    return {"ok": True, "pallet": numero, "stato": "IN LAVORAZIONE"}
 
 @router.get("/ordine-esecuzione")
 async def get_ordine_esecuzione():

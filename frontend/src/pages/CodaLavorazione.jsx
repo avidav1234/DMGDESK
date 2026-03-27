@@ -492,7 +492,7 @@ export default function CodaLavorazione() {
             const hasProj  = !!progettiPallet[p.id];
             const isEmpty  = !hasProj && p.stato === "VUOTO";
             const proj     = progettiPallet[p.id];
-            const isAvviato  = proj && (proj.in_macchina > 0 && proj.pct < 100) || p.stato === "IN LAVORAZIONE";
+            const isAvviato  = p.stato === "IN LAVORAZIONE";
             const isCompleto = proj && proj.pct === 100;
             const cardBg     = isCompleto ? "#dcfce7" : isAvviato ? "#dbeafe" : isEmpty ? "#F8F7F5" : s.bg;
             const cardBorder = isCompleto ? "#16a34a" : isAvviato ? "#1D5FAD" : isActive ? "#f59e0b" : isEmpty ? "#E8E6E0" : s.border;
@@ -562,11 +562,11 @@ export default function CodaLavorazione() {
                           <span style={{fontSize:10,color:s.fg,opacity:0.7}}>{progettiPallet[p.id].completati}/{progettiPallet[p.id].totale} pgm</span>
                           <span style={{fontSize:11,fontWeight:800,color:s.fg}}>{progettiPallet[p.id].pct}%</span>
                         </div>
-                        {progettiPallet[p.id].da_fare > 0 && !isAvviato && (
+                        {(progettiPallet[p.id].da_fare > 0 || progettiPallet[p.id].in_macchina > 0) && !isAvviato && (
                           <button onClick={e=>{e.stopPropagation();avviaProgetto(p.id)}}
                             style={{marginTop:4,width:'100%',background:'#1D5FAD',border:'none',borderRadius:4,
                               color:'#fff',fontWeight:700,fontSize:10,padding:'4px 0',cursor:'pointer'}}>
-                            ▶ Avvia ({progettiPallet[p.id].da_fare})
+                            ▶ Avvia ({progettiPallet[p.id].da_fare + progettiPallet[p.id].in_macchina})
                           </button>
                         )}
                         {progettiPallet[p.id].pct===100 && p.stato!=='FINITO' && (

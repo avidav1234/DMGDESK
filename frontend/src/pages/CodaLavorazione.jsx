@@ -382,8 +382,8 @@ export default function CodaLavorazione() {
   return (
     <div style={{
       display: "flex",
-      gap: 20,
-      padding: 20,
+      gap: 16,
+      padding: 16,
       height: "100%",
       boxSizing: "border-box",
       background: "var(--bg-base, #eef2f7)",
@@ -447,7 +447,7 @@ export default function CodaLavorazione() {
       )}
 
       {/* ── Griglia 2×3 pallet ─────────────────────────────────── */}
-      <div style={{ flexShrink: 0 }}>
+      <div style={{ flex: 1, minWidth: 0, overflowY: 'auto' }}>
         <div style={{
           display: "flex",
           justifyContent: "space-between",
@@ -457,14 +457,11 @@ export default function CodaLavorazione() {
           <span style={{ fontSize: 12, fontWeight: 700, color: "#0d2d5e", letterSpacing: 1 }}>
             PALLET
           </span>
-          {lastUpdate && (
-            <span style={{ fontSize: 10, color: "#94a3b8" }}>{lastUpdate}</span>
-          )}
         </div>
 
         <div style={{
           display: "grid",
-          gridTemplateColumns: "repeat(2, 200px)",
+          gridTemplateColumns: "repeat(2, 1fr)",
           gridTemplateRows: "auto",
           gap: 10,
           alignItems: "start",
@@ -580,7 +577,7 @@ export default function CodaLavorazione() {
       </div>
 
       {/* ── Pannello destro ─────────────────────────────────────── */}
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 10, minWidth: 0 }}>
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 10, minWidth: 0, overflowY: 'auto' }}>
 
         {/* Stato macchina + programma + utensile — tutto in un blocco compatto */}
         <div style={{

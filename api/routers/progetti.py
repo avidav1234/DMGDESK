@@ -815,6 +815,40 @@ async def get_analisi_setup():
 
 # ── Segna programmi in_macchina ────────────────────────────────────────────
 
+@router.post("/{project_id}/avvia-tutti")
+async def avvia_tutti(project_id: str):
+    """
+    Segna tutti i programmi 'da_fare' come 'in_macchina'.
+    Usato dal pulsante Avvia nella pagina Macchina.
+    """
+    config   = carica_configurazione()
+    data     = _load_progetti(config)
+    projects = data.get("projects", [])
+    project  = next((p for p in projects if p.get("id") == project_id), None)
+    if not project:
+        raise HTTPException(404, f"Progetto {project_id} non trovato")
+
+    now = datetime.now().strftime("%d/%m/%Y %H:%M")
+    aggiornati = 0
+    for step in project.get("steps", []):
+        for task in step.get("tasks", []):
+            if task.get("text", "").strip().lower() != "fresatura":
+                continue
+            for pgm in task.get("programs", []):
+                if pgm.get("tipoGruppo") == "ipm":
+                    continue
+                if pgm.get("stato") == "da_fare":
+                    pgm["stato"] = "in_macchina"
+                    if not pgm.get("tempoInizio"):
+                        pgm["tempoInizio"] = now
+                    aggiornati += 1
+
+    if aggiornati > 0:
+        _save_progetti(config, data)
+
+    return {"ok": True, "aggiornati": aggiornati}
+
+
 @router.post("/{project_id}/segna-in-macchina")
 async def segna_in_macchina(project_id: str, body: dict):
     """

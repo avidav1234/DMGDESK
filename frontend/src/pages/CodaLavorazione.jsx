@@ -77,10 +77,27 @@ export default function CodaLavorazione() {
     fetchAll()
   }
 
-  function avviaProgetto(palletNum) {
-    // Naviga a Progetti con il pallet preselezionato nel sessionStorage
-    sessionStorage.setItem('dmgdesk_avvia_pallet', JSON.stringify({palletNum}));
-    window.location.href = '/progetti';
+  async function avviaProgetto(palletNum) {
+    try {
+      // 1. Porta questo pallet in cima alla coda esecuzione
+      const nuovoOrdine = [palletNum, ...codaOrdine.filter(n => n !== palletNum)]
+      await fetch('/api/pallet/ordine-esecuzione', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ordine: nuovoOrdine })
+      })
+      setCodaOrdine(nuovoOrdine)
+      // 2. Segna i programmi da_fare come in_macchina tramite API
+      const proj = progettiPallet[palletNum]
+      if (proj?.id) {
+        await fetch(`/api/progetti/${proj.id}/avvia-tutti`, { method: 'POST' })
+      }
+      // 3. Ricarica tutto
+      await fetchAll()
+      await caricaPgmInMacchina()
+    } catch(e) {
+      console.error('Avvia errore:', e)
+    }
   }
 
   const fetchAll = useCallback(async () => {

@@ -1937,22 +1937,24 @@ class TabProgetti:
             row_refs[pid] = (row, _btn, check_var)  # aggiorna con btn reale
         tk.Label(row, text=pgm.get("numPgm",""),
                  font=("Consolas",9,"bold"), fg=TC["blue"], bg=row_bg, width=5).pack(side="left")
-        # Badge utensile con colore problema
+        # Nome file (senza estensione) — occupa lo spazio disponibile
+        fn_txt = (pgm.get("filename","") or "").replace(".MPF","").replace(".mpf","")
+        tk.Label(row, text=fn_txt or "—",
+                 font=("Consolas",9,"bold"), fg=TC["text"],
+                 bg=row_bg, anchor="w").pack(side="left", padx=(0,6), fill="x", expand=True)
+        # Utensile con badge problema
         alias_txt = pgm.get("utensile","") or "—"
         badge_sfx = {"mancante":" ✗","fin_vita":" ⚠","disabilitato":" ⊘"}.get(tool_status,"")
         tk.Label(row, text=alias_txt+badge_sfx,
                  font=("Consolas",9,"bold" if tool_status else "normal"),
-                 fg=TOOL_FG.get(tool_status, TC["text"]),
-                 bg=row_bg, width=20, anchor="w").pack(side="left")
-        op = (pgm.get("tipoOp","") or "").replace("- NESSUN TESTO","").strip()[:38]
-        tk.Label(row, text=op or "—", font=("Inter",9), fg=TC["sub"], bg=row_bg).pack(side="left", padx=3)
+                 fg=TOOL_FG.get(tool_status, TC["sub"]),
+                 bg=row_bg).pack(side="left", padx=(0,4))
+        # Timestamp destra
         if pgm.get("tempoFine"):
             tk.Label(row, text=f"■{pgm['tempoFine']}", font=("Consolas",8), fg=TC["green"], bg=row_bg).pack(side="right", padx=3)
         elif pgm.get("tempoInizio"):
             tk.Label(row, text=f"▶{pgm['tempoInizio']}", font=("Consolas",8), fg=TC["blue"], bg=row_bg).pack(side="right", padx=3)
-        elif pgm.get("dataPost"):
-            tk.Label(row, text=f"📅{pgm['dataPost']}", font=("Consolas",8), fg=TC["muted"], bg=row_bg).pack(side="right", padx=3)
-        # Badge tempo stimato
+        # Tempo stimato
         if pgm.get("tempoStimato"):
             t_fmt = fmt_tempo(pgm["tempoStimato"])
             if t_fmt:

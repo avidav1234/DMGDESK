@@ -222,9 +222,8 @@ class TabCodaLavorazione:
         body.pack(fill="both", expand=True, padx=10, pady=10)
 
         # ── Griglia pallet (sinistra) ─────────────────────────────────────
-        col_sx = ctk.CTkFrame(body, fg_color="transparent", width=340)
-        col_sx.pack(side="left", fill="y", padx=(0, 10))
-        col_sx.pack_propagate(False)
+        col_sx = ctk.CTkScrollableFrame(body, fg_color="transparent")
+        col_sx.pack(side="left", fill="both", expand=True, padx=(0, 5))
 
         hdr_row = ctk.CTkFrame(col_sx, fg_color="transparent")
         hdr_row.pack(fill="x", pady=(0, 6))
@@ -354,7 +353,8 @@ class TabCodaLavorazione:
             }
 
         # ── Pannello destro: coda + programmi ────────────────────────────
-        col_dx = ctk.CTkScrollableFrame(body, fg_color="transparent")
+        tk.Frame(body, bg="#e2e8f0", width=1).pack(side="left", fill="y", padx=(0,5))
+        col_dx = ctk.CTkFrame(body, fg_color="transparent")
         col_dx.pack(side="left", fill="both", expand=True)
 
         # ── Coda Esecuzione ──────────────────────────────────────────────
@@ -390,7 +390,7 @@ class TabCodaLavorazione:
         self.lbl_pgm_completa.pack(side="right")
         # Scrollable per la lista programmi
         self.frame_pgm_mac_body = ctk.CTkScrollableFrame(
-            self.card_pgm_mac, fg_color="transparent", height=200)
+            self.card_pgm_mac, fg_color="transparent")
         self.frame_pgm_mac_body.pack(fill="both", expand=True, padx=8, pady=(0, 8))
         # Selezionati
         self._pgm_sel = {}   # {pgm_id: (pallet_num, BooleanVar)}

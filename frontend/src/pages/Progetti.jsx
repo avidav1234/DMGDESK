@@ -71,7 +71,19 @@ function parseMpfFile(filename,content){
   const utensile=toolLine?toolLine.replace(/.*TOOL COMMENT:\s*/,'').trim():''
   const diaLine=lines.find(l=>l.includes('DIAMETER:'))
   const diametro=diaLine?diaLine.replace(/.*DIAMETER:\s*/,'').replace(/CORNER.*/,'').trim():''
-  const dataPost=get('DATA ESECUZIONE POST')
+  // DATA ESECUZIONE POST: "9/3/2026 - 13:16:35" → "09/03/2026 13:16"
+  const dataPostRaw=get('DATA ESECUZIONE POST')
+  const dataPost=(()=>{
+    if(!dataPostRaw) return ''
+    try{
+      const m=dataPostRaw.match(/(\d{1,2})\/(\d{1,2})\/(\d{4}).*?(\d{1,2}):(\d{2})/)
+      if(m){
+        const [,d,mo,y,h,mi]=m
+        return `${d.padStart(2,'0')}/${mo.padStart(2,'0')}/${y} ${h}:${mi}`
+      }
+    }catch{}
+    return dataPostRaw
+  })()
   const isIPM=/[_\-]IPM[_\-]/i.test(filename)||utensile.toUpperCase().includes('RENISHAW')
   const tipoGruppo=isIPM?'ipm':'fresatura'
   const baseName=filename.replace(/\.MPF$/i,'')
@@ -201,7 +213,7 @@ function ProgramRow({pgm,gruppo,onStato,onOperatore,onTempo,onRemove,toolStatus,
               <button onClick={()=>setEditingT(true)} style={{background:'none',border:`1px dashed ${T.border}`,borderRadius:6,color:pgm.tempoStimato?T.text:T.textMuted,fontSize:12,padding:'4px 10px',cursor:'pointer'}}>⏱ {pgm.tempoStimato||'Aggiungi'}</button>
             )}
           </div>
-          {pgm.dataPost&&<div><div style={{fontSize:10,color:T.textMuted,fontWeight:700,letterSpacing:'0.06em',marginBottom:4}}>DATA POST</div><div style={{fontSize:12,color:T.textSub,fontFamily:'monospace'}}>{pgm.dataPost}</div></div>}
+          {pgm.dataPost&&<div style={{fontSize:10,color:T.textMuted,fontFamily:'monospace',marginLeft:'auto',flexShrink:0,alignSelf:'flex-end'}}>📅 {pgm.dataPost}</div>}
           <div><div style={{fontSize:10,color:T.textMuted,fontWeight:700,letterSpacing:'0.06em',marginBottom:4}}>FILE</div><div style={{fontSize:11,color:T.textMuted,fontFamily:'monospace'}}>{pgm.filename}</div></div>
           <div style={{marginLeft:'auto'}}>
             <div style={{fontSize:10,color:T.textMuted,fontWeight:700,letterSpacing:'0.06em',marginBottom:4}}>STATO</div>

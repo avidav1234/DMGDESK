@@ -1670,7 +1670,7 @@ class TabProgetti:
                 num_pgm = tokens[ipm_idx+1] if ipm_idx >= 0 and ipm_idx+1 < len(tokens) else tokens[-1]
                 tempo   = parse_tempo_mpf(fpath)
                 # Parsa anche utensile e operazione dal file
-                utensile_new, tipo_op_new, diametro_new = "", "", ""
+                utensile_new, tipo_op_new, diametro_new, data_post_new = "", "", "", ""
                 try:
                     with open(fpath, encoding="utf-8", errors="ignore") as f:
                         content = f.read()
@@ -1688,24 +1688,32 @@ class TabProgetti:
                             txt = line.split(";",1)[-1].strip() if ";" in line else ""
                             if txt and not any(s in txt.upper() for s in skip) and len(txt) > 3:
                                 tipo_op_new = txt
+                        # DATA ESECUZIONE POST: "9/3/2026 - 13:16:35"
+                        if "DATA ESECUZIONE POST" in line.upper() and ":" in line:
+                            raw = line.split(":")[-3] + ":" + line.split(":")[-2] + ":" + line.split(":")[-1] if line.count(":") >= 2 else line.split(":",1)[-1]
+                            raw = raw.strip()
+                            m2 = _re.search(r"(\d{1,2})/(\d{1,2})/(\d{4}).*?(\d{1,2}):(\d{2})", raw)
+                            if m2:
+                                d2,mo2,y2,h2,mi2 = m2.group(1),m2.group(2),m2.group(3),m2.group(4),m2.group(5)
+                                data_post_new = f"{d2.zfill(2)}/{mo2.zfill(2)}/{y2} {h2}:{mi2}"
                 except Exception:
                     pass
 
                 existing = next((p for p in programs if p.get("filename")==fn), None)
                 if existing:
-                    # Aggiorna metadati, mantieni stato/tempi/operatore
                     existing["utensile"]     = utensile_new or existing.get("utensile","")
                     existing["diametro"]     = diametro_new or existing.get("diametro","")
                     existing["tipoOp"]       = tipo_op_new  or existing.get("tipoOp","")
                     existing["tempoStimato"] = tempo or existing.get("tempoStimato","")
                     existing["numPgm"]       = num_pgm
+                    existing["dataPost"]     = data_post_new or existing.get("dataPost","")
                     aggiornati += 1
                 else:
                     programs.append({
                         "id":uid(),"filename":fn,"numPgm":num_pgm,
                         "tipoGruppo":"ipm" if is_ipm else "fresatura",
                         "utensile":utensile_new,"diametro":diametro_new,
-                        "tipoOp":tipo_op_new,"dataPost":"",
+                        "tipoOp":tipo_op_new,"dataPost":data_post_new,
                         "stato":"da_fare","operatore":"",
                         "tempoStimato":tempo or "",
                         "tempoInizio":None,"tempoFine":None,
@@ -1925,6 +1933,8 @@ class TabProgetti:
             tk.Label(row, text=f"■{pgm['tempoFine']}", font=("Consolas",8), fg=TC["green"], bg=row_bg).pack(side="right", padx=3)
         elif pgm.get("tempoInizio"):
             tk.Label(row, text=f"▶{pgm['tempoInizio']}", font=("Consolas",8), fg=TC["blue"], bg=row_bg).pack(side="right", padx=3)
+        elif pgm.get("dataPost"):
+            tk.Label(row, text=f"📅{pgm['dataPost']}", font=("Consolas",8), fg=TC["muted"], bg=row_bg).pack(side="right", padx=3)
         # Badge tempo stimato
         if pgm.get("tempoStimato"):
             t_fmt = fmt_tempo(pgm["tempoStimato"])

@@ -452,7 +452,7 @@ async def analisi_fine_vita(body: dict):
         ...
     ]}
 
-    Unità life_total / life_remaining: secondi ($TC_MOP11 / $TC_MOP2 Siemens 840D).
+    Unità life_total / life_remaining: MINUTI ($TC_MOP11 / $TC_MOP2 Siemens 840D).
     """
     from collections import defaultdict
 
@@ -487,15 +487,14 @@ async def analisi_fine_vita(body: dict):
                     tool_entry = t
 
         life_pct   = tool_entry.get("life_percent")   if tool_entry else None
-        life_total = tool_entry.get("life_total")     if tool_entry else None   # secondi
-        life_rem   = tool_entry.get("life_remaining") if tool_entry else None   # secondi
+        life_total = tool_entry.get("life_total")     if tool_entry else None   # minuti
+        life_rem   = tool_entry.get("life_remaining") if tool_entry else None   # minuti
 
         # Minuti richiesti dai programmi
         pgm_ordinati = sorted(pgm_list, key=lambda p: str(p.get("numPgm", "")))
         minuti_richiesti = sum(int(p.get("tempoStimato") or 0) for p in pgm_ordinati)
-        secondi_richiesti = minuti_richiesti * 60
 
-        # Calcolo previsione
+        # Calcolo previsione — tutto in MINUTI
         alert = False
         alert_tipo = None
         pgm_critico = None
@@ -503,18 +502,17 @@ async def analisi_fine_vita(body: dict):
         deficit_minuti = None
 
         if life_rem is not None and life_total is not None and life_total > 0:
-            # Vita in secondi → converti in minuti
-            minuti_rimanenti = life_rem / 60.0
+            minuti_rimanenti = life_rem  # già in minuti
 
-            if secondi_richiesti > 0 and life_rem < secondi_richiesti:
+            if minuti_richiesti > 0 and life_rem < minuti_richiesti:
                 alert = True
                 alert_tipo = "insufficiente"
-                deficit_minuti = round((secondi_richiesti - life_rem) / 60, 1)
+                deficit_minuti = round(minuti_richiesti - life_rem, 1)
 
                 # Trova il programma critico (dove la vita si esaurisce)
                 vita_consumata = 0
                 for p in pgm_ordinati:
-                    vita_consumata += int(p.get("tempoStimato") or 0) * 60
+                    vita_consumata += int(p.get("tempoStimato") or 0)
                     if vita_consumata >= life_rem and pgm_critico is None:
                         pgm_critico = p.get("filename") or p.get("numPgm")
 

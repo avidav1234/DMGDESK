@@ -517,14 +517,14 @@ def _calcola_previsione_vita(projects: list, tools_db: dict, classify_fn) -> lis
 
         # Usa il gemello con più vita rimanente
         best = max(abilitati, key=lambda t: t.get("life_remaining") or 0)
-        life_rem_sec = best.get("life_remaining")
-        life_tot_sec = best.get("life_total")
+        life_rem_sec = best.get("life_remaining")   # minuti
+        life_tot_sec = best.get("life_total")       # minuti
 
         if life_rem_sec is not None and life_rem_sec > 0:
-            vita_rim_min = round(life_rem_sec / 60)
+            vita_rim_min = round(life_rem_sec)   # già in minuti
         elif life_tot_sec and best.get("life_percent") is not None:
-            # Fallback: stima da percentuale × vita totale
-            vita_rim_min = round((best["life_percent"] / 100) * life_tot_sec / 60)
+            # Fallback: percentuale × vita totale (entrambi in minuti)
+            vita_rim_min = round((best["life_percent"] / 100) * life_tot_sec)
 
         if vita_rim_min is None or vita_rim_min <= 0:
             continue

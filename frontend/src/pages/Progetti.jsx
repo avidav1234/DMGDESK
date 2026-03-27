@@ -1982,6 +1982,280 @@ function HomePage({projects,deliveries,palletState,setupData,onNavigateProject,o
   )
 }
 
+function QuickTasksSidebar({collapsed,onToggleCollapse}){
+  const[tasks,setTasks]=useState([])
+  const[newText,setNewText]=useState('')
+  const[newPrio,setNewPrio]=useState('media')
+  const[filter,setFilter]=useState('tutti')
+  const inputRef=useRef(null)
+  const pendingCount=tasks.filter(t=>!t.done).length
+
+  // Carica da API all'avvio e ogni 15s
+  useEffect(()=>{
+    const load=()=>fetch('/api/progetti/quick-tasks').then(r=>r.ok?r.json():{tasks:[]}).then(d=>setTasks(d.tasks||[])).catch(()=>{})
+    load()
+    const t=setInterval(load,15000)
+    return()=>clearInterval(t)
+  },[])
+
+  // Salva su API ogni volta che tasks cambia
+  const saveRef=useRef(null)
+  useEffect(()=>{
+    if(saveRef.current) clearTimeout(saveRef.current)
+    saveRef.current=setTimeout(()=>{
+      fetch('/api/progetti/quick-tasks',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({tasks})}).catch(()=>{})
+    },400)
+  },[tasks])
+
+  const filtered=tasks.filter(t=>{
+    if(filter==='da_fare') return !t.done
+    if(filter==='fatti')   return t.done
+    if(filter==='alta')    return t.priority==='alta'
+    if(filter==='media')   return t.priority==='media'
+    if(filter==='bassa')   return t.priority==='bassa'
+    return true
+  })
+  function addTask(){
+    if(!newText.trim()) return
+    setTasks(ts=>[{id:uid(),text:newText.trim(),priority:newPrio,done:false,createdAt:new Date().toISOString()},...ts])
+    setNewText('');inputRef.current?.focus()
+  }
+  if(collapsed){
+    return(
+      <div onClick={onToggleCollapse} title='Apri task rapidi'
+        style={{width:32,flexShrink:0,background:T.surface,borderLeft:`1px solid ${T.border}`,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',cursor:'pointer',userSelect:'none'}}>
+        <div style={{writingMode:'vertical-rl',transform:'rotate(180deg)',fontSize:12,fontWeight:700,color:T.textSub,letterSpacing:'0.1em',display:'flex',alignItems:'center',gap:6}}>
+          ⚡ TASK RAPIDI
+          {pendingCount>0&&<span style={{background:T.accent,color:'#fff',borderRadius:10,fontSize:10,fontWeight:800,padding:'2px 5px',writingMode:'horizontal-tb'}}>{pendingCount}</span>}
+        </div>
+      </div>
+    )
+  }
+  return(
+    <div style={{width:280,flexShrink:0,background:T.surface,borderLeft:`1px solid ${T.border}`,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+      <div style={{padding:'14px 14px 10px',borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
+        <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
+          <span style={{fontSize:16}}>⚡</span>
+          <span style={{fontSize:14,fontWeight:800,color:T.text,flex:1}}>Task Rapidi</span>
+          {pendingCount>0&&<span style={{background:T.accent,color:'#fff',borderRadius:20,fontSize:11,fontWeight:800,padding:'2px 8px'}}>{pendingCount}</span>}
+          <button onClick={onToggleCollapse} style={{background:'none',border:`1px solid ${T.border}`,borderRadius:6,color:T.textMuted,fontSize:12,padding:'2px 7px',cursor:'pointer'}}>✕</button>
+        </div>
+        <div style={{display:'flex',flexDirection:'column',gap:6}}>
+          <input ref={inputRef} value={newText} onChange={e=>setNewText(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')addTask()}} placeholder='Nuovo task...'
+            style={{background:T.surface2,border:`1.5px solid ${T.border}`,borderRadius:8,padding:'8px 10px',color:T.text,fontSize:13,outline:'none',width:'100%'}}/>
+          <div style={{display:'flex',gap:5}}>
+            {Object.entries(PRIORITY).map(([key,p])=>(
+              <button key={key} onClick={()=>setNewPrio(key)} style={{flex:1,background:newPrio===key?p.bg:'transparent',border:`1.5px solid ${newPrio===key?p.color:T.border}`,borderRadius:6,color:newPrio===key?p.color:T.textMuted,fontSize:11,fontWeight:700,padding:'5px 0',cursor:'pointer'}}>{p.dot} {p.label}</button>
+            ))}
+          </div>
+          <button onClick={addTask} style={{background:T.accent,border:'none',borderRadius:8,color:'#fff',fontWeight:700,fontSize:13,padding:'8px',cursor:'pointer',width:'100%'}}>+ Aggiungi</button>
+        </div>
+      </div>
+      <div style={{padding:'8px 10px',borderBottom:`1px solid ${T.border}`,display:'flex',flexWrap:'wrap',gap:4,flexShrink:0}}>
+        {[['tutti',`Tutti (${tasks.length})`],['da_fare',`Da fare (${tasks.filter(t=>!t.done).length})`],['fatti',`Fatti (${tasks.filter(t=>t.done).length})`],['alta','🔴'],['media','🟡'],['bassa','🟢']].map(([key,label])=>(
+          <button key={key} onClick={()=>setFilter(key)} style={{background:filter===key?T.surface2:'transparent',border:`1px solid ${filter===key?T.borderStrong:'transparent'}`,borderRadius:6,color:filter===key?T.text:T.textMuted,fontSize:11,fontWeight:600,padding:'3px 8px',cursor:'pointer'}}>{label}</button>
+        ))}
+      </div>
+      <div style={{flex:1,overflowY:'auto',padding:'8px'}}>
+        {filtered.length===0&&<div style={{textAlign:'center',padding:'30px 10px',color:T.textMuted,fontSize:13}}>{filter==='tutti'?'Nessun task ancora.\nAggiungine uno!':'Nessun task in questa categoria.'}</div>}
+        {filtered.map(task=>(
+          <QuickTaskRow key={task.id} task={task}
+            onToggle={()=>setTasks(ts=>ts.map(t=>t.id===task.id?{...t,done:!t.done}:t))}
+            onDelete={()=>setTasks(ts=>ts.filter(t=>t.id!==task.id))}
+            onPriority={p=>setTasks(ts=>ts.map(t=>t.id===task.id?{...t,priority:p}:t))}
+            onEditText={text=>setTasks(ts=>ts.map(t=>t.id===task.id?{...t,text}:t))}/>
+        ))}
+      </div>
+    </div>
+  )
+}
+// ── DeliveryRow ────────────────────────────────────────────────────────────────
+function DeliveryRow({d,onToggle,onEdit,onDelete,onOpen}){
+  const[hovered,setHovered]=useState(false)
+  const u=d.urgency
+  return(
+    <div onMouseEnter={()=>setHovered(true)} onMouseLeave={()=>setHovered(false)}
+      style={{background:T.surface,border:`1.5px solid ${d.delivered?T.border:u.color+'44'}`,borderLeft:`4px solid ${d.delivered?T.border:u.color}`,borderRadius:12,padding:'14px 18px',display:'flex',alignItems:'center',gap:14,opacity:d.delivered?0.65:1,transition:'all 0.15s',boxShadow:hovered&&!d.delivered?'0 2px 12px rgba(0,0,0,0.07)':'none'}}>
+      <div onClick={onToggle} title={d.delivered?'Segna come da consegnare':'Segna come consegnato'}
+        style={{width:24,height:24,borderRadius:8,flexShrink:0,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',border:d.delivered?'none':`2px solid ${u.color}`,background:d.delivered?T.green:'transparent',transition:'all 0.2s'}}>
+        {d.delivered&&<span style={{color:'#fff',fontSize:14,fontWeight:800}}>✓</span>}
+      </div>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:3}}>
+          {d.proj&&<div style={{width:10,height:10,borderRadius:'50%',background:d.proj.color,flexShrink:0}}/>}
+          <span style={{fontSize:15,fontWeight:700,color:T.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{d.proj?.name||<span style={{color:T.red,fontStyle:'italic'}}>Progetto eliminato</span>}</span>
+        </div>
+        <div style={{display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
+          {d.note&&<span style={{fontSize:13,color:T.textSub}}>{d.note}</span>}
+          {d.delivered&&d.deliveredAt&&<span style={{fontSize:12,color:T.textMuted,fontStyle:'italic'}}>Consegnato {d.deliveredAt}</span>}
+        </div>
+      </div>
+      {d.proj&&!d.delivered&&(
+        <div style={{width:80,flexShrink:0}}>
+          <div style={{fontSize:11,color:T.textMuted,marginBottom:3,textAlign:'right'}}>{d.progress}%</div>
+          <div style={{height:5,background:T.surface2,borderRadius:3,overflow:'hidden'}}><div style={{height:'100%',width:`${d.progress}%`,background:d.proj.color,borderRadius:3}}/></div>
+        </div>
+      )}
+      {!d.delivered&&(
+        <div style={{background:u.bg,color:u.color,border:`1.5px solid ${u.color}44`,borderRadius:20,padding:'4px 14px',fontSize:13,fontWeight:800,flexShrink:0,minWidth:70,textAlign:'center'}}>
+          {u.dot} {d.days===null?'—':d.days===0?'OGGI':d.days<0?`${Math.abs(d.days)}gg fa`:`${d.days}gg`}
+        </div>
+      )}
+      <div style={{fontSize:13,color:T.textMuted,flexShrink:0,minWidth:80,textAlign:'right'}}>
+        {d.dueDate?new Date(d.dueDate).toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric'}):'—'}
+      </div>
+      <div style={{display:'flex',gap:6,opacity:hovered?1:0,transition:'opacity 0.15s',flexShrink:0}}>
+        {d.proj&&<button onClick={onOpen} style={{background:T.surface2,border:`1px solid ${T.border}`,borderRadius:7,color:T.textSub,fontSize:12,padding:'4px 10px',cursor:'pointer',fontWeight:600}}>Apri →</button>}
+        <button onClick={onEdit} style={{background:'none',border:`1px solid ${T.border}`,borderRadius:7,color:T.textSub,fontSize:12,padding:'4px 8px',cursor:'pointer'}}>✏️</button>
+        <button onClick={onDelete} style={{background:'none',border:`1px solid ${T.red}44`,borderRadius:7,color:T.red,fontSize:12,padding:'4px 8px',cursor:'pointer'}}>🗑️</button>
+      </div>
+    </div>
+  )
+}
+
+// ── DeliveryPage ───────────────────────────────────────────────────────────────
+function DeliveryPage({projects,deliveries,onSetDelivery,onNavigateToProject}){
+  const[showForm,setShowForm]=useState(false)
+  const[editId,setEditId]=useState(null)
+  const[form,setForm]=useState({projectId:'',note:'',dueDate:'',delivered:false})
+  const[confirm,setConfirm]=useState(null)
+  const activeProjects=projects.filter(p=>!p.archived)
+  const enriched=deliveries.map(d=>{
+    const proj=projects.find(p=>p.id===d.projectId)
+    const days=daysUntil(d.dueDate)
+    const urgency=deliveryUrgency(days)
+    const progress=proj?getProgress(proj):0
+    return{...d,proj,days,urgency,progress}
+  }).sort((a,b)=>{
+    if(a.delivered!==b.delivered) return a.delivered?1:-1
+    if(a.days===null) return 1;if(b.days===null) return -1
+    return a.days-b.days
+  })
+  const pending=enriched.filter(d=>!d.delivered)
+  const delivered=enriched.filter(d=>d.delivered)
+  const urgent=pending.filter(d=>d.days!==null&&d.days<=7)
+  function openNew(){setForm({projectId:activeProjects[0]?.id||'',note:'',dueDate:'',delivered:false});setEditId(null);setShowForm(true)}
+  function openEdit(d){setForm({projectId:d.projectId,note:d.note||'',dueDate:d.dueDate||'',delivered:d.delivered});setEditId(d.id);setShowForm(true)}
+  function save(){
+    if(!form.projectId||!form.dueDate) return
+    if(editId){
+      onSetDelivery(editId,form,true)
+    }else{
+      onSetDelivery(uid(),form,false)
+    }
+    setShowForm(false)
+  }
+  const inputSt={background:T.surface2,border:`1.5px solid ${T.border}`,borderRadius:8,padding:'9px 12px',color:T.text,fontSize:14,outline:'none',width:'100%'}
+  return(
+    <div style={{flex:1,overflowY:'auto',padding:'24px 28px',background:T.bg,fontFamily:"var(--font-display)"}}>
+      {urgent.length>0&&(
+        <div style={{background:T.redBg,border:`2px solid ${T.red}44`,borderRadius:14,padding:'16px 20px',marginBottom:24}}>
+          <div style={{fontSize:13,fontWeight:800,color:T.red,letterSpacing:'0.08em',marginBottom:10}}>🎯 FOCUS DEL GIORNO — {urgent.length} CONSEGN{urgent.length===1?'A':'E'} URGENTI</div>
+          <div style={{display:'flex',flexDirection:'column',gap:8}}>
+            {urgent.map(d=>(
+              <div key={d.id} style={{display:'flex',alignItems:'center',gap:12,background:'rgba(255,255,255,0.6)',borderRadius:10,padding:'10px 14px'}}>
+                <span style={{fontSize:20}}>{d.urgency.dot}</span>
+                <div style={{flex:1}}><span style={{fontWeight:700,color:T.text,fontSize:15}}>{d.proj?.name||'—'}</span>{d.note&&<span style={{fontSize:13,color:T.textSub,marginLeft:8}}>{d.note}</span>}</div>
+                <span style={{fontSize:13,fontWeight:800,color:d.urgency.color,background:d.urgency.bg,padding:'3px 12px',borderRadius:20,border:`1px solid ${d.urgency.color}44`}}>{d.days===0?'OGGI':d.days<0?`${Math.abs(d.days)}gg fa`:`${d.days}gg`}</span>
+                <span style={{fontSize:13,color:T.textSub}}>{d.progress}%</span>
+                {d.proj&&<button onClick={()=>onNavigateToProject(d.proj.id)} style={{background:T.red,border:'none',borderRadius:7,color:'#fff',fontSize:12,fontWeight:700,padding:'5px 12px',cursor:'pointer'}}>Apri →</button>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      <div style={{display:'flex',alignItems:'center',marginBottom:20}}>
+        <div style={{fontSize:13,color:T.textSub,fontWeight:700,letterSpacing:'0.06em'}}>CONSEGNE — {pending.length} IN ATTESA</div>
+        <button onClick={openNew} style={{marginLeft:'auto',background:T.accent,border:'none',borderRadius:8,color:'#fff',fontWeight:700,fontSize:14,padding:'9px 20px',cursor:'pointer'}}>+ Nuova consegna</button>
+      </div>
+      {showForm&&(
+        <div style={{background:T.surface,border:`1.5px solid ${T.accent}44`,borderRadius:14,padding:'20px',marginBottom:20}}>
+          <div style={{fontSize:14,fontWeight:700,color:T.text,marginBottom:14}}>{editId?'✏️ Modifica consegna':'+ Nuova consegna'}</div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}}>
+            <div><label style={{fontSize:12,color:T.textSub,fontWeight:700,display:'block',marginBottom:5}}>PROGETTO *</label>
+              <select value={form.projectId} onChange={e=>setForm(f=>({...f,projectId:e.target.value}))} style={{...inputSt,appearance:'none'}}>
+                <option value=''>— Seleziona —</option>
+                {activeProjects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </div>
+            <div><label style={{fontSize:12,color:T.textSub,fontWeight:700,display:'block',marginBottom:5}}>DATA DI CONSEGNA *</label><input type='date' value={form.dueDate} onChange={e=>setForm(f=>({...f,dueDate:e.target.value}))} style={inputSt}/></div>
+          </div>
+          <div style={{marginBottom:14}}><label style={{fontSize:12,color:T.textSub,fontWeight:700,display:'block',marginBottom:5}}>NOTE (opzionale)</label><input value={form.note} onChange={e=>setForm(f=>({...f,note:e.target.value}))} placeholder='Es. consegna parziale, cliente X...' style={inputSt}/></div>
+          <div style={{display:'flex',gap:10,justifyContent:'flex-end'}}>
+            <button onClick={()=>setShowForm(false)} style={{background:'none',border:`1px solid ${T.border}`,borderRadius:8,color:T.textSub,fontSize:14,padding:'8px 18px',cursor:'pointer'}}>Annulla</button>
+            <button onClick={save} disabled={!form.projectId||!form.dueDate} style={{background:form.projectId&&form.dueDate?T.accent:'#ccc',border:'none',borderRadius:8,color:'#fff',fontWeight:700,fontSize:14,padding:'8px 22px',cursor:form.projectId&&form.dueDate?'pointer':'default'}}>{editId?'Salva modifiche':'Aggiungi'}</button>
+          </div>
+        </div>
+      )}
+      {pending.length===0&&!showForm&&(
+        <div style={{textAlign:'center',padding:'60px 0'}}>
+          <div style={{fontSize:48,marginBottom:16}}>📅</div>
+          <div style={{fontSize:18,fontWeight:700,color:T.text,marginBottom:8}}>Nessuna consegna programmata</div>
+          <div style={{fontSize:15,color:T.textSub,marginBottom:20}}>Aggiungi le date di consegna dei tuoi progetti</div>
+          <button onClick={openNew} style={{background:T.accent,border:'none',borderRadius:10,color:'#fff',fontWeight:700,fontSize:15,padding:'11px 26px',cursor:'pointer'}}>+ Prima consegna</button>
+        </div>
+      )}
+      {pending.length>0&&<div style={{display:'flex',flexDirection:'column',gap:10,marginBottom:32}}>{pending.map(d=><DeliveryRow key={d.id} d={d} onToggle={()=>onSetDelivery(d.id,{delivered:!d.delivered,deliveredAt:!d.delivered?nowStr():null},true)} onEdit={()=>openEdit(d)} onDelete={()=>setConfirm(d.id)} onOpen={()=>d.proj&&onNavigateToProject(d.proj.id)}/>)}</div>}
+      {delivered.length>0&&(
+        <details style={{marginTop:8}}>
+          <summary style={{fontSize:13,color:T.textSub,fontWeight:700,letterSpacing:'0.06em',cursor:'pointer',marginBottom:10}}>✅ CONSEGNATE — {delivered.length}</summary>
+          <div style={{display:'flex',flexDirection:'column',gap:8,marginTop:10}}>{delivered.map(d=><DeliveryRow key={d.id} d={d} onToggle={()=>onSetDelivery(d.id,{delivered:!d.delivered,deliveredAt:!d.delivered?nowStr():null},true)} onEdit={()=>openEdit(d)} onDelete={()=>setConfirm(d.id)} onOpen={()=>d.proj&&onNavigateToProject(d.proj.id)}/>)}</div>
+        </details>
+      )}
+      {confirm&&<ConfirmDialog message='Eliminare questa consegna?' onConfirm={()=>{onSetDelivery(confirm,null,null,true);setConfirm(null)}} onCancel={()=>setConfirm(null)}/>}
+    </div>
+  )
+}
+
+// ── NewProjectModal ────────────────────────────────────────────────────────────
+function NewProjectModal({onClose,onCreate,templates,preselectedTemplate}){
+  const[name,setName]=useState('')
+  const[desc,setDesc]=useState('')
+  const[color,setColor]=useState(preselectedTemplate?.color||'#0d2d5e')
+  const[selectedTmpl,setSelectedTmpl]=useState(preselectedTemplate||null)
+  const[stepsRaw,setStepsRaw]=useState('')
+  function selectTmpl(t){setSelectedTmpl(t);if(t)setColor(t.color)}
+  function create(){
+    if(!name.trim()) return
+    const steps=selectedTmpl?cloneTemplateToSteps(selectedTmpl):stepsRaw.split('\n').filter(l=>l.trim()).map(line=>({id:uid(),title:line.trim(),tasks:[]}))
+    onCreate({id:uid(),name:name.trim(),description:desc.trim(),color,createdAt:new Date().toISOString().slice(0,10),archived:false,steps:steps.length?steps:[{id:uid(),title:'Step 1',tasks:[]}],log:[],pallet_assegnato:null})
+    onClose()
+  }
+  const inputStyle={width:'100%',background:T.surface2,border:`1.5px solid ${T.border}`,borderRadius:10,padding:'10px 14px',color:T.text,fontSize:15,outline:'none'}
+  return(
+    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:100}} onClick={onClose}>
+      <div onClick={e=>e.stopPropagation()} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:14,padding:32,width:540,maxWidth:'92vw',maxHeight:'88vh',overflowY:'auto',boxShadow:'0 12px 48px rgba(0,0,0,0.2)'}}>
+        <div style={{fontSize:20,fontWeight:800,color:T.text,marginBottom:22}}>Nuovo Progetto</div>
+        <div style={{marginBottom:16}}><label style={{fontSize:13,color:T.textSub,fontWeight:600,display:'block',marginBottom:6}}>NOME PROGETTO *</label><input autoFocus value={name} onChange={e=>setName(e.target.value)} style={inputStyle} placeholder='Es. 4349_0221'/></div>
+        <div style={{marginBottom:22}}><label style={{fontSize:13,color:T.textSub,fontWeight:600,display:'block',marginBottom:6}}>DESCRIZIONE</label><input value={desc} onChange={e=>setDesc(e.target.value)} style={inputStyle} placeholder='Breve descrizione'/></div>
+        <div style={{marginBottom:22}}>
+          <label style={{fontSize:13,color:T.textSub,fontWeight:600,display:'block',marginBottom:10}}>PARTI DA UN TEMPLATE</label>
+          <div style={{display:'flex',flexWrap:'wrap',gap:8,marginBottom:12}}>
+            <button onClick={()=>selectTmpl(null)} style={{background:!selectedTmpl?T.surface2:'transparent',border:`1.5px solid ${!selectedTmpl?T.borderStrong:T.border}`,borderRadius:8,color:!selectedTmpl?T.text:T.textSub,fontSize:13,padding:'7px 14px',cursor:'pointer',fontWeight:600}}>Nessuno</button>
+            {templates.map(t=><button key={t.id} onClick={()=>selectTmpl(t)} style={{background:selectedTmpl?.id===t.id?t.color+'18':'transparent',border:`1.5px solid ${selectedTmpl?.id===t.id?t.color:T.border}`,borderRadius:8,color:selectedTmpl?.id===t.id?t.color:T.textSub,fontSize:13,padding:'7px 14px',cursor:'pointer',fontWeight:600}}>{t.icon} {t.name}</button>)}
+          </div>
+          {selectedTmpl?(
+            <div style={{background:T.surface2,border:`1px solid ${T.border}`,borderRadius:10,padding:'12px 16px'}}>
+              <div style={{fontSize:12,color:T.textSub,fontWeight:700,marginBottom:8}}>FASI INCLUSE</div>
+              {selectedTmpl.steps.map(s=><div key={s.id} style={{fontSize:14,color:T.text,marginBottom:4,display:'flex',gap:8}}><span style={{color:selectedTmpl.color,fontWeight:700}}>•</span>{s.title} <span style={{color:T.textMuted}}>({(s.tasks||[]).length} task)</span></div>)}
+            </div>
+          ):(
+            <div><label style={{fontSize:13,color:T.textSub,fontWeight:600,display:'block',marginBottom:6}}>OPPURE INSERISCI FASI (una per riga)</label><textarea value={stepsRaw} onChange={e=>setStepsRaw(e.target.value)} rows={4} placeholder={'Preparazione\nFase 1\nFase 2'} style={{...inputStyle,resize:'vertical'}}/></div>
+          )}
+        </div>
+        <div style={{marginBottom:24}}>
+          <label style={{fontSize:13,color:T.textSub,fontWeight:600,display:'block',marginBottom:10}}>COLORE PROGETTO</label>
+          <div style={{display:'flex',gap:10}}>{COLORS.map(c=><div key={c} onClick={()=>setColor(c)} style={{width:30,height:30,borderRadius:'50%',background:c,cursor:'pointer',border:color===c?'3px solid #333':'3px solid transparent',transform:color===c?'scale(1.15)':'scale(1)'}}/>)}</div>
+        </div>
+        <div style={{display:'flex',gap:10,justifyContent:'flex-end'}}>
+          <button onClick={onClose} style={{background:T.surface2,border:`1px solid ${T.border}`,borderRadius:10,color:T.textSub,fontSize:15,padding:'10px 22px',cursor:'pointer',fontWeight:600}}>Annulla</button>
+          <button onClick={create} style={{background:color,border:'none',borderRadius:10,color:'#fff',fontWeight:800,fontSize:15,padding:'10px 26px',cursor:'pointer'}}>Crea Progetto</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── App principale ─────────────────────────────────────────────────────────────
 export default function Progetti(){
   const navigate=useNavigate()

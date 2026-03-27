@@ -399,13 +399,13 @@ export default function CodaLavorazione() {
   return (
     <div style={{
       display: "flex",
-      flexDirection: "column",
-      gap: 12,
+      flexDirection: "row",
+      gap: 16,
       padding: 16,
       height: "100%",
       boxSizing: "border-box",
       background: "var(--bg-base, #eef2f7)",
-      overflowY: "auto",
+      overflow: "hidden",
     }}>
 
       {/* ── Banner live context (programma in esecuzione) ───────── */}
@@ -466,7 +466,7 @@ export default function CodaLavorazione() {
       )}
 
       {/* ── Griglia 2×3 pallet ─────────────────────────────────── */}
-      <div style={{ width: '100%', flexShrink: 0 }}>
+      <div style={{ flex: '0 0 calc(50% - 8px)', minWidth: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
         <div style={{
           display: "flex",
           justifyContent: "space-between",
@@ -492,6 +492,12 @@ export default function CodaLavorazione() {
             const isLav    = p.stato === "IN LAVORAZIONE";
             const hasProj  = !!progettiPallet[p.id];
             const isEmpty  = !hasProj && p.stato === "VUOTO";
+            const proj     = progettiPallet[p.id];
+            const isAvviato = proj && proj.in_macchina > 0 && proj.pct < 100;
+            const isCompleto = proj && proj.pct === 100;
+            const cardBg     = isCompleto ? "#dcfce7" : isAvviato ? "#dbeafe" : isEmpty ? "#F8F7F5" : s.bg;
+            const cardBorder = isCompleto ? "#16a34a" : isAvviato ? "#1D5FAD" : isActive ? "#f59e0b" : isEmpty ? "#E8E6E0" : s.border;
+            const cardFg     = isCompleto ? "#14532d" : isAvviato ? "#0d2d5e" : isEmpty ? "#B0ADA4" : s.fg;
             const proj     = progettiPallet[p.id];
             const isAvviato = proj && proj.in_macchina > 0 && proj.pct < 100;
             const isCompleto = proj && proj.pct === 100;
@@ -564,12 +570,15 @@ export default function CodaLavorazione() {
                           <span style={{fontSize:10,color:s.fg,opacity:0.7}}>{progettiPallet[p.id].completati}/{progettiPallet[p.id].totale} pgm</span>
                           <span style={{fontSize:11,fontWeight:800,color:s.fg}}>{progettiPallet[p.id].pct}%</span>
                         </div>
-                        {progettiPallet[p.id].da_fare > 0 && (
+                        {progettiPallet[p.id].da_fare > 0 && !isAvviato && (
                           <button onClick={e=>{e.stopPropagation();avviaProgetto(p.id)}}
                             style={{marginTop:4,width:'100%',background:'#1D5FAD',border:'none',borderRadius:4,
-                              color:'#fff',fontWeight:700,fontSize:9,padding:'3px 0',cursor:'pointer'}}>
+                              color:'#fff',fontWeight:700,fontSize:10,padding:'4px 0',cursor:'pointer'}}>
                             ▶ Avvia ({progettiPallet[p.id].da_fare})
                           </button>
+                        )}
+                        {isAvviato && (
+                          <div style={{marginTop:3,fontSize:9,fontWeight:700,color:'#1D5FAD',textAlign:'center'}}>⚙ IN MACCHINA</div>
                         )}
                         {progettiPallet[p.id].pct===100 && p.stato!=='FINITO' && (
                           <button onClick={e=>{e.stopPropagation();setPalletStato(p.id,'FINITO')}}
@@ -603,8 +612,6 @@ export default function CodaLavorazione() {
         `}</style>
       </div>
 
-      {/* ── Pannello destro ─────────────────────────────────────── */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 10, width: '100%' }}>
 
         {/* Stato macchina + programma + utensile — tutto in un blocco compatto */}
         <div style={{
@@ -851,6 +858,11 @@ export default function CodaLavorazione() {
           </div>
         </div>
       , document.body)}
+      </div>
+
+      {/* ── Pannello destro — Coda + Programmi ──── */}
+      <div style={{ flex: '0 0 calc(50% - 8px)', display: "flex", flexDirection: "column", gap: 10, minWidth: 0, overflowY: 'auto' }}>
+
 
         {/* ── Coda Esecuzione ───────────────────────────────────── */}
         {assegnatiCoda.length > 0 && (

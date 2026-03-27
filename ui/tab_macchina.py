@@ -1161,27 +1161,26 @@ class TabMacchina:
         threading.Thread(target=_worker, daemon=True).start()
 
     def _avvia_pallet(self, num_pallet: int, progetto_id: str):
-        """Avvia pallet: mette in cima alla coda + segna tutti i da_fare → in_macchina."""
+        """Avvia pallet: IN LAVORAZIONE + da_fare→in_macchina + gestisce pallet precedente."""
         import threading, json, urllib.request
         def _worker():
             try:
-                # 1. Metti in cima alla coda
-                ordine = list(self._coda_ordine)
-                ordine = [num_pallet] + [n for n in ordine if n != num_pallet]
-                data = json.dumps({"ordine": ordine}).encode()
+                # Endpoint atomico: IN LAVORAZIONE + programmi + gestione pallet precedente
                 req = urllib.request.Request(
-                    "http://localhost:8000/api/pallet/ordine-esecuzione",
-                    data=data, method="PUT",
-                    headers={"Content-Type": "application/json"})
-                urllib.request.urlopen(req, timeout=3)
-                self._coda_ordine = ordine
-
-                # 2. Segna tutti da_fare → in_macchina
-                req2 = urllib.request.Request(
-                    f"http://localhost:8000/api/progetti/{progetto_id}/avvia-tutti",
+                    f"http://localhost:8000/api/pallet/{num_pallet}/avvia",
                     data=b"", method="POST",
                     headers={"Content-Type": "application/json"})
+                urllib.request.urlopen(req, timeout=3)
+
+                # Metti in cima alla coda
+                ordine = list(self._coda_ordine)
+                ordine = [num_pallet] + [n for n in ordine if n != num_pallet]
+                req2 = urllib.request.Request(
+                    "http://localhost:8000/api/pallet/ordine-esecuzione",
+                    data=json.dumps({"ordine": ordine}).encode(), method="PUT",
+                    headers={"Content-Type": "application/json"})
                 urllib.request.urlopen(req2, timeout=3)
+                self._coda_ordine = ordine
 
                 self.parent.after(0, self._render_coda)
                 self.parent.after(0, self._load_coda)

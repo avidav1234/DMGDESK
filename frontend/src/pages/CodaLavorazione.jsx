@@ -81,7 +81,10 @@ export default function CodaLavorazione() {
     const proj = progettiPallet[palletNum]
     if (!proj?.id) return
 
-    // 1. Metti in cima alla coda (questo pallet viene prima)
+    // Usa endpoint atomico: IN LAVORAZIONE + da_fare→in_macchina + gestisce pallet precedente
+    await fetch(`/api/pallet/${palletNum}/avvia`, { method: 'POST' }).catch(() => {})
+
+    // Metti in cima alla coda
     const nuovoOrdine = [palletNum, ...codaOrdine.filter(n => n !== palletNum)]
     await fetch('/api/pallet/ordine-esecuzione', {
       method: 'PUT',
@@ -90,11 +93,7 @@ export default function CodaLavorazione() {
     }).catch(() => {})
     setCodaOrdine(nuovoOrdine)
 
-    // 2. Segna tutti i da_fare → in_macchina
-    // La card diventa BLU automaticamente (isAvviato = in_macchina > 0)
-    await fetch(`/api/progetti/${proj.id}/avvia-tutti`, { method: 'POST' }).catch(() => {})
-
-    // 3. Ricarica tutto
+    // Ricarica tutto
     await fetchAll()
     await caricaPgmInMacchina()
   }
@@ -493,7 +492,7 @@ export default function CodaLavorazione() {
             const hasProj  = !!progettiPallet[p.id];
             const isEmpty  = !hasProj && p.stato === "VUOTO";
             const proj     = progettiPallet[p.id];
-            const isAvviato  = proj && proj.in_macchina > 0 && proj.pct < 100;
+            const isAvviato  = proj && (proj.in_macchina > 0 && proj.pct < 100) || p.stato === "IN LAVORAZIONE";
             const isCompleto = proj && proj.pct === 100;
             const cardBg     = isCompleto ? "#dcfce7" : isAvviato ? "#dbeafe" : isEmpty ? "#F8F7F5" : s.bg;
             const cardBorder = isCompleto ? "#16a34a" : isAvviato ? "#1D5FAD" : isActive ? "#f59e0b" : isEmpty ? "#E8E6E0" : s.border;

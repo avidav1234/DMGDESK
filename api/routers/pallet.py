@@ -524,6 +524,78 @@ async def get_pallet_disponibili():
     }
 
 
+@router.post("/{numero}/avvia")
+async def avvia_pallet(numero: int):
+    """
+    Avvia un pallet:
+    1. Il pallet diventa IN LAVORAZIONE
+    2. Tutti i programmi da_fare → in_macchina
+    3. Se c'era un altro pallet IN LAVORAZIONE:
+       - se ha ancora programmi in_macchina → torna GREZZO
+       - se tutti completati → rimane FINITO (già impostato)
+    Solo un pallet IN LAVORAZIONE alla volta.
+    """
+    from api.routers.progetti import _load_progetti, _save_progetti
+    from datetime import datetime as _dt
+    config = carica_configurazione()
+    state  = _load(config)
+    data   = _load_progetti(config)
+
+    pallet_target = next((p for p in state["pallet"] if p["numero"] == numero), None)
+    if not pallet_target:
+        raise HTTPException(404, f"Pallet {numero} non trovato")
+
+    now = _dt.now().strftime("%d/%m/%Y %H:%M")
+
+    # Gestisci il pallet precedentemente IN LAVORAZIONE
+    for p in state["pallet"]:
+        if p["numero"] != numero and p.get("stato") == "IN LAVORAZIONE":
+            pid = p.get("progetto_id")
+            if pid:
+                proj = next((pr for pr in data.get("projects",[]) if pr.get("id")==pid), None)
+                if proj:
+                    all_pgm = [pg for s in proj.get("steps",[])
+                               for t in s.get("tasks",[])
+                               if t.get("text","").strip().lower()=="fresatura"
+                               for pg in t.get("programs",[])
+                               if pg.get("tipoGruppo")!="ipm"]
+                    has_in_mac = any(pg.get("stato")=="in_macchina" for pg in all_pgm)
+                    all_done   = all_pgm and all(pg.get("stato")=="completato" for pg in all_pgm)
+                    if all_done:
+                        p["stato"] = "finito"
+                    else:
+                        p["stato"] = "grezzo"  # rimette a grezzo se ancora in corso
+            else:
+                p["stato"] = "grezzo"
+
+    # Imposta il pallet target IN LAVORAZIONE
+    pallet_target["stato"]     = "IN LAVORAZIONE"
+    pallet_target["aggiornato"] = now
+
+    # Segna tutti i programmi da_fare → in_macchina
+    pid = pallet_target.get("progetto_id")
+    aggiornati = 0
+    if pid:
+        proj = next((p for p in data.get("projects",[]) if p.get("id")==pid), None)
+        if proj:
+            for step in proj.get("steps", []):
+                for task in step.get("tasks", []):
+                    if task.get("text","").strip().lower() != "fresatura": continue
+                    for pgm in task.get("programs", []):
+                        if pgm.get("tipoGruppo") == "ipm": continue
+                        if pgm.get("stato") == "da_fare":
+                            pgm["stato"] = "in_macchina"
+                            if not pgm.get("tempoInizio"):
+                                pgm["tempoInizio"] = now
+                            aggiornati += 1
+
+    _save(config, state)
+    if aggiornati > 0:
+        _save_progetti(config, data)
+
+    return {"ok": True, "pallet": numero, "stato": "IN LAVORAZIONE", "programmi_avviati": aggiornati}
+
+
 @router.get("/ordine-esecuzione")
 async def get_ordine_esecuzione():
     """Legge l'ordine di esecuzione pallet dalla coda macchina."""

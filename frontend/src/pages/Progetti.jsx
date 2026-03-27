@@ -256,6 +256,7 @@ function FresaturaPanel({task,onUpdateTask,toolsDB,projectId}){
   const programs=Array.isArray(task.programs)?task.programs:[]
   const[expanded,setExpanded]=useState(false)
   const[collapsedGroups,setCollapsedGroups]=useState({ipm:true,fresatura:true})
+  const[uploadMsg,setUploadMsg]=useState(null)
   const { selectedIds: selected, setSelectedIds: setSelected } = useContext(PgmSelContext)
   const TOOL_BADGE={
     ok:          {dot:'✓',color:'#166534',bg:'#dcfce7'},
@@ -275,21 +276,43 @@ function FresaturaPanel({task,onUpdateTask,toolsDB,projectId}){
   }
   async function handleFileUpload(e){
     const files=Array.from(e.target.files)
-    const parsed=[]
+    let nuovi=0, aggiornati=0
+    let updatedPrograms=[...programs]
     for(const file of files){
       const text=await file.text()
       const info=parseMpfFile(file.name,text)
-      if(!programs.find(p=>p.filename===info.filename))
-        parsed.push({id:uid(),...info,stato:'da_fare',operatore:'',tempoStimato:info.tempoStimato||'',tempoInizio:null,tempoFine:null})
+      const existing=updatedPrograms.find(p=>p.filename===info.filename)
+      if(existing){
+        // Aggiorna metadati, mantieni stato/tempi/operatore
+        updatedPrograms=updatedPrograms.map(p=>p.filename===info.filename?{
+          ...p,
+          utensile:   info.utensile   || p.utensile,
+          diametro:   info.diametro   || p.diametro,
+          tipoOp:     info.tipoOp     || p.tipoOp,
+          tempoStimato: info.tempoStimato || p.tempoStimato,
+          numPgm:     info.numPgm     || p.numPgm,
+          // stato, operatore, tempoInizio, tempoFine → invariati
+        }:p)
+        aggiornati++
+      } else {
+        updatedPrograms.push({id:uid(),...info,stato:'da_fare',operatore:'',
+          tempoStimato:info.tempoStimato||'',tempoInizio:null,tempoFine:null})
+        nuovi++
+      }
     }
-    if(parsed.length>0){
-      const all=[...programs,...parsed].sort((a,b)=>{
-        if(a.tipoGruppo!==b.tipoGruppo) return a.tipoGruppo==='ipm'?-1:1
-        return a.numPgm.localeCompare(b.numPgm,undefined,{numeric:true})
-      })
-      updatePrograms(all)
-    }
+    const sorted=updatedPrograms.sort((a,b)=>{
+      if(a.tipoGruppo!==b.tipoGruppo) return a.tipoGruppo==='ipm'?-1:1
+      return a.numPgm.localeCompare(b.numPgm,undefined,{numeric:true})
+    })
+    updatePrograms(sorted)
     e.target.value=''
+    if(aggiornati>0||nuovi>0){
+      const parts=[]
+      if(nuovi) parts.push(`${nuovi} nuov${nuovi===1?'o':'i'}`)
+      if(aggiornati) parts.push(`${aggiornati} aggiornat${aggiornati===1?'o':'i'} — stato mantenuto`)
+      setUploadMsg(parts.join(' · '))
+      setTimeout(()=>setUploadMsg(null), 4000)
+    }
   }
   function updatePgm(id,patch){
     updatePrograms(programs.map(p=>{
@@ -390,6 +413,7 @@ function FresaturaPanel({task,onUpdateTask,toolsDB,projectId}){
             <input ref={fileInputRef} type='file' accept='.mpf,.MPF' multiple style={{display:'none'}} onChange={handleFileUpload}/>
             <button onClick={()=>fileInputRef.current.click()} style={{background:'#0d2d5e',border:'none',borderRadius:7,color:'#fff',fontWeight:700,fontSize:13,padding:'7px 14px',cursor:'pointer'}}>📂 Carica .mpf</button>
             {total>0&&<span style={{fontSize:12,color:T.textMuted}}>{ipmPrograms.length>0&&`📏 ${ipmPrograms.length} IPM · `}⚙️ {fresPrograms.length} fresatura</span>}
+            {uploadMsg&&<span style={{fontSize:12,fontWeight:700,color:'#166534',background:'#dcfce7',padding:'3px 10px',borderRadius:6}}>✓ {uploadMsg}</span>}
           </div>
 
           {/* ── Previsione fine vita ── */}

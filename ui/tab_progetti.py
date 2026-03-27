@@ -1660,24 +1660,64 @@ class TabProgetti:
         def _carica():
             files = fd.askopenfilenames(title="Carica file MPF",
                                          filetypes=[("MPF","*.MPF *.mpf"),("Tutti","*.*")])
+            nuovi = 0; aggiornati = 0
             for fpath in files:
                 fn = os.path.basename(fpath)
-                if not any(p.get("filename")==fn for p in programs):
-                    is_ipm = "_IPM_" in fn.upper()
-                    tokens = fn.replace(".MPF","").replace(".mpf","").split("_")
-                    ipm_idx = next((i for i,t in enumerate(tokens) if t.upper()=="IPM"), -1)
-                    num_pgm = tokens[ipm_idx+1] if ipm_idx >= 0 and ipm_idx+1 < len(tokens) else tokens[-1]
-                    tempo = parse_tempo_mpf(fpath)  # legge TEMPO dal commento M6
+                # Parsa i metadati dal file
+                is_ipm = "_IPM_" in fn.upper()
+                tokens = fn.replace(".MPF","").replace(".mpf","").split("_")
+                ipm_idx = next((i for i,t in enumerate(tokens) if t.upper()=="IPM"), -1)
+                num_pgm = tokens[ipm_idx+1] if ipm_idx >= 0 and ipm_idx+1 < len(tokens) else tokens[-1]
+                tempo   = parse_tempo_mpf(fpath)
+                # Parsa anche utensile e operazione dal file
+                utensile_new, tipo_op_new, diametro_new = "", "", ""
+                try:
+                    with open(fpath, encoding="utf-8", errors="ignore") as f:
+                        content = f.read()
+                    for line in content.splitlines():
+                        if "TOOL COMMENT:" in line.upper() and not utensile_new:
+                            utensile_new = line.split("TOOL COMMENT:")[-1].strip()
+                        if "DIAMETER:" in line.upper() and not diametro_new:
+                            import re as _re
+                            m = _re.search(r"DIAMETER:\s*([\d.]+)", line, _re.IGNORECASE)
+                            if m: diametro_new = m.group(1)
+                        # Prima riga commento operazione (N7; SGROSSATURA...)
+                        import re as _re
+                        if _re.match(r"N\d+;", line) and not tipo_op_new:
+                            skip = ["DIAMETER","TOOL COMMENT","CIMATRON","DOCUMENTO","UTENTE","POST","REVISIONE","DATA","N.UT"]
+                            txt = line.split(";",1)[-1].strip() if ";" in line else ""
+                            if txt and not any(s in txt.upper() for s in skip) and len(txt) > 3:
+                                tipo_op_new = txt
+                except Exception:
+                    pass
+
+                existing = next((p for p in programs if p.get("filename")==fn), None)
+                if existing:
+                    # Aggiorna metadati, mantieni stato/tempi/operatore
+                    existing["utensile"]     = utensile_new or existing.get("utensile","")
+                    existing["diametro"]     = diametro_new or existing.get("diametro","")
+                    existing["tipoOp"]       = tipo_op_new  or existing.get("tipoOp","")
+                    existing["tempoStimato"] = tempo or existing.get("tempoStimato","")
+                    existing["numPgm"]       = num_pgm
+                    aggiornati += 1
+                else:
                     programs.append({
-                        "id":uid(),"filename":fn,
-                        "numPgm":num_pgm,
+                        "id":uid(),"filename":fn,"numPgm":num_pgm,
                         "tipoGruppo":"ipm" if is_ipm else "fresatura",
-                        "utensile":"","diametro":"","tipoOp":"","dataPost":"",
-                        "stato":"da_fare","operatore":"","tempoStimato":tempo or "",
+                        "utensile":utensile_new,"diametro":diametro_new,
+                        "tipoOp":tipo_op_new,"dataPost":"",
+                        "stato":"da_fare","operatore":"",
+                        "tempoStimato":tempo or "",
                         "tempoInizio":None,"tempoFine":None,
                     })
+                    nuovi += 1
             task["programs"] = programs
             self._save_project(project)
+            if aggiornati:
+                msg = []
+                if nuovi: msg.append(f"{nuovi} nuovi")
+                if aggiornati: msg.append(f"{aggiornati} aggiornati")
+                mb.showinfo("Caricamento completato", " · ".join(msg))
 
         tk.Button(ph, text="📂 Carica .MPF", command=_carica,
                   font=("Inter",9,"bold"), fg="#fff", bg=TC["blue"],

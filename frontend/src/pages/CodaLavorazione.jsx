@@ -498,13 +498,6 @@ export default function CodaLavorazione() {
             const cardBg     = isCompleto ? "#dcfce7" : isAvviato ? "#dbeafe" : isEmpty ? "#F8F7F5" : s.bg;
             const cardBorder = isCompleto ? "#16a34a" : isAvviato ? "#1D5FAD" : isActive ? "#f59e0b" : isEmpty ? "#E8E6E0" : s.border;
             const cardFg     = isCompleto ? "#14532d" : isAvviato ? "#0d2d5e" : isEmpty ? "#B0ADA4" : s.fg;
-            const proj     = progettiPallet[p.id];
-            const isAvviato = proj && proj.in_macchina > 0 && proj.pct < 100;
-            const isCompleto = proj && proj.pct === 100;
-            // Colori semantici: blu=avviato, verde=completo, giallo=grezzo
-            const cardBg     = isCompleto ? "#dcfce7" : isAvviato ? "#dbeafe" : isEmpty ? "#F8F7F5" : s.bg;
-            const cardBorder = isCompleto ? "#16a34a" : isAvviato ? "#1D5FAD" : isActive ? "#f59e0b" : isEmpty ? "#E8E6E0" : s.border;
-            const cardFg     = isCompleto ? "#14532d" : isAvviato ? "#0d2d5e" : isEmpty ? "#B0ADA4" : s.fg;
 
             return (
               <div

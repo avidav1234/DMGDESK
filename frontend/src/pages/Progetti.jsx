@@ -190,7 +190,12 @@ function ProgramRow({pgm,gruppo,onStato,onOperatore,onTempo,onRemove,toolStatus,
             {pgm.tempoFine&&<span style={{fontSize:10,color:'#166534',fontFamily:'monospace',whiteSpace:'nowrap'}}>■ {pgm.tempoFine}</span>}
           </div>
         )}
-        <div onClick={()=>setExpanded(v=>!v)} style={{flexShrink:0,width:32,borderLeft:`1px solid ${T.border}`,alignSelf:'stretch',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',color:T.textMuted,fontSize:11}}>{expanded?'▲':'▼'}</div>
+        {/* Tempo stimato + data post — sempre visibili */}
+        <div style={{flexShrink:0,padding:'0 8px',borderLeft:`1px solid ${T.border}`,alignSelf:'stretch',display:'flex',flexDirection:'column',justifyContent:'center',minWidth:60,alignItems:'flex-end'}}>
+          {pgm.tempoStimato&&<span style={{fontSize:11,fontWeight:700,color:'#475569',whiteSpace:'nowrap'}}>⏱ {pgm.tempoStimato}m</span>}
+          {pgm.dataPost&&<span style={{fontSize:9,color:T.textMuted,fontFamily:'monospace',whiteSpace:'nowrap'}}>📅 {pgm.dataPost}</span>}
+        </div>
+        <div onClick={()=>setExpanded(v=>!v)} style={{flexShrink:0,width:28,borderLeft:`1px solid ${T.border}`,alignSelf:'stretch',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',color:T.textMuted,fontSize:11}}>{expanded?'▲':'▼'}</div>
       </div>
       {expanded&&(
         <div style={{padding:'10px 14px',background:T.surface2,borderTop:`1px solid ${T.border}`,

@@ -462,19 +462,13 @@ async def check_utensili_progetto(project_id: str):
 
 def _calcola_previsione_vita(projects: list, tools_db: dict, classify_fn) -> list:
     """
-    Per ogni utensile con vita_rimanente (minuti), simula il consumo
+    Per ogni utensile con vita_rimanente, simula il consumo cumulato
     scorrendo i programmi 'da_fare' in ordine e trova il punto di rottura.
 
-    Restituisce lista di alert:
-    {
-      alias, vita_rimanente, consumo_totale, programmi_analizzati,
-      programma_critico: {progetto, fase, filename, numPgm, minuto_rottura},
-      surplus_mancante,   # minuti che mancano
-      ok: bool
-    }
+    life_remaining dal Sinumerik 840D è in SECONDI → convertiamo in minuti.
+    TEMPO nei file MPF è in MINUTI.
     """
-    # Raccoglie tutti i programmi da fare con tempo stimato, raggruppati per utensile
-    # Struttura: alias → [ {progetto, fase, filename, numPgm, tempo} ]
+    # Raccoglie programmi da fare con tempo stimato, per utensile
     utensile_queue: dict[str, list] = {}
 
     for project in projects:
@@ -494,7 +488,7 @@ def _calcola_previsione_vita(projects: list, tools_db: dict, classify_fn) -> lis
                     if not alias or not tempo:
                         continue
                     try:
-                        tempo_int = int(tempo)
+                        tempo_min = int(tempo)
                     except (ValueError, TypeError):
                         continue
                     if alias not in utensile_queue:
@@ -505,53 +499,60 @@ def _calcola_previsione_vita(projects: list, tools_db: dict, classify_fn) -> lis
                         "filename":  pgm.get("filename", ""),
                         "numPgm":    pgm.get("numPgm", ""),
                         "stato":     pgm.get("stato", "da_fare"),
-                        "tempo":     tempo_int,
+                        "tempo":     tempo_min,
                     })
 
     alerts = []
     for alias, pgm_list in utensile_queue.items():
-        # Trova vita rimanente in minuti (life_percent è già in minuti)
-        vita_rim = None
+        # Trova vita rimanente: life_remaining è in SECONDI → converti in minuti
+        vita_rim_min = None
         abilitati = [
             t for t in tools_db.values()
             if (t.get("name") or "").upper().strip() == alias
             and t.get("is_enabled", True)
             and not t.get("is_worn", False)
         ]
-        if abilitati:
-            vita_rim = max(
-                (t.get("life_percent") or 0) for t in abilitati
-            )
+        if not abilitati:
+            continue
 
-        if vita_rim is None:
-            continue  # utensile non in macchina — già gestito da da_montare
+        # Usa il gemello con più vita rimanente
+        best = max(abilitati, key=lambda t: t.get("life_remaining") or 0)
+        life_rem_sec = best.get("life_remaining")
+        life_tot_sec = best.get("life_total")
+
+        if life_rem_sec is not None and life_rem_sec > 0:
+            vita_rim_min = round(life_rem_sec / 60)
+        elif life_tot_sec and best.get("life_percent") is not None:
+            # Fallback: stima da percentuale × vita totale
+            vita_rim_min = round((best["life_percent"] / 100) * life_tot_sec / 60)
+
+        if vita_rim_min is None or vita_rim_min <= 0:
+            continue
 
         # Simula consumo in ordine
         consumo = 0
         critico = None
         for pgm in pgm_list:
             consumo += pgm["tempo"]
-            if consumo > vita_rim and critico is None:
+            if consumo > vita_rim_min and critico is None:
+                min_nel_pgm = vita_rim_min - (consumo - pgm["tempo"])
                 critico = {
                     **pgm,
-                    "minuto_rottura": vita_rim - (consumo - pgm["tempo"]),
+                    "minuto_rottura": max(0, min_nel_pgm),
                     "consumo_al_punto": consumo,
                 }
 
-        total_consumo = consumo
-        ok = critico is None
-
-        if not ok:
+        if critico:
             alerts.append({
-                "alias":              alias,
-                "vita_rimanente":     vita_rim,
-                "consumo_totale":     total_consumo,
-                "surplus_mancante":   total_consumo - vita_rim,
-                "programmi_n":        len(pgm_list),
-                "programma_critico":  critico,
-                "ok":                 False,
+                "alias":             alias,
+                "vita_rimanente":    vita_rim_min,
+                "vita_rimanente_pct": round(best.get("life_percent") or 0, 1),
+                "consumo_totale":    consumo,
+                "surplus_mancante":  consumo - vita_rim_min,
+                "programmi_n":       len(pgm_list),
+                "programma_critico": critico,
+                "ok":                False,
             })
-        # Non includiamo gli ok per non sovraccaricare — solo i problematici
 
     return sorted(alerts, key=lambda x: x["surplus_mancante"], reverse=True)
 

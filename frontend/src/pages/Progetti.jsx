@@ -342,7 +342,12 @@ function FresaturaPanel({task,onUpdateTask,toolsDB,projectId}){
       const utensili=Object.values(toolsDB).filter(t=>
         (t.name||'').toUpperCase().trim()===alias && t.is_enabled && !t.is_worn)
       if(!utensili.length) continue
-      const vitaRim=Math.max(...utensili.map(t=>t.life_percent||0))
+      // life_remaining è in secondi (Sinumerik 840D) → converti in minuti
+      // fallback a life_percent% × life_total/60 se life_remaining manca
+      const vitaRimSec=Math.max(...utensili.map(t=>t.life_remaining||0))
+      const vitaRim=vitaRimSec>0
+        ? Math.round(vitaRimSec/60)
+        : Math.round((Math.max(...utensili.map(t=>t.life_percent||0))/100)*(Math.max(...utensili.map(t=>t.life_total||0))/60))
       let consumo=0, critico=null
       for(const p of pgms){
         consumo+=parseInt(p.tempoStimato)||0

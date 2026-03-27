@@ -970,21 +970,33 @@ async def riparsing_utensili(project_id: str):
                 if not fpath:
                     continue
                 try:
+                    import re as _re
                     testo = open(fpath, encoding="utf-8", errors="replace").read()
-                    # Cerca TOOL COMMENT nel header Cimatron
-                    for line in testo.splitlines():
-                        if "TOOL COMMENT:" in line.upper():
-                            alias = line.split("TOOL COMMENT:")[-1].strip()
-                            if alias:
-                                pgm["utensile"] = alias.upper()
-                                aggiornati += 1
+                    lines_mpf = testo.splitlines()
+                    # Trova M6 e risale cercando T = "alias" nelle righe precedenti
+                    alias = None
+                    for idx_l, line in enumerate(lines_mpf):
+                        if _re.search(r'\bM6\b', line):
+                            for j in range(idx_l - 1, max(-1, idx_l - 6), -1):
+                                m = _re.search(r'T\s*=\s*"([^"]+)"', lines_mpf[j])
+                                if m:
+                                    alias = m.group(1).strip().upper()
+                                    break
                             break
-                    # Fallback: usa parse_mpf_testo (T= + M6)
-                    if not pgm.get("utensile"):
+                    # Fallback a TOOL COMMENT
+                    if not alias:
+                        for line in lines_mpf:
+                            if "TOOL COMMENT:" in line.upper():
+                                alias = line.split("TOOL COMMENT:")[-1].strip().upper()
+                                break
+                    # Fallback a parse_mpf_testo
+                    if not alias:
                         aliases = parse_mpf_testo(testo)
                         if aliases:
-                            pgm["utensile"] = sorted(aliases)[0]
-                            aggiornati += 1
+                            alias = sorted(aliases)[0]
+                    if alias:
+                        pgm["utensile"] = alias
+                        aggiornati += 1
                 except Exception:
                     pass
 

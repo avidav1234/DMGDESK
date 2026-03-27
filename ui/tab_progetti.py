@@ -1678,23 +1678,34 @@ class TabProgetti:
                 # Parsa anche utensile e operazione dal file
                 utensile_new, tipo_op_new, diametro_new, data_post_new = "", "", "", ""
                 try:
+                    import re as _re
                     with open(fpath, encoding="utf-8", errors="ignore") as f:
                         content = f.read()
-                    for line in content.splitlines():
-                        if "TOOL COMMENT:" in line.upper() and not utensile_new:
-                            utensile_new = line.split("TOOL COMMENT:")[-1].strip()
+                    lines_mpf = content.splitlines()
+                    # Trova M6 e risale cercando T = "alias" nelle righe precedenti
+                    for idx_l, line in enumerate(lines_mpf):
+                        if _re.search(r'\bM6\b', line):
+                            for j in range(idx_l - 1, max(-1, idx_l - 6), -1):
+                                m = _re.search(r'T\s*=\s*"([^"]+)"', lines_mpf[j])
+                                if m:
+                                    utensile_new = m.group(1).strip()
+                                    break
+                            break
+                    # Fallback a TOOL COMMENT
+                    if not utensile_new:
+                        for line in lines_mpf:
+                            if "TOOL COMMENT:" in line.upper():
+                                utensile_new = line.split("TOOL COMMENT:")[-1].strip()
+                                break
+                    for line in lines_mpf:
                         if "DIAMETER:" in line.upper() and not diametro_new:
-                            import re as _re
                             m = _re.search(r"DIAMETER:\s*([\d.]+)", line, _re.IGNORECASE)
                             if m: diametro_new = m.group(1)
-                        # Prima riga commento operazione (N7; SGROSSATURA...)
-                        import re as _re
                         if _re.match(r"N\d+;", line) and not tipo_op_new:
                             skip = ["DIAMETER","TOOL COMMENT","CIMATRON","DOCUMENTO","UTENTE","POST","REVISIONE","DATA","N.UT"]
                             txt = line.split(";",1)[-1].strip() if ";" in line else ""
                             if txt and not any(s in txt.upper() for s in skip) and len(txt) > 3:
                                 tipo_op_new = txt
-                        # DATA ESECUZIONE POST: "9/3/2026 - 13:16:35"
                         if "DATA ESECUZIONE POST" in line.upper() and ":" in line:
                             raw = line.split(":")[-3] + ":" + line.split(":")[-2] + ":" + line.split(":")[-1] if line.count(":") >= 2 else line.split(":",1)[-1]
                             raw = raw.strip()

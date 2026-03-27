@@ -68,8 +68,22 @@ function parseMpfFile(filename,content){
   const get=(label)=>{const l=lines.find(l=>l.includes(label));return l?(l.indexOf(':')>=0?l.slice(l.indexOf(':')+1).trim():''):''}
   const opLine=lines.find(l=>/N\d+;/.test(l)&&!l.includes('DIAMETER')&&!l.includes('TOOL COMMENT')&&!l.includes('CIMATRON')&&!l.includes('DOCUMENTO')&&!l.includes('UTENTE')&&!l.includes('POST')&&!l.includes('REVISIONE')&&!l.includes('DATA')&&!l.includes('N.UT')&&l.includes(';')&&l.replace(/N\d+;\s*/,'').trim().length>3)
   const tipoOp=opLine?opLine.replace(/N\d+;\s*/,'').trim():''
-  const toolLine=lines.find(l=>l.includes('TOOL COMMENT:'))
-  const utensile=toolLine?toolLine.replace(/.*TOOL COMMENT:\s*/,'').trim():''
+  // Utensile: legge T="alias" dalla riga immediatamente prima di M6
+  // Più affidabile di TOOL COMMENT che è un commento Cimatron potenzialmente stale
+  let utensile = ''
+  const m6Idx = lines.findIndex(l => /\bM6\b/.test(l))
+  if (m6Idx > 0) {
+    // Risale fino a 5 righe prima di M6 cercando T = "..."
+    for (let i = m6Idx - 1; i >= Math.max(0, m6Idx - 5); i--) {
+      const m = lines[i].match(/T\s*=\s*"([^"]+)"/)
+      if (m) { utensile = m[1].trim(); break }
+    }
+  }
+  // Fallback a TOOL COMMENT se T= non trovato
+  if (!utensile) {
+    const toolLine = lines.find(l => l.includes('TOOL COMMENT:'))
+    if (toolLine) utensile = toolLine.replace(/.*TOOL COMMENT:\s*/, '').trim()
+  }
   const diaLine=lines.find(l=>l.includes('DIAMETER:'))
   const diametro=diaLine?diaLine.replace(/.*DIAMETER:\s*/,'').replace(/CORNER.*/,'').trim():''
   // DATA ESECUZIONE POST: "9/3/2026 - 13:16:35" → "09/03/2026 13:16"

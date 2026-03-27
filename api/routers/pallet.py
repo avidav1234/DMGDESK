@@ -441,3 +441,30 @@ async def get_pallet_disponibili():
             and not p.get("progetto_id")
         ]
     }
+
+
+@router.get("/ordine-esecuzione")
+async def get_ordine_esecuzione():
+    """Legge l'ordine di esecuzione pallet dalla coda macchina."""
+    config = carica_configurazione()
+    state  = _load(config)
+    return {
+        "ordine": state.get("ordine_esecuzione", []),
+        "pallet": state.get("pallet", [])
+    }
+
+
+@router.put("/ordine-esecuzione")
+async def set_ordine_esecuzione(body: dict):
+    """
+    Salva l'ordine di esecuzione pallet.
+    Body: { "ordine": [3, 4, 5] }  — lista di numeri pallet in ordine
+    """
+    config = carica_configurazione()
+    state  = _load(config)
+    ordine = body.get("ordine", [])
+    # Valida: solo numeri pallet validi (1-6)
+    ordine = [int(n) for n in ordine if 1 <= int(n) <= N_PALLET]
+    state["ordine_esecuzione"] = ordine
+    _save(config, state)
+    return {"ok": True, "ordine": ordine}

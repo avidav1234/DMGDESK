@@ -3,6 +3,197 @@ import { useState, useEffect, useRef } from 'react'
 import { api } from '../api/client'
 import { Loader, SectionHeader } from '../components/UI'
 
+// pages/Macchina.jsx — V16: solo Sync TOA/TMA + Confronto MPF
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { api } from '../api/client'
+import { Loader, SectionHeader } from '../components/UI'
+
+// ── Coda Esecuzione con drag&drop ────────────────────────────────────────────
+function CodaEsecuzione({ setupData }) {
+  const [pallet, setPallet]     = useState([])
+  const [ordine, setOrdine]     = useState([])   // [3,4,5] — numeri pallet in coda
+  const [saving, setSaving]     = useState(false)
+  const dragIdx = useRef(null)
+
+  useEffect(() => {
+    fetch('/api/pallet/ordine-esecuzione')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (!d) return
+        setPallet(d.pallet || [])
+        setOrdine(d.ordine || [])
+      })
+  }, [])
+
+  // Pallet assegnati non ancora in ordine + in ordine
+  const assegnati = pallet.filter(p => p.progetto_id)
+  const inCoda    = ordine.map(n => assegnati.find(p => p.numero === n)).filter(Boolean)
+  const fuoriCoda = assegnati.filter(p => !ordine.includes(p.numero))
+
+  async function salvaOrdine(nuovoOrdine) {
+    setOrdine(nuovoOrdine)
+    setSaving(true)
+    try {
+      await fetch('/api/pallet/ordine-esecuzione', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ordine: nuovoOrdine })
+      })
+    } finally { setSaving(false) }
+  }
+
+  function aggiungiACoda(numPallet) {
+    if (!ordine.includes(numPallet))
+      salvaOrdine([...ordine, numPallet])
+  }
+
+  function rimuoviDaCoda(numPallet) {
+    salvaOrdine(ordine.filter(n => n !== numPallet))
+  }
+
+  // Drag & drop
+  function onDragStart(e, idx) {
+    dragIdx.current = idx
+    e.dataTransfer.effectAllowed = 'move'
+  }
+  function onDragOver(e, idx) {
+    e.preventDefault()
+    if (dragIdx.current === null || dragIdx.current === idx) return
+    const newOrdine = [...inCoda]
+    const [moved] = newOrdine.splice(dragIdx.current, 1)
+    newOrdine.splice(idx, 0, moved)
+    dragIdx.current = idx
+    setOrdine(newOrdine.map(p => p.numero))
+  }
+  function onDrop() {
+    salvaOrdine(ordine)
+    dragIdx.current = null
+  }
+
+  const fmtTempo = (min) => {
+    if (!min) return null
+    const h = Math.floor(min / 60), m = min % 60
+    return h > 0 ? `${h}h${m > 0 ? ` ${m}m` : ''}` : `${m}m`
+  }
+
+  const prev = setupData?.previsione_vita || []
+
+  // Colori pallet
+  const PAL_COLOR = ['#0d2d5e','#1D5FAD','#2563eb','#7c3aed','#0891b2','#059669']
+
+  if (!assegnati.length) return null
+
+  return (
+    <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '14px 16px', marginBottom: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+        <span style={{ fontSize: 14 }}>📋</span>
+        <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '0.04em' }}>CODA ESECUZIONE</span>
+        {saving && <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>salvataggio…</span>}
+        {prev.length > 0 && (
+          <span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 700, color: '#e65100', background: '#fff3e0', padding: '2px 10px', borderRadius: 20, border: '1px solid #ffb74d' }}>
+            🔮 {prev.length} utensil{prev.length === 1 ? 'e' : 'i'} a rischio
+          </span>
+        )}
+      </div>
+
+      {/* Zona coda ordinata */}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: fuoriCoda.length ? 10 : 0 }}>
+        {inCoda.map((p, idx) => {
+          const col = PAL_COLOR[(p.numero - 1) % PAL_COLOR.length]
+          const alert = prev.find(a => a.programma_critico?.progetto_id === p.progetto_id || a.programma_critico?.progetto === p.progetto_nome)
+          return (
+            <div key={p.numero}
+              draggable
+              onDragStart={e => onDragStart(e, idx)}
+              onDragOver={e => onDragOver(e, idx)}
+              onDrop={onDrop}
+              style={{ background: 'var(--bg-card)', border: `2px solid ${col}`, borderRadius: 10,
+                padding: '10px 14px', minWidth: 130, cursor: 'grab', position: 'relative',
+                boxShadow: '0 2px 6px rgba(0,0,0,0.08)', userSelect: 'none' }}>
+              {/* Numero ordine */}
+              <div style={{ position: 'absolute', top: -10, left: 10, background: col, color: '#fff',
+                fontSize: 10, fontWeight: 800, borderRadius: 10, padding: '1px 7px' }}>{idx + 1}°</div>
+              {/* Rimuovi */}
+              <button onClick={() => rimuoviDaCoda(p.numero)}
+                style={{ position: 'absolute', top: 4, right: 6, background: 'none', border: 'none',
+                  cursor: 'pointer', color: 'var(--text-dim)', fontSize: 13, lineHeight: 1 }}>✕</button>
+              <div style={{ fontSize: 10, color: col, fontWeight: 700, marginBottom: 2 }}>P{p.numero}</div>
+              <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
+                {p.progetto_nome || '—'}
+              </div>
+              {alert && (
+                <div style={{ fontSize: 10, color: '#e65100', fontWeight: 700, marginTop: 4 }}>
+                  🔮 {alert.alias} a rischio
+                </div>
+              )}
+            </div>
+          )
+        })}
+        {inCoda.length === 0 && (
+          <div style={{ fontSize: 12, color: 'var(--text-dim)', padding: '8px 12px' }}>
+            Nessun progetto in coda — aggiungi i pallet assegnati ↓
+          </div>
+        )}
+      </div>
+
+      {/* Pallet assegnati ma fuori coda */}
+      {fuoriCoda.length > 0 && (
+        <div style={{ borderTop: '1px solid var(--border)', paddingTop: 8 }}>
+          <div style={{ fontSize: 10, color: 'var(--text-dim)', fontWeight: 700, letterSpacing: '0.06em', marginBottom: 6 }}>
+            NON IN CODA — clicca per aggiungere
+          </div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {fuoriCoda.map(p => {
+              const col = PAL_COLOR[(p.numero - 1) % PAL_COLOR.length]
+              return (
+                <button key={p.numero} onClick={() => aggiungiACoda(p.numero)}
+                  style={{ background: 'var(--bg-hover)', border: `1.5px dashed ${col}44`,
+                    borderRadius: 8, padding: '6px 12px', cursor: 'pointer', fontSize: 12,
+                    color: 'var(--text-secondary)', fontWeight: 600 }}>
+                  + P{p.numero} {p.progetto_nome}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Previsione vita cross-progetto */}
+      {prev.length > 0 && (
+        <div style={{ borderTop: '1px solid #ffb74d', marginTop: 12, paddingTop: 10 }}>
+          <div style={{ fontSize: 11, fontWeight: 800, color: '#e65100', marginBottom: 8 }}>🔮 PREVISIONE FINE VITA — ordine coda attuale</div>
+          {prev.map((a, i) => {
+            const cr = a.programma_critico
+            const pct = Math.round((a.vita_rimanente / a.consumo_totale) * 100)
+            return (
+              <div key={i} style={{ background: '#fff8f0', border: '1px solid #ffcc80', borderRadius: 8, padding: '8px 12px', marginBottom: 6 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+                  <span style={{ fontFamily: 'monospace', fontWeight: 800, color: '#bf360c', fontSize: 12 }}>{a.alias}</span>
+                  <div style={{ flex: 1, height: 5, background: '#ffe0b2', borderRadius: 3, overflow: 'hidden' }}>
+                    <div style={{ height: 5, width: `${Math.min(pct, 100)}%`, background: pct < 50 ? '#f44336' : '#ff9800', borderRadius: 3 }} />
+                  </div>
+                  <span style={{ fontSize: 11, color: '#e65100', fontWeight: 700, flexShrink: 0 }}>{a.vita_rimanente}min / {a.consumo_totale}min</span>
+                </div>
+                {cr && (
+                  <div style={{ fontSize: 11, color: '#5d4037' }}>
+                    <span style={{ fontWeight: 700, color: '#bf360c' }}>⚠ Finisce durante </span>
+                    <span style={{ fontFamily: 'monospace', fontWeight: 700 }}>{cr.progetto}</span>
+                    <span> pgm <span style={{ fontFamily: 'monospace' }}>{cr.numPgm}</span></span>
+                    <span style={{ color: '#9a3412' }}> — mancano {a.surplus_mancante}min</span>
+                    <span style={{ display: 'block', fontWeight: 700, color: '#e65100', marginTop: 2 }}>
+                      💡 Sostituire prima di iniziare {cr.progetto}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function LifeBar({ pct }) {
   if (pct === null || pct === undefined)
     return <span style={{ color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>—</span>
@@ -292,6 +483,9 @@ export default function Macchina() {
     <>
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 12, padding: '12px 20px 0' }}>
       <SectionHeader title="Utensili in macchina" subtitle="" />
+
+      {/* Coda Esecuzione */}
+      <CodaEsecuzione setupData={setupData} />
 
       {/* Toolbar: MPF a sinistra (grande), sync a destra (piccolo) */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

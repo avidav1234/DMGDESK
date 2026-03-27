@@ -460,7 +460,128 @@ async def check_utensili_progetto(project_id: str):
     return {"project_id": project_id, "utensili": result, "summary": summary}
 
 
-def _calcola_previsione_vita(projects: list, tools_db: dict, classify_fn) -> list:
+def _calcola_previsione_vita(projects: list, tools_db: dict, classify_fn, ordine_pallet: list = None) -> list:
+    """
+    Per ogni utensile con vita_rimanente, simula il consumo cumulato
+    scorrendo i progetti nell'ordine della coda macchina (ordine_pallet),
+    poi i programmi di ciascun progetto in ordine numerico.
+
+    life_remaining dal Sinumerik 840D è in MINUTI.
+    TEMPO nei file MPF è in MINUTI.
+    """
+    # Costruisce mappa progetto_id → lista programmi da fare ordinati numericamente
+    proj_map = {}
+    for project in projects:
+        p_id   = project.get("id")
+        p_name = project.get("name", "?")
+        pgm_list = []
+        for step in project.get("steps", []):
+            s_title = step.get("title", "")
+            for task in step.get("tasks", []):
+                if task.get("text", "").strip().lower() != "fresatura":
+                    continue
+                for pgm in task.get("programs", []):
+                    if pgm.get("tipoGruppo") == "ipm": continue
+                    if pgm.get("stato") == "completato": continue
+                    alias = (pgm.get("utensile") or "").upper().strip()
+                    try: tempo = int(pgm.get("tempoStimato") or 0)
+                    except: tempo = 0
+                    if not alias or not tempo: continue
+                    pgm_list.append({
+                        "progetto_id": p_id,
+                        "progetto":    p_name,
+                        "fase":        s_title,
+                        "filename":    pgm.get("filename", ""),
+                        "numPgm":      pgm.get("numPgm", ""),
+                        "stato":       pgm.get("stato", "da_fare"),
+                        "tempo":       tempo,
+                        "alias":       alias,
+                    })
+        # Ordina numericamente per numPgm
+        pgm_list.sort(key=lambda p: p["numPgm"].zfill(6))
+        proj_map[p_id] = pgm_list
+
+    # Costruisce la sequenza globale rispettando l'ordine pallet
+    # ordine_pallet = [3, 4, 5] → pallet 3 prima, poi 4, poi 5
+    sequenza_globale = []
+    if ordine_pallet:
+        # Prima i progetti in coda nell'ordine definito
+        progetti_in_coda = {p.get("id"): p for p in projects}
+        pallet_progetto = {}  # numero_pallet → progetto_id (dai progetti stessi)
+        for p in projects:
+            pn = p.get("pallet_numero")
+            if pn: pallet_progetto[pn] = p.get("id")
+
+        for num_pallet in ordine_pallet:
+            pid = pallet_progetto.get(num_pallet)
+            if pid and pid in proj_map:
+                sequenza_globale.extend(proj_map[pid])
+        # Poi i progetti non in coda (senza ordine definito)
+        pid_in_coda = set(pallet_progetto.get(n) for n in ordine_pallet if pallet_progetto.get(n))
+        for project in projects:
+            if project.get("id") not in pid_in_coda:
+                sequenza_globale.extend(proj_map.get(project.get("id"), []))
+    else:
+        # Fallback: ordine array progetti
+        for project in projects:
+            sequenza_globale.extend(proj_map.get(project.get("id"), []))
+
+    if not sequenza_globale:
+        return []
+
+    # Raggruppa la sequenza globale per utensile mantenendo l'ordine
+    from collections import defaultdict
+    utensile_queue: dict[str, list] = defaultdict(list)
+    for pgm in sequenza_globale:
+        utensile_queue[pgm["alias"]].append(pgm)
+
+    alerts = []
+    for alias, pgm_list in utensile_queue.items():
+        abilitati = [
+            t for t in tools_db.values()
+            if (t.get("name") or "").upper().strip() == alias
+            and t.get("is_enabled", True)
+            and not t.get("is_worn", False)
+        ]
+        if not abilitati: continue
+
+        best = max(abilitati, key=lambda t: t.get("life_remaining") or 0)
+        life_rem = best.get("life_remaining")
+        life_tot = best.get("life_total")
+
+        if life_rem is not None and life_rem > 0:
+            vita_rim_min = round(life_rem)
+        elif life_tot and best.get("life_percent") is not None:
+            vita_rim_min = round((best["life_percent"] / 100) * life_tot)
+        else:
+            continue
+
+        if vita_rim_min <= 0: continue
+
+        consumo = 0
+        critico = None
+        for pgm in pgm_list:
+            consumo += pgm["tempo"]
+            if consumo > vita_rim_min and critico is None:
+                critico = {
+                    **pgm,
+                    "minuto_rottura":   max(0, vita_rim_min - (consumo - pgm["tempo"])),
+                    "consumo_al_punto": consumo,
+                }
+
+        if critico:
+            alerts.append({
+                "alias":              alias,
+                "vita_rimanente":     vita_rim_min,
+                "vita_rimanente_pct": round(best.get("life_percent") or 0, 1),
+                "consumo_totale":     consumo,
+                "surplus_mancante":   consumo - vita_rim_min,
+                "programmi_n":        len(pgm_list),
+                "programma_critico":  critico,
+                "ok":                 False,
+            })
+
+    return sorted(alerts, key=lambda x: x["surplus_mancante"], reverse=True)
     """
     Per ogni utensile con vita_rimanente, simula il consumo cumulato
     scorrendo i programmi 'da_fare' in ordine e trova il punto di rottura.
@@ -575,6 +696,20 @@ async def get_analisi_setup():
     projects  = [p for p in data_proj.get("projects", [])
                  if not p.get("archived")]
 
+    # Carica pallet_state per ordine_esecuzione e associazione pallet↔progetto
+    try:
+        from api.routers.pallet import _load as _load_pallet
+        pallet_state_data = _load_pallet(config)
+        # Inietta pallet_numero nei progetti
+        for pal in pallet_state_data.get("pallet", []):
+            pid = pal.get("progetto_id")
+            if pid:
+                for p in projects:
+                    if p.get("id") == pid:
+                        p["pallet_numero"] = pal["numero"]
+    except Exception:
+        pallet_state_data = {}
+
     tools_folder = (config.get("tools_toa_folder") or "").strip()
     tools_db, sync_time = {}, None
     if tools_folder:
@@ -671,7 +806,10 @@ async def get_analisi_setup():
         "da_montare":     da_montare,
         "fin_vita":       sorted(fin_vita, key=lambda x: x.get("life_percent") or 0),
         "sync_time":      sync_time,
-        "previsione_vita": _calcola_previsione_vita(projects, tools_db, _ct),
+        "previsione_vita": _calcola_previsione_vita(
+            projects, tools_db, _ct,
+            ordine_pallet=pallet_state_data.get("ordine_esecuzione", [])
+        ),
     }
 
 

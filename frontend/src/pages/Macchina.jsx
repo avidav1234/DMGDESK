@@ -9,7 +9,7 @@ import { api } from '../api/client'
 import { Loader, SectionHeader } from '../components/UI'
 
 // ── Coda Esecuzione con drag&drop ────────────────────────────────────────────
-function CodaEsecuzione({ setupData }) {
+function CodaEsecuzione({ setupData, onOrdineChanged }) {
   const [pallet, setPallet]     = useState([])
   const [ordine, setOrdine]     = useState([])   // [3,4,5] — numeri pallet in coda
   const [saving, setSaving]     = useState(false)
@@ -39,6 +39,8 @@ function CodaEsecuzione({ setupData }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ordine: nuovoOrdine })
       })
+      // Ricalcola previsione vita con nuovo ordine
+      if (onOrdineChanged) onOrdineChanged()
     } finally { setSaving(false) }
   }
 
@@ -485,7 +487,7 @@ export default function Macchina() {
       <SectionHeader title="Utensili in macchina" subtitle="" />
 
       {/* Coda Esecuzione */}
-      <CodaEsecuzione setupData={setupData} />
+      <CodaEsecuzione setupData={setupData} onOrdineChanged={loadSetupAnalisi} />
 
       {/* Toolbar: MPF a sinistra (grande), sync a destra (piccolo) */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

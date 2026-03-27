@@ -262,6 +262,7 @@ class TabMacchina:
         self._check_result = None
         self._create_ui()
         self._load_existing_db()
+        self._load_coda()
 
     # ── UI ───────────────────────────────────────────────────────────────────
 
@@ -351,6 +352,24 @@ class TabMacchina:
             font=get_font("small"), text_color=COLOR_TEXT_SECONDARY,
             justify="left", anchor="w")
         self.lbl_mpf_list.pack(padx=10, pady=4, anchor="w")
+
+        # ── Sezione Coda Esecuzione ──────────────────────────────────────────
+        self.frame_coda = ctk.CTkFrame(self.parent, fg_color=COLOR_SURFACE, corner_radius=8)
+        self.frame_coda.pack(fill="x", padx=8, pady=(4, 4))
+        self._coda_ordine = []   # [3, 4, 5] — numeri pallet in coda
+
+        coda_hdr = ctk.CTkFrame(self.frame_coda, fg_color="transparent")
+        coda_hdr.pack(fill="x", padx=8, pady=(8, 4))
+        ctk.CTkLabel(coda_hdr, text="📋  CODA ESECUZIONE",
+                     font=get_font("medium", bold=True),
+                     text_color=COLOR_PRIMARY).pack(side="left")
+        self.lbl_coda_status = ctk.CTkLabel(coda_hdr, text="",
+                                             font=get_font("small"),
+                                             text_color=COLOR_TEXT_SECONDARY)
+        self.lbl_coda_status.pack(side="left", padx=8)
+
+        self.frame_coda_body = ctk.CTkFrame(self.frame_coda, fg_color="transparent")
+        self.frame_coda_body.pack(fill="x", padx=8, pady=(0, 8))
 
         # Frame risultati confronto
         self.frame_check = ctk.CTkFrame(self.parent, fg_color=COLOR_SURFACE, corner_radius=8)
@@ -1024,3 +1043,109 @@ class TabMacchina:
 
     def refresh(self):
         self._load_existing_db()
+        self._load_coda()
+
+    def _load_coda(self):
+        """Carica ordine coda dall'API e aggiorna il pannello."""
+        import threading
+        def _worker():
+            try:
+                import urllib.request, json
+                r = urllib.request.urlopen("http://localhost:8000/api/pallet/ordine-esecuzione", timeout=3)
+                data = json.loads(r.read())
+                self._coda_ordine = data.get("ordine", [])
+                self._coda_pallet = data.get("pallet", [])
+                self.parent.after(0, self._render_coda)
+            except Exception:
+                pass
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _render_coda(self):
+        """Renderizza il pannello coda con i pallet in ordine."""
+        import tkinter as tk
+        for w in self.frame_coda_body.winfo_children():
+            w.destroy()
+
+        pallet   = getattr(self, "_coda_pallet", [])
+        ordine   = getattr(self, "_coda_ordine", [])
+        assegnati = [p for p in pallet if p.get("progetto_id")]
+
+        if not assegnati:
+            tk.Label(self.frame_coda_body, text="Nessun progetto assegnato ai pallet",
+                     font=("Inter", 9), fg="#9e9e9e", bg=COLOR_SURFACE).pack(anchor="w")
+            return
+
+        in_coda   = [next((p for p in assegnati if p["numero"] == n), None) for n in ordine]
+        in_coda   = [p for p in in_coda if p]
+        fuori     = [p for p in assegnati if p["numero"] not in ordine]
+
+        # Riga con pallet in coda + frecce su/giù
+        row = tk.Frame(self.frame_coda_body, bg=COLOR_SURFACE)
+        row.pack(fill="x")
+
+        for i, p in enumerate(in_coda):
+            card = tk.Frame(row, bg="#eef4fb",
+                            highlightbackground="#1D5FAD", highlightthickness=1)
+            card.pack(side="left", padx=(0, 6), pady=2)
+            tk.Label(card, text=f"{i+1}°  P{p['numero']}",
+                     font=("Inter", 8, "bold"), fg="#0d2d5e", bg="#eef4fb").pack(side="left", padx=(6,2), pady=4)
+            tk.Label(card, text=p.get("progetto_nome","?"),
+                     font=("Inter", 9, "bold"), fg="#0d2d5e", bg="#eef4fb").pack(side="left", padx=(0,4))
+            # Frecce su/giù
+            btns = tk.Frame(card, bg="#eef4fb")
+            btns.pack(side="left", padx=(0,4))
+            if i > 0:
+                tk.Button(btns, text="◀", font=("Inter",7), fg="#0d2d5e", bg="#eef4fb",
+                          relief="flat", cursor="hand2", padx=2,
+                          command=lambda idx=i: self._sposta_coda(idx, -1)).pack(side="left")
+            if i < len(in_coda) - 1:
+                tk.Button(btns, text="▶", font=("Inter",7), fg="#0d2d5e", bg="#eef4fb",
+                          relief="flat", cursor="hand2", padx=2,
+                          command=lambda idx=i: self._sposta_coda(idx, +1)).pack(side="left")
+            tk.Button(card, text="✕", font=("Inter",7), fg="#9e9e9e", bg="#eef4fb",
+                      relief="flat", cursor="hand2",
+                      command=lambda n=p["numero"]: self._rimuovi_da_coda(n)).pack(side="left", padx=(0,3))
+
+        # Pallet fuori coda
+        if fuori:
+            tk.Label(row, text="+ aggiungi:", font=("Inter",8), fg="#9e9e9e",
+                     bg=COLOR_SURFACE).pack(side="left", padx=(8,4))
+            for p in fuori:
+                tk.Button(row, text=f"P{p['numero']} {p.get('progetto_nome','')}",
+                          font=("Inter",8), fg="#1D5FAD", bg="#e3f0fb",
+                          relief="flat", cursor="hand2", padx=6, pady=2,
+                          command=lambda n=p["numero"]: self._aggiungi_a_coda(n)).pack(side="left", padx=2)
+
+        if ordine:
+            self.lbl_coda_status.configure(text=f"Ordine: {' → '.join(f'P{n}' for n in ordine)}")
+
+    def _sposta_coda(self, idx, delta):
+        ordine = list(self._coda_ordine)
+        nuovo = idx + delta
+        if 0 <= nuovo < len(ordine):
+            ordine[idx], ordine[nuovo] = ordine[nuovo], ordine[idx]
+            self._salva_coda(ordine)
+
+    def _aggiungi_a_coda(self, num):
+        ordine = list(self._coda_ordine)
+        if num not in ordine:
+            self._salva_coda(ordine + [num])
+
+    def _rimuovi_da_coda(self, num):
+        self._salva_coda([n for n in self._coda_ordine if n != num])
+
+    def _salva_coda(self, ordine):
+        import threading, json, urllib.request
+        def _worker():
+            try:
+                data = json.dumps({"ordine": ordine}).encode()
+                req = urllib.request.Request(
+                    "http://localhost:8000/api/pallet/ordine-esecuzione",
+                    data=data, method="PUT",
+                    headers={"Content-Type": "application/json"})
+                urllib.request.urlopen(req, timeout=3)
+                self._coda_ordine = ordine
+                self.parent.after(0, self._render_coda)
+            except Exception as e:
+                print(f"[CODA] Errore salvataggio: {e}")
+        threading.Thread(target=_worker, daemon=True).start()

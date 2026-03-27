@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from 'react-router-dom';
 
@@ -34,8 +34,12 @@ export default function CodaLavorazione() {
   const [error, setError]           = useState(null);
   const [palletMenu, setPalletMenu]  = useState(null);
   const [liveCtx, setLiveCtx]        = useState(null);
-  const [progettiPallet, setProgettiPallet] = useState({});  // {palletNum: {id,nome,colore,pct,...}}
-  const [modalAssegna, setModalAssegna]     = useState(null); // {palletId}
+  const [progettiPallet, setProgettiPallet] = useState({});
+  const [modalAssegna, setModalAssegna]     = useState(null);
+  // ── Coda esecuzione ────────────────────────────────────────────
+  const [codaOrdine, setCodaOrdine] = useState([]);   // [3,4,5]
+  const [codaSaving, setCodaSaving] = useState(false);
+  const dragCodaIdx = useRef(null);
 
   const fetchLiveContext = async () => {
     try {
@@ -138,7 +142,12 @@ export default function CodaLavorazione() {
   }, []);
 
   useEffect(() => {
-    fetchAll();
+    fetchAll()
+    // Carica ordine coda
+    fetch('/api/pallet/ordine-esecuzione')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setCodaOrdine(d.ordine || []) })
+      .catch(() => {})
     const t = setInterval(fetchAll, REFRESH_MS);
     return () => clearInterval(t);
   }, [fetchAll]);
@@ -287,6 +296,37 @@ export default function CodaLavorazione() {
       </div>
     )
   }
+
+  // ── Funzioni coda esecuzione ──────────────────────────────────
+  const assegnatiCoda = pallets
+    .filter(p => progettiPallet[p.id])
+    .map(p => ({ numero: p.id, progetto_nome: progettiPallet[p.id]?.nome, progetto_id: progettiPallet[p.id]?.id }))
+
+  const inCodaList  = codaOrdine.map(n => assegnatiCoda.find(p => p.numero === n)).filter(Boolean)
+  const fuoriCodaList = assegnatiCoda.filter(p => !codaOrdine.includes(p.numero))
+
+  async function salvaCoda(nuovoOrdine) {
+    setCodaOrdine(nuovoOrdine)
+    setCodaSaving(true)
+    try {
+      await fetch('/api/pallet/ordine-esecuzione', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ordine: nuovoOrdine })
+      })
+    } finally { setCodaSaving(false) }
+  }
+
+  function codaDragStart(e, idx) { dragCodaIdx.current = idx; e.dataTransfer.effectAllowed = 'move' }
+  function codaDragOver(e, idx) {
+    e.preventDefault()
+    if (dragCodaIdx.current === null || dragCodaIdx.current === idx) return
+    const newList = [...inCodaList]
+    const [moved] = newList.splice(dragCodaIdx.current, 1)
+    newList.splice(idx, 0, moved)
+    dragCodaIdx.current = idx
+    setCodaOrdine(newList.map(p => p.numero))
+  }
+  function codaDrop() { salvaCoda(codaOrdine); dragCodaIdx.current = null }
 
   return (
     <div style={{
@@ -490,6 +530,59 @@ export default function CodaLavorazione() {
 
       {/* ── Pannello destro ─────────────────────────────────────── */}
       <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 10, minWidth: 0 }}>
+
+        {/* ── Coda Esecuzione ───────────────────────────────────── */}
+        {assegnatiCoda.length > 0 && (
+          <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '12px 16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+              <span style={{ fontSize: 13, fontWeight: 800, color: '#0d2d5e' }}>📋 CODA ESECUZIONE</span>
+              {codaSaving && <span style={{ fontSize: 11, color: '#94a3b8' }}>salvataggio…</span>}
+              <span style={{ fontSize: 11, color: '#94a3b8', marginLeft: 'auto' }}>trascina per riordinare</span>
+            </div>
+            {/* Pallet in coda — drag&drop */}
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: fuoriCodaList.length ? 8 : 0 }}>
+              {inCodaList.map((p, idx) => (
+                <div key={p.numero}
+                  draggable
+                  onDragStart={e => codaDragStart(e, idx)}
+                  onDragOver={e => codaDragOver(e, idx)}
+                  onDrop={codaDrop}
+                  style={{ background: '#eef4fb', border: '2px solid #1D5FAD', borderRadius: 10,
+                    padding: '8px 12px', cursor: 'grab', position: 'relative', userSelect: 'none',
+                    display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ position: 'absolute', top: -8, left: 8, background: '#0d2d5e',
+                    color: '#fff', fontSize: 9, fontWeight: 800, borderRadius: 8, padding: '1px 6px' }}>
+                    {idx + 1}°
+                  </span>
+                  <span style={{ fontSize: 11, color: '#0d2d5e', fontWeight: 700 }}>P{p.numero}</span>
+                  <span style={{ fontSize: 12, fontWeight: 800, color: '#0d2d5e', fontFamily: 'monospace' }}>
+                    {p.progetto_nome}
+                  </span>
+                  <button onClick={() => salvaCoda(codaOrdine.filter(n => n !== p.numero))}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer',
+                      color: '#94a3b8', fontSize: 13, lineHeight: 1, padding: '0 2px' }}>✕</button>
+                </div>
+              ))}
+              {inCodaList.length === 0 && (
+                <span style={{ fontSize: 12, color: '#94a3b8' }}>Nessun progetto in coda — aggiungi ↓</span>
+              )}
+            </div>
+            {/* Pallet fuori coda */}
+            {fuoriCodaList.length > 0 && (
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 700, letterSpacing: '0.06em' }}>+ AGGIUNGI:</span>
+                {fuoriCodaList.map(p => (
+                  <button key={p.numero}
+                    onClick={() => salvaCoda([...codaOrdine, p.numero])}
+                    style={{ background: '#f1f5f9', border: '1.5px dashed #94a3b8', borderRadius: 8,
+                      padding: '4px 10px', cursor: 'pointer', fontSize: 11, color: '#475569', fontWeight: 600 }}>
+                    P{p.numero} {p.progetto_nome}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Stato macchina + programma + utensile — tutto in un blocco compatto */}
         <div style={{

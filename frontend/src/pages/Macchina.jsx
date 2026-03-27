@@ -1,9 +1,4 @@
 // pages/Macchina.jsx — V16: solo Sync TOA/TMA + Confronto MPF
-import { useState, useEffect, useRef } from 'react'
-import { api } from '../api/client'
-import { Loader, SectionHeader } from '../components/UI'
-
-// pages/Macchina.jsx — V16: solo Sync TOA/TMA + Confronto MPF
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { api } from '../api/client'
 import { Loader, SectionHeader } from '../components/UI'

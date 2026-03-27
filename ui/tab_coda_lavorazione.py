@@ -410,6 +410,7 @@ class TabCodaLavorazione:
     # ── Polling ──────────────────────────────────────────────────────────────
 
     def _start_polling(self):
+        self._cache = {}   # cache dati: aggiornata nel worker, letta nell'UI
         self._fetch_data()
 
     def _schedule_next(self):
@@ -418,9 +419,62 @@ class TabCodaLavorazione:
     def _fetch_data(self):
         config = _carica_config()
         def _worker():
-            macchina = self._fetch_macchina(config)
-            pallets  = self._fetch_pallets(config, macchina)
-            self.parent.after(0, lambda: self._update_ui(macchina, pallets))
+            try:
+                macchina = self._fetch_macchina(config)
+                pallets  = self._fetch_pallets(config, macchina)
+
+                # ── Legge worktrack_projects.json UNA VOLTA SOLA ──────────
+                progetti_data = {}
+                ordine_coda   = []
+                try:
+                    folder = (config.get("tools_toa_folder") or "").strip()
+                    if folder:
+                        from pathlib import Path as _P
+                        pf = _P(folder) / "worktrack_projects.json"
+                        if pf.exists():
+                            raw = json.loads(pf.read_text(encoding="utf-8"))
+                            for proj in raw.get("projects", []):
+                                pgms = [pg for s in proj.get("steps",[])
+                                        for t in s.get("tasks",[])
+                                        if t.get("text","").strip().lower()=="fresatura"
+                                        for pg in t.get("programs",[])
+                                        if pg.get("tipoGruppo")!="ipm"]
+                                done    = sum(1 for p in pgms if p.get("stato")=="completato")
+                                da_fare = sum(1 for p in pgms if p.get("stato")=="da_fare")
+                                in_mac  = sum(1 for p in pgms if p.get("stato")=="in_macchina")
+                                tot     = len(pgms)
+                                pgm_in_mac_list = [pg for pg in pgms if pg.get("stato")=="in_macchina"]
+                                pgm_in_mac_list.sort(key=lambda x: str(x.get("numPgm","")).zfill(6))
+                                progetti_data[proj.get("name","")] = {
+                                    "id":         proj.get("id"),
+                                    "pct":        round(done/tot*100, 1) if tot else 0,
+                                    "done":       done, "tot": tot,
+                                    "da_fare":    da_fare,
+                                    "in_macchina": in_mac,
+                                    "pgm_in_mac": pgm_in_mac_list,
+                                }
+                except Exception:
+                    pass
+
+                # ── Legge ordine coda ────────────────────────────────────
+                try:
+                    import urllib.request as _ur
+                    r = _ur.urlopen(
+                        "http://localhost:8000/api/pallet/ordine-esecuzione",
+                        timeout=2)
+                    ordine_coda = json.loads(r.read()).get("ordine", [])
+                except Exception:
+                    ordine_coda = []
+
+                self._cache = {
+                    "macchina":      macchina,
+                    "pallets":       pallets,
+                    "progetti_data": progetti_data,
+                    "ordine_coda":   ordine_coda,
+                }
+                self.parent.after(0, self._update_ui_cached)
+            except Exception as e:
+                print(f"[FETCH] {e}")
         threading.Thread(target=_worker, daemon=True).start()
 
     def _fetch_macchina(self, config) -> dict:
@@ -472,6 +526,14 @@ class TabCodaLavorazione:
         return pallets
 
     # ── Aggiornamento UI ─────────────────────────────────────────────────────
+
+    def _update_ui_cached(self):
+        """Chiama _update_ui usando la cache aggiornata dal worker."""
+        cache = getattr(self, "_cache", {})
+        self._update_ui(
+            cache.get("macchina", {}),
+            cache.get("pallets", []),
+        )
 
     def _update_ui(self, macchina, pallets):
         self._macchina = macchina
@@ -537,8 +599,9 @@ class TabCodaLavorazione:
             self._update_pallet_card(p, pallet_attivo)
 
         # Coda esecuzione + programmi in macchina
-        self._render_coda_dx(pallets)
-        self._render_pgm_macchina(pallets)
+        cache = getattr(self, "_cache", {})
+        self._render_coda_dx(pallets, cache.get("ordine_coda", []))
+        self._render_pgm_macchina(pallets, cache.get("progetti_data", {}))
 
         self._schedule_next()
 
@@ -549,10 +612,11 @@ class TabCodaLavorazione:
         is_active = (pallet_attivo_mac == pid)
         is_lav = stato == "IN LAVORAZIONE"
 
-        # Calcola info progetto per colori semantici
+        # Usa dati dalla cache invece di leggere da disco
         proj_nome   = pallet.get("progetto_nome") or ""
         proj_colore = pallet.get("progetto_colore") or "#1D5FAD"
-        info = self._calc_pct(proj_nome) if proj_nome else None
+        cache = getattr(self, "_cache", {})
+        info = cache.get("progetti_data", {}).get(proj_nome)
 
         # Colori semantici: blu=IN LAVORAZIONE, verde=completato, giallo=grezzo
         is_completo = info and info["pct"] >= 100
@@ -637,19 +701,12 @@ class TabCodaLavorazione:
 
     # ── Click pallet ─────────────────────────────────────────────────────────
 
-    def _render_coda_dx(self, pallets):
+    def _render_coda_dx(self, pallets, ordine_coda=None):
         """Renderizza la coda esecuzione nella colonna destra."""
         for w in self.frame_coda_body2.winfo_children():
             w.destroy()
 
-        # Legge ordine coda dalla API
-        try:
-            import urllib.request as _ur
-            r = _ur.urlopen("http://localhost:8000/api/pallet/ordine-esecuzione", timeout=2)
-            data = json.loads(r.read())
-            ordine = data.get("ordine", [])
-        except Exception:
-            ordine = []
+        ordine = ordine_coda or []
 
         assegnati = {p["id"]: p for p in pallets if p.get("progetto_nome")}
         if not assegnati:
@@ -709,47 +766,31 @@ class TabCodaLavorazione:
                 print(f"[CODA] {e}")
         threading.Thread(target=_w, daemon=True).start()
 
-    def _render_pgm_macchina(self, pallets):
+    def _render_pgm_macchina(self, pallets, progetti_data=None):
         """Renderizza la lista programmi in_macchina con checkbox → completa."""
+        if progetti_data is None:
+            progetti_data = {}
         for w in self.frame_pgm_mac_body.winfo_children():
             w.destroy()
         self._pgm_sel = {}
         self._pgm_data = {}
 
-        # Carica programmi in_macchina per ogni pallet assegnato
         PAL_COLORS = ["#0d2d5e","#0891b2","#7c3aed","#059669","#d97706","#dc2626"]
         has_any = False
 
         for p in pallets:
             if not p.get("progetto_nome"): continue
-            info = self._calc_pct(p["progetto_nome"])
+            info = progetti_data.get(p["progetto_nome"])
             if not info or info.get("in_macchina", 0) == 0: continue
 
-            # Carica programmi dettagliati
-            try:
-                cfg = _carica_config()
-                from pathlib import Path as _P
-                folder = (cfg.get("tools_toa_folder") or "").strip()
-                pf = _P(folder) / "worktrack_projects.json"
-                data = json.loads(pf.read_text(encoding="utf-8"))
-                proj = next((pr for pr in data.get("projects",[])
-                             if pr.get("name")==p["progetto_nome"]), None)
-                if not proj: continue
-                pgms_in_mac = []
-                for step in proj.get("steps",[]):
-                    for task in step.get("tasks",[]):
-                        if task.get("text","").strip().lower()!="fresatura": continue
-                        for pgm in task.get("programs",[]):
-                            if pgm.get("tipoGruppo")=="ipm": continue
-                            if pgm.get("stato")=="in_macchina":
-                                pgms_in_mac.append(pgm)
-                if not pgms_in_mac: continue
-                pgms_in_mac.sort(key=lambda x: str(x.get("numPgm","")).zfill(6))
-                self._pgm_data[p["id"]] = {"progetto_id": proj["id"],
-                                            "progetto_nome": p["progetto_nome"],
-                                            "programmi": pgms_in_mac}
-            except Exception:
-                continue
+            pgms_in_mac = info.get("pgm_in_mac", [])
+            if not pgms_in_mac: continue
+
+            self._pgm_data[p["id"]] = {
+                "progetto_id":   info.get("id"),
+                "progetto_nome": p["progetto_nome"],
+                "programmi":     pgms_in_mac,
+            }
 
             col = PAL_COLORS[(p["id"]-1) % len(PAL_COLORS)]
             has_any = True

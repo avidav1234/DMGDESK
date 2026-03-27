@@ -1664,108 +1664,174 @@ function TemplateEditor({template,onSave,onCancel}){
 
 // ── HomePage — Dashboard turno ──────────────────────────────────────────────
 function HomePage({projects,deliveries,palletState,setupData,onNavigateProject,onNavigateCoda}){
-  const now=new Date()
-  const todayStr=now.toISOString().slice(0,10)
-  const dayLabel=now.toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long'})
-  const inProgress=projects.filter(p=>!p.archived&&getProgress(p)<100)
-  const allPgm=inProgress.flatMap(p=>(p.steps||[]).flatMap(s=>s.tasks||[]).filter(t=>t.text?.trim().toLowerCase()==='fresatura').flatMap(t=>(t.programs||[]).filter(p=>p.tipoGruppo!=='ipm')))
-  const pgmDaFare=allPgm.filter(p=>p.stato==='da_fare')
-  const pgmInMac=allPgm.filter(p=>p.stato==='in_macchina')
-  const pgmCompletati=allPgm.filter(p=>p.stato==='completato')
-  const pgmOggi=allPgm.filter(p=>(p.tempoFine||'').startsWith(todayStr))
-  function getDelivery(pid){return deliveries.find(d=>d.projectId===pid)||null}
-  const urgenti=inProgress.filter(p=>{const d=getDelivery(p.id);const days=d&&d.dueDate&&!d.delivered?daysUntil(d.dueDate):null;return days!==null&&days<=7}).sort((a,b)=>{const da=getDelivery(a.id);const db=getDelivery(b.id);return(daysUntil(da?.dueDate)||99)-(daysUntil(db?.dueDate)||99)})
-  const daMontare=(setupData?.da_montare||[]).length
-  const fineVita=(setupData?.fin_vita||[]).length
-  const pallets=palletState||[]
-  const STATO_COLOR={grezzo:'#b45309',finito:'#16a34a',guasto:'#dc2626',vuoto:'#94a3b8'}
-  const STATO_BG={grezzo:'#fef9c3',finito:'#f0fdf4',guasto:'#fef2f2',vuoto:'#f8fafc'}
-  const STATO_BORDER={grezzo:'#d9770633',finito:'#16a34a33',guasto:'#dc262633',vuoto:'#e2e8f0'}
+  const T = useTheme()
+  const now   = new Date()
+  const days  = ['Domenica','Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato']
+  const months= ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre']
+  const dayLabel = `${days[now.getDay()]} ${now.getDate()} ${months[now.getMonth()]} ${now.getFullYear()}`
 
-  return(
-    <div style={{flex:1,overflowY:'auto',background:T.bg,fontFamily:"var(--font-display)"}}>
+  const pallets    = palletState || []
+  const inProgress = projects.filter(p => !p.archived)
 
-      {/* ── Topbar header ── */}
-      <div style={{background:T.surface,borderBottom:`1px solid ${T.border}`,padding:'14px 28px',display:'flex',alignItems:'baseline',gap:12}}>
-        <div style={{fontSize:22,fontWeight:800,color:T.text}}>Buongiorno</div>
-        <div style={{fontSize:14,color:T.textMuted}}>{dayLabel}</div>
+  // ── Progetto IN LAVORAZIONE ──────────────────────────────────────────────
+  const palletLav   = pallets.find(p => (p.stato||'').toLowerCase().replace('_',' ') === 'in lavorazione')
+  const progettoLav = palletLav ? inProgress.find(p => p.id === palletLav.progetto_id) : null
+
+  // ── Metriche turno ───────────────────────────────────────────────────────
+  const allPgm = inProgress.flatMap(p =>
+    (p.steps||[]).flatMap(s=>(s.tasks||[]).filter(t=>t.text?.trim().toLowerCase()==='fresatura')
+    .flatMap(t=>(t.programs||[]).filter(pg=>pg.tipoGruppo!=='ipm'))))
+  const pgmDaFare   = allPgm.filter(p=>p.stato==='da_fare').length
+  const pgmInMac    = allPgm.filter(p=>p.stato==='in_macchina').length
+  const pgmOggi     = allPgm.filter(p=>{
+    if(p.stato!=='completato'||!p.tempoFine) return false
+    const d=new Date(p.tempoFine.split(' ').reverse().join('-').replace(/(\d+)\/(\d+)\/(\d+)/,'$3-$2-$1'))
+    return d.toDateString()===now.toDateString()
+  }).length
+
+  // ── Scadenze ─────────────────────────────────────────────────────────────
+  function daysUntil(dateStr){
+    if(!dateStr) return null
+    try{
+      const parts=dateStr.split(/[\/\-]/)
+      const d=parts[0].length===4?new Date(parts[0],parts[1]-1,parts[2]):new Date(parts[2],parts[1]-1,parts[0])
+      return Math.ceil((d-new Date(now.getFullYear(),now.getMonth(),now.getDate()))/(1000*60*60*24))
+    }catch{return null}
+  }
+  const conScadenza = inProgress
+    .map(p=>({p, d:deliveries.find(d=>d.projectId===p.id), pNum:pallets.find(x=>x.progetto_id===p.id)?.numero}))
+    .filter(({d})=>d?.dueDate && !d.delivered)
+    .map(({p,d,pNum})=>({p, days:daysUntil(d.dueDate), pNum}))
+    .sort((a,b)=>a.days-b.days)
+
+  // ── Utensili con problemi ─────────────────────────────────────────────────
+  const mancanti    = (setupData?.non_utilizzati||[]).filter(u=>u.provenienza==='richiesto_da_progetto')
+  const finVita     = (setupData?.fin_vita||[])
+  const daMontare   = (setupData?.da_montare||[])
+  const aRischio    = (setupData?.previsione_vita?.utensili_critici||[])
+  // Unifica evitando duplicati per alias
+  const utensiliProblema = (() => {
+    const map = {}
+    mancanti.forEach(u=>{
+      map[u.alias]={alias:u.alias, tipo:'mancante', label:'MANCANTE', color:'#dc2626',
+        bg:'#fef2f2', border:'#fca5a5',
+        detail:(u.progetti||[]).map(r=>r.progetto).join(', ')||''}
+    })
+    daMontare.forEach(u=>{
+      if(!map[u.alias]) map[u.alias]={alias:u.alias, tipo:'da_montare', label:'DA MONTARE', color:'#d97706',
+        bg:'#fffbeb', border:'#fcd34d', detail:`pos. ${u.posizione||'—'}`}
+    })
+    finVita.forEach(u=>{
+      const pct = typeof u.life_percent==='number' ? u.life_percent : null
+      if(!map[u.alias]) map[u.alias]={alias:u.alias, tipo:'fin_vita',
+        label: pct!==null ? `${pct.toFixed(0)}%` : 'FINE VITA',
+        color:'#c2410c', bg:'#fff7ed', border:'#fdba74',
+        detail:`pos. ${u.posizione||'—'}`}
+    })
+    aRischio.forEach(u=>{
+      if(!map[u.alias]) map[u.alias]={alias:u.alias, tipo:'rischio',
+        label:`esaurito al pgm ${u.programma_critico||'?'}`,
+        color:'#7c3aed', bg:'#f5f3ff', border:'#c4b5fd',
+        detail:u.progetto||''}
+    })
+    return Object.values(map).sort((a,b)=>{
+      const ord={mancante:0,da_montare:1,fin_vita:2,rischio:3}
+      return (ord[a.tipo]||9)-(ord[b.tipo]||9)
+    })
+  })()
+
+  // ── Colori pallet ─────────────────────────────────────────────────────────
+  function palletColors(stato, hasProj, pct){
+    const s = (stato||'').toLowerCase().replace('_',' ')
+    if(s==='in lavorazione') return {bg:'#dbeafe',fg:'#0d2d5e',border:'#1D5FAD',label:'IN LAV.'}
+    if(pct>=100||s==='finito') return {bg:'#dcfce7',fg:'#14532d',border:'#16a34a',label:'FINITO'}
+    if(hasProj) return {bg:'#fefce8',fg:'#854d0e',border:'#eab308',label:'GREZZO'}
+    return {bg:'#f1f5f9',fg:'#94a3b8',border:'#e2e8f0',label:'VUOTO'}
+  }
+
+  // avanzamento per pallet
+  function palletInfo(pNum){
+    const pal = pallets.find(p=>p.numero===pNum)
+    if(!pal?.progetto_id) return null
+    const proj = inProgress.find(p=>p.id===pal.progetto_id)
+    if(!proj) return null
+    const pgms = (proj.steps||[]).flatMap(s=>(s.tasks||[])
+      .filter(t=>t.text?.trim().toLowerCase()==='fresatura')
+      .flatMap(t=>(t.programs||[]).filter(pg=>pg.tipoGruppo!=='ipm')))
+    const tot  = pgms.length
+    const done = pgms.filter(p=>p.stato==='completato').length
+    const pct  = tot ? Math.round(done/tot*100) : 0
+    const daFare = pgms.filter(p=>p.stato==='da_fare').length
+    const inMac  = pgms.filter(p=>p.stato==='in_macchina').length
+    return {proj, pct, tot, done, daFare, inMac, colore:proj.color||'#1D5FAD'}
+  }
+
+  // Avanzamento progetto in lavorazione
+  const lavInfo = progettoLav ? (() => {
+    const pgms = (progettoLav.steps||[]).flatMap(s=>(s.tasks||[])
+      .filter(t=>t.text?.trim().toLowerCase()==='fresatura')
+      .flatMap(t=>(t.programs||[]).filter(pg=>pg.tipoGruppo!=='ipm')))
+    const tot  = pgms.length
+    const done = pgms.filter(p=>p.stato==='completato').length
+    const pct  = tot ? Math.round(done/tot*100) : 0
+    return {pct, done, tot, inMac:pgms.filter(p=>p.stato==='in_macchina').length}
+  })() : null
+
+  const critici = conScadenza.filter(x=>x.days!==null&&x.days<=0).length
+
+  // ── RENDER ────────────────────────────────────────────────────────────────
+  return (
+    <div style={{flex:1,overflowY:'auto',background:'#eef2f7',fontFamily:'var(--font-display)'}}>
+      {/* Header */}
+      <div style={{background:'#fff',borderBottom:'1px solid #e2e8f0',padding:'12px 24px',
+        display:'flex',alignItems:'baseline',gap:12}}>
+        <span style={{fontSize:20,fontWeight:800,color:'#0d2d5e'}}>Cruscotto turno</span>
+        <span style={{fontSize:13,color:'#94a3b8'}}>{dayLabel}</span>
       </div>
 
-      <div style={{padding:'20px 28px',display:'flex',flexDirection:'column',gap:20}}>
+      {/* Body principale — 3 colonne */}
+      <div style={{display:'grid',gridTemplateColumns:'320px 1fr 220px',gap:16,padding:'16px 20px',
+        alignItems:'start'}}>
 
-        {/* ── Alert strip ── */}
-        {(urgenti.length>0||daMontare>0||fineVita>0)&&(
-          <div style={{display:'flex',flexDirection:'column',gap:8}}>
-            {urgenti.map(p=>{
-              const d=getDelivery(p.id)
-              const days=daysUntil(d?.dueDate)
-              return(
-                <div key={p.id} onClick={()=>onNavigateProject(p.id)}
-                  style={{display:'flex',alignItems:'center',gap:12,background:'#fef2f2',border:'1px solid #C0392B33',borderRadius:10,padding:'10px 16px',cursor:'pointer'}}>
-                  <div style={{width:8,height:8,borderRadius:'50%',background:'#dc2626',flexShrink:0}}/>
-                  <div style={{fontSize:13,fontWeight:700,color:'#7B1F1F',flex:1}}>
-                    🎯 {p.name}
-                    <span style={{fontWeight:400,color:'#dc2626',marginLeft:8}}>— scadenza {days===0?'oggi':days<0?`${Math.abs(days)} giorni fa`:`tra ${days} giorni`}</span>
-                  </div>
-                  <span style={{fontSize:12,fontWeight:800,color:'#dc2626',background:'#fff',padding:'2px 10px',borderRadius:20,border:'1px solid #C0392B33'}}>{days===0?'OGGI':days<0?`${Math.abs(days)}gg fa`:`${days}gg`}</span>
-                </div>
-              )
-            })}
-            {(daMontare>0||fineVita>0)&&(
-              <div style={{display:'flex',alignItems:'center',gap:12,background:'#FEF3C7',border:'1px solid #D4700A33',borderRadius:10,padding:'10px 16px'}}>
-                <div style={{fontSize:13,fontWeight:700,color:'#7B4500',flex:1}}>
-                  🔧 Utensili — azione richiesta
-                  {daMontare>0&&<span style={{marginLeft:8,fontWeight:400,color:'#B45309'}}>{daMontare} da montare</span>}
-                  {fineVita>0&&<span style={{marginLeft:8,fontWeight:400,color:'#B45309'}}>{fineVita} a fine vita</span>}
-                </div>
-                <span style={{fontSize:11,color:'#B45309'}}>Vai su Utensili → Setup</span>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ── Pallet — protagonisti ── */}
-        <div>
-          <div style={{fontSize:11,fontWeight:700,letterSpacing:'0.08em',color:T.textMuted,marginBottom:12}}>PALLET MACCHINA</div>
-          <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:12}}>
+        {/* ── COL 1: PALLET ─────────────────────────────────────────────── */}
+        <div style={{display:'flex',flexDirection:'column',gap:10}}>
+          <div style={{fontSize:11,fontWeight:800,letterSpacing:'0.08em',color:'#0d2d5e'}}>PALLET</div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
             {[1,2,3,4,5,6].map(n=>{
-              const pd=pallets.find(x=>x.numero===n)||{}
-              const stato=(pd.stato||'vuoto').toLowerCase()
-              const nome=pd.progetto_nome||''
-              const pid=pd.progetto_id
-              const proj=pid?inProgress.find(x=>x.id===pid):null
-              const pct=proj?getProgress(proj):null
-              const d=proj?getDelivery(proj.id):null
-              const days=d&&d.dueDate&&!d.delivered?daysUntil(d.dueDate):null
-              const isUrgent=days!==null&&days<=3
-              const color=STATO_COLOR[stato]||'#94a3b8'
-              const bg=STATO_BG[stato]||'#eef2f7'
-              const isEmpty=stato==='vuoto'&&!nome
-              return(
-                <div key={n} onClick={pid?()=>onNavigateProject(pid):undefined}
-                  style={{background:bg,border:`1.5px solid ${isUrgent?'#dc2626':isEmpty?T.border:color+'66'}`,borderRadius:12,padding:'14px 16px',cursor:pid?'pointer':'default',transition:'all 0.15s',minHeight:isEmpty?72:110}}>
-                  <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:nome?8:0}}>
-                    <span style={{fontSize:22,fontWeight:900,color:isEmpty?'#C8C5BE':color,lineHeight:1}}>P{n}</span>
-                    <span style={{fontSize:10,fontWeight:700,color:isEmpty?'#C8C5BE':color,background:isEmpty?'transparent':bg,padding:'2px 8px',borderRadius:10,border:`1px solid ${isEmpty?'transparent':color+'44'}`}}>
-                      {stato}
-                    </span>
-                    {isUrgent&&<span style={{marginLeft:'auto',fontSize:10,fontWeight:800,color:'#dc2626',background:'#fef2f2',padding:'2px 8px',borderRadius:10}}>{days===0?'OGGI':`${days}gg`}</span>}
+              const info = palletInfo(n)
+              const pal  = pallets.find(p=>p.numero===n)||{}
+              const c    = palletColors(pal.stato, !!info, info?.pct)
+              const isLav= c.label==='IN LAV.'
+              return (
+                <div key={n}
+                  onClick={info?()=>onNavigateProject(info.proj.id):undefined}
+                  style={{background:c.bg,border:`2px solid ${c.border}`,borderRadius:10,
+                    padding:'10px 12px',cursor:info?'pointer':'default',
+                    minHeight:120,display:'flex',flexDirection:'column',justifyContent:'space-between'}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+                    <span style={{fontSize:28,fontWeight:900,color:c.fg,lineHeight:1}}>P{n}</span>
+                    {isLav&&<span style={{fontSize:8,fontWeight:800,color:'#1D5FAD',
+                      background:'#eff6ff',padding:'2px 6px',borderRadius:4,letterSpacing:1}}>● LIVE</span>}
                   </div>
-                  {nome&&(
-                    <>
-                      <div style={{fontSize:14,fontWeight:800,color:T.text,marginBottom:6,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{nome}</div>
-                      {pct!==null&&(
-                        <>
-                          <div style={{height:5,background:'rgba(0,0,0,0.08)',borderRadius:3,overflow:'hidden',marginBottom:3}}>
-                            <div style={{height:5,width:`${pct}%`,background:color,borderRadius:3,transition:'width 0.3s'}}/>
-                          </div>
-                          <div style={{display:'flex',justifyContent:'space-between'}}>
-                            <span style={{fontSize:11,color:T.textMuted}}>{(()=>{const p=allPgm.filter(x=>proj?.steps?.flatMap(s=>s.tasks||[]).find(t=>t.text?.trim().toLowerCase()==='fresatura'&&(t.programs||[]).find(pr=>pr.id===x.id)));return p.filter(x=>x.stato==='da_fare').length})()} pgm da fare</span>
-                            <span style={{fontSize:12,fontWeight:800,color:color}}>{pct}%</span>
-                          </div>
-                        </>
-                      )}
-                    </>
+                  {info ? (
+                    <div>
+                      <div style={{fontSize:11,fontWeight:800,color:c.fg,
+                        overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',marginBottom:4}}>
+                        {info.proj.name}
+                      </div>
+                      <div style={{height:4,background:'rgba(0,0,0,0.1)',borderRadius:2,overflow:'hidden',marginBottom:3}}>
+                        <div style={{height:'100%',width:`${info.pct}%`,
+                          background:info.colore,borderRadius:2,transition:'width 0.3s'}}/>
+                      </div>
+                      <div style={{display:'flex',justifyContent:'space-between'}}>
+                        <span style={{fontSize:9,color:c.fg,opacity:0.7}}>{info.done}/{info.tot} pgm</span>
+                        <span style={{fontSize:11,fontWeight:800,color:c.fg}}>{info.pct}%</span>
+                      </div>
+                      <div style={{fontSize:8,fontWeight:700,color:c.fg,
+                        letterSpacing:1,marginTop:3,opacity:0.85}}>{c.label}</div>
+                    </div>
+                  ) : (
+                    <div style={{fontSize:10,fontWeight:600,color:c.fg,letterSpacing:1}}>VUOTO</div>
                   )}
                 </div>
               )
@@ -1773,422 +1839,149 @@ function HomePage({projects,deliveries,palletState,setupData,onNavigateProject,o
           </div>
         </div>
 
-        {/* ── Griglia inferiore: metriche + progetti ── */}
-        <div style={{display:'grid',gridTemplateColumns:'auto 1fr',gap:20,alignItems:'start'}}>
+        {/* ── COL 2: PROGETTO ATTIVO + SCADENZE + UTENSILI ──────────────── */}
+        <div style={{display:'flex',flexDirection:'column',gap:12}}>
 
-          {/* Metriche turno — colonna sinistra */}
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,width:280}}>
-            {[
-              {val:pgmDaFare.length,  label:'Da fare',          sub:`${inProgress.length} lavori attivi`, color:'#475569', bg:T.surface2},
-              {val:pgmInMac.length,   label:'In macchina',       sub:'programmi attivi',                  color:'#0d2d5e', bg:'#EFF6FF'},
-              {val:pgmOggi.length,    label:'Completati oggi',   sub:`${pgmCompletati.length} totali`,    color:'#16a34a', bg:'#F0FBF4'},
-              {val:daMontare+fineVita,label:'Utensili critici',  sub:daMontare>0?`${daMontare} da montare`:'tutto ok',
-               color:daMontare+fineVita>0?'#dc2626':'#16a34a', bg:daMontare+fineVita>0?'#FEF0EE':'#F0FBF4'},
-            ].map(({val,label,sub,color,bg})=>(
-              <div key={label} style={{background:bg,borderRadius:10,padding:'12px 14px'}}>
-                <div style={{fontSize:26,fontWeight:700,color,lineHeight:1,marginBottom:3}}>{val}</div>
-                <div style={{fontSize:11,fontWeight:700,color,marginBottom:1}}>{label}</div>
-                <div style={{fontSize:10,color:T.textMuted}}>{sub}</div>
-              </div>
-            ))}
-          </div>
-
-          {/* Progetti in corso — colonna destra */}
-          <div>
-            <div style={{fontSize:11,fontWeight:700,letterSpacing:'0.08em',color:T.textMuted,marginBottom:10}}>LAVORI IN CORSO</div>
-            <div style={{display:'flex',flexDirection:'column',gap:6}}>
-              {inProgress.slice(0,6).map(p=>{
-                const pct=getProgress(p)
-                const d=getDelivery(p.id)
-                const days=d&&d.dueDate&&!d.delivered?daysUntil(d.dueDate):null
-                const pNum=pallets.find(x=>x.progetto_id===p.id)?.numero
-                const daFareP=allPgm.filter(x=>p.steps?.flatMap(s=>s.tasks||[]).find(t=>t.text?.trim().toLowerCase()==='fresatura'&&(t.programs||[]).find(pr=>pr.id===x.id))).filter(x=>x.stato==='da_fare').length
-                return(
-                  <div key={p.id} onClick={()=>onNavigateProject(p.id)}
-                    style={{display:'flex',alignItems:'center',gap:12,background:T.surface,border:`1px solid ${T.border}`,borderRadius:10,padding:'10px 14px',cursor:'pointer',borderLeft:`4px solid ${p.color}`}}>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
-                        <span style={{fontSize:13,fontWeight:700,color:T.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}</span>
-                        {pNum&&<span style={{fontSize:10,fontWeight:700,color:'#0d2d5e',background:'#EFF6FF',padding:'1px 7px',borderRadius:8,flexShrink:0}}>P{pNum}</span>}
-                      </div>
-                      <div style={{height:4,background:T.surface2,borderRadius:2,overflow:'hidden'}}>
-                        <div style={{height:4,width:`${pct}%`,background:p.color,borderRadius:2}}/>
-                      </div>
-                    </div>
-                    <div style={{textAlign:'right',flexShrink:0}}>
-                      <div style={{fontSize:13,fontWeight:800,color:pct===100?'#16a34a':p.color}}>{pct}%</div>
-                      {days!==null&&<div style={{fontSize:10,fontWeight:700,color:days<=3?'#dc2626':'#0d2d5e'}}>{days===0?'oggi':days<0?`${Math.abs(days)}gg fa`:`${days}gg`}</div>}
-                      {daFareP>0&&<div style={{fontSize:10,color:'#0d2d5e'}}>{daFareP} pgm</div>}
-                    </div>
-                  </div>
-                )
-              })}
+          {/* Progetto in lavorazione */}
+          <div style={{background:'#fff',border:'1px solid #e2e8f0',borderRadius:12,padding:'14px 18px'}}>
+            <div style={{fontSize:11,fontWeight:800,letterSpacing:'0.08em',color:'#0d2d5e',marginBottom:10}}>
+              PROGETTO IN LAVORAZIONE
             </div>
-          </div>
-        </div>
-
-      </div>
-    </div>
-  )
-}
-
-// ── TemplatesPage ──────────────────────────────────────────────────────────────
-function TemplatesPage({templates,onEdit,onCreate,onDelete,onDuplicate,onUseTemplate,lastSaved}){
-  return(
-    <div style={{flex:1,overflowY:'auto',padding:'24px 28px',background:T.bg,fontFamily:"var(--font-display)"}}>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:20}}>
-        <div>
-          <div style={{fontSize:13,color:T.textSub,fontWeight:600,letterSpacing:'0.06em',marginBottom:4}}>TEMPLATE SALVATI — {templates.length}</div>
-          {lastSaved&&<span style={{background:T.greenBg,border:`1px solid ${T.green}44`,borderRadius:20,padding:'2px 10px',fontSize:12,color:T.green,fontWeight:600}}>💾 Salvati automaticamente · {lastSaved}</span>}
-        </div>
-        <button onClick={onCreate} style={{background:T.accent,border:'none',borderRadius:8,color:'#fff',fontWeight:700,fontSize:14,padding:'9px 20px',cursor:'pointer'}}>+ Nuovo Template</button>
-      </div>
-      {templates.length===0&&<div style={{textAlign:'center',padding:'60px 0',color:T.textMuted,fontSize:16}}>Nessun template. Creane uno!</div>}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill, minmax(320px, 1fr))',gap:16}}>
-        {templates.map(tmpl=>(
-          <div key={tmpl.id} style={{background:T.surface,border:`1.5px solid ${T.border}`,borderTop:`4px solid ${tmpl.color}`,borderRadius:12,padding:'18px 20px',boxShadow:'0 1px 4px rgba(0,0,0,0.05)'}}>
-            <div style={{display:'flex',alignItems:'flex-start',gap:14,marginBottom:14}}>
-              <span style={{fontSize:28,lineHeight:1}}>{tmpl.icon}</span>
-              <div style={{flex:1}}><div style={{fontSize:16,fontWeight:800,color:T.text,marginBottom:3}}>{tmpl.name}</div><div style={{fontSize:13,color:T.textSub}}>{tmpl.description}</div></div>
-            </div>
-            <div style={{background:T.surface2,borderRadius:8,padding:'10px 12px',marginBottom:10}}>
-              {(tmpl.steps||[]).map((step,i)=>(
-                <div key={step.id} style={{display:'flex',alignItems:'center',gap:8,marginBottom:i<tmpl.steps.length-1?5:0}}>
-                  <span style={{fontSize:12,color:tmpl.color,fontWeight:700,minWidth:18}}>{i+1}.</span>
-                  <span style={{fontSize:14,color:T.text,fontWeight:500,flex:1}}>{step.title}</span>
-                  <span style={{fontSize:12,color:T.textMuted}}>{(step.tasks||[]).length} task</span>
+            {progettoLav && lavInfo ? (
+              <div>
+                <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:8}}>
+                  <div style={{width:10,height:10,borderRadius:'50%',
+                    background:progettoLav.color||'#1D5FAD',flexShrink:0}}/>
+                  <span style={{fontSize:16,fontWeight:800,color:'#0d2d5e',
+                    overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                    {progettoLav.name}
+                  </span>
+                  <span style={{fontSize:11,fontWeight:700,color:'#fff',background:'#1D5FAD',
+                    padding:'2px 8px',borderRadius:6,flexShrink:0}}>P{palletLav.numero}</span>
                 </div>
-              ))}
-            </div>
-            <div style={{fontSize:12,color:T.textMuted,marginBottom:14}}>{(tmpl.steps||[]).reduce((a,s)=>a+(s.tasks||[]).length,0)} task totali · {(tmpl.steps||[]).length} fasi</div>
-            <div style={{display:'flex',gap:6}}>
-              <button onClick={()=>onUseTemplate(tmpl)} style={{flex:1,background:tmpl.color,border:'none',borderRadius:8,color:'#fff',fontWeight:700,fontSize:14,padding:'9px',cursor:'pointer'}}>▶ Usa</button>
-              <button onClick={()=>onDuplicate(tmpl)} style={{background:T.surface2,border:`1px solid ${T.border}`,borderRadius:8,color:T.textSub,fontSize:14,padding:'9px 12px',cursor:'pointer',fontWeight:600}} title='Duplica'>⧉</button>
-              <button onClick={()=>onEdit(tmpl)} style={{background:T.surface2,border:`1px solid ${T.border}`,borderRadius:8,color:T.textSub,fontSize:14,padding:'9px 12px',cursor:'pointer',fontWeight:600}} title='Modifica'>✏️</button>
-              <button onClick={()=>onDelete(tmpl.id)} style={{background:T.redBg,border:`1px solid ${T.red}44`,borderRadius:8,color:T.red,fontSize:14,padding:'9px 12px',cursor:'pointer'}} title='Elimina'>🗑️</button>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-// ── QuickTaskRow ───────────────────────────────────────────────────────────────
-function QuickTaskRow({task,onToggle,onDelete,onPriority,onEditText}){
-  const[hovered,setHovered]=useState(false)
-  const[showPrioPick,setShowPrioPick]=useState(false)
-  const[editing,setEditing]=useState(false)
-  const[editVal,setEditVal]=useState(task.text)
-  const p=PRIORITY[task.priority]||PRIORITY.media
-  function saveEdit(){if(editVal.trim())onEditText(editVal.trim());setEditing(false)}
-  return(
-    <div onMouseEnter={()=>setHovered(true)} onMouseLeave={()=>{setHovered(false);setShowPrioPick(false)}}
-      style={{display:'flex',alignItems:'flex-start',gap:8,padding:'8px 8px',borderRadius:8,marginBottom:3,background:hovered?T.surface2:'transparent',borderLeft:`3px solid ${task.done?T.border:p.color}`,transition:'background 0.12s',opacity:task.done?0.6:1}}>
-      <div onClick={onToggle} style={{width:18,height:18,borderRadius:5,flexShrink:0,marginTop:editing?8:1,border:task.done?'none':`2px solid ${p.color}`,background:task.done?p.color:'transparent',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
-        {task.done&&<span style={{color:'#fff',fontSize:11,fontWeight:800}}>✓</span>}
-      </div>
-      {editing?(
-        <div style={{flex:1,display:'flex',gap:5}}>
-          <input value={editVal} onChange={e=>setEditVal(e.target.value)} autoFocus
-            style={{flex:1,background:T.surface,border:`1.5px solid ${T.accent}44`,borderRadius:6,padding:'4px 8px',color:T.text,fontSize:13,outline:'none'}}
-            onKeyDown={e=>{if(e.key==='Enter')saveEdit();if(e.key==='Escape')setEditing(false)}}/>
-          <button onClick={saveEdit} style={{background:T.accent,border:'none',borderRadius:5,color:'#fff',fontSize:12,fontWeight:700,padding:'4px 9px',cursor:'pointer',flexShrink:0}}>OK</button>
-          <button onClick={()=>setEditing(false)} style={{background:'none',border:`1px solid ${T.border}`,borderRadius:5,color:T.textSub,fontSize:12,padding:'4px 6px',cursor:'pointer',flexShrink:0}}>✕</button>
-        </div>
-      ):(
-        <span onDoubleClick={()=>{setEditVal(task.text);setEditing(true)}} style={{flex:1,fontSize:13,color:T.text,lineHeight:1.5,textDecoration:task.done?'line-through':'none',wordBreak:'break-word',cursor:'text'}} title='Doppio click per modificare'>{task.text}</span>
-      )}
-      {hovered&&!editing&&(
-        <div style={{display:'flex',flexDirection:'column',gap:3,flexShrink:0,position:'relative'}}>
-          <button onClick={()=>{setEditVal(task.text);setEditing(true)}} style={{background:'none',border:`1px solid ${T.border}`,borderRadius:5,fontSize:11,padding:'2px 5px',cursor:'pointer',color:T.textSub}}>✏️</button>
-          <button onClick={()=>setShowPrioPick(v=>!v)} style={{background:'none',border:`1px solid ${T.border}`,borderRadius:5,fontSize:12,padding:'2px 5px',cursor:'pointer',color:p.color,fontWeight:700}}>{p.dot}</button>
-          <button onClick={onDelete} style={{background:'none',border:`1px solid ${T.border}`,borderRadius:5,fontSize:11,padding:'2px 5px',cursor:'pointer',color:T.red}}>🗑️</button>
-          {showPrioPick&&(
-            <div style={{position:'absolute',right:'110%',top:0,background:T.surface,border:`1px solid ${T.border}`,borderRadius:8,padding:6,display:'flex',flexDirection:'column',gap:4,boxShadow:'0 4px 16px rgba(0,0,0,0.12)',zIndex:50,width:90}}>
-              {Object.entries(PRIORITY).map(([key,pr])=>(
-                <button key={key} onClick={()=>{onPriority(key);setShowPrioPick(false)}} style={{background:task.priority===key?pr.bg:'transparent',border:`1px solid ${task.priority===key?pr.color:'transparent'}`,borderRadius:5,color:pr.color,fontSize:12,fontWeight:700,padding:'4px 8px',cursor:'pointer',textAlign:'left'}}>{pr.dot} {pr.label}</button>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ── QuickTasksSidebar ──────────────────────────────────────────────────────────
-function QuickTasksSidebar({collapsed,onToggleCollapse}){
-  const[tasks,setTasks]=useState([])
-  const[newText,setNewText]=useState('')
-  const[newPrio,setNewPrio]=useState('media')
-  const[filter,setFilter]=useState('tutti')
-  const inputRef=useRef(null)
-  const pendingCount=tasks.filter(t=>!t.done).length
-
-  // Carica da API all'avvio e ogni 15s
-  useEffect(()=>{
-    const load=()=>fetch('/api/progetti/quick-tasks').then(r=>r.ok?r.json():{tasks:[]}).then(d=>setTasks(d.tasks||[])).catch(()=>{})
-    load()
-    const t=setInterval(load,15000)
-    return()=>clearInterval(t)
-  },[])
-
-  // Salva su API ogni volta che tasks cambia
-  const saveRef=useRef(null)
-  useEffect(()=>{
-    if(saveRef.current) clearTimeout(saveRef.current)
-    saveRef.current=setTimeout(()=>{
-      fetch('/api/progetti/quick-tasks',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({tasks})}).catch(()=>{})
-    },400)
-  },[tasks])
-
-  const filtered=tasks.filter(t=>{
-    if(filter==='da_fare') return !t.done
-    if(filter==='fatti')   return t.done
-    if(filter==='alta')    return t.priority==='alta'
-    if(filter==='media')   return t.priority==='media'
-    if(filter==='bassa')   return t.priority==='bassa'
-    return true
-  })
-  function addTask(){
-    if(!newText.trim()) return
-    setTasks(ts=>[{id:uid(),text:newText.trim(),priority:newPrio,done:false,createdAt:new Date().toISOString()},...ts])
-    setNewText('');inputRef.current?.focus()
-  }
-  if(collapsed){
-    return(
-      <div onClick={onToggleCollapse} title='Apri task rapidi'
-        style={{width:32,flexShrink:0,background:T.surface,borderLeft:`1px solid ${T.border}`,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',cursor:'pointer',userSelect:'none'}}>
-        <div style={{writingMode:'vertical-rl',transform:'rotate(180deg)',fontSize:12,fontWeight:700,color:T.textSub,letterSpacing:'0.1em',display:'flex',alignItems:'center',gap:6}}>
-          ⚡ TASK RAPIDI
-          {pendingCount>0&&<span style={{background:T.accent,color:'#fff',borderRadius:10,fontSize:10,fontWeight:800,padding:'2px 5px',writingMode:'horizontal-tb'}}>{pendingCount}</span>}
-        </div>
-      </div>
-    )
-  }
-  return(
-    <div style={{width:280,flexShrink:0,background:T.surface,borderLeft:`1px solid ${T.border}`,display:'flex',flexDirection:'column',overflow:'hidden'}}>
-      <div style={{padding:'14px 14px 10px',borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
-        <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
-          <span style={{fontSize:16}}>⚡</span>
-          <span style={{fontSize:14,fontWeight:800,color:T.text,flex:1}}>Task Rapidi</span>
-          {pendingCount>0&&<span style={{background:T.accent,color:'#fff',borderRadius:20,fontSize:11,fontWeight:800,padding:'2px 8px'}}>{pendingCount}</span>}
-          <button onClick={onToggleCollapse} style={{background:'none',border:`1px solid ${T.border}`,borderRadius:6,color:T.textMuted,fontSize:12,padding:'2px 7px',cursor:'pointer'}}>✕</button>
-        </div>
-        <div style={{display:'flex',flexDirection:'column',gap:6}}>
-          <input ref={inputRef} value={newText} onChange={e=>setNewText(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')addTask()}} placeholder='Nuovo task...'
-            style={{background:T.surface2,border:`1.5px solid ${T.border}`,borderRadius:8,padding:'8px 10px',color:T.text,fontSize:13,outline:'none',width:'100%'}}/>
-          <div style={{display:'flex',gap:5}}>
-            {Object.entries(PRIORITY).map(([key,p])=>(
-              <button key={key} onClick={()=>setNewPrio(key)} style={{flex:1,background:newPrio===key?p.bg:'transparent',border:`1.5px solid ${newPrio===key?p.color:T.border}`,borderRadius:6,color:newPrio===key?p.color:T.textMuted,fontSize:11,fontWeight:700,padding:'5px 0',cursor:'pointer'}}>{p.dot} {p.label}</button>
-            ))}
-          </div>
-          <button onClick={addTask} style={{background:T.accent,border:'none',borderRadius:8,color:'#fff',fontWeight:700,fontSize:13,padding:'8px',cursor:'pointer',width:'100%'}}>+ Aggiungi</button>
-        </div>
-      </div>
-      <div style={{padding:'8px 10px',borderBottom:`1px solid ${T.border}`,display:'flex',flexWrap:'wrap',gap:4,flexShrink:0}}>
-        {[['tutti',`Tutti (${tasks.length})`],['da_fare',`Da fare (${tasks.filter(t=>!t.done).length})`],['fatti',`Fatti (${tasks.filter(t=>t.done).length})`],['alta','🔴'],['media','🟡'],['bassa','🟢']].map(([key,label])=>(
-          <button key={key} onClick={()=>setFilter(key)} style={{background:filter===key?T.surface2:'transparent',border:`1px solid ${filter===key?T.borderStrong:'transparent'}`,borderRadius:6,color:filter===key?T.text:T.textMuted,fontSize:11,fontWeight:600,padding:'3px 8px',cursor:'pointer'}}>{label}</button>
-        ))}
-      </div>
-      <div style={{flex:1,overflowY:'auto',padding:'8px'}}>
-        {filtered.length===0&&<div style={{textAlign:'center',padding:'30px 10px',color:T.textMuted,fontSize:13}}>{filter==='tutti'?'Nessun task ancora.\nAggiungine uno!':'Nessun task in questa categoria.'}</div>}
-        {filtered.map(task=>(
-          <QuickTaskRow key={task.id} task={task}
-            onToggle={()=>setTasks(ts=>ts.map(t=>t.id===task.id?{...t,done:!t.done}:t))}
-            onDelete={()=>setTasks(ts=>ts.filter(t=>t.id!==task.id))}
-            onPriority={p=>setTasks(ts=>ts.map(t=>t.id===task.id?{...t,priority:p}:t))}
-            onEditText={text=>setTasks(ts=>ts.map(t=>t.id===task.id?{...t,text}:t))}/>
-        ))}
-      </div>
-    </div>
-  )
-}
-// ── DeliveryRow ────────────────────────────────────────────────────────────────
-function DeliveryRow({d,onToggle,onEdit,onDelete,onOpen}){
-  const[hovered,setHovered]=useState(false)
-  const u=d.urgency
-  return(
-    <div onMouseEnter={()=>setHovered(true)} onMouseLeave={()=>setHovered(false)}
-      style={{background:T.surface,border:`1.5px solid ${d.delivered?T.border:u.color+'44'}`,borderLeft:`4px solid ${d.delivered?T.border:u.color}`,borderRadius:12,padding:'14px 18px',display:'flex',alignItems:'center',gap:14,opacity:d.delivered?0.65:1,transition:'all 0.15s',boxShadow:hovered&&!d.delivered?'0 2px 12px rgba(0,0,0,0.07)':'none'}}>
-      <div onClick={onToggle} title={d.delivered?'Segna come da consegnare':'Segna come consegnato'}
-        style={{width:24,height:24,borderRadius:8,flexShrink:0,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',border:d.delivered?'none':`2px solid ${u.color}`,background:d.delivered?T.green:'transparent',transition:'all 0.2s'}}>
-        {d.delivered&&<span style={{color:'#fff',fontSize:14,fontWeight:800}}>✓</span>}
-      </div>
-      <div style={{flex:1,minWidth:0}}>
-        <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:3}}>
-          {d.proj&&<div style={{width:10,height:10,borderRadius:'50%',background:d.proj.color,flexShrink:0}}/>}
-          <span style={{fontSize:15,fontWeight:700,color:T.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{d.proj?.name||<span style={{color:T.red,fontStyle:'italic'}}>Progetto eliminato</span>}</span>
-        </div>
-        <div style={{display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
-          {d.note&&<span style={{fontSize:13,color:T.textSub}}>{d.note}</span>}
-          {d.delivered&&d.deliveredAt&&<span style={{fontSize:12,color:T.textMuted,fontStyle:'italic'}}>Consegnato {d.deliveredAt}</span>}
-        </div>
-      </div>
-      {d.proj&&!d.delivered&&(
-        <div style={{width:80,flexShrink:0}}>
-          <div style={{fontSize:11,color:T.textMuted,marginBottom:3,textAlign:'right'}}>{d.progress}%</div>
-          <div style={{height:5,background:T.surface2,borderRadius:3,overflow:'hidden'}}><div style={{height:'100%',width:`${d.progress}%`,background:d.proj.color,borderRadius:3}}/></div>
-        </div>
-      )}
-      {!d.delivered&&(
-        <div style={{background:u.bg,color:u.color,border:`1.5px solid ${u.color}44`,borderRadius:20,padding:'4px 14px',fontSize:13,fontWeight:800,flexShrink:0,minWidth:70,textAlign:'center'}}>
-          {u.dot} {d.days===null?'—':d.days===0?'OGGI':d.days<0?`${Math.abs(d.days)}gg fa`:`${d.days}gg`}
-        </div>
-      )}
-      <div style={{fontSize:13,color:T.textMuted,flexShrink:0,minWidth:80,textAlign:'right'}}>
-        {d.dueDate?new Date(d.dueDate).toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric'}):'—'}
-      </div>
-      <div style={{display:'flex',gap:6,opacity:hovered?1:0,transition:'opacity 0.15s',flexShrink:0}}>
-        {d.proj&&<button onClick={onOpen} style={{background:T.surface2,border:`1px solid ${T.border}`,borderRadius:7,color:T.textSub,fontSize:12,padding:'4px 10px',cursor:'pointer',fontWeight:600}}>Apri →</button>}
-        <button onClick={onEdit} style={{background:'none',border:`1px solid ${T.border}`,borderRadius:7,color:T.textSub,fontSize:12,padding:'4px 8px',cursor:'pointer'}}>✏️</button>
-        <button onClick={onDelete} style={{background:'none',border:`1px solid ${T.red}44`,borderRadius:7,color:T.red,fontSize:12,padding:'4px 8px',cursor:'pointer'}}>🗑️</button>
-      </div>
-    </div>
-  )
-}
-
-// ── DeliveryPage ───────────────────────────────────────────────────────────────
-function DeliveryPage({projects,deliveries,onSetDelivery,onNavigateToProject}){
-  const[showForm,setShowForm]=useState(false)
-  const[editId,setEditId]=useState(null)
-  const[form,setForm]=useState({projectId:'',note:'',dueDate:'',delivered:false})
-  const[confirm,setConfirm]=useState(null)
-  const activeProjects=projects.filter(p=>!p.archived)
-  const enriched=deliveries.map(d=>{
-    const proj=projects.find(p=>p.id===d.projectId)
-    const days=daysUntil(d.dueDate)
-    const urgency=deliveryUrgency(days)
-    const progress=proj?getProgress(proj):0
-    return{...d,proj,days,urgency,progress}
-  }).sort((a,b)=>{
-    if(a.delivered!==b.delivered) return a.delivered?1:-1
-    if(a.days===null) return 1;if(b.days===null) return -1
-    return a.days-b.days
-  })
-  const pending=enriched.filter(d=>!d.delivered)
-  const delivered=enriched.filter(d=>d.delivered)
-  const urgent=pending.filter(d=>d.days!==null&&d.days<=7)
-  function openNew(){setForm({projectId:activeProjects[0]?.id||'',note:'',dueDate:'',delivered:false});setEditId(null);setShowForm(true)}
-  function openEdit(d){setForm({projectId:d.projectId,note:d.note||'',dueDate:d.dueDate||'',delivered:d.delivered});setEditId(d.id);setShowForm(true)}
-  function save(){
-    if(!form.projectId||!form.dueDate) return
-    if(editId){
-      onSetDelivery(editId,form,true)
-    }else{
-      onSetDelivery(uid(),form,false)
-    }
-    setShowForm(false)
-  }
-  const inputSt={background:T.surface2,border:`1.5px solid ${T.border}`,borderRadius:8,padding:'9px 12px',color:T.text,fontSize:14,outline:'none',width:'100%'}
-  return(
-    <div style={{flex:1,overflowY:'auto',padding:'24px 28px',background:T.bg,fontFamily:"var(--font-display)"}}>
-      {urgent.length>0&&(
-        <div style={{background:T.redBg,border:`2px solid ${T.red}44`,borderRadius:14,padding:'16px 20px',marginBottom:24}}>
-          <div style={{fontSize:13,fontWeight:800,color:T.red,letterSpacing:'0.08em',marginBottom:10}}>🎯 FOCUS DEL GIORNO — {urgent.length} CONSEGN{urgent.length===1?'A':'E'} URGENTI</div>
-          <div style={{display:'flex',flexDirection:'column',gap:8}}>
-            {urgent.map(d=>(
-              <div key={d.id} style={{display:'flex',alignItems:'center',gap:12,background:'rgba(255,255,255,0.6)',borderRadius:10,padding:'10px 14px'}}>
-                <span style={{fontSize:20}}>{d.urgency.dot}</span>
-                <div style={{flex:1}}><span style={{fontWeight:700,color:T.text,fontSize:15}}>{d.proj?.name||'—'}</span>{d.note&&<span style={{fontSize:13,color:T.textSub,marginLeft:8}}>{d.note}</span>}</div>
-                <span style={{fontSize:13,fontWeight:800,color:d.urgency.color,background:d.urgency.bg,padding:'3px 12px',borderRadius:20,border:`1px solid ${d.urgency.color}44`}}>{d.days===0?'OGGI':d.days<0?`${Math.abs(d.days)}gg fa`:`${d.days}gg`}</span>
-                <span style={{fontSize:13,color:T.textSub}}>{d.progress}%</span>
-                {d.proj&&<button onClick={()=>onNavigateToProject(d.proj.id)} style={{background:T.red,border:'none',borderRadius:7,color:'#fff',fontSize:12,fontWeight:700,padding:'5px 12px',cursor:'pointer'}}>Apri →</button>}
+                <div style={{height:8,background:'#e2e8f0',borderRadius:4,overflow:'hidden',marginBottom:6}}>
+                  <div style={{height:'100%',width:`${lavInfo.pct}%`,
+                    background:progettoLav.color||'#1D5FAD',borderRadius:4,transition:'width 0.4s'}}/>
+                </div>
+                <div style={{display:'flex',gap:20}}>
+                  <span style={{fontSize:12,color:'#475569'}}>
+                    <b style={{color:'#0d2d5e'}}>{lavInfo.done}</b>/{lavInfo.tot} completati
+                  </span>
+                  <span style={{fontSize:12,color:'#475569'}}>
+                    <b style={{color:'#1D5FAD'}}>{lavInfo.inMac}</b> in macchina
+                  </span>
+                  <span style={{fontSize:13,fontWeight:800,color:progettoLav.color||'#1D5FAD',marginLeft:'auto'}}>
+                    {lavInfo.pct}%
+                  </span>
+                </div>
               </div>
-            ))}
+            ) : (
+              <div style={{color:'#94a3b8',fontSize:13,fontStyle:'italic'}}>
+                Nessun pallet in lavorazione
+              </div>
+            )}
           </div>
-        </div>
-      )}
-      <div style={{display:'flex',alignItems:'center',marginBottom:20}}>
-        <div style={{fontSize:13,color:T.textSub,fontWeight:700,letterSpacing:'0.06em'}}>CONSEGNE — {pending.length} IN ATTESA</div>
-        <button onClick={openNew} style={{marginLeft:'auto',background:T.accent,border:'none',borderRadius:8,color:'#fff',fontWeight:700,fontSize:14,padding:'9px 20px',cursor:'pointer'}}>+ Nuova consegna</button>
-      </div>
-      {showForm&&(
-        <div style={{background:T.surface,border:`1.5px solid ${T.accent}44`,borderRadius:14,padding:'20px',marginBottom:20}}>
-          <div style={{fontSize:14,fontWeight:700,color:T.text,marginBottom:14}}>{editId?'✏️ Modifica consegna':'+ Nuova consegna'}</div>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}}>
-            <div><label style={{fontSize:12,color:T.textSub,fontWeight:700,display:'block',marginBottom:5}}>PROGETTO *</label>
-              <select value={form.projectId} onChange={e=>setForm(f=>({...f,projectId:e.target.value}))} style={{...inputSt,appearance:'none'}}>
-                <option value=''>— Seleziona —</option>
-                {activeProjects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
+
+          {/* Scadenze */}
+          <div style={{background:'#fff',border:'1px solid #e2e8f0',borderRadius:12,padding:'14px 18px'}}>
+            <div style={{fontSize:11,fontWeight:800,letterSpacing:'0.08em',color:'#0d2d5e',marginBottom:10}}>
+              SCADENZE PROGETTI
             </div>
-            <div><label style={{fontSize:12,color:T.textSub,fontWeight:700,display:'block',marginBottom:5}}>DATA DI CONSEGNA *</label><input type='date' value={form.dueDate} onChange={e=>setForm(f=>({...f,dueDate:e.target.value}))} style={inputSt}/></div>
+            {conScadenza.length===0 ? (
+              <div style={{color:'#94a3b8',fontSize:13,fontStyle:'italic'}}>Nessun progetto con scadenza</div>
+            ) : (
+              <div style={{display:'flex',flexDirection:'column',gap:5}}>
+                {conScadenza.map(({p,days,pNum})=>{
+                  const overdue = days<0
+                  const today   = days===0
+                  const soon    = days>0&&days<=3
+                  const color   = overdue?'#dc2626':today?'#d97706':soon?'#c2410c':'#475569'
+                  const bg      = overdue?'#fef2f2':today?'#fffbeb':soon?'#fff7ed':'#f8fafc'
+                  const badge   = overdue?`${Math.abs(days)}gg fa`:today?'OGGI':`${days}gg`
+                  return (
+                    <div key={p.id} onClick={()=>onNavigateProject(p.id)}
+                      style={{display:'flex',alignItems:'center',gap:10,
+                        background:bg,borderRadius:8,padding:'7px 12px',cursor:'pointer',
+                        border:`1px solid ${color}22`}}>
+                      <div style={{width:7,height:7,borderRadius:'50%',background:color,flexShrink:0}}/>
+                      <span style={{fontSize:12,fontWeight:700,color:'#1e293b',flex:1,
+                        overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                        {p.name}
+                      </span>
+                      {pNum&&<span style={{fontSize:10,fontWeight:700,color:'#0d2d5e',
+                        background:'#eff6ff',padding:'1px 6px',borderRadius:4,flexShrink:0}}>P{pNum}</span>}
+                      <span style={{fontSize:11,fontWeight:800,color,flexShrink:0,
+                        background:'#fff',padding:'1px 8px',borderRadius:10,
+                        border:`1px solid ${color}44`}}>{badge}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
-          <div style={{marginBottom:14}}><label style={{fontSize:12,color:T.textSub,fontWeight:700,display:'block',marginBottom:5}}>NOTE (opzionale)</label><input value={form.note} onChange={e=>setForm(f=>({...f,note:e.target.value}))} placeholder='Es. consegna parziale, cliente X...' style={inputSt}/></div>
-          <div style={{display:'flex',gap:10,justifyContent:'flex-end'}}>
-            <button onClick={()=>setShowForm(false)} style={{background:'none',border:`1px solid ${T.border}`,borderRadius:8,color:T.textSub,fontSize:14,padding:'8px 18px',cursor:'pointer'}}>Annulla</button>
-            <button onClick={save} disabled={!form.projectId||!form.dueDate} style={{background:form.projectId&&form.dueDate?T.accent:'#ccc',border:'none',borderRadius:8,color:'#fff',fontWeight:700,fontSize:14,padding:'8px 22px',cursor:form.projectId&&form.dueDate?'pointer':'default'}}>{editId?'Salva modifiche':'Aggiungi'}</button>
+
+          {/* Utensili con problemi */}
+          <div style={{background:'#fff',border:'1px solid #e2e8f0',borderRadius:12,padding:'14px 18px'}}>
+            <div style={{fontSize:11,fontWeight:800,letterSpacing:'0.08em',color:'#0d2d5e',marginBottom:10}}>
+              UTENSILI — ATTENZIONE
+              {utensiliProblema.length>0&&
+                <span style={{marginLeft:8,fontSize:11,fontWeight:800,color:'#dc2626',
+                  background:'#fef2f2',padding:'1px 8px',borderRadius:10}}>
+                  {utensiliProblema.length}
+                </span>}
+            </div>
+            {utensiliProblema.length===0 ? (
+              <div style={{color:'#22c55e',fontSize:13,fontWeight:600}}>✓ Nessun problema rilevato</div>
+            ) : (
+              <div style={{display:'flex',flexDirection:'column',gap:4}}>
+                {utensiliProblema.map(u=>(
+                  <div key={u.alias}
+                    style={{display:'flex',alignItems:'center',gap:10,
+                      background:u.bg,border:`1px solid ${u.border}`,
+                      borderRadius:8,padding:'7px 12px'}}>
+                    <span style={{fontSize:11,fontWeight:800,color:u.color,
+                      background:'#fff',padding:'1px 7px',borderRadius:4,
+                      border:`1px solid ${u.border}`,flexShrink:0,minWidth:70,textAlign:'center'}}>
+                      {u.label}
+                    </span>
+                    <span style={{fontSize:12,fontWeight:700,color:'#1e293b',
+                      fontFamily:'monospace',flex:1,
+                      overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                      {u.alias}
+                    </span>
+                    {u.detail&&<span style={{fontSize:10,color:u.color,opacity:0.8,
+                      flexShrink:0,maxWidth:160,overflow:'hidden',
+                      textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                      {u.detail}
+                    </span>}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
-      )}
-      {pending.length===0&&!showForm&&(
-        <div style={{textAlign:'center',padding:'60px 0'}}>
-          <div style={{fontSize:48,marginBottom:16}}>📅</div>
-          <div style={{fontSize:18,fontWeight:700,color:T.text,marginBottom:8}}>Nessuna consegna programmata</div>
-          <div style={{fontSize:15,color:T.textSub,marginBottom:20}}>Aggiungi le date di consegna dei tuoi progetti</div>
-          <button onClick={openNew} style={{background:T.accent,border:'none',borderRadius:10,color:'#fff',fontWeight:700,fontSize:15,padding:'11px 26px',cursor:'pointer'}}>+ Prima consegna</button>
+
+        {/* ── COL 3: METRICHE ───────────────────────────────────────────── */}
+        <div style={{display:'flex',flexDirection:'column',gap:10}}>
+          <div style={{fontSize:11,fontWeight:800,letterSpacing:'0.08em',color:'#0d2d5e'}}>METRICHE TURNO</div>
+          {[
+            {val:pgmDaFare,  label:'Da fare',       sub:`${inProgress.length} lavori attivi`, color:'#0d2d5e', bg:'#eff6ff'},
+            {val:pgmInMac,   label:'In macchina',    sub:'programmi attivi',                  color:'#1D5FAD', bg:'#dbeafe'},
+            {val:pgmOggi,    label:'Completati oggi',sub:'nel turno corrente',                color:'#166534', bg:'#dcfce7'},
+            {val:critici,    label:'Critici',         sub:'scaduti o in ritardo',             color:'#dc2626', bg:'#fef2f2'},
+          ].map(({val,label,sub,color,bg})=>(
+            <div key={label} style={{background:bg,borderRadius:10,padding:'14px 16px'}}>
+              <div style={{fontSize:32,fontWeight:800,color,lineHeight:1,marginBottom:2}}>{val}</div>
+              <div style={{fontSize:12,fontWeight:700,color,marginBottom:2}}>{label}</div>
+              <div style={{fontSize:10,color,opacity:0.7}}>{sub}</div>
+            </div>
+          ))}
         </div>
-      )}
-      {pending.length>0&&<div style={{display:'flex',flexDirection:'column',gap:10,marginBottom:32}}>{pending.map(d=><DeliveryRow key={d.id} d={d} onToggle={()=>onSetDelivery(d.id,{delivered:!d.delivered,deliveredAt:!d.delivered?nowStr():null},true)} onEdit={()=>openEdit(d)} onDelete={()=>setConfirm(d.id)} onOpen={()=>d.proj&&onNavigateToProject(d.proj.id)}/>)}</div>}
-      {delivered.length>0&&(
-        <details style={{marginTop:8}}>
-          <summary style={{fontSize:13,color:T.textSub,fontWeight:700,letterSpacing:'0.06em',cursor:'pointer',marginBottom:10}}>✅ CONSEGNATE — {delivered.length}</summary>
-          <div style={{display:'flex',flexDirection:'column',gap:8,marginTop:10}}>{delivered.map(d=><DeliveryRow key={d.id} d={d} onToggle={()=>onSetDelivery(d.id,{delivered:!d.delivered,deliveredAt:!d.delivered?nowStr():null},true)} onEdit={()=>openEdit(d)} onDelete={()=>setConfirm(d.id)} onOpen={()=>d.proj&&onNavigateToProject(d.proj.id)}/>)}</div>
-        </details>
-      )}
-      {confirm&&<ConfirmDialog message='Eliminare questa consegna?' onConfirm={()=>{onSetDelivery(confirm,null,null,true);setConfirm(null)}} onCancel={()=>setConfirm(null)}/>}
+      </div>
     </div>
   )
 }
 
-// ── NewProjectModal ────────────────────────────────────────────────────────────
-function NewProjectModal({onClose,onCreate,templates,preselectedTemplate}){
-  const[name,setName]=useState('')
-  const[desc,setDesc]=useState('')
-  const[color,setColor]=useState(preselectedTemplate?.color||'#0d2d5e')
-  const[selectedTmpl,setSelectedTmpl]=useState(preselectedTemplate||null)
-  const[stepsRaw,setStepsRaw]=useState('')
-  function selectTmpl(t){setSelectedTmpl(t);if(t)setColor(t.color)}
-  function create(){
-    if(!name.trim()) return
-    const steps=selectedTmpl?cloneTemplateToSteps(selectedTmpl):stepsRaw.split('\n').filter(l=>l.trim()).map(line=>({id:uid(),title:line.trim(),tasks:[]}))
-    onCreate({id:uid(),name:name.trim(),description:desc.trim(),color,createdAt:new Date().toISOString().slice(0,10),archived:false,steps:steps.length?steps:[{id:uid(),title:'Step 1',tasks:[]}],log:[],pallet_assegnato:null})
-    onClose()
-  }
-  const inputStyle={width:'100%',background:T.surface2,border:`1.5px solid ${T.border}`,borderRadius:10,padding:'10px 14px',color:T.text,fontSize:15,outline:'none'}
-  return(
-    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:100}} onClick={onClose}>
-      <div onClick={e=>e.stopPropagation()} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:14,padding:32,width:540,maxWidth:'92vw',maxHeight:'88vh',overflowY:'auto',boxShadow:'0 12px 48px rgba(0,0,0,0.2)'}}>
-        <div style={{fontSize:20,fontWeight:800,color:T.text,marginBottom:22}}>Nuovo Progetto</div>
-        <div style={{marginBottom:16}}><label style={{fontSize:13,color:T.textSub,fontWeight:600,display:'block',marginBottom:6}}>NOME PROGETTO *</label><input autoFocus value={name} onChange={e=>setName(e.target.value)} style={inputStyle} placeholder='Es. 4349_0221'/></div>
-        <div style={{marginBottom:22}}><label style={{fontSize:13,color:T.textSub,fontWeight:600,display:'block',marginBottom:6}}>DESCRIZIONE</label><input value={desc} onChange={e=>setDesc(e.target.value)} style={inputStyle} placeholder='Breve descrizione'/></div>
-        <div style={{marginBottom:22}}>
-          <label style={{fontSize:13,color:T.textSub,fontWeight:600,display:'block',marginBottom:10}}>PARTI DA UN TEMPLATE</label>
-          <div style={{display:'flex',flexWrap:'wrap',gap:8,marginBottom:12}}>
-            <button onClick={()=>selectTmpl(null)} style={{background:!selectedTmpl?T.surface2:'transparent',border:`1.5px solid ${!selectedTmpl?T.borderStrong:T.border}`,borderRadius:8,color:!selectedTmpl?T.text:T.textSub,fontSize:13,padding:'7px 14px',cursor:'pointer',fontWeight:600}}>Nessuno</button>
-            {templates.map(t=><button key={t.id} onClick={()=>selectTmpl(t)} style={{background:selectedTmpl?.id===t.id?t.color+'18':'transparent',border:`1.5px solid ${selectedTmpl?.id===t.id?t.color:T.border}`,borderRadius:8,color:selectedTmpl?.id===t.id?t.color:T.textSub,fontSize:13,padding:'7px 14px',cursor:'pointer',fontWeight:600}}>{t.icon} {t.name}</button>)}
-          </div>
-          {selectedTmpl?(
-            <div style={{background:T.surface2,border:`1px solid ${T.border}`,borderRadius:10,padding:'12px 16px'}}>
-              <div style={{fontSize:12,color:T.textSub,fontWeight:700,marginBottom:8}}>FASI INCLUSE</div>
-              {selectedTmpl.steps.map(s=><div key={s.id} style={{fontSize:14,color:T.text,marginBottom:4,display:'flex',gap:8}}><span style={{color:selectedTmpl.color,fontWeight:700}}>•</span>{s.title} <span style={{color:T.textMuted}}>({(s.tasks||[]).length} task)</span></div>)}
-            </div>
-          ):(
-            <div><label style={{fontSize:13,color:T.textSub,fontWeight:600,display:'block',marginBottom:6}}>OPPURE INSERISCI FASI (una per riga)</label><textarea value={stepsRaw} onChange={e=>setStepsRaw(e.target.value)} rows={4} placeholder={'Preparazione\nFase 1\nFase 2'} style={{...inputStyle,resize:'vertical'}}/></div>
-          )}
-        </div>
-        <div style={{marginBottom:24}}>
-          <label style={{fontSize:13,color:T.textSub,fontWeight:600,display:'block',marginBottom:10}}>COLORE PROGETTO</label>
-          <div style={{display:'flex',gap:10}}>{COLORS.map(c=><div key={c} onClick={()=>setColor(c)} style={{width:30,height:30,borderRadius:'50%',background:c,cursor:'pointer',border:color===c?'3px solid #333':'3px solid transparent',transform:color===c?'scale(1.15)':'scale(1)'}}/>)}</div>
-        </div>
-        <div style={{display:'flex',gap:10,justifyContent:'flex-end'}}>
-          <button onClick={onClose} style={{background:T.surface2,border:`1px solid ${T.border}`,borderRadius:10,color:T.textSub,fontSize:15,padding:'10px 22px',cursor:'pointer',fontWeight:600}}>Annulla</button>
-          <button onClick={create} style={{background:color,border:'none',borderRadius:10,color:'#fff',fontWeight:800,fontSize:15,padding:'10px 26px',cursor:'pointer'}}>Crea Progetto</button>
-        </div>
-      </div>
-    </div>
-  )
 }
 // ── App principale ─────────────────────────────────────────────────────────────
 export default function Progetti(){

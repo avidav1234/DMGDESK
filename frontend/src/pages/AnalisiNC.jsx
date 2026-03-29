@@ -296,6 +296,19 @@ export default function AnalisiNC() {
     finally { setSending(false) }
   }
 
+  const doSendBatch = async () => {
+    if (!fileDaInviare.length) return
+    setSending(true); setInvioResults([]); setInvioStatus(null)
+    try {
+      const r = await api.inviaBatch(progetto, fileDaInviare)
+      setInvioResults(r.risultati || [])
+      setInvioStatus(r.n_err === 0
+        ? { type: 'ok',  msg: `⚡ ${r.n_ok} file batch — monitoraggio completato` }
+        : { type: 'warn', msg: `${r.n_ok} OK · ${r.n_err} errori` })
+    } catch (e) { setInvioStatus({ type: 'err', msg: e.message }) }
+    finally { setSending(false) }
+  }
+
   const saveMachCfg = async () => {
     try { await api.setMachineConfig({ ip: machIp, port: Number(machPort) }); setEditingCfg(false) }
     catch (e) { setInvioStatus({ type: 'err', msg: e.message }) }
@@ -416,6 +429,15 @@ export default function AnalisiNC() {
             background: checkResult?.reachable && !sending ? 'var(--navy-700)' : 'var(--bg-hover)',
             border: 'none', color: checkResult?.reachable && !sending ? 'white' : 'var(--text-dim)' }}>
           {sending ? '⏳' : '📤'} Invia tutto
+        </button>
+        <button onClick={doSendBatch}
+          disabled={!checkResult?.reachable || sending || !fileDaInviare.length || !progetto}
+          title="Invia tutti i file in una sola connessione — più veloce, con verifica per ogni file"
+          style={{ padding: '7px 14px', borderRadius: 7, fontSize: 12, fontWeight: 700,
+            cursor: (!checkResult?.reachable || sending) ? 'not-allowed' : 'pointer',
+            background: checkResult?.reachable && !sending ? '#0369a1' : 'var(--bg-hover)',
+            border: 'none', color: checkResult?.reachable && !sending ? 'white' : 'var(--text-dim)' }}>
+          {sending ? '⏳' : '⚡'} Batch
         </button>
         {mainGeneratoFile && (
           <button onClick={() => doSend(true)} disabled={!checkResult?.reachable || sending || !progetto}

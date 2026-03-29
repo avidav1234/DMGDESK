@@ -167,6 +167,15 @@ class TabAnalisiNC:
             state="disabled")
         self.btn_invia.pack(side="right", padx=3)
 
+        # ⚡ Batch
+        self.btn_batch = ctk.CTkButton(
+            right, text="⚡ Batch",
+            command=self._invia_batch,
+            fg_color="#0369a1", hover_color="#075985",
+            font=get_font("medium"), height=BTN_H, width=90, corner_radius=6,
+            state="disabled")
+        self.btn_batch.pack(side="right", padx=3)
+
         # ── Separatore ────────────────────────────────────────────────────
         sep = ctk.CTkFrame(self.parent, fg_color="#E8EDF2", height=1)
         sep.pack(fill="x")
@@ -319,6 +328,7 @@ class TabAnalisiNC:
         self.lbl_fonte.configure(text="")
         self.btn_invia.configure(state="disabled")
         self.btn_solo_main.configure(state="disabled")
+        self.btn_batch.configure(state="disabled")
         self.entry_nome.delete(0, "end")
         self._show_placeholder()
 
@@ -399,6 +409,7 @@ class TabAnalisiNC:
 
         self.lbl_fonte.configure(text=fonte)
         self.btn_invia.configure(state="normal")
+        self.btn_batch.configure(state="normal")
 
         if show_message:
             messagebox.showinfo("Confronto completato",
@@ -537,6 +548,52 @@ class TabAnalisiNC:
             self.parent.wait_window(dlg)
         except Exception as e:
             messagebox.showerror("Errore", str(e))
+
+    def _invia_batch(self):
+        """Invia tutti i file in batch — una sola connessione TCP, verifica per file."""
+        if not self.file_paths:
+            return messagebox.showwarning("Attenzione", "Nessun file caricato")
+        progetto = self.entry_nome.get().strip()
+        if not progetto:
+            return messagebox.showwarning("Attenzione", "Inserisci il nome progetto")
+        try:
+            from machine_client import MachineClient
+            from database.db_handler import carica_configurazione
+            config = carica_configurazione()
+            ip   = config.get("machine_ip",   "10.95.20.29")
+            port = int(config.get("machine_port", 9999))
+
+            paths = list(self.file_paths)
+            if self._main_generato_path and os.path.exists(self._main_generato_path):
+                if self._main_generato_path not in paths:
+                    paths.insert(0, self._main_generato_path)
+
+            self.btn_batch.configure(state="disabled", text="⏳ Batch...")
+
+            def _worker():
+                client = MachineClient(ip, port)
+                n_ok, n_err, dettaglio = client.invia_batch(paths, progetto)
+                self.parent.after(0, lambda: _done(n_ok, n_err, dettaglio))
+
+            def _done(n_ok, n_err, dettaglio):
+                self.btn_batch.configure(state="normal", text="⚡ Batch")
+                if n_err == 0:
+                    msg = f"⚡ Batch OK — {n_ok} file trasferiti"
+                else:
+                    msg = f"⚡ Batch: {n_ok} OK, {n_err} errori"
+                # Mostra dettaglio in dialog
+                detail_lines = "\n".join(
+                    f"{'✓' if d.get('ok') else '✗'} {d.get('nome','')}  {d.get('msg','')}"
+                    for d in dettaglio
+                ) if dettaglio else msg
+                messagebox.showinfo("Risultato Batch", f"{msg}\n\n{detail_lines}")
+
+            import threading
+            threading.Thread(target=_worker, daemon=True).start()
+
+        except Exception as e:
+            messagebox.showerror("Errore", str(e))
+            self.btn_batch.configure(state="normal", text="⚡ Batch")
 
     def _genera_main(self):
         if not self.file_paths:

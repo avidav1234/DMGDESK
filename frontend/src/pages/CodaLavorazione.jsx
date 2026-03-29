@@ -15,12 +15,15 @@ const STATI_ORDER = ["VUOTO", "GREZZO", "FINITO", "GUASTO"];
 // Estrae commessa/posizione/fase dal path NC
 function parseProgram(path) {
   if (!path) return null;
-  // Es: /_N_WKS_DIR/_N_4349_0221_WPD/_N_4349_0221_03_010_MPF
+  // Caso 1: path raw completo /_N_WKS_DIR/_N_4349_0221_WPD/_N_4349_0221_03_010_MPF
   const m = path.match(/_N_(\d+)_(\d+)_WPD\/_N_\d+_\d+_(.+?)_MPF/);
-  if (m) return { commessa: m[1], posizione: m[2], fase: m[3] };
-  // Fallback: solo nome file
-  const m2 = path.match(/_N_([^/]+?)_(?:MPF|SPF)$/);
-  return m2 ? { fase: m2[1] } : null;
+  if (m) return { commessa: m[1], posizione: m[2], fase: m[3], full: path };
+  // Caso 2: nome file già estratto es. "4348_0301_02_24.MPF"
+  const m2 = path.match(/^(\d+)_(\d+)_(.+?)\.MPF$/i);
+  if (m2) return { commessa: m2[1], posizione: m2[2], fase: m2[3], full: path };
+  // Caso 3: fallback generico — mostra tutto
+  const nome = path.replace(/\/_N_/g, '').replace(/_MPF$/,'').replace(/_/g,' ');
+  return { fase: nome, full: path };
 }
 
 const REFRESH_MS = 5000;

@@ -151,9 +151,17 @@ def _normalizza(raw: dict) -> dict:
             pass
     out["pallet_attivo"] = pallet
 
-    # programma_attivo — pulisci path lungo
-    prog = raw.get("programma_attivo", "")
-    out["programma_attivo"] = prog if prog and prog != "0" else None
+    # programma_attivo — filtra path di sistema, estrai solo nome file
+    prog = raw.get("programma_attivo", "") or ""
+    if prog and "_N_SYF_DIR" not in prog and "_N_CST_DIR" not in prog and prog != "0":
+        # Estrai nome file dal path: /_N_WKS_DIR/_N_WPD/_N_NOME_MPF → NOME.MPF
+        m_mpf = _re.search(r"/_N_([^/]+)_MPF$", prog)
+        if m_mpf:
+            out["programma_attivo"] = m_mpf.group(1) + ".MPF"
+        else:
+            out["programma_attivo"] = prog
+    else:
+        out["programma_attivo"] = None
 
     # utensile_attivo
     ut = raw.get("utensile_attivo", "")

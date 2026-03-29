@@ -159,6 +159,25 @@ export default function CodaLavorazione() {
     }
   }, []);
 
+  // Polling aggiornamento automatico stati da log OpcUa (ogni 5s)
+  useEffect(() => {
+    const aggiornaStati = async () => {
+      try {
+        const r = await fetch('/api/macchina-live/aggiorna-stati-da-log', { method: 'POST' })
+        if (!r.ok) return
+        const d = await r.json()
+        // Se ci sono stati aggiornamenti → ricarica tutto
+        if (d.pallet > 0 || d.in_macchina > 0 || d.completato > 0) {
+          await fetchAll()
+          await caricaPgmInMacchina()
+        }
+      } catch {}
+    }
+    aggiornaStati()
+    const t2 = setInterval(aggiornaStati, 5000)
+    return () => clearInterval(t2)
+  }, [fetchAll])
+
   useEffect(() => {
     fetchAll()
     fetch('/api/pallet/ordine-esecuzione')

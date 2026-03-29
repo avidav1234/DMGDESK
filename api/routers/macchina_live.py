@@ -402,20 +402,139 @@ async def get_live_context():
 @router.post("/aggiorna-stati-da-log")
 async def aggiorna_stati_da_log():
     """
-    FUTURO: chiamata dal frontend ogni N secondi.
-    Legge il programma attivo dal log e aggiorna automaticamente
-    lo stato dei programmi nei progetti:
-    - programma che sta girando → in_macchina (se era da_fare)
-    - programma appena finito (cambio programma) → completato
-
-    Oggi ritorna solo il contesto senza modificare nulla.
-    Quando il log sarà affidabile, abilitare la scrittura.
+    Chiamata dal frontend ogni 5 secondi.
+    Legge programma_attivo e stato_programma dal log OpcUa e applica:
+    1. Pallet in lavorazione da log (stato=3)
+    2. Programma attivo → in_macchina
+    3. Programma precedente → completato (cambio programma)
+    4. Pallet → grezzo/finito quando macchina si ferma
     """
-    ctx = await get_live_context()
+    from api.routers.progetti import _load_progetti, _save_progetti, _invalidate_analisi_cache
+    from api.routers.pallet import _load as _load_pallet, _save as _save_pallet
+    from datetime import datetime as _dt
 
-    return {
-        "contesto": ctx,
-        "aggiornamenti_applicati": 0,
-        "_nota": "Aggiornamento automatico stati disabilitato — "
-                 "abilitare quando il log OpcUa è stabile e affidabile."
+    config   = carica_configurazione()
+    log_path = _trova_log_path(config)
+    if not log_path:
+        return {"aggiornamenti": 0, "nota": "log non trovato"}
+
+    raw  = _parse_log(log_path)
+    data = _normalizza(raw)
+
+    prog_raw  = data.get("programma_attivo") or ""
+    stato_pgm = data.get("stato_programma", 0)
+    now_str   = _dt.now().strftime("%d/%m/%Y %H:%M")
+
+    # Parsing path: /_N_WKS_DIR/_N_4349_0301_WPD/_N_4348_0301_02_24_MPF
+    wpd_m   = re.search(r"_N_([^/]+)_WPD", prog_raw)
+    mpf_m   = re.search(r"/_N_([^/]+)_MPF", prog_raw)
+    wpd_nome    = wpd_m.group(1) if wpd_m else None   # "4349_0301"
+    mpf_nome    = mpf_m.group(1) if mpf_m else None   # "4348_0301_02_24"
+    mpf_filename = (mpf_nome + ".MPF") if mpf_nome else None
+
+    updates = {
+        "pallet": 0, "in_macchina": 0, "completato": 0,
+        "progetto_rilevato": None, "pallet_rilevato": None,
+        "programma_attivo": mpf_filename, "stato_macchina": stato_pgm,
     }
+
+    proj_data   = _load_progetti(config)
+    pallet_data = _load_pallet(config)
+    projects    = proj_data.get("projects", [])
+    pallets     = pallet_data.get("pallet", [])
+    proj_dirty = pallet_dirty = False
+
+    # Trova progetto dal nome WPD
+    progetto_attivo = None
+    if wpd_nome:
+        for p in projects:
+            pname = (p.get("name") or "").upper().replace(" ","_").replace("-","_")
+            if pname == wpd_nome.upper() or wpd_nome.upper() in pname:
+                progetto_attivo = p
+                break
+
+    # Trova pallet dal progetto
+    pallet_num = None
+    if progetto_attivo:
+        for pal in pallets:
+            if pal.get("progetto_id") == progetto_attivo.get("id"):
+                pallet_num = pal.get("numero")
+                break
+
+    updates["progetto_rilevato"] = progetto_attivo.get("name") if progetto_attivo else None
+    updates["pallet_rilevato"]   = pallet_num
+
+    # ── Automazione 1 e 4: stato pallet ──────────────────────────────────
+    if pallet_num:
+        for pal in pallets:
+            if pal.get("numero") != pallet_num:
+                continue
+            if stato_pgm == 3 and pal.get("stato") != "in_lavorazione":
+                # Macchina in esecuzione → questo pallet diventa in_lavorazione
+                for other in pallets:
+                    if other.get("numero") != pallet_num and                        other.get("stato") == "in_lavorazione":
+                        other_proj = next((p for p in projects
+                            if p.get("id") == other.get("progetto_id")), None)
+                        if other_proj:
+                            all_pgm = [pg for s in other_proj.get("steps",[])
+                                for t in s.get("tasks",[])
+                                if t.get("text","").strip().lower()=="fresatura"
+                                for pg in t.get("programs",[])
+                                if pg.get("tipoGruppo")!="ipm"]
+                            all_done = all_pgm and all(
+                                pg.get("stato")=="completato" for pg in all_pgm)
+                            other["stato"] = "finito" if all_done else "grezzo"
+                            pallet_dirty = True
+                pal["stato"] = "in_lavorazione"
+                pal["aggiornato"] = now_str
+                pallet_dirty = True
+                updates["pallet"] += 1
+            elif stato_pgm in (0, 5) and pal.get("stato") == "in_lavorazione":
+                # Macchina ferma → grezzo o finito
+                if progetto_attivo:
+                    all_pgm = [pg for s in progetto_attivo.get("steps",[])
+                        for t in s.get("tasks",[])
+                        if t.get("text","").strip().lower()=="fresatura"
+                        for pg in t.get("programs",[])
+                        if pg.get("tipoGruppo")!="ipm"]
+                    all_done = all_pgm and all(
+                        pg.get("stato")=="completato" for pg in all_pgm)
+                    pal["stato"] = "finito" if all_done else "grezzo"
+                    pal["aggiornato"] = now_str
+                    pallet_dirty = True
+                    updates["pallet"] += 1
+            break
+
+    # ── Automazione 2 e 3: stati programmi ───────────────────────────────
+    if progetto_attivo and mpf_filename and stato_pgm == 3:
+        for step in progetto_attivo.get("steps", []):
+            for task in step.get("tasks", []):
+                if task.get("text","").strip().lower() != "fresatura":
+                    continue
+                for pgm in task.get("programs", []):
+                    if pgm.get("tipoGruppo") == "ipm":
+                        continue
+                    fn = (pgm.get("filename") or "").upper().replace(".MPF","").strip()
+                    tgt = mpf_filename.upper().replace(".MPF","").strip()
+                    if fn == tgt:
+                        # Programma attivo → in_macchina
+                        if pgm.get("stato") == "da_fare":
+                            pgm["stato"] = "in_macchina"
+                            pgm["tempoInizio"] = pgm.get("tempoInizio") or now_str
+                            proj_dirty = True
+                            updates["in_macchina"] += 1
+                    else:
+                        # Altro programma → se era in_macchina diventa completato
+                        if pgm.get("stato") == "in_macchina":
+                            pgm["stato"] = "completato"
+                            pgm["tempoFine"] = pgm.get("tempoFine") or now_str
+                            proj_dirty = True
+                            updates["completato"] += 1
+
+    if proj_dirty:
+        _save_progetti(config, proj_data)
+        _invalidate_analisi_cache()
+    if pallet_dirty:
+        _save_pallet(config, pallet_data)
+
+    return updates

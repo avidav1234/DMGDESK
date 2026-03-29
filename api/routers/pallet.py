@@ -170,10 +170,32 @@ class SetLavorazioneBody(BaseModel):
 
 @router.get("/")
 async def get_pallet():
-    """Restituisce lo stato attuale di tutti i pallet."""
+    """Restituisce lo stato attuale di tutti i pallet.
+    Garantisce che al massimo 1 pallet sia in_lavorazione —
+    se ce ne sono più di uno (inconsistenza), tieni il più recente.
+    """
     config = carica_configurazione()
-    path = _pallet_path(config)
-    state = _load(config)
+    state  = _load(config)
+    pallets = state.get("pallet", [])
+
+    # Trova tutti i pallet in_lavorazione
+    in_lav = [p for p in pallets if (p.get("stato") or "").lower() == "in_lavorazione"]
+
+    if len(in_lav) > 1:
+        # Tieni solo quello con aggiornato più recente, rimetti gli altri a grezzo
+        in_lav_sorted = sorted(
+            in_lav,
+            key=lambda p: p.get("aggiornato") or "",
+            reverse=True
+        )
+        da_resettare = in_lav_sorted[1:]  # tutti tranne il più recente
+        ids_reset = {p.get("numero") for p in da_resettare}
+        for p in pallets:
+            if p.get("numero") in ids_reset:
+                p["stato"] = "grezzo"
+        # Salva la correzione
+        _save(config, state)
+
     return state
 
 @router.get("/debug-path")
@@ -552,7 +574,8 @@ async def avvia_pallet(numero: int):
 
     # Gestisci il pallet precedentemente IN LAVORAZIONE
     for p in state["pallet"]:
-        if p["numero"] != numero and p.get("stato") == "IN LAVORAZIONE":
+        if p["numero"] != numero and \
+           (p.get("stato") or "").lower().replace(" ","_") == "in_lavorazione":
             pid = p.get("progetto_id")
             if pid:
                 proj = next((pr for pr in data.get("projects",[]) if pr.get("id")==pid), None)

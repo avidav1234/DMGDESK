@@ -414,12 +414,45 @@ static DWORD WINAPI export_thread(LPVOID unused) {
         if (GetFileAttributesA(opcua_log) != INVALID_FILE_ATTRIBUTES) {
             char dest[MAX_PATH_LEN];
             snprintf(dest, sizeof(dest), "%sOpcUaLegacy.log", share_dir);
-            if (CopyFileA(opcua_log, dest, FALSE)) {
-                opcua_ok = 1;
-                printf("[EXPORT] %s OK\n", ts);
+
+            /* Leggi il file sorgente con FILE_SHARE_READ|WRITE
+               — funziona anche se opcUa_Server_xp.exe lo tiene aperto */
+            HANDLE hSrc = CreateFileA(opcua_log,
+                GENERIC_READ,
+                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+
+            if (hSrc != INVALID_HANDLE_VALUE) {
+                HANDLE hDst = CreateFileA(dest,
+                    GENERIC_WRITE, 0, NULL,
+                    CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+
+                if (hDst != INVALID_HANDLE_VALUE) {
+                    char buf[4096];
+                    DWORD nr, nw;
+                    opcua_ok = 1;
+                    while (ReadFile(hSrc, buf, sizeof(buf), &nr, NULL) && nr > 0) {
+                        if (!WriteFile(hDst, buf, nr, &nw, NULL) || nw != nr) {
+                            opcua_ok = 0;
+                            snprintf(errori, sizeof(errori),
+                                     "ERR scrittura dest: %lu", GetLastError());
+                            break;
+                        }
+                    }
+                    CloseHandle(hDst);
+                    if (opcua_ok)
+                        printf("[EXPORT] %s OK\n", ts);
+                    else
+                        printf("[EXPORT] %s WARN %s\n", ts, errori);
+                } else {
+                    snprintf(errori, sizeof(errori),
+                             "ERR apertura dest: %lu", GetLastError());
+                    printf("[EXPORT] %s WARN %s\n", ts, errori);
+                }
+                CloseHandle(hSrc);
             } else {
                 snprintf(errori, sizeof(errori),
-                         "ERR copia log: %lu", GetLastError());
+                         "ERR apertura src: %lu", GetLastError());
                 printf("[EXPORT] %s WARN %s\n", ts, errori);
             }
         } else {

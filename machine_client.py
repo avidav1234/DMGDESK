@@ -18,9 +18,9 @@ class MachineClient:
         self.server_ip = server_ip
         self.port      = port
 
-    def _connect(self):
+    def _connect(self, timeout=None):
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.settimeout(TIMEOUT_SEC)
+        s.settimeout(timeout or TIMEOUT_SEC)
         s.connect((self.server_ip, self.port))
         return s
 
@@ -35,7 +35,7 @@ class MachineClient:
             "files":    filenames
         }) + "\n"
         try:
-            s = self._connect()
+            s = self._connect(timeout=5)  # timeout breve per il check
             s.sendall(header.encode("utf-8"))
             # F2: leggi fino a \n — stesso meccanismo di invia_file
             # evita di bloccare con risposte grandi (128KB con molti file)

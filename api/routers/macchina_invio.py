@@ -121,7 +121,12 @@ async def check_macchina(
         names = [f.strip() for f in filenames.split(",") if f.strip()]
 
     client = MachineClient(ip, port)
-    esistenti, dest_dir, err = client.check_esistenti(names, progetto)
+
+    import asyncio
+    loop = asyncio.get_event_loop()
+    esistenti, dest_dir, err = await loop.run_in_executor(
+        None, lambda: client.check_esistenti(names, progetto)
+    )
 
     return CheckResponse(
         reachable=err is None,

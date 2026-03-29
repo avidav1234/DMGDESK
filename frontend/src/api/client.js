@@ -117,6 +117,13 @@ export const api = {
     return request('POST', '/macchina-invio/invia', fd)
   },
 
+  inviaBatch:           (progetto, files) => {
+    const fd = new FormData()
+    fd.append('progetto', progetto)
+    files.forEach(f => fd.append('files', f))
+    return request('POST', '/macchina-invio/invia-batch', fd)
+  },
+
   // ── Health ────────────────────────────────────────────
   health:               ()          => fetch('/health').then(r => r.json()),
 }

@@ -91,6 +91,78 @@ static void call_transfer_dnc(const char *filepath) {
     if (g_vbs_mutex) ReleaseMutex(g_vbs_mutex);
 }
 
+/* TransferAutom — avvia ciclo import automatico senza aspettare file specifico */
+static void call_transfer_autom(void) {
+    char vbs[MAX_PATH_LEN];
+    char cmd[MAX_PATH_LEN * 3];
+    get_vbs_path(vbs, sizeof(vbs));
+    snprintf(cmd, sizeof(cmd), "cscript //Nologo \"%s\" > NUL 2>&1", vbs);
+    Sleep(300);
+    if (g_vbs_mutex) WaitForSingleObject(g_vbs_mutex, 15000);
+    printf("[DNC AUTOM] %s\n", cmd);
+    int ret = system(cmd);
+    if (ret == 0) printf("[DNC AUTOM] OK\n");
+    else          printf("[DNC AUTOM] ret=%d\n", ret);
+    if (g_vbs_mutex) ReleaseMutex(g_vbs_mutex);
+}
+
+/* Scrive un file MPF in dnc_tmp con header NCK e CRLF.
+   Restituisce 1 se OK, 0 se errore (messaggio in err_out). */
+static int write_mpf_file(const char *norm, const char *progetto,
+                           const char *filebuf, long filesize,
+                           const char *dnc_tmp,
+                           char *dest_out, int dest_n,
+                           char *err_out,  int err_n) {
+    /* Header NCK */
+    char header_nck[256];
+    snprintf(header_nck, sizeof(header_nck),
+             "%%_N_%s_MPF\r\n;$PATH=/_N_WKS_DIR/_N_%s_WPD\r\n",
+             norm, progetto);
+    int hlen = strlen(header_nck);
+
+    /* Normalizza LF → CRLF */
+    char *body = (char*)malloc(filesize * 2 + 1);
+    if (!body) { snprintf(err_out, err_n, "malloc CRLF"); return 0; }
+    long blen = 0;
+    for (long i = 0; i < filesize; i++) {
+        unsigned char ch = (unsigned char)filebuf[i];
+        if (ch == '\n' && (blen == 0 || body[blen-1] != '\r'))
+            body[blen++] = '\r';
+        body[blen++] = (char)ch;
+    }
+
+    /* Footer */
+    const char *footer = (blen >= 2 &&
+                          body[blen-2] == '\r' && body[blen-1] == '\n')
+                         ? "%" : "\r\n%";
+    int flen = strlen(footer);
+
+    /* Componi */
+    long total = hlen + blen + flen;
+    char *outbuf = (char*)malloc(total + 1);
+    if (!outbuf) { free(body); snprintf(err_out, err_n, "malloc output"); return 0; }
+    memcpy(outbuf,        header_nck, hlen);
+    memcpy(outbuf + hlen, body,       blen);
+    memcpy(outbuf + hlen + blen, footer, flen);
+    free(body);
+
+    /* Path destinazione */
+    snprintf(dest_out, dest_n, "%s\\%s.MPF", dnc_tmp, norm);
+
+    /* Scrivi */
+    FILE *f = fopen(dest_out, "wb");
+    if (!f) {
+        free(outbuf);
+        snprintf(err_out, err_n, "fopen %s", dest_out);
+        return 0;
+    }
+    fwrite(outbuf, 1, total, f);
+    fclose(f);
+    free(outbuf);
+    printf("[MPF] scritto %s (%ld bytes)\n", dest_out, total);
+    return 1;
+}
+
 /* ── JSON helpers ────────────────────────────────────────────────────────── */
 
 static int json_get_str(const char *json, const char *key, char *out, int n) {
@@ -132,6 +204,9 @@ static void normalize_name(const char *src, char *dst, int n) {
         dst[len - 4] = '\0';
 }
 
+/* Forward declarations */
+static void handle_batch(SOCKET client, const char *progetto_in);
+
 /* ── Gestione client ─────────────────────────────────────────────────────── */
 
 static void handle_client(SOCKET client, const char *base_path) {
@@ -149,18 +224,22 @@ static void handle_client(SOCKET client, const char *base_path) {
     printf("[REQ] %s\n", hdr);
 
     char cmd[32] = {0};
-    /* Accetta sia "cmd" che "comando" */
     if (!json_get_str(hdr, "cmd", cmd, sizeof(cmd)))
         json_get_str(hdr, "comando", cmd, sizeof(cmd));
 
     char progetto[128] = {0};
     json_get_str(hdr, "progetto", progetto, sizeof(progetto));
-    /* Maiuscolo */
     for (int i = 0; progetto[i]; i++)
         if (progetto[i] >= 'a' && progetto[i] <= 'z') progetto[i] -= 32;
 
     char wpd[MAX_PATH_LEN];
     snprintf(wpd, sizeof(wpd), "%s\\%s.WPD", base_path, progetto);
+
+    /* ── INVIA_BATCH — tutti i file in una sola chiamata ── */
+    if (strcmp(cmd, "INVIA_BATCH") == 0) {
+        handle_batch(client, progetto);
+        return;
+    }
 
     /* ── CHECK ── */
     if (strcmp(cmd, "CHECK") == 0) {
@@ -190,7 +269,7 @@ static void handle_client(SOCKET client, const char *base_path) {
         return;
     }
 
-    /* ── INVIA ── */
+    /* ── INVIA (file singolo) ── */
     if (strcmp(cmd, "INVIA") == 0) {
         char filename[256] = {0}, norm[256] = {0};
         long filesize = 0;
@@ -199,12 +278,9 @@ static void handle_client(SOCKET client, const char *base_path) {
         normalize_name(filename, norm, sizeof(norm));
 
         if (filesize <= 0) {
-            const char *err = "{\"stato\":\"errore\",\"msg\":\"filesize non valido\"}\n";
-            send(client, err, strlen(err), 0);
+            send(client, "{\"stato\":\"errore\",\"msg\":\"filesize non valido\"}\n", 47, 0);
             return;
         }
-
-        /* Ricevi bytes */
         char *filebuf = (char*)malloc(filesize);
         if (!filebuf) {
             send(client, "{\"stato\":\"errore\",\"msg\":\"Memoria insufficiente\"}\n", 48, 0);
@@ -226,118 +302,55 @@ static void handle_client(SOCKET client, const char *base_path) {
             return;
         }
 
-        /* Prepara header NCK */
         char dnc_tmp[MAX_PATH_LEN];
         get_dnc_tmp(dnc_tmp, sizeof(dnc_tmp));
-        if (!PathIsDirectoryA(dnc_tmp))
-            CreateDirectoryA(dnc_tmp, NULL);
+        if (!PathIsDirectoryA(dnc_tmp)) CreateDirectoryA(dnc_tmp, NULL);
 
-        char header_nck[256];
-        snprintf(header_nck, sizeof(header_nck),
-                 "%%_N_%s_MPF\r\n;$PATH=/_N_WKS_DIR/_N_%s_WPD\r\n",
-                 norm, progetto);
-        int hlen2 = strlen(header_nck);
-
-        /* Normalizza LF→CRLF nel corpo del file.
-           Sinumerik 840D PowerLine richiede CRLF su tutto il file.
-           Alloca worst-case: ogni \n diventa \r\n → al massimo 2x */
-        char *body_crlf = (char*)malloc(filesize * 2 + 1);
-        if (!body_crlf) {
+        char dest[MAX_PATH_LEN] = {0};
+        char errbuf[256] = {0};
+        if (!write_mpf_file(norm, progetto, filebuf, filesize,
+                            dnc_tmp, dest, sizeof(dest), errbuf, sizeof(errbuf))) {
             free(filebuf);
-            send(client, "{\"stato\":\"errore\",\"msg\":\"Errore allocazione CRLF\"}\n", 51, 0);
+            char resp[512];
+            snprintf(resp, sizeof(resp), "{\"stato\":\"errore\",\"msg\":\"%s\"}\n", errbuf);
+            send(client, resp, strlen(resp), 0);
             return;
         }
-        long body_len = 0;
-        for (long ci = 0; ci < filesize; ci++) {
-            unsigned char ch = (unsigned char)filebuf[ci];
-            if (ch == '\n') {
-                /* Aggiungi \r solo se non già preceduto da \r */
-                if (body_len == 0 || body_crlf[body_len-1] != '\r')
-                    body_crlf[body_len++] = '\r';
-            }
-            body_crlf[body_len++] = (char)ch;
-        }
-        free(filebuf);
-        filebuf = NULL;
 
-        /* Footer Sinumerik: \r\n% — se il corpo già finisce con \r\n non aggiungere altro \r\n */
-        const char *footer = "\r\n%";
-        int footer_len = 3;
-        if (body_len >= 2 &&
-            body_crlf[body_len-2] == '\r' && body_crlf[body_len-1] == '\n') {
-            /* corpo finisce già con \r\n → footer è solo % */
-            footer     = "%";
-            footer_len = 1;
-        }
+        call_transfer_dnc(dest);
 
-        /* Componi: header + corpo CRLF + footer */
-        long total2 = hlen2 + body_len + footer_len;
-        char *outbuf = (char*)malloc(total2 + 1);
-        if (!outbuf) {
-            free(body_crlf);
-            send(client, "{\"stato\":\"errore\",\"msg\":\"Errore allocazione output\"}\n", 52, 0);
-            return;
-        }
-        memcpy(outbuf,           header_nck, hlen2);
-        memcpy(outbuf + hlen2,   body_crlf,  body_len);
-        memcpy(outbuf + hlen2 + body_len, footer, footer_len);
-        free(body_crlf);
-
-        /* Scrivi in D:\tmp\autoimport — unico path che funziona con USE_INTERN_PATH */
-        char dest_path[MAX_PATH_LEN];
-        snprintf(dest_path, sizeof(dest_path), "%s\\%s.MPF", dnc_tmp, norm);
-        FILE *f = fopen(dest_path, "wb");
-        if (!f) {
-            free(outbuf);
-            send(client, "{\"stato\":\"errore\",\"msg\":\"Impossibile scrivere file\"}\n", 52, 0);
-            return;
-        }
-        fwrite(outbuf, 1, total2, f);
-        fclose(f);
-        /* NON free(outbuf) qui — serve nel loop per ri-scrivere dopo .ERR */
-
-        printf("[OK] %s (%ld -> %ld bytes CRLF) -> %s\n", norm, filesize, total2, dest_path);
-
-        call_transfer_dnc(dest_path);
-
-        /* ── Attesa trasferimento (F3+F5) ──────────────────────────────────
-           .ERR è TRANSITORIO: NCU occupata → DNCMachine riprova.
-           Se DNCMachine rimuove anche il .MPF → lo riscriviamo da outbuf.
-        ── */
+        /* Attesa trasferimento */
         char err_path[MAX_PATH_LEN];
-        snprintf(err_path, sizeof(err_path), "%s.ERR", dest_path);
+        snprintf(err_path, sizeof(err_path), "%s.ERR", dest);
+        int transferred = 0, err_count = 0, elapsed = 0;
 
-        int transferred = 0;
-        int err_count   = 0;
-        int elapsed     = 0;
+        /* Rileggi outbuf per eventuale retry */
+        long filesize2 = filesize;
+        char *filebuf2 = filebuf;
 
         while (elapsed < 90) {
-            Sleep(2000);
-            elapsed += 2;
-            int file_exists = (GetFileAttributesA(dest_path) != INVALID_FILE_ATTRIBUTES);
-            int err_exists  = (GetFileAttributesA(err_path)  != INVALID_FILE_ATTRIBUTES);
-
-            if (!file_exists && !err_exists) { transferred = 1; break; }
-
-            if (err_exists) {
+            Sleep(2000); elapsed += 2;
+            int fe = (GetFileAttributesA(dest)     != INVALID_FILE_ATTRIBUTES);
+            int ee = (GetFileAttributesA(err_path) != INVALID_FILE_ATTRIBUTES);
+            if (!fe && !ee) { transferred = 1; break; }
+            if (ee) {
                 err_count++;
                 DeleteFileA(err_path);
-                if (!file_exists) {
-                    /* DNCMachine ha rimosso il .MPF insieme al .ERR — riscrivilo */
-                    FILE *fw = fopen(dest_path, "wb");
-                    if (fw) { fwrite(outbuf, 1, total2, fw); fclose(fw); }
+                if (!fe) {
+                    FILE *fw = fopen(dest, "wb");
+                    /* Riscrivi — dobbiamo rigenerare il file */
+                    char dest2[MAX_PATH_LEN] = {0};
+                    char eb2[256] = {0};
+                    write_mpf_file(norm, progetto, filebuf2, filesize2,
+                                   dnc_tmp, dest2, sizeof(dest2), eb2, sizeof(eb2));
+                    if (fw) fclose(fw);
                     printf("[RETRY] %s riscritto dopo .ERR n.%d\n", norm, err_count);
-                } else {
-                    printf("[RETRY] %s .ERR n.%d cancellato\n", norm, err_count);
                 }
-                continue;
             }
             printf("[WAIT] %s... %ds\n", norm, elapsed);
         }
+        free(filebuf);
 
-        free(outbuf); /* libera solo ora */
-
-        /* Costruisci risposta JSON con escape backslash */
         char wpd_escaped[MAX_PATH_LEN * 2];
         int si = 0, di = 0;
         while (wpd[si] && di < (int)sizeof(wpd_escaped) - 2) {
@@ -347,29 +360,129 @@ static void handle_client(SOCKET client, const char *base_path) {
         wpd_escaped[di] = '\0';
 
         char resp[512];
-        if (transferred) {
-            snprintf(resp, sizeof(resp),
-                     "{\"stato\":\"ok\",\"msg\":\"OK %s -> %s\"}\n", norm, wpd_escaped);
-            printf("[OK] %s trasferito in NCU\n", norm);
-        } else if (err_count > 0) {
-            /* Timeout ma ci sono stati .ERR — il file è in coda, arriverà via autoimport */
-            snprintf(resp, sizeof(resp),
-                     "{\"stato\":\"ok\",\"msg\":\"OK %s -> in coda autoimport (%d retry NCU)\"}\n",
-                     norm, err_count);
-            printf("[OK] %s in coda autoimport dopo %d .ERR\n", norm, err_count);
-        } else {
-            snprintf(resp, sizeof(resp),
-                     "{\"stato\":\"ok\",\"msg\":\"OK %s -> in coda autoimport\"}\n", norm);
-            printf("[OK] %s in coda autoimport\n", norm);
-        }
+        if (transferred)
+            snprintf(resp, sizeof(resp), "{\"stato\":\"ok\",\"msg\":\"OK %s -> %s\"}\n", norm, wpd_escaped);
+        else if (err_count > 0)
+            snprintf(resp, sizeof(resp), "{\"stato\":\"ok\",\"msg\":\"OK %s -> in coda autoimport (%d retry NCU)\"}\n", norm, err_count);
+        else
+            snprintf(resp, sizeof(resp), "{\"stato\":\"ok\",\"msg\":\"OK %s -> in coda autoimport\"}\n", norm);
 
         send(client, resp, strlen(resp), 0);
         closesocket(client);
-        client = INVALID_SOCKET;
         return;
     }
 
     send(client, "{\"stato\":\"errore\",\"msg\":\"Comando sconosciuto\"}\n", 47, 0);
+}
+
+/* ── INVIA_BATCH ─────────────────────────────────────────────────────────────
+   Protocollo:
+   1. Header JSON (una riga \n):
+      {"cmd":"INVIA_BATCH","progetto":"4297_0007","count":N}
+   2. Per ogni file (N volte):
+      {"filename":"F1.MPF","filesize":1234}\n
+      <filesize bytes di contenuto>
+   3. MchnSrv scrive tutti i file in dnc_tmp SENZA aspettare
+   4. Dopo l'ultimo file chiama TransferAutom una sola volta
+   5. Risponde {"stato":"ok","inviati":N,"msg":"..."}\n
+─────────────────────────────────────────────────────────────────────────────*/
+static void handle_batch(SOCKET client, const char *progetto_in) {
+    char dnc_tmp[MAX_PATH_LEN];
+    get_dnc_tmp(dnc_tmp, sizeof(dnc_tmp));
+    if (!PathIsDirectoryA(dnc_tmp))
+        CreateDirectoryA(dnc_tmp, NULL);
+
+    /* Progetto in maiuscolo */
+    char progetto[128];
+    strncpy(progetto, progetto_in, sizeof(progetto));
+    progetto[sizeof(progetto)-1] = '\0';
+    for (int i = 0; progetto[i]; i++)
+        if (progetto[i] >= 'a' && progetto[i] <= 'z') progetto[i] -= 32;
+
+    int inviati = 0, errori = 0;
+    char last_err[256] = {0};
+    char nomi_ok[4096] = {0};   /* lista nomi per il log */
+
+    /* Loop: leggi header file + contenuto finché la connessione regge */
+    while (1) {
+        /* Header file: {"filename":"...","filesize":N}\n */
+        char fhdr[512] = {0};
+        int fhlen = 0;
+        while (fhlen < (int)sizeof(fhdr) - 1) {
+            char c;
+            int r = recv(client, &c, 1, 0);
+            if (r <= 0) goto batch_done;   /* connessione chiusa = fine batch */
+            if (c == '\n') break;
+            fhdr[fhlen++] = c;
+        }
+        if (!fhdr[0]) break;
+
+        char filename[256] = {0}, norm[256] = {0};
+        long filesize = 0;
+        json_get_str(fhdr, "filename", filename, sizeof(filename));
+        filesize = json_get_long(fhdr, "filesize");
+        normalize_name(filename, norm, sizeof(norm));
+
+        if (filesize <= 0 || !norm[0]) {
+            snprintf(last_err, sizeof(last_err), "header non valido: %s", fhdr);
+            errori++;
+            break;
+        }
+
+        /* Ricevi contenuto */
+        char *filebuf = (char*)malloc(filesize);
+        if (!filebuf) {
+            snprintf(last_err, sizeof(last_err), "malloc %ld bytes", filesize);
+            errori++;
+            break;
+        }
+        long received = 0;
+        while (received < filesize) {
+            int to_read = (int)(filesize - received);
+            if (to_read > BUF_SIZE) to_read = BUF_SIZE;
+            int r = recv(client, filebuf + received, to_read, 0);
+            if (r <= 0) { free(filebuf); goto batch_done; }
+            received += r;
+        }
+
+        /* Scrivi MPF — senza aspettare DNCMachine */
+        char dest[MAX_PATH_LEN] = {0};
+        char err[256] = {0};
+        if (write_mpf_file(norm, progetto, filebuf, filesize,
+                           dnc_tmp, dest, sizeof(dest), err, sizeof(err))) {
+            inviati++;
+            /* Aggiungi nome alla lista */
+            if (strlen(nomi_ok) + strlen(norm) + 2 < sizeof(nomi_ok)) {
+                if (nomi_ok[0]) strncat(nomi_ok, ",", sizeof(nomi_ok)-strlen(nomi_ok)-1);
+                strncat(nomi_ok, norm, sizeof(nomi_ok)-strlen(nomi_ok)-1);
+            }
+        } else {
+            snprintf(last_err, sizeof(last_err), "%s: %s", norm, err);
+            errori++;
+        }
+        free(filebuf);
+    }
+
+batch_done:
+    /* Chiama TransferAutom UNA SOLA VOLTA per tutti i file */
+    if (inviati > 0) {
+        printf("[BATCH] %d file scritti, avvio TransferAutom\n", inviati);
+        call_transfer_autom();
+    }
+
+    /* Risposta */
+    char resp[1024];
+    if (errori == 0) {
+        snprintf(resp, sizeof(resp),
+                 "{\"stato\":\"ok\",\"inviati\":%d,\"msg\":\"OK %d file -> autoimport: %s\"}\n",
+                 inviati, inviati, nomi_ok);
+    } else {
+        snprintf(resp, sizeof(resp),
+                 "{\"stato\":\"ok\",\"inviati\":%d,\"errori\":%d,\"msg\":\"%s\"}\n",
+                 inviati, errori, last_err);
+    }
+    send(client, resp, strlen(resp), 0);
+    printf("[BATCH] risposta: %s", resp);
 }
 
 /* ── Thread esportazione OpcUaLegacy.log sulla share ─────────────────────── */

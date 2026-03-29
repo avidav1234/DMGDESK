@@ -115,6 +115,96 @@ class MachineClient:
                 progress_callback(filename, False, str(e))
             return False, str(e)
 
+    def invia_batch(self, filepaths, progetto, progress_callback=None):
+        """
+        Invia tutti i file in una sola connessione TCP.
+        Protocollo:
+          1. Header: {"cmd":"INVIA_BATCH","progetto":"...","count":N}\n
+          2. Per ogni file: {"filename":"...","filesize":N}\n + bytes
+          3. Chiude connessione → server chiama TransferAutom una sola volta
+        Molto più veloce di invia_lista per batch grandi.
+        Restituisce (n_ok, n_err, lista_errori)
+        """
+        if not filepaths:
+            return 0, 0, []
+
+        # Leggi tutti i file prima di aprire la connessione
+        files_data = []
+        for fp in filepaths:
+            try:
+                with open(fp, "rb") as f:
+                    content = f.read()
+                fname = os.path.basename(fp).upper()
+                if fname.endswith(".MPF"):
+                    fname = fname[:-4]
+                files_data.append((fname, content, fp))
+            except Exception as e:
+                if progress_callback:
+                    progress_callback(os.path.basename(fp), False, str(e))
+
+        if not files_data:
+            return 0, len(filepaths), ["Nessun file leggibile"]
+
+        n_ok, n_err, errori = 0, 0, []
+        try:
+            s = self._connect()
+            s.settimeout(30)  # batch: timeout breve per file singolo
+
+            # 1. Header batch
+            header = json.dumps({
+                "cmd":      "INVIA_BATCH",
+                "progetto": progetto,
+                "count":    len(files_data)
+            }) + "\n"
+            s.sendall(header.encode("utf-8"))
+
+            # 2. Invia ogni file
+            for fname, content, fp in files_data:
+                fhdr = json.dumps({
+                    "filename": fname,
+                    "filesize": len(content)
+                }) + "\n"
+                s.sendall(fhdr.encode("utf-8") + content)
+                n_ok += 1
+                if progress_callback:
+                    progress_callback(os.path.basename(fp), True, "inviato")
+
+            # 3. Chiudi connessione → server avvia TransferAutom
+            s.shutdown(socket.SHUT_WR)
+
+            # 4. Leggi risposta finale
+            risposta = b""
+            s.settimeout(15)
+            try:
+                while True:
+                    chunk = s.recv(1024)
+                    if not chunk:
+                        break
+                    risposta += chunk
+                    if b"\n" in risposta:
+                        break
+            except Exception:
+                pass
+            s.close()
+
+            risposta_str = risposta.strip().decode("utf-8", errors="replace")
+            if risposta_str:
+                try:
+                    rj = json.loads(risposta_str)
+                    print(f"[BATCH] risposta server: {rj}")
+                    if rj.get("errori", 0) > 0:
+                        n_err = rj["errori"]
+                        n_ok  = rj.get("inviati", n_ok)
+                        errori.append(rj.get("msg", "errore batch"))
+                except Exception:
+                    print(f"[BATCH] risposta: {risposta_str}")
+
+        except Exception as e:
+            n_err = len(files_data) - n_ok
+            errori.append(str(e))
+
+        return n_ok, n_err, errori
+
     def invia_lista(self, filepaths, progetto, progress_callback=None):
         """
         Invia una lista di file in sequenza.

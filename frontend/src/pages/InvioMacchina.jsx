@@ -76,6 +76,21 @@ export default function InvioMacchina() {
     } finally { setSending(false) }
   }
 
+  const doSendBatch = async () => {
+    if (!check?.reachable) return
+    setSending(true); setResults([]); setStatus(null)
+    try {
+      const r = await api.inviaBatch(progetto.trim(), files)
+      setResults(r.risultati)
+      if (r.n_err === 0)
+        setStatus({ type: 'ok', msg: `⚡ ${r.n_ok} file inviati in batch (TransferAutom avviato)` })
+      else
+        setStatus({ type: 'warn', msg: `${r.n_ok} inviati, ${r.n_err} errori` })
+    } catch (e) {
+      setStatus({ type: 'err', msg: e.message })
+    } finally { setSending(false) }
+  }
+
   const fileState = (filename) => {
     if (results.length) {
       const r = results.find(r => r.filename === filename)
@@ -267,6 +282,20 @@ export default function InvioMacchina() {
             transition: 'all var(--t-fast)',
           }}>
           {sending ? '⏳ Invio in corso...' : `📤 Invia ${files.length ? files.length + ' file' : ''}`}
+        </button>
+
+        <button onClick={doSendBatch}
+          disabled={!check?.reachable || sending || !files.length || !progetto.trim()}
+          title="Invia tutti i file in una sola connessione — molto più veloce per batch grandi"
+          style={{
+            padding: '10px 24px', borderRadius: 6, fontSize: 13, fontWeight: 700,
+            cursor: (!check?.reachable || sending) ? 'not-allowed' : 'pointer',
+            background: check?.reachable && !sending ? 'rgba(0,180,255,0.12)' : 'var(--bg-hover)',
+            border: `1px solid ${check?.reachable && !sending ? 'rgba(0,180,255,0.4)' : 'var(--border)'}`,
+            color: check?.reachable && !sending ? '#38bdf8' : 'var(--text-dim)',
+            transition: 'all var(--t-fast)',
+          }}>
+          {sending ? '⏳ Invio in corso...' : `⚡ Batch ${files.length ? '(' + files.length + ')' : ''}`}
         </button>
 
         {files.length > 0 && (

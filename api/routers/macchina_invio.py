@@ -164,3 +164,48 @@ async def invia_alla_macchina(
     n_ok  = sum(1 for r in risultati if r.ok)
     n_err = sum(1 for r in risultati if not r.ok)
     return InvioResponse(n_ok=n_ok, n_err=n_err, risultati=risultati)
+
+
+@router.post(
+    "/invia-batch",
+    response_model=InvioResponse,
+    summary="Invia tutti i file NC in una sola connessione TCP (INVIA_BATCH)",
+)
+async def invia_batch_alla_macchina(
+    progetto: str = Form(...),
+    files:    List[UploadFile] = File(...),
+):
+    """
+    Invia tutti i file in una sola connessione TCP usando INVIA_BATCH.
+    Molto più veloce di /invia per batch grandi:
+    - Nessuna attesa tra un file e l'altro
+    - TransferAutom chiamato una sola volta alla fine
+    """
+    ip, port = _get_machine_config()
+    client   = MachineClient(ip, port)
+
+    tmp_dir = tempfile.mkdtemp(prefix="toolmgr_batch_")
+    tmp_paths = []
+    try:
+        for upload in files:
+            tmp_path = os.path.join(tmp_dir, upload.filename)
+            content  = await upload.read()
+            with open(tmp_path, "wb") as f:
+                f.write(content)
+            tmp_paths.append((upload.filename, tmp_path))
+
+        n_ok, n_err, errori = client.invia_batch(
+            [p for _, p in tmp_paths], progetto
+        )
+
+        risultati = []
+        for fname, _ in tmp_paths:
+            ok  = n_err == 0
+            msg = "OK" if ok else (errori[0] if errori else "errore")
+            risultati.append(InvioResult(filename=fname, ok=ok, msg=msg))
+
+        log.info(f"[BATCH] {progetto}: {n_ok} OK, {n_err} ERR")
+        return InvioResponse(n_ok=n_ok, n_err=n_err, risultati=risultati)
+    finally:
+        import shutil
+        shutil.rmtree(tmp_dir, ignore_errors=True)

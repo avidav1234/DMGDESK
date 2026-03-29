@@ -123,7 +123,7 @@ export default function CodaLavorazione() {
         // Sovrascrive con IN LAVORAZIONE se macchina lo conferma live
         if (
           macchinaData?.pallet_attivo === p.id &&
-          macchinaData?.stato_programma === 3
+          [1,3].includes(macchinaData?.stato_programma)
         ) {
           stato = "IN LAVORAZIONE";
         }
@@ -255,7 +255,7 @@ export default function CodaLavorazione() {
     }
   };
 
-  const inLavorazione = macchina?.stato_programma === 3;
+  const inLavorazione = [1,3].includes(macchina?.stato_programma);
   const prog          = parseProgram(macchina?.programma_attivo);
   const utensile      = macchina?.utensile_attivo || null;
   const tNum          = macchina?.numero_utensile   || null;

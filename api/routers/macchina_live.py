@@ -477,7 +477,7 @@ async def aggiorna_stati_da_log():
         for pal in pallets:
             if pal.get("numero") != pallet_num:
                 continue
-            if stato_pgm == 3 and pal.get("stato") != "in_lavorazione":
+            if stato_pgm in (1, 3) and pal.get("stato") != "in_lavorazione":
                 # Macchina in esecuzione → questo pallet diventa in_lavorazione
                 for other in pallets:
                     if other.get("numero") != pallet_num and                        other.get("stato") == "in_lavorazione":
@@ -514,7 +514,7 @@ async def aggiorna_stati_da_log():
             break
 
     # ── Automazione 2 e 3: stati programmi ───────────────────────────────
-    if progetto_attivo and mpf_filename and stato_pgm == 3:
+    if progetto_attivo and mpf_filename and stato_pgm in (1, 3):
         for step in progetto_attivo.get("steps", []):
             for task in step.get("tasks", []):
                 if task.get("text","").strip().lower() != "fresatura":

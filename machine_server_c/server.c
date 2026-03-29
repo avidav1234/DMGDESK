@@ -1,6 +1,7 @@
 /*
  * server.c - MachineServer per trasferimento NC a Siemens 840D PowerLine
- * Compilazione: i686-w64-mingw32-gcc -static -static-libgcc -o MachineServer.exe server.c -lws2_32 -lshlwapi
+ *            + esportazione OpcUaLegacy.log sulla share (integra esporta_stato_macchina.vbs)
+ * Compilazione: i686-w64-mingw32-gcc-win32 -static -static-libgcc -o MchnSrv.exe server.c -lws2_32 -lshlwapi
  */
 
 #include <winsock2.h>
@@ -13,12 +14,15 @@
 #pragma comment(lib, "ws2_32.lib")
 #pragma comment(lib, "shlwapi.lib")
 
-#define DEFAULT_PORT     9999
-#define DEFAULT_BASE     "F:\\dh\\wks.dir"
-#define DEFAULT_DNC_TMP  "D:\\tmp\\autoimport"
-#define DEFAULT_VBS_PATH "F:\\ADD_ON\\DNC\\transfer_dnc.vbs"
-#define BUF_SIZE         65536
-#define MAX_PATH_LEN     512
+#define DEFAULT_PORT       9999
+#define DEFAULT_BASE       "F:\\dh\\wks.dir"
+#define DEFAULT_DNC_TMP    "D:\\tmp\\autoimport"
+#define DEFAULT_VBS_PATH   "F:\\ADD_ON\\DNC\\transfer_dnc.vbs"
+#define DEFAULT_OPCUA_LOG  "F:\\oem\\opcualegacy\\OpcUaLegacy.log"
+#define DEFAULT_SHARE_DIR  "Z:\\DMG_DMC_160U\\"
+#define DEFAULT_EXPORT_INT 60000   /* ms tra una copia e l'altra */
+#define BUF_SIZE           65536
+#define MAX_PATH_LEN       512
 
 /* Path assoluto del config — costruito a runtime nella stessa cartella dell'exe */
 static char CFG_FILE[MAX_PATH_LEN];
@@ -49,6 +53,15 @@ static void get_dnc_tmp(char *out, int n) {
 }
 static void get_vbs_path(char *out, int n) {
     GetPrivateProfileStringA("server", "vbs_path", DEFAULT_VBS_PATH, out, n, CFG_FILE);
+}
+static void get_opcua_log(char *out, int n) {
+    GetPrivateProfileStringA("server", "opcua_log", DEFAULT_OPCUA_LOG, out, n, CFG_FILE);
+}
+static void get_share_dir(char *out, int n) {
+    GetPrivateProfileStringA("server", "share_dir", DEFAULT_SHARE_DIR, out, n, CFG_FILE);
+}
+static int get_export_interval(void) {
+    return (int)GetPrivateProfileIntA("server", "export_interval_ms", DEFAULT_EXPORT_INT, CFG_FILE);
 }
 
 /* ── Mutex globale — serializza chiamate VBS (F6) ────────────────────────── */
@@ -359,11 +372,100 @@ static void handle_client(SOCKET client, const char *base_path) {
     send(client, "{\"stato\":\"errore\",\"msg\":\"Comando sconosciuto\"}\n", 47, 0);
 }
 
+/* ── Thread esportazione OpcUaLegacy.log sulla share ─────────────────────── */
+
+static DWORD WINAPI export_thread(LPVOID unused) {
+    (void)unused;
+
+    char opcua_log[MAX_PATH_LEN];
+    char share_dir[MAX_PATH_LEN];
+    int  interval_ms;
+
+    get_opcua_log(opcua_log, sizeof(opcua_log));
+    get_share_dir(share_dir, sizeof(share_dir));
+    interval_ms = get_export_interval();
+
+    /* Assicura che share_dir termini con \ */
+    int slen = strlen(share_dir);
+    if (slen > 0 && share_dir[slen-1] != '\\') {
+        share_dir[slen]   = '\\';
+        share_dir[slen+1] = '\0';
+    }
+
+    printf("[EXPORT] OpcUa log: %s\n", opcua_log);
+    printf("[EXPORT] Share dir: %s\n", share_dir);
+    printf("[EXPORT] Intervallo: %d ms\n", interval_ms);
+
+    /* Aspetta 15 secondi all'avvio — lascia tempo alla rete di connettersi */
+    Sleep(15000);
+
+    while (1) {
+        SYSTEMTIME st;
+        GetLocalTime(&st);
+        char ts[32];
+        snprintf(ts, sizeof(ts), "%04d-%02d-%02d %02d:%02d:%02d",
+                 st.wYear, st.wMonth, st.wDay,
+                 st.wHour, st.wMinute, st.wSecond);
+
+        int opcua_ok = 0;
+        char errori[256] = {0};
+
+        /* 1. Copia OpcUaLegacy.log sulla share */
+        if (GetFileAttributesA(opcua_log) != INVALID_FILE_ATTRIBUTES) {
+            char dest[MAX_PATH_LEN];
+            snprintf(dest, sizeof(dest), "%sOpcUaLegacy.log", share_dir);
+            if (CopyFileA(opcua_log, dest, FALSE)) {
+                opcua_ok = 1;
+                printf("[EXPORT] %s OK\n", ts);
+            } else {
+                snprintf(errori, sizeof(errori),
+                         "ERR copia log: %lu", GetLastError());
+                printf("[EXPORT] %s WARN %s\n", ts, errori);
+            }
+        } else {
+            strncpy(errori, "WARN: OpcUaLegacy.log non trovato", sizeof(errori));
+            printf("[EXPORT] %s %s\n", ts, errori);
+        }
+
+        /* 2. Heartbeat — xp_heartbeat.txt */
+        char hb_path[MAX_PATH_LEN];
+        snprintf(hb_path, sizeof(hb_path), "%sxp_heartbeat.txt", share_dir);
+        FILE *hb = fopen(hb_path, "w");
+        if (hb) {
+            fprintf(hb, "ultimo_run=%s\n", ts);
+            fprintf(hb, "opcua_log_ok=%s\n", opcua_ok ? "True" : "False");
+            if (errori[0]) fprintf(hb, "errori=%s\n", errori);
+            fclose(hb);
+        }
+
+        /* 3. Log esecuzione — esporta_log.txt (append) */
+        char log_path[MAX_PATH_LEN];
+        snprintf(log_path, sizeof(log_path), "%sesporta_log.txt", share_dir);
+        FILE *lf = fopen(log_path, "a");
+        if (lf) {
+            if (!errori[0])
+                fprintf(lf, "%s OK\n", ts);
+            else
+                fprintf(lf, "%s WARN %s\n", ts, errori);
+            fclose(lf);
+        }
+
+        Sleep(interval_ms);
+    }
+
+    return 0;
+}
+
 /* ── Main ────────────────────────────────────────────────────────────────── */
 
 int main(void) {
     init_cfg_path();
-    init_vbs_mutex(); /* F6: mutex per serializzare chiamate VBS */
+    init_vbs_mutex();
+
+    /* Avvia thread esportazione OpcUa log in background */
+    HANDLE hExport = CreateThread(NULL, 0, export_thread, NULL, 0, NULL);
+    if (hExport) CloseHandle(hExport);
+    else printf("[WARN] Thread esportazione non avviato\n");
 
     WSADATA wsa;
     if (WSAStartup(MAKEWORD(2,2), &wsa) != 0) {

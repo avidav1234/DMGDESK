@@ -77,17 +77,15 @@ static void call_transfer_dnc(const char *filepath) {
     char cmd[MAX_PATH_LEN * 3];
     get_vbs_path(vbs, sizeof(vbs));
     if (filepath && filepath[0])
-        snprintf(cmd, sizeof(cmd), "cscript //Nologo \"%s\" \"%s\" > NUL 2>&1", vbs, filepath);
+        snprintf(cmd, sizeof(cmd), "cscript //Nologo \"%s\" \"%s\"", vbs, filepath);
     else
-        snprintf(cmd, sizeof(cmd), "cscript //Nologo \"%s\" > NUL 2>&1", vbs);
+        snprintf(cmd, sizeof(cmd), "cscript //Nologo \"%s\"", vbs);
 
-    Sleep(500); /* F4: lascia alla NCU 500ms dopo la scrittura del file */
-
-    if (g_vbs_mutex) WaitForSingleObject(g_vbs_mutex, 15000); /* F6: una VBS alla volta */
+    Sleep(500);
+    if (g_vbs_mutex) WaitForSingleObject(g_vbs_mutex, 15000);
     printf("[DNC] %s\n", cmd);
     int ret = system(cmd);
-    if (ret == 0) printf("[DNC] OK\n");
-    else          printf("[DNC] ret=%d\n", ret);
+    printf("[DNC] ret=%d\n", ret);
     if (g_vbs_mutex) ReleaseMutex(g_vbs_mutex);
 }
 
@@ -96,13 +94,12 @@ static void call_transfer_autom(void) {
     char vbs[MAX_PATH_LEN];
     char cmd[MAX_PATH_LEN * 3];
     get_vbs_path(vbs, sizeof(vbs));
-    snprintf(cmd, sizeof(cmd), "cscript //Nologo \"%s\" > NUL 2>&1", vbs);
+    snprintf(cmd, sizeof(cmd), "cscript //Nologo \"%s\"", vbs);
     Sleep(300);
     if (g_vbs_mutex) WaitForSingleObject(g_vbs_mutex, 15000);
     printf("[DNC AUTOM] %s\n", cmd);
     int ret = system(cmd);
-    if (ret == 0) printf("[DNC AUTOM] OK\n");
-    else          printf("[DNC AUTOM] ret=%d\n", ret);
+    printf("[DNC AUTOM] ret=%d\n", ret);
     if (g_vbs_mutex) ReleaseMutex(g_vbs_mutex);
 }
 

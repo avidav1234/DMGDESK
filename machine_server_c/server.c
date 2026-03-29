@@ -614,8 +614,10 @@ static DWORD WINAPI export_thread(LPVOID unused) {
     printf("[EXPORT] Share dir: %s\n", share_dir);
     printf("[EXPORT] Intervallo: %d ms\n", interval_ms);
 
-    /* Aspetta 15 secondi all'avvio — lascia tempo alla rete di connettersi */
+    /* Aspetta 15 secondi all'avvio — lascia tempo alla rete */
     Sleep(15000);
+
+    int ciclo = 0;
 
     while (1) {
         SYSTEMTIME st;
@@ -628,22 +630,28 @@ static DWORD WINAPI export_thread(LPVOID unused) {
         int opcua_ok = 0;
         char errori[256] = {0};
 
-        /* 1. Copia OpcUaLegacy.log sulla share */
+        /* 1. Copia OpcUaLegacy.log sulla share
+              - sorgente: FILE_SHARE_READ|WRITE (non disturba opcUa_Server_xp)
+              - destinazione: FILE_SHARE_READ permesso (DMGDesk può leggere
+                              mentre scriviamo) */
         if (GetFileAttributesA(opcua_log) != INVALID_FILE_ATTRIBUTES) {
             char dest[MAX_PATH_LEN];
             snprintf(dest, sizeof(dest), "%sOpcUaLegacy.log", share_dir);
 
-            /* Leggi il file sorgente con FILE_SHARE_READ|WRITE
-               — funziona anche se opcUa_Server_xp.exe lo tiene aperto */
             HANDLE hSrc = CreateFileA(opcua_log,
                 GENERIC_READ,
                 FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
                 NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 
             if (hSrc != INVALID_HANDLE_VALUE) {
+                /* FIX: apri dest con FILE_SHARE_READ — DMGDesk può leggere
+                   mentre scriviamo, evita sharing violation */
                 HANDLE hDst = CreateFileA(dest,
-                    GENERIC_WRITE, 0, NULL,
-                    CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+                    GENERIC_WRITE,
+                    FILE_SHARE_READ,   /* <-- era 0, causa di sharing violation */
+                    NULL,
+                    CREATE_ALWAYS,
+                    FILE_ATTRIBUTE_NORMAL, NULL);
 
                 if (hDst != INVALID_HANDLE_VALUE) {
                     char buf[4096];
@@ -663,14 +671,16 @@ static DWORD WINAPI export_thread(LPVOID unused) {
                     else
                         printf("[EXPORT] %s WARN %s\n", ts, errori);
                 } else {
+                    DWORD gle = GetLastError();
                     snprintf(errori, sizeof(errori),
-                             "ERR apertura dest: %lu", GetLastError());
+                             "ERR apertura dest: %lu", gle);
                     printf("[EXPORT] %s WARN %s\n", ts, errori);
                 }
                 CloseHandle(hSrc);
             } else {
+                DWORD gle = GetLastError();
                 snprintf(errori, sizeof(errori),
-                         "ERR apertura src: %lu", GetLastError());
+                         "ERR apertura src: %lu", gle);
                 printf("[EXPORT] %s WARN %s\n", ts, errori);
             }
         } else {
@@ -678,27 +688,65 @@ static DWORD WINAPI export_thread(LPVOID unused) {
             printf("[EXPORT] %s %s\n", ts, errori);
         }
 
-        /* 2. Heartbeat — xp_heartbeat.txt */
+        ciclo++;
+
+        /* 2. Heartbeat — xp_heartbeat.txt
+              FIX: usa CreateFileA invece di fopen — gestisce meglio la rete */
         char hb_path[MAX_PATH_LEN];
         snprintf(hb_path, sizeof(hb_path), "%sxp_heartbeat.txt", share_dir);
-        FILE *hb = fopen(hb_path, "w");
-        if (hb) {
-            fprintf(hb, "ultimo_run=%s\n", ts);
-            fprintf(hb, "opcua_log_ok=%s\n", opcua_ok ? "True" : "False");
-            if (errori[0]) fprintf(hb, "errori=%s\n", errori);
-            fclose(hb);
+        HANDLE hHb = CreateFileA(hb_path,
+            GENERIC_WRITE, FILE_SHARE_READ, NULL,
+            CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+        if (hHb != INVALID_HANDLE_VALUE) {
+            char hb_content[512];
+            int hb_len = snprintf(hb_content, sizeof(hb_content),
+                "ultimo_run=%s\nopcua_log_ok=%s\nciclo=%d\n",
+                ts, opcua_ok ? "True" : "False", ciclo);
+            if (errori[0]) {
+                hb_len += snprintf(hb_content + hb_len,
+                    sizeof(hb_content) - hb_len,
+                    "errori=%s\n", errori);
+            }
+            DWORD nw;
+            WriteFile(hHb, hb_content, hb_len, &nw, NULL);
+            CloseHandle(hHb);
         }
 
-        /* 3. Log esecuzione — esporta_log.txt (append) */
+        /* 3. Log esecuzione — esporta_log.txt
+              FIX: rotazione automatica ogni 500 righe (~8 ore a 60s)
+              Usa CreateFileA per append robusto sulla rete */
         char log_path[MAX_PATH_LEN];
         snprintf(log_path, sizeof(log_path), "%sesporta_log.txt", share_dir);
-        FILE *lf = fopen(log_path, "a");
-        if (lf) {
+
+        /* Controlla dimensione — ruota se > 50KB */
+        WIN32_FILE_ATTRIBUTE_DATA fad;
+        if (GetFileAttributesExA(log_path, GetFileExInfoStandard, &fad)) {
+            if (fad.nFileSizeLow > 51200) { /* 50KB */
+                /* Rinomina in .bak sovrascrivendo il precedente */
+                char bak_path[MAX_PATH_LEN];
+                snprintf(bak_path, sizeof(bak_path),
+                         "%sesporta_log.bak", share_dir);
+                MoveFileExA(log_path, bak_path,
+                            MOVEFILE_REPLACE_EXISTING);
+            }
+        }
+
+        HANDLE hLog = CreateFileA(log_path,
+            GENERIC_WRITE, FILE_SHARE_READ, NULL,
+            OPEN_ALWAYS,   /* append: apri se esiste, crea se no */
+            FILE_ATTRIBUTE_NORMAL, NULL);
+        if (hLog != INVALID_HANDLE_VALUE) {
+            SetFilePointer(hLog, 0, NULL, FILE_END); /* vai a fine file */
+            char line[512];
+            int llen;
             if (!errori[0])
-                fprintf(lf, "%s OK\n", ts);
+                llen = snprintf(line, sizeof(line), "%s OK\r\n", ts);
             else
-                fprintf(lf, "%s WARN %s\n", ts, errori);
-            fclose(lf);
+                llen = snprintf(line, sizeof(line),
+                                "%s WARN %s\r\n", ts, errori);
+            DWORD nw;
+            WriteFile(hLog, line, llen, &nw, NULL);
+            CloseHandle(hLog);
         }
 
         Sleep(interval_ms);

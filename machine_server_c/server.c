@@ -375,117 +375,222 @@ static void handle_client(SOCKET client, const char *base_path) {
     send(client, "{\"stato\":\"errore\",\"msg\":\"Comando sconosciuto\"}\n", 47, 0);
 }
 
-/* ── INVIA_BATCH ─────────────────────────────────────────────────────────────
-   Protocollo:
-   1. Header JSON (una riga \n):
-      {"cmd":"INVIA_BATCH","progetto":"4297_0007","count":N}
-   2. Per ogni file (N volte):
-      {"filename":"F1.MPF","filesize":1234}\n
-      <filesize bytes di contenuto>
-   3. MchnSrv scrive tutti i file in dnc_tmp SENZA aspettare
-   4. Dopo l'ultimo file chiama TransferAutom una sola volta
-   5. Risponde {"stato":"ok","inviati":N,"msg":"..."}\n
+
+/* ── INVIA_BATCH ──────────────────────────────────────────────────────────────
+   Fasi:
+   1. Ricevi tutti i file e scrivili in dnc_tmp
+   2. Chiama TransferAutom una sola volta
+   3. Monitora ogni file per max 120s:
+      - file sparito            → OK trasferito
+      - .ERR trovato            → cancella .ERR, riscrivi file, riprova (max 5x)
+      - timeout con err_count>0 → in coda autoimport (DNCMachine completerà)
+      - timeout senza nulla     → in coda autoimport
+   4. Risponde JSON con dettaglio per ogni file
 ─────────────────────────────────────────────────────────────────────────────*/
+
+#define BATCH_MAX_FILES  256
+#define BATCH_MAX_RETRY    5    /* max tentativi dopo .ERR per ogni file */
+#define BATCH_TIMEOUT_S  120    /* secondi di attesa massima */
+
+typedef struct {
+    char  nome[256];
+    char  dest[MAX_PATH_LEN];
+    int   scritto;       /* file scritto su disco OK */
+    int   ok;            /* trasferito alla NCU */
+    int   err_count;     /* .ERR ricevuti */
+    char  msg[128];
+    char *outbuf;        /* copia del contenuto per retry */
+    long  outbuf_len;
+} BatchFile;
+
 static void handle_batch(SOCKET client, const char *progetto_in) {
     char dnc_tmp[MAX_PATH_LEN];
     get_dnc_tmp(dnc_tmp, sizeof(dnc_tmp));
-    if (!PathIsDirectoryA(dnc_tmp))
-        CreateDirectoryA(dnc_tmp, NULL);
+    if (!PathIsDirectoryA(dnc_tmp)) CreateDirectoryA(dnc_tmp, NULL);
 
-    /* Progetto in maiuscolo */
     char progetto[128];
     strncpy(progetto, progetto_in, sizeof(progetto));
     progetto[sizeof(progetto)-1] = '\0';
     for (int i = 0; progetto[i]; i++)
         if (progetto[i] >= 'a' && progetto[i] <= 'z') progetto[i] -= 32;
 
-    int inviati = 0, errori = 0;
-    char last_err[256] = {0};
-    char nomi_ok[4096] = {0};   /* lista nomi per il log */
+    BatchFile *bf = (BatchFile*)calloc(BATCH_MAX_FILES, sizeof(BatchFile));
+    if (!bf) { send(client, "{\"stato\":\"errore\",\"msg\":\"OOM\"}\n", 30, 0); return; }
+    int n = 0;
 
-    /* Loop: leggi header file + contenuto finché la connessione regge */
-    while (1) {
-        /* Header file: {"filename":"...","filesize":N}\n */
-        char fhdr[512] = {0};
-        int fhlen = 0;
-        while (fhlen < (int)sizeof(fhdr) - 1) {
-            char c;
-            int r = recv(client, &c, 1, 0);
-            if (r <= 0) goto batch_done;   /* connessione chiusa = fine batch */
+    /* ── Fase 1: ricevi e scrivi tutti i file ────────────────────────────── */
+    while (n < BATCH_MAX_FILES) {
+        char fhdr[512] = {0}; int fhlen = 0;
+        while (fhlen < (int)sizeof(fhdr)-1) {
+            char c; int r = recv(client, &c, 1, 0);
+            if (r <= 0) goto phase2;
             if (c == '\n') break;
             fhdr[fhlen++] = c;
         }
         if (!fhdr[0]) break;
 
-        char filename[256] = {0}, norm[256] = {0};
-        long filesize = 0;
+        char filename[256] = {0}; long filesize = 0;
         json_get_str(fhdr, "filename", filename, sizeof(filename));
         filesize = json_get_long(fhdr, "filesize");
-        normalize_name(filename, norm, sizeof(norm));
+        normalize_name(filename, bf[n].nome, sizeof(bf[n].nome));
 
-        if (filesize <= 0 || !norm[0]) {
-            snprintf(last_err, sizeof(last_err), "header non valido: %s", fhdr);
-            errori++;
-            break;
+        if (filesize <= 0 || !bf[n].nome[0]) {
+            snprintf(bf[n].msg, sizeof(bf[n].msg), "header non valido");
+            n++; continue;
         }
 
-        /* Ricevi contenuto */
-        char *filebuf = (char*)malloc(filesize);
-        if (!filebuf) {
-            snprintf(last_err, sizeof(last_err), "malloc %ld bytes", filesize);
-            errori++;
-            break;
-        }
-        long received = 0;
-        while (received < filesize) {
-            int to_read = (int)(filesize - received);
-            if (to_read > BUF_SIZE) to_read = BUF_SIZE;
-            int r = recv(client, filebuf + received, to_read, 0);
-            if (r <= 0) { free(filebuf); goto batch_done; }
-            received += r;
+        char *raw = (char*)malloc(filesize);
+        if (!raw) { snprintf(bf[n].msg, sizeof(bf[n].msg), "OOM"); n++; continue; }
+        long got = 0;
+        while (got < filesize) {
+            int nr = (int)(filesize-got); if (nr > BUF_SIZE) nr = BUF_SIZE;
+            int r = recv(client, raw+got, nr, 0);
+            if (r <= 0) { free(raw); goto phase2; }
+            got += r;
         }
 
-        /* Scrivi MPF — senza aspettare DNCMachine */
-        char dest[MAX_PATH_LEN] = {0};
-        char err[256] = {0};
-        if (write_mpf_file(norm, progetto, filebuf, filesize,
-                           dnc_tmp, dest, sizeof(dest), err, sizeof(err))) {
-            inviati++;
-            /* Aggiungi nome alla lista */
-            if (strlen(nomi_ok) + strlen(norm) + 2 < sizeof(nomi_ok)) {
-                if (nomi_ok[0]) strncat(nomi_ok, ",", sizeof(nomi_ok)-strlen(nomi_ok)-1);
-                strncat(nomi_ok, norm, sizeof(nomi_ok)-strlen(nomi_ok)-1);
+        char errbuf[256] = {0};
+        if (write_mpf_file(bf[n].nome, progetto, raw, filesize,
+                           dnc_tmp, bf[n].dest, sizeof(bf[n].dest),
+                           errbuf, sizeof(errbuf))) {
+            bf[n].scritto = 1;
+            /* Leggi il file scritto per tenerlo in memoria (retry) */
+            FILE *ff = fopen(bf[n].dest, "rb");
+            if (ff) {
+                fseek(ff, 0, SEEK_END); bf[n].outbuf_len = ftell(ff); rewind(ff);
+                bf[n].outbuf = (char*)malloc(bf[n].outbuf_len);
+                if (bf[n].outbuf) fread(bf[n].outbuf, 1, bf[n].outbuf_len, ff);
+                fclose(ff);
             }
+            printf("[BATCH] scritto %s\n", bf[n].nome);
         } else {
-            snprintf(last_err, sizeof(last_err), "%s: %s", norm, err);
-            errori++;
+            snprintf(bf[n].msg, sizeof(bf[n].msg), "write err: %.80s", errbuf);
+            printf("[BATCH] ERR scrittura %s: %s\n", bf[n].nome, errbuf);
         }
-        free(filebuf);
+        free(raw); n++;
     }
 
-batch_done:
-    /* Chiama TransferAutom UNA SOLA VOLTA per tutti i file */
-    if (inviati > 0) {
-        printf("[BATCH] %d file scritti, avvio TransferAutom\n", inviati);
+phase2:
+    /* ── Fase 2: TransferAutom una sola volta ────────────────────────────── */
+    int n_scritti = 0;
+    for (int i = 0; i < n; i++) if (bf[i].scritto) n_scritti++;
+    if (n_scritti > 0) {
+        printf("[BATCH] %d file scritti, TransferAutom...\n", n_scritti);
         call_transfer_autom();
     }
 
-    /* Risposta */
-    char resp[1024];
-    if (errori == 0) {
-        snprintf(resp, sizeof(resp),
-                 "{\"stato\":\"ok\",\"inviati\":%d,\"msg\":\"OK %d file -> autoimport: %s\"}\n",
-                 inviati, inviati, nomi_ok);
-    } else {
-        snprintf(resp, sizeof(resp),
-                 "{\"stato\":\"ok\",\"inviati\":%d,\"errori\":%d,\"msg\":\"%s\"}\n",
-                 inviati, errori, last_err);
-    }
-    send(client, resp, strlen(resp), 0);
-    printf("[BATCH] risposta: %s", resp);
-}
+    /* ── Fase 3: monitora con retry ──────────────────────────────────────── */
+    int elapsed = 0, pending = n_scritti;
+    while (elapsed < BATCH_TIMEOUT_S && pending > 0) {
+        Sleep(2000); elapsed += 2; pending = 0;
+        for (int i = 0; i < n; i++) {
+            if (!bf[i].scritto || bf[i].ok) continue;
+            /* Blocco per file con troppi .ERR — lascia in coda autoimport */
+            if (bf[i].err_count >= BATCH_MAX_RETRY) {
+                snprintf(bf[i].msg, sizeof(bf[i].msg),
+                         "max retry (%d .ERR) — in coda autoimport", bf[i].err_count);
+                bf[i].ok = 1; /* considera risolto, DNCMachine lo processerà */
+                printf("[BATCH] %s: max retry raggiunti, in coda\n", bf[i].nome);
+                continue;
+            }
 
-/* ── Thread esportazione OpcUaLegacy.log sulla share ─────────────────────── */
+            char err_path[MAX_PATH_LEN];
+            snprintf(err_path, sizeof(err_path), "%s.ERR", bf[i].dest);
+            int fe = (GetFileAttributesA(bf[i].dest)  != INVALID_FILE_ATTRIBUTES);
+            int ee = (GetFileAttributesA(err_path)    != INVALID_FILE_ATTRIBUTES);
+
+            if (!fe && !ee) {
+                /* File sparito senza .ERR = trasferito correttamente */
+                bf[i].ok = 1;
+                snprintf(bf[i].msg, sizeof(bf[i].msg),
+                         "OK — trasferito in %ds", elapsed);
+                printf("[BATCH] %s OK in %ds\n", bf[i].nome, elapsed);
+                continue;
+            }
+            if (ee) {
+                /* .ERR trovato — cancella, riscrivi, riprova */
+                bf[i].err_count++;
+                DeleteFileA(err_path);
+                if (!fe && bf[i].outbuf) {
+                    /* DNCMachine ha rimosso il .MPF insieme al .ERR — riscrivi */
+                    FILE *fw = fopen(bf[i].dest, "wb");
+                    if (fw) {
+                        fwrite(bf[i].outbuf, 1, bf[i].outbuf_len, fw);
+                        fclose(fw);
+                        printf("[BATCH] %s riscritto (tentativo %d/%d)\n",
+                               bf[i].nome, bf[i].err_count, BATCH_MAX_RETRY);
+                    }
+                } else {
+                    printf("[BATCH] %s .ERR cancellato (tentativo %d/%d)\n",
+                           bf[i].nome, bf[i].err_count, BATCH_MAX_RETRY);
+                }
+                pending++;
+                continue;
+            }
+            /* File ancora presente, nessun .ERR — semplicemente in attesa */
+            pending++;
+        }
+        if (pending > 0)
+            printf("[BATCH] %ds — %d file ancora pending\n", elapsed, pending);
+    }
+
+    /* Segna timeout per i non risolti */
+    for (int i = 0; i < n; i++) {
+        if (bf[i].scritto && !bf[i].ok) {
+            if (bf[i].err_count > 0)
+                snprintf(bf[i].msg, sizeof(bf[i].msg),
+                         "timeout — %d .ERR, in coda autoimport", bf[i].err_count);
+            else
+                snprintf(bf[i].msg, sizeof(bf[i].msg),
+                         "timeout — in coda autoimport");
+        }
+        if (!bf[i].scritto && !bf[i].msg[0])
+            strncpy(bf[i].msg, "errore scrittura", sizeof(bf[i].msg));
+        if (bf[i].outbuf) { free(bf[i].outbuf); bf[i].outbuf = NULL; }
+    }
+
+    /* ── Fase 4: risposta JSON dettagliata ───────────────────────────────── */
+    int n_ok = 0, n_err = 0;
+    for (int i = 0; i < n; i++) {
+        /* ok = trasferito O in coda (DNCMachine completerà) */
+        if (bf[i].scritto) n_ok++; else n_err++;
+    }
+
+    /* Costruisci JSON: {"stato":"ok","totale":N,"ok":X,"errori":Y,
+       "dettaglio":[{"nome":"F1","ok":true,"msg":"..."},...]} */
+    char *resp = (char*)malloc(n * 256 + 256);
+    if (!resp) {
+        send(client, "{\"stato\":\"errore\",\"msg\":\"OOM resp\"}\n", 35, 0);
+        free(bf); return;
+    }
+    int rp = 0;
+    rp += sprintf(resp+rp,
+        "{\"stato\":\"ok\",\"totale\":%d,\"ok\":%d,\"errori\":%d,\"dettaglio\":[",
+        n, n_ok, n_err);
+    for (int i = 0; i < n; i++) {
+        /* Escape backslash e virgolette nel msg */
+        char safe_msg[256] = {0};
+        int si = 0, di = 0;
+        while (bf[i].msg[si] && di < 250) {
+            if (bf[i].msg[si] == '"' || bf[i].msg[si] == '\\')
+                safe_msg[di++] = '\\';
+            safe_msg[di++] = bf[i].msg[si++];
+        }
+        rp += sprintf(resp+rp,
+            "%s{\"nome\":\"%s\",\"ok\":%s,\"err_count\":%d,\"msg\":\"%s\"}",
+            i ? "," : "",
+            bf[i].nome,
+            (bf[i].scritto) ? "true" : "false",
+            bf[i].err_count,
+            safe_msg);
+    }
+    rp += sprintf(resp+rp, "]}\n");
+
+    send(client, resp, rp, 0);
+    printf("[BATCH] done: %d OK, %d ERR\n", n_ok, n_err);
+    free(resp);
+    free(bf);
+}
 
 static DWORD WINAPI export_thread(LPVOID unused) {
     (void)unused;

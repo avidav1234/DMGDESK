@@ -194,15 +194,29 @@ async def invia_batch_alla_macchina(
                 f.write(content)
             tmp_paths.append((upload.filename, tmp_path))
 
-        n_ok, n_err, errori = client.invia_batch(
+        n_ok, n_err, dettaglio = client.invia_batch(
             [p for _, p in tmp_paths], progetto
         )
 
+        # Costruisce risultati per file dal dettaglio del server
         risultati = []
+        nome_map = {os.path.splitext(fname)[0].upper(): fname
+                    for fname, _ in tmp_paths}
+        for d in dettaglio:
+            fname_orig = nome_map.get(d.get("nome", "").upper(),
+                                      d.get("nome", "") + ".MPF")
+            risultati.append(InvioResult(
+                filename=fname_orig,
+                ok=d.get("ok", False),
+                msg=d.get("msg", "")
+            ))
+
+        # File non presenti nel dettaglio (errori prima dell'invio)
+        nomi_in_det = {d.get("nome","").upper() for d in dettaglio}
         for fname, _ in tmp_paths:
-            ok  = n_err == 0
-            msg = "OK" if ok else (errori[0] if errori else "errore")
-            risultati.append(InvioResult(filename=fname, ok=ok, msg=msg))
+            if os.path.splitext(fname)[0].upper() not in nomi_in_det:
+                risultati.append(InvioResult(filename=fname, ok=False,
+                                              msg="non ricevuto dal server"))
 
         log.info(f"[BATCH] {progetto}: {n_ok} OK, {n_err} ERR")
         return InvioResponse(n_ok=n_ok, n_err=n_err, risultati=risultati)

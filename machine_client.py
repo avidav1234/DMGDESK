@@ -117,18 +117,14 @@ class MachineClient:
 
     def invia_batch(self, filepaths, progetto, progress_callback=None):
         """
-        Invia tutti i file in una sola connessione TCP.
-        Protocollo:
-          1. Header: {"cmd":"INVIA_BATCH","progetto":"...","count":N}\n
-          2. Per ogni file: {"filename":"...","filesize":N}\n + bytes
-          3. Chiude connessione → server chiama TransferAutom una sola volta
-        Molto più veloce di invia_lista per batch grandi.
-        Restituisce (n_ok, n_err, lista_errori)
+        Invia tutti i file in una sola connessione TCP — INVIA_BATCH.
+        Il server monitora ogni file (max 120s, max 5 retry per .ERR).
+        Restituisce (n_ok, n_err, dettaglio)
+        dove dettaglio = [{"nome":..., "ok":bool, "err_count":int, "msg":...}]
         """
         if not filepaths:
             return 0, 0, []
 
-        # Leggi tutti i file prima di aprire la connessione
         files_data = []
         for fp in filepaths:
             try:
@@ -143,14 +139,13 @@ class MachineClient:
                     progress_callback(os.path.basename(fp), False, str(e))
 
         if not files_data:
-            return 0, len(filepaths), ["Nessun file leggibile"]
+            return 0, len(filepaths), []
 
-        n_ok, n_err, errori = 0, 0, []
         try:
             s = self._connect()
-            s.settimeout(30)  # batch: timeout breve per file singolo
+            s.settimeout(30)
 
-            # 1. Header batch
+            # Header batch
             header = json.dumps({
                 "cmd":      "INVIA_BATCH",
                 "progetto": progetto,
@@ -158,26 +153,25 @@ class MachineClient:
             }) + "\n"
             s.sendall(header.encode("utf-8"))
 
-            # 2. Invia ogni file
+            # Invia ogni file
             for fname, content, fp in files_data:
                 fhdr = json.dumps({
                     "filename": fname,
                     "filesize": len(content)
                 }) + "\n"
                 s.sendall(fhdr.encode("utf-8") + content)
-                n_ok += 1
                 if progress_callback:
-                    progress_callback(os.path.basename(fp), True, "inviato")
+                    progress_callback(os.path.basename(fp), True, "inviato al server")
 
-            # 3. Chiudi connessione → server avvia TransferAutom
+            # Chiudi lato scrittura → il server sa che è finita la lista
             s.shutdown(socket.SHUT_WR)
 
-            # 4. Leggi risposta finale
+            # Leggi risposta (può arrivare dopo 120s di monitoraggio)
+            s.settimeout(150)
             risposta = b""
-            s.settimeout(15)
             try:
                 while True:
-                    chunk = s.recv(1024)
+                    chunk = s.recv(4096)
                     if not chunk:
                         break
                     risposta += chunk
@@ -188,22 +182,24 @@ class MachineClient:
             s.close()
 
             risposta_str = risposta.strip().decode("utf-8", errors="replace")
-            if risposta_str:
-                try:
-                    rj = json.loads(risposta_str)
-                    print(f"[BATCH] risposta server: {rj}")
-                    if rj.get("errori", 0) > 0:
-                        n_err = rj["errori"]
-                        n_ok  = rj.get("inviati", n_ok)
-                        errori.append(rj.get("msg", "errore batch"))
-                except Exception:
-                    print(f"[BATCH] risposta: {risposta_str}")
+            if not risposta_str:
+                return len(files_data), 0, []
+
+            rj = json.loads(risposta_str)
+            dettaglio = rj.get("dettaglio", [])
+            n_ok  = rj.get("ok",     0)
+            n_err = rj.get("errori", 0)
+
+            # Aggiorna progress per ogni file con il risultato finale
+            if progress_callback:
+                for d in dettaglio:
+                    progress_callback(d["nome"] + ".MPF", d["ok"], d["msg"])
+
+            return n_ok, n_err, dettaglio
 
         except Exception as e:
-            n_err = len(files_data) - n_ok
-            errori.append(str(e))
-
-        return n_ok, n_err, errori
+            return 0, len(files_data), [{"nome": "?", "ok": False,
+                                          "err_count": 0, "msg": str(e)}]
 
     def invia_lista(self, filepaths, progetto, progress_callback=None):
         """

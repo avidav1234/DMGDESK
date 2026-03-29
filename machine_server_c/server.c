@@ -755,6 +755,12 @@ static DWORD WINAPI export_thread(LPVOID unused) {
 /* ── Main ────────────────────────────────────────────────────────────────── */
 
 int main(void) {
+    /* Delay avvio — lascia tempo a runopcua di inizializzarsi completamente
+       prima che MchnSrv tocchi COM/DDE/Winsock/RAM */
+    printf("[MchnSrv] Avvio ritardato di 120s — attendo runopcua...\n");
+    Sleep(120000);
+    printf("[MchnSrv] Delay completato, avvio normale.\n");
+
     init_cfg_path();
     init_vbs_mutex();
 

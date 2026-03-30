@@ -476,13 +476,14 @@ async def aggiorna_stati_da_log():
     mpf_filename = prog_attivo if prog_attivo else None   # "4297_005_01_12.MPF"
 
     # Estrai commessa_posizione dal nome file: "4297_005_01_12.MPF" → "4297_0005"
-    # poi normalizza a 4 cifre: "4297_0007"
     mpf_progetto = None
-    if mpf_nome:
-        parts = mpf_nome.split("_")
+    if mpf_filename:
+        nome_bare = mpf_filename.upper().replace(".MPF", "")
+        parts = nome_bare.split("_")
         if len(parts) >= 2:
             comm = parts[0]
-            pos  = parts[1].zfill(4)  # "007" → "0007", "0008" → "0008"
+            pos  = parts[1].zfill(4)
+            mpf_progetto = f"{comm}_{pos}"
             mpf_progetto = f"{comm}_{pos}"
 
     def _norm_nome(n):

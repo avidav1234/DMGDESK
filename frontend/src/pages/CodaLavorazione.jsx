@@ -666,26 +666,22 @@ export default function CodaLavorazione() {
               <div style={{ fontSize: 10, letterSpacing: 1, marginBottom: 6,
                 color: inLavorazione ? "#93c5fd" : "#94a3b8" }}>PROGRAMMA</div>
               {prog ? (
-                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                  {/* Nome completo su una riga */}
-                  <div style={{ fontSize: 13, fontWeight: 700, fontFamily: 'monospace',
-                    color: inLavorazione ? "#ffffff" : "#0d2d5e", letterSpacing: 0.5 }}>
-                    {prog.full}
-                  </div>
-                  {/* Dettaglio strutturato */}
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {/* Tutti i campi alla stessa dimensione */}
+                  <div style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap" }}>
                     {[
                       { label: "COMM.", val: prog.commessa },
                       { label: "POS.",  val: prog.posizione },
                       { label: "FASE",  val: prog.fase },
                       { label: "N°",    val: prog.seq },
                     ].filter(x => x.val).map(x => (
-                      <div key={x.label} style={{ display: "flex", flexDirection: "column",
-                        alignItems: "center" }}>
-                        <span style={{ fontSize: 8, letterSpacing: 1,
-                          color: inLavorazione ? "#93c5fd" : "#94a3b8" }}>{x.label}</span>
-                        <span style={{ fontSize: 13, fontWeight: 700,
-                          color: inLavorazione ? "#ffffff" : "#0d2d5e" }}>{x.val}</span>
+                      <div key={x.label} style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+                        <span style={{ fontSize: 9, letterSpacing: 1,
+                          color: inLavorazione ? "#93c5fd" : "#94a3b8",
+                          marginBottom: 2 }}>{x.label}</span>
+                        <span style={{ fontSize: 16, fontWeight: 700, fontFamily: "monospace",
+                          color: inLavorazione ? "#ffffff" : "#0d2d5e",
+                          lineHeight: 1 }}>{x.val}</span>
                       </div>
                     ))}
                   </div>

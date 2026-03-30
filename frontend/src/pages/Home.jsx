@@ -20,13 +20,14 @@ function fmtTimer(sec){
 
 export default function Home(){
   const nav = useNavigate()
-  const [projects,  setProjects]  = useState([])
-  const [deliveries,setDeliveries]= useState([])
-  const [pallet,    setPallet]    = useState([])
-  const [setup,     setSetup]     = useState({})
-  const [sessLive,  setSessLive]  = useState(null)
-  const [tickSec,   setTickSec]   = useState(0)
-  const [loading,   setLoading]   = useState(true)
+  const [projects,   setProjects]   = useState([])
+  const [deliveries, setDeliveries] = useState([])
+  const [pallet,     setPallet]     = useState([])
+  const [setup,      setSetup]      = useState({})
+  const [sessLive,   setSessLive]   = useState(null)
+  const [tempiCiclo, setTempiCiclo] = useState({})  // { "4297_005_01_18.MPF": {media_sec,std_sec,n} }
+  const [tickSec,    setTickSec]    = useState(0)
+  const [loading,    setLoading]    = useState(true)
 
   useEffect(()=>{
     Promise.all([
@@ -49,7 +50,13 @@ export default function Home(){
     fetchSessLive()
     const t2=setInterval(fetchSessLive,10000)
     const t3=setInterval(()=>setTickSec(s=>s+1),1000)
-    return()=>{clearInterval(t);clearInterval(t2);clearInterval(t3)}
+    // Tempi ciclo reali — aggiorna ogni 5 minuti (dati storici, non cambiano spesso)
+    const fetchTempiCiclo=()=>
+      fetch('/api/report/tempi-ciclo').then(r=>r.ok?r.json():null)
+        .then(d=>{ if(d?.cicli) setTempiCiclo(d.cicli) }).catch(()=>{})
+    fetchTempiCiclo()
+    const t4=setInterval(fetchTempiCiclo,300000)
+    return()=>{clearInterval(t);clearInterval(t2);clearInterval(t3);clearInterval(t4)}
   },[])
 
   const now    = new Date()
@@ -106,6 +113,60 @@ export default function Home(){
   const progettoLav = palletLav?projects.find(p=>p.id===palletLav.progetto_id):null
   const lavInfo     = progettoLav?palletInfo(palletLav.numero):null
   const sessMatch   = sessLive?.attiva&&sessLive?.pallet===palletLav?.numero
+
+  // ── ETA programma corrente da cicli reali ────────────────────────────────
+  // Se abbiamo dati storici sul ciclo del programma corrente, calcoliamo:
+  // - tempo rimanente nel programma corrente (media - elapsed)
+  // - ETA fine pallet (programmi_rimanenti * media_ciclo)
+  const etaCalc = (()=>{
+    if(!sessMatch||!sessLive?.programma_corrente||!lavInfo) return null
+    const fname = sessLive.programma_corrente.toUpperCase()
+    const ciclo = tempiCiclo[fname]
+    if(!ciclo||ciclo.n<2) return null  // serve almeno 2 campioni
+
+    // Tempo rimanente nel programma corrente
+    const elapsed   = durataProgrammaLive || 0
+    const rimPgm    = Math.max(0, ciclo.media_sec - elapsed)
+
+    // Programmi da fare dopo quello corrente (nell'ordine)
+    const allPgmLav = progettoLav
+      ? (progettoLav.steps||[]).flatMap(s=>(s.tasks||[])
+          .filter(t=>t.text?.trim().toLowerCase()==='fresatura')
+          .flatMap(t=>(t.programs||[]).filter(pg=>pg.tipoGruppo!=='ipm')))
+      : []
+    const idxCorrente = allPgmLav.findIndex(p=>
+      (p.filename||'').toUpperCase() === fname)
+    const pgmSuccessivi = idxCorrente>=0
+      ? allPgmLav.slice(idxCorrente+1).filter(p=>p.stato!=='completato')
+      : allPgmLav.filter(p=>p.stato!=='completato')
+
+    // ETA totale: rimanente corrente + (successivi × media ciclo per quel file)
+    const secSuccessivi = pgmSuccessivi.reduce((acc,p)=>{
+      const fn = (p.filename||'').toUpperCase()
+      const tc = tempiCiclo[fn]
+      return acc + (tc?.n>=2 ? tc.media_sec : ciclo.media_sec)
+    }, 0)
+    const totSec = rimPgm + secSuccessivi
+
+    // Formato
+    const fmtEta = (sec)=>{
+      if(sec<60) return `<1 min`
+      if(sec<3600) return `~${Math.round(sec/60)} min`
+      const h=Math.floor(sec/3600), m=Math.round((sec%3600)/60)
+      return m>0 ? `~${h}h ${m}m` : `~${h}h`
+    }
+
+    return {
+      rimPgm,
+      totSec,
+      etaFmtPgm:   fmtEta(rimPgm),
+      etaFmtPallet: fmtEta(totSec),
+      nCampioni:   ciclo.n,
+      deviazione:  ciclo.std_sec,
+      anomalia:    durataProgrammaLive!=null && ciclo.std_sec>0
+                   && durataProgrammaLive > (ciclo.media_sec + 2*ciclo.std_sec),
+    }
+  })()
 
   // ── Metriche ─────────────────────────────────────────────────────────────
   const allPgm=projects.flatMap(p=>(p.steps||[]).flatMap(s=>(s.tasks||[])
@@ -314,6 +375,32 @@ export default function Home(){
                   </span>
                 )}
               </div>
+
+              {/* ETA da cicli reali */}
+              {etaCalc&&(
+                <div style={{display:'flex',alignItems:'center',gap:8,
+                  marginTop:6,padding:'7px 10px',borderRadius:8,flexWrap:'wrap',
+                  background: etaCalc.anomalia ? '#fef2f2' : '#f0f7ff',
+                  border: `1px solid ${etaCalc.anomalia ? '#fca5a5' : '#bfdbfe'}`}}>
+                  {etaCalc.anomalia&&(
+                    <span style={{fontSize:10,fontWeight:800,color:'#dc2626',
+                      background:'#fff',padding:'2px 7px',borderRadius:4,
+                      border:'1px solid #fca5a5',flexShrink:0}}>
+                      CICLO LUNGO
+                    </span>
+                  )}
+                  <span style={{fontSize:11,color: etaCalc.anomalia?'#dc2626':'#1D5FAD'}}>
+                    pgm corrente: <b>{etaCalc.etaFmtPgm}</b>
+                  </span>
+                  <span style={{fontSize:11,color:'#64748b'}}>·</span>
+                  <span style={{fontSize:11,color:'#0d2d5e'}}>
+                    fine pallet: <b>{etaCalc.etaFmtPallet}</b>
+                  </span>
+                  <span style={{marginLeft:'auto',fontSize:10,color:'#94a3b8',fontStyle:'italic'}}>
+                    da {etaCalc.nCampioni} cicli reali
+                  </span>
+                </div>
+              )}
             </div>
           ):(
             <div style={{background:'#fff',border:'1px solid #e2e8f0',borderRadius:12,

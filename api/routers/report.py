@@ -700,3 +700,80 @@ async def export_excel_download(data: str = Query(default=None)):
     shutil.copy(str(out), str(dest))
     return FileResponse(str(dest), filename=fname,
                         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+# ── Tempi ciclo reali per ETA ─────────────────────────────────────────────────
+
+@router.get("/tempi-ciclo")
+async def get_tempi_ciclo():
+    """
+    Analizza lavorazioni_log.json e calcola statistiche del ciclo reale
+    per ogni filename MPF: media, deviazione standard, n campioni.
+
+    Usato per:
+    - ETA programma corrente nella Home (media * n_programmi_rimanenti)
+    - Aggiornamento automatico tempoStimato nei progetti
+    - Rilevamento cicli anomali (durata > media + 2σ)
+
+    Risposta:
+    {
+      "cicli": {
+        "4297_005_01_18.MPF": {
+          "media_sec":  342,
+          "std_sec":    28,
+          "min_sec":    310,
+          "max_sec":    398,
+          "n":          7,
+          "ultimo":     "2026-03-30T22:04:00"
+        },
+        ...
+      },
+      "n_programmi_con_dati": 45,
+      "sessioni_analizzate":  12
+    }
+    """
+    config = carica_configurazione()
+    log    = _load_log(config)
+    sessioni = log.get("sessioni", [])
+
+    # Accumula durate per filename
+    from collections import defaultdict
+    import statistics
+
+    dati: dict[str, list] = defaultdict(list)
+    ultimi: dict[str, str] = {}
+
+    for sess in sessioni:
+        for pgm in sess.get("programmi", []):
+            fname = pgm.get("filename", "").strip().upper()
+            dur   = pgm.get("durata_sec")
+            fine  = pgm.get("fine")
+            if not fname or dur is None or dur <= 0:
+                continue
+            # Filtra durate anomale (> 8h = quasi certamente un bug di timing)
+            if dur > 28800:
+                continue
+            dati[fname].append(dur)
+            if fine and (fname not in ultimi or fine > ultimi[fname]):
+                ultimi[fname] = fine
+
+    cicli = {}
+    for fname, durate in dati.items():
+        if len(durate) < 1:
+            continue
+        media = sum(durate) / len(durate)
+        std   = statistics.stdev(durate) if len(durate) > 1 else 0
+        cicli[fname] = {
+            "media_sec": round(media),
+            "std_sec":   round(std),
+            "min_sec":   min(durate),
+            "max_sec":   max(durate),
+            "n":         len(durate),
+            "ultimo":    ultimi.get(fname),
+        }
+
+    return {
+        "cicli":                  cicli,
+        "n_programmi_con_dati":   len(cicli),
+        "sessioni_analizzate":    len(sessioni),
+    }

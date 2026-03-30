@@ -251,16 +251,23 @@ async def get_stato_macchina():
     raw  = _parse_log(log_path)
     data = _normalizza(raw)
 
-    # Timestamp ultimo aggiornamento del file
+    # Timestamp e controllo stale
+    log_stale = False
+    log_age_sec = None
     try:
         mtime = os.path.getmtime(log_path)
         ts    = datetime.fromtimestamp(mtime).strftime("%d/%m/%Y %H:%M:%S")
+        log_age_sec = int((datetime.now() - datetime.fromtimestamp(mtime)).total_seconds())
+        if log_age_sec > 120:
+            log_stale = True
     except Exception:
         ts = None
 
     return {
-        "connessa": True,
-        "log_path": log_path,
+        "connessa":             True,
+        "log_path":             log_path,
+        "log_stale":            log_stale,
+        "log_age_sec":          log_age_sec,
         **data,
         "ultimo_aggiornamento": ts,
     }
@@ -476,6 +483,25 @@ async def aggiorna_stati_da_log():
     log_path = _trova_log_path(config)
     if not log_path:
         return {"aggiornamenti": 0, "nota": "log non trovato"}
+
+    # ── Watchdog MchnSrv: rileva log stale ───────────────────────────────────
+    # Se MchnSrv smette di copiare il log dalla PCU50, il file rimane congelato.
+    # DMGDesk continuerebbe a leggere dati vecchi e applicare transizioni di stato
+    # sbagliate. Soglia: 120s senza aggiornamento = log non affidabile.
+    LOG_STALE_SOGLIA_SEC = 120
+    try:
+        mtime = os.path.getmtime(log_path)
+        log_age_sec = (_dt.now() - _dt.fromtimestamp(mtime)).total_seconds()
+        if log_age_sec > LOG_STALE_SOGLIA_SEC:
+            return {
+                "aggiornamenti": 0,
+                "log_stale": True,
+                "log_age_sec": int(log_age_sec),
+                "nota": f"Log non aggiornato da {int(log_age_sec)}s — MchnSrv potrebbe essere fermo",
+                "stato_macchina": -1,   # -1 = segnale speciale "dati non affidabili"
+            }
+    except OSError:
+        pass  # se non riesce a leggere mtime, procede normalmente
 
     raw  = _parse_log(log_path)
     data = _normalizza(raw)

@@ -80,7 +80,7 @@ export default function Sidebar() {
 
   // ── Stato macchina live ───────────────────────────────────────────────
   const [statoMacchina, setStatoMacchina] = useState(null)
-  // { attiva: bool, programma: str|null, utensile: str|null }
+  // { attiva, programma, utensile, pallet, progetto, logStale, logAgeSec }
 
   // ── Alert contatori ───────────────────────────────────────────────────
   const [alerts, setAlerts] = useState({ analisi: 0, utensili: 0 })
@@ -92,13 +92,15 @@ export default function Sidebar() {
         .then(r => r.ok ? r.json() : null)
         .then(d => {
           if (!d) return
-          const attiva = [1, 3].includes(d.stato_programma)
+          const attiva = [1, 3].includes(d.stato_programma) && !d.log_stale
           setStatoMacchina({
             attiva,
             programma:  d.programma_attivo,
             utensile:   d.utensile_attivo,
-            pallet:     d.pallet_attivo  || null,
+            pallet:     d.pallet_attivo   || null,
             progetto:   d.progetto_attivo || null,
+            logStale:   d.log_stale       || false,
+            logAgeSec:  d.log_age_sec     || null,
           })
         }).catch(() => {})
 
@@ -121,6 +123,16 @@ export default function Sidebar() {
     // Ascolta il GlobalPoller — aggiorna stato macchina ad ogni tick
     const onUpdate = (e) => {
       const d = e.detail || {}
+      // stato_macchina === -1 = segnale speciale "log stale"
+      if (d.log_stale) {
+        setStatoMacchina(prev => ({
+          ...prev,
+          attiva:    false,
+          logStale:  true,
+          logAgeSec: d.log_age_sec || prev?.logAgeSec || null,
+        }))
+        return
+      }
       if (d.stato_macchina !== undefined) {
         const attiva = [1, 3].includes(d.stato_macchina)
         setStatoMacchina(prev => ({
@@ -129,9 +141,10 @@ export default function Sidebar() {
           utensile:  prev?.utensile || null,
           pallet:    d.pallet_rilevato   ?? prev?.pallet   ?? null,
           progetto:  d.progetto_rilevato || prev?.progetto || null,
+          logStale:  false,
+          logAgeSec: null,
         }))
       }
-      // Ricarica alert se ci sono cambiamenti utensili
       if (d.in_macchina > 0 || d.completato > 0) {
         fetchAlerts()
       }
@@ -165,8 +178,8 @@ export default function Sidebar() {
       <NavLink to="/coda" style={{ textDecoration: 'none' }}>
         <div style={{
           width: 58, marginBottom: 6, borderRadius: 8, padding: '5px 6px',
-          background: statoMacchina?.attiva ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.05)',
-          border: `1px solid ${statoMacchina?.attiva ? 'rgba(34,197,94,0.3)' : 'rgba(255,255,255,0.08)'}`,
+          background: statoMacchina?.logStale ? 'rgba(239,68,68,0.15)' : statoMacchina?.attiva ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.05)',
+          border: `1px solid ${statoMacchina?.logStale ? 'rgba(239,68,68,0.4)' : statoMacchina?.attiva ? 'rgba(34,197,94,0.3)' : 'rgba(255,255,255,0.08)'}`,
           display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
           transition: 'all 0.3s', cursor: 'pointer',
         }}>
@@ -174,15 +187,15 @@ export default function Sidebar() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <div style={{
               width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
-              background: statoMacchina?.attiva ? '#22c55e' : '#64748b',
-              animation: statoMacchina?.attiva ? 'pulse-green 2s ease-in-out infinite' : 'none',
+              background: statoMacchina?.logStale ? '#ef4444' : statoMacchina?.attiva ? '#22c55e' : '#64748b',
+              animation: statoMacchina?.logStale ? 'pulse-red 1s ease-in-out infinite' : statoMacchina?.attiva ? 'pulse-green 2s ease-in-out infinite' : 'none',
             }}/>
             <span style={{
               fontSize: 8, fontWeight: 800, letterSpacing: '0.06em',
               fontFamily: 'var(--font-mono)',
-              color: statoMacchina?.attiva ? '#86efac' : '#64748b',
+              color: statoMacchina?.logStale ? '#fca5a5' : statoMacchina?.attiva ? '#86efac' : '#64748b',
             }}>
-              {statoMacchina?.attiva ? 'LIVE' : 'FERMO'}
+              {statoMacchina?.logStale ? 'STALE' : statoMacchina?.attiva ? 'LIVE' : 'FERMO'}
             </span>
           </div>
           {/* Pallet attivo */}
@@ -204,7 +217,16 @@ export default function Sidebar() {
               {statoMacchina.programma.replace('.MPF','').replace('.mpf','').split('_').slice(-2).join('_')}
             </div>
           )}
-          {!statoMacchina?.attiva && (
+          {/* Badge STALE — MchnSrv fermo */}
+          {statoMacchina?.logStale && (
+            <div style={{ fontSize: 7, fontFamily: 'var(--font-mono)', color: '#fca5a5',
+              textAlign: 'center', lineHeight: 1.3 }}>
+              {statoMacchina.logAgeSec
+                ? `${Math.round(statoMacchina.logAgeSec / 60)}min`
+                : 'offline'}
+            </div>
+          )}
+          {!statoMacchina?.logStale && !statoMacchina?.attiva && (
             <div style={{ fontSize: 7, color: 'rgba(100,116,139,0.6)', fontFamily: 'var(--font-mono)' }}>
               in attesa
             </div>
@@ -258,6 +280,7 @@ export default function Sidebar() {
       </div>
 
       <style>{`
+        @keyframes pulse-red { 0%,100%{opacity:1} 50%{opacity:.4} }
         @keyframes pulse-green {
           0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(34,197,94,0.4); }
           50%       { opacity: .7; box-shadow: 0 0 0 4px rgba(34,197,94,0); }

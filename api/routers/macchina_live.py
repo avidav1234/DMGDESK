@@ -494,9 +494,23 @@ async def aggiorna_stati_da_log():
                 break
 
     # Trova pallet:
-    # Fonte 1 (priorità): pallet_attivo dal log (_N_PALLET_WPD/_N_PALLETn_MPF)
-    # Fonte 2: pallet assegnato al progetto nei dati DMGDesk
+    # Fonte 1 (priorità): pallet_attivo dal log (_N_PALLET_WPD/_N_PALLETn_MPF nelle ultime righe)
+    # Fonte 2: prog_raw corrente contiene direttamente _N_PALLETn_MPF
+    # Fonte 3: pallet assegnato al progetto nei dati DMGDesk
     pallet_num = data.get("pallet_attivo")  # già normalizzato come int 1-6 o None
+
+    # Fonte 2: prog_raw potrebbe essere lui stesso il PALLET
+    if not pallet_num:
+        m_pal = re.search(r"_N_PALLET_WPD/_N_PALLET(\d)_MPF",
+                          prog_raw, re.IGNORECASE)
+        if not m_pal:
+            m_pal = re.search(r"_N_PALLET(\d)_MPF", prog_raw, re.IGNORECASE)
+        if m_pal:
+            v = int(m_pal.group(1))
+            if 1 <= v <= 6:
+                pallet_num = v
+
+    # Fonte 3: pallet assegnato al progetto
     if not pallet_num and progetto_attivo:
         for pal in pallets:
             if pal.get("progetto_id") == progetto_attivo.get("id"):

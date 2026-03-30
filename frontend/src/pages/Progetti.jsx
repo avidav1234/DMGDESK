@@ -122,11 +122,13 @@ function parseMpfFile(filename,content){
   return{numPgm,fase,tipoOp,utensile,diametro,dataPost,filename,tipoGruppo,tempoStimato}
 }
 
-const STATO_NEXT={da_fare:'in_macchina',in_macchina:'completato',completato:'da_fare'}
+const STATO_NEXT={da_fare:'in_main',in_main:'in_lavorazione',in_lavorazione:'completato',completato:'da_fare'}
 const STATO_CFG={
-  da_fare:    {label:'Da fare',    short:'Da fare',    color:T.textMuted,bg:T.surface2,border:T.border,  dot:'○'},
-  in_macchina:{label:'In macchina',short:'In macchina',color:'#0d2d5e',  bg:'#e6f1fb', border:'#0d2d5e',dot:'⚙'},
-  completato: {label:'Completato', short:'Fatto',      color:'#166534',  bg:'#dcfce7', border:'#166534',dot:'✓'},
+  da_fare:      {label:'Da fare',       short:'Da fare',   color:T.textMuted, bg:T.surface2,  border:T.border,   dot:'○'},
+  in_main:      {label:'In Main',        short:'In Main',   color:'#92400e',  bg:'#fef3c7',  border:'#d97706',  dot:'📋'},
+  in_lavorazione:{label:'In Lavorazione',short:'In Lav.',   color:'#1e40af',  bg:'#dbeafe',  border:'#3b82f6',  dot:'⚙'},
+  in_macchina:  {label:'In Lavorazione', short:'In Lav.',   color:'#1e40af',  bg:'#dbeafe',  border:'#3b82f6',  dot:'⚙'},
+  completato:   {label:'Completato',     short:'Fatto',     color:'#166534',  bg:'#dcfce7',  border:'#166534',  dot:'✓'},
 }
 const OPERATORI=['I.Dodon','Operatore 2','Operatore 3']
 const PRIORITY={
@@ -164,7 +166,7 @@ function ProgramRow({pgm,gruppo,onStato,onOperatore,onTempo,onRemove,toolStatus,
   const sc=STATO_CFG[pgm.stato]||STATO_CFG.da_fare
   const opClean=(pgm.tipoOp||'').replace(/[-–]\s*NESSUN TESTO\s*/gi,'').replace(/MISURAZIONE NEL PROCESSO[-–]?/gi,'MISURA ').trim()
   return(
-    <div style={{borderBottom:`1px solid ${T.border}`,background:selected?'#EFF6FF':pgm.stato==='completato'?'#f0fdf4':pgm.stato==='in_macchina'?'#eff6ff':T.surface,opacity:pgm.stato==='completato'&&!selected?0.75:1,transition:'background 0.15s'}}>
+    <div style={{borderBottom:`1px solid ${T.border}`,background:selected?'#EFF6FF':pgm.stato==='completato'?'#f0fdf4':['in_main','in_lavorazione','in_macchina'].includes(pgm.stato)?'#eff6ff':T.surface,opacity:pgm.stato==='completato'&&!selected?0.75:1,transition:'background 0.15s'}}>
       <div style={{display:'flex',alignItems:'center',minHeight:38}}>
         {/* Checkbox */}
         <div onClick={e=>{e.stopPropagation();onSelect&&onSelect()}}
@@ -330,7 +332,7 @@ function FresaturaPanel({task,onUpdateTask,toolsDB,projectId}){
   const ipmPrograms=programs.filter(p=>p.tipoGruppo==='ipm')
   const fresPrograms=programs.filter(p=>p.tipoGruppo!=='ipm')
   const doneTotal=programs.filter(p=>p.stato==='completato').length
-  const inMacchina=programs.filter(p=>p.stato==='in_macchina').length
+  const inMacchina=programs.filter(p=>['in_main','in_lavorazione','in_macchina'].includes(p.stato)).length
   const total=programs.length
   const allDone=total>0&&doneTotal===total
   function updatePrograms(newPrograms){
@@ -381,7 +383,7 @@ function FresaturaPanel({task,onUpdateTask,toolsDB,projectId}){
     updatePrograms(programs.map(p=>{
       if(p.id!==id) return p
       const next={...p,...patch}
-      if(patch.stato==='in_macchina'&&!p.tempoInizio) next.tempoInizio=nowStr()
+      if(['in_main','in_lavorazione','in_macchina'].includes(patch.stato)&&!p.tempoInizio) next.tempoInizio=nowStr()
       if(patch.stato==='completato') next.tempoFine=nowStr()
       return next
     }))
@@ -393,7 +395,7 @@ function FresaturaPanel({task,onUpdateTask,toolsDB,projectId}){
     updatePrograms(programs.map(p=>{
       if(!selected.has(p.id)) return p
       const next={...p,stato}
-      if(stato==='in_macchina'&&!p.tempoInizio) next.tempoInizio=nowStr()
+      if(['in_main','in_lavorazione','in_macchina'].includes(stato)&&!p.tempoInizio) next.tempoInizio=nowStr()
       if(stato==='completato') next.tempoFine=nowStr()
       return next
     }))

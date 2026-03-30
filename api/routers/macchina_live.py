@@ -627,7 +627,7 @@ async def aggiorna_stati_da_log():
             for pg in t.get("programs",[])
             if pg.get("tipoGruppo")!="ipm"]
         pal["stato"] = "finito" if (all_pgm and all(
-            pg.get("stato")=="completato" for pg in all_pgm)) else "grezzo"
+            pg.get("stato") in ("completato",) for pg in all_pgm)) else "grezzo"
 
     if stato_pgm in (1, 3):
         # Macchina IN ESECUZIONE

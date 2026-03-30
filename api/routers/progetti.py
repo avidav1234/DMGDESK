@@ -88,20 +88,29 @@ async def get_progetti():
     templates = _load_templates(config)
     projects  = data.get("projects", [])
 
+    # Migrazione: in_macchina → in_main (aggiunto stato in_lavorazione per log OpcUa)
+    migrated = False
+    for proj in projects:
+        for step in proj.get("steps", []):
+            for task in step.get("tasks", []):
+                for pgm in task.get("programs", []):
+                    if pgm.get("stato") == "in_macchina":
+                        pgm["stato"] = "in_main"
+                        migrated = True
+    if migrated:
+        _save_progetti(config, data)
+
     # Incrocia con pallet_state per avere pallet_assegnato aggiornato
     try:
         from api.routers.pallet import _load as _load_pallet, _pallet_path
         pallet_state = _load_pallet(config)
-        # Mappa progetto_id → numero pallet
         pallet_map = {
             p["progetto_id"]: p["numero"]
             for p in pallet_state.get("pallet", [])
             if p.get("progetto_id")
         }
-        # Aggiorna ogni progetto con il pallet corretto
         for proj in projects:
             pid = proj.get("id")
-            # pallet_map è la fonte di verità — sovrascrive sempre
             proj["pallet_assegnato"] = pallet_map.get(pid, None)
     except Exception as e:
         import traceback
@@ -912,7 +921,7 @@ async def segna_in_macchina(project_id: str, body: dict):
             for pgm in task.get("programs", []):
                 if pgm.get("filename", "").upper() in filenames:
                     if pgm.get("stato") == "da_fare":
-                        pgm["stato"] = "in_macchina"
+                        pgm["stato"] = "in_main"
                         pgm["tempoInizio"] = now
                         aggiornati += 1
 

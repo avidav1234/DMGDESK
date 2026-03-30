@@ -483,45 +483,54 @@ async def aggiorna_stati_da_log():
     updates["pallet_rilevato"]   = pallet_num
 
     # ── Automazione 1 e 4: stato pallet ──────────────────────────────────
-    if pallet_num:
+    # Il log è la fonte di verità assoluta:
+    # - Macchina IN ESECUZIONE con progetto X → pallet di X = in_lavorazione,
+    #   tutti gli altri in_lavorazione → grezzo/finito (anche se impostati manualmente)
+    # - Macchina FERMA → tutti i pallet in_lavorazione → grezzo/finito
+
+    def _a_grezzo_o_finito(pal, projects):
+        pid = pal.get("progetto_id")
+        if not pid:
+            pal["stato"] = "grezzo"; return
+        proj = next((p for p in projects if p.get("id") == pid), None)
+        if not proj:
+            pal["stato"] = "grezzo"; return
+        all_pgm = [pg for s in proj.get("steps",[])
+            for t in s.get("tasks",[])
+            if t.get("text","").strip().lower()=="fresatura"
+            for pg in t.get("programs",[])
+            if pg.get("tipoGruppo")!="ipm"]
+        pal["stato"] = "finito" if (all_pgm and all(
+            pg.get("stato")=="completato" for pg in all_pgm)) else "grezzo"
+
+    if stato_pgm in (1, 3):
+        # Macchina IN ESECUZIONE
         for pal in pallets:
-            if pal.get("numero") != pallet_num:
-                continue
-            if stato_pgm in (1, 3) and pal.get("stato") != "in_lavorazione":
-                # Macchina in esecuzione → questo pallet diventa in_lavorazione
-                for other in pallets:
-                    if other.get("numero") != pallet_num and                        other.get("stato") == "in_lavorazione":
-                        other_proj = next((p for p in projects
-                            if p.get("id") == other.get("progetto_id")), None)
-                        if other_proj:
-                            all_pgm = [pg for s in other_proj.get("steps",[])
-                                for t in s.get("tasks",[])
-                                if t.get("text","").strip().lower()=="fresatura"
-                                for pg in t.get("programs",[])
-                                if pg.get("tipoGruppo")!="ipm"]
-                            all_done = all_pgm and all(
-                                pg.get("stato")=="completato" for pg in all_pgm)
-                            other["stato"] = "finito" if all_done else "grezzo"
-                            pallet_dirty = True
-                pal["stato"] = "in_lavorazione"
-                pal["aggiornato"] = now_str
-                pallet_dirty = True
-                updates["pallet"] += 1
-            elif stato_pgm in (0, 5) and pal.get("stato") == "in_lavorazione":
-                # Macchina ferma → grezzo o finito
-                if progetto_attivo:
-                    all_pgm = [pg for s in progetto_attivo.get("steps",[])
-                        for t in s.get("tasks",[])
-                        if t.get("text","").strip().lower()=="fresatura"
-                        for pg in t.get("programs",[])
-                        if pg.get("tipoGruppo")!="ipm"]
-                    all_done = all_pgm and all(
-                        pg.get("stato")=="completato" for pg in all_pgm)
-                    pal["stato"] = "finito" if all_done else "grezzo"
+            is_attivo = (pal.get("numero") == pallet_num)
+            cur_stato = (pal.get("stato") or "").lower().replace(" ","_")
+            if is_attivo:
+                if cur_stato != "in_lavorazione":
+                    pal["stato"] = "in_lavorazione"
                     pal["aggiornato"] = now_str
                     pallet_dirty = True
                     updates["pallet"] += 1
-            break
+            else:
+                # FIX: qualsiasi altro pallet in_lavorazione viene resettato
+                if cur_stato == "in_lavorazione":
+                    _a_grezzo_o_finito(pal, projects)
+                    pal["aggiornato"] = now_str
+                    pallet_dirty = True
+                    updates["pallet"] += 1
+
+    elif stato_pgm in (0, 5):
+        # Macchina FERMA → tutti i pallet in_lavorazione → grezzo/finito
+        for pal in pallets:
+            if (pal.get("stato") or "").lower().replace(" ","_") == "in_lavorazione":
+                _a_grezzo_o_finito(pal, projects)
+                pal["aggiornato"] = now_str
+                pallet_dirty = True
+                updates["pallet"] += 1
+
 
     # ── Automazione 2 e 3: stati programmi ───────────────────────────────
     if progetto_attivo and mpf_filename and stato_pgm in (1, 3):

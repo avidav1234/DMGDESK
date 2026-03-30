@@ -461,18 +461,21 @@ async def aggiorna_stati_da_log():
     raw  = _parse_log(log_path)
     data = _normalizza(raw)
 
-    prog_raw  = data.get("programma_attivo") or ""
+    # programma_attivo è già il nome file estratto: "4297_005_01_12.MPF"
+    # prog_raw_full è il path completo dal log grezzo (per estrarre WPD)
+    prog_attivo = data.get("programma_attivo") or ""   # "4297_005_01_12.MPF"
+    prog_raw_full = raw.get("programma_attivo") or ""  # "/_N_WKS_DIR/_N_.._WPD/_N_.._MPF"
     stato_pgm = data.get("stato_programma", 0)
     now_str   = _dt.now().strftime("%d/%m/%Y %H:%M")
 
-    # Parsing path: /_N_WKS_DIR/_N_4298_0008_WPD/_N_4297_0008_01_31_MPF
-    wpd_m   = re.search(r"_N_([^/]+)_WPD", prog_raw)
-    mpf_m   = re.search(r"/_N_([^/]+)_MPF", prog_raw)
-    wpd_nome    = wpd_m.group(1) if wpd_m else None   # "4298_0008" (può differire dal nome progetto)
-    mpf_nome    = mpf_m.group(1) if mpf_m else None   # "4297_0008_01_31"
-    mpf_filename = (mpf_nome + ".MPF") if mpf_nome else None
+    # Estrai WPD dal path grezzo
+    wpd_m    = re.search(r"_N_([^/]+)_WPD", prog_raw_full)
+    wpd_nome = wpd_m.group(1) if wpd_m else None   # "4298_0008"
 
-    # Estrai commessa_posizione dal nome MPF: "4297_007_03_RIP" → "4297_007"
+    # mpf_filename = il nome file già estratto
+    mpf_filename = prog_attivo if prog_attivo else None   # "4297_005_01_12.MPF"
+
+    # Estrai commessa_posizione dal nome file: "4297_005_01_12.MPF" → "4297_0005"
     # poi normalizza a 4 cifre: "4297_0007"
     mpf_progetto = None
     if mpf_nome:
@@ -527,12 +530,12 @@ async def aggiorna_stati_da_log():
     # Fonte 4: pallet assegnato al progetto nei dati DMGDesk
     pallet_num = data.get("pallet_attivo")  # int 1-6 o None
 
-    # Fonte 2: prog_raw è lui stesso il PALLET
+    # Fonte 2: cerca PALLET nel path grezzo del log
     if not pallet_num:
         m_pal = re.search(r"_N_PALLET_WPD/_N_PALLET(\d)_MPF",
-                          prog_raw, re.IGNORECASE)
+                          prog_raw_full, re.IGNORECASE)
         if not m_pal:
-            m_pal = re.search(r"_N_PALLET(\d)_MPF", prog_raw, re.IGNORECASE)
+            m_pal = re.search(r"_N_PALLET(\d)_MPF", prog_raw_full, re.IGNORECASE)
         if m_pal:
             v = int(m_pal.group(1))
             if 1 <= v <= 6:
@@ -583,6 +586,7 @@ async def aggiorna_stati_da_log():
         "wpd_nome": wpd_nome, "mpf_progetto": mpf_progetto,
         "pallet_num": pallet_num, "stato_pgm": stato_pgm,
         "mpf_filename": mpf_filename,
+        "prog_attivo": prog_attivo, "prog_raw_full": prog_raw_full[:80] if prog_raw_full else None,
     }
 
     # ── Automazione 1 e 4: stato pallet ──────────────────────────────────

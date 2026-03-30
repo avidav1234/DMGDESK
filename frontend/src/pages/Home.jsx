@@ -140,13 +140,13 @@ export default function Home(){
       </div>
 
       {/* Body — 3 colonne */}
-      <div style={{display:'grid',gridTemplateColumns:'300px 1fr 210px',gap:16,
+      <div style={{display:'grid',gridTemplateColumns:'420px 1fr 200px',gap:16,
         padding:'16px 20px',alignItems:'start'}}>
 
         {/* ── COL 1: PALLET ─────────────────────────────────────────── */}
         <div style={{display:'flex',flexDirection:'column',gap:10}}>
           <div style={{fontSize:11,fontWeight:800,letterSpacing:'0.08em',color:'#0d2d5e'}}>PALLET</div>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
             {[1,2,3,4,5,6].map(n=>{
               const info = palletInfo(n)
               const c    = palletColors(n)
@@ -194,46 +194,6 @@ export default function Home(){
 
         {/* ── COL 2: PROGETTO ATTIVO + SCADENZE + UTENSILI ────────────── */}
         <div style={{display:'flex',flexDirection:'column',gap:12}}>
-
-          {/* Progetto in lavorazione */}
-          <div style={{background:'#fff',border:'1px solid #e2e8f0',borderRadius:12,padding:'14px 18px'}}>
-            <div style={{fontSize:11,fontWeight:800,letterSpacing:'0.08em',color:'#0d2d5e',marginBottom:10}}>
-              PROGETTO IN LAVORAZIONE
-            </div>
-            {progettoLav&&lavInfo?(
-              <div style={{cursor:'pointer'}} onClick={()=>nav('/progetti',{state:{openId:progettoLav.id}})}>
-                <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:8}}>
-                  <div style={{width:10,height:10,borderRadius:'50%',
-                    background:progettoLav.color||'#1D5FAD',flexShrink:0}}/>
-                  <span style={{fontSize:16,fontWeight:800,color:'#0d2d5e',flex:1,
-                    overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
-                    {progettoLav.name}
-                  </span>
-                  <span style={{fontSize:11,fontWeight:700,color:'#fff',background:'#1D5FAD',
-                    padding:'2px 8px',borderRadius:6,flexShrink:0}}>P{palletLav.numero}</span>
-                </div>
-                <div style={{height:8,background:'#e2e8f0',borderRadius:4,overflow:'hidden',marginBottom:6}}>
-                  <div style={{height:'100%',width:`${lavInfo.pct}%`,
-                    background:progettoLav.color||'#1D5FAD',borderRadius:4,transition:'width 0.4s'}}/>
-                </div>
-                <div style={{display:'flex',gap:20}}>
-                  <span style={{fontSize:12,color:'#475569'}}>
-                    <b style={{color:'#0d2d5e'}}>{lavInfo.done}</b>/{lavInfo.tot} completati
-                  </span>
-                  <span style={{fontSize:12,color:'#475569'}}>
-                    <b style={{color:'#1D5FAD'}}>{lavInfo.inMac}</b> in macchina
-                  </span>
-                  <span style={{fontSize:13,fontWeight:800,color:progettoLav.color||'#1D5FAD',marginLeft:'auto'}}>
-                    {lavInfo.pct}%
-                  </span>
-                </div>
-              </div>
-            ):(
-              <div style={{color:'#94a3b8',fontSize:13,fontStyle:'italic'}}>
-                Nessun pallet in lavorazione — premi Avvia nella pagina Macchina
-              </div>
-            )}
-          </div>
 
           {/* Scadenze */}
           <div style={{background:'#fff',border:'1px solid #e2e8f0',borderRadius:12,padding:'14px 18px'}}>

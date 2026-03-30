@@ -119,6 +119,15 @@ def aggiorna_da_log(
             dirty = True
 
     # ── Macchina IN ESECUZIONE ────────────────────────────────────────────────
+    # Filtra programmi di sistema Sinumerik (non sono lavorazioni utente)
+    _FILTRI_SISTEMA = ("_N_CMA_DIR", "_N_CST_DIR", "_N_SYF_DIR",
+                       "_N_MPF_DIR", "_SPF", "BPOSAXIS", "TMPCYC")
+    if programma_attivo:
+        for f in _FILTRI_SISTEMA:
+            if f in programma_attivo.upper():
+                programma_attivo = None
+                break
+
     elif stato_pgm in (1, 3) and programma_attivo:
         prev_prog = sc.get("programma_corrente")
 

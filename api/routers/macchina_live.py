@@ -108,12 +108,12 @@ def _parse_log(log_path: str) -> dict:
                     result["pallet_attivo"] = m.group(2).strip()
                     break
 
-        # Pallet da workPandProgName: cerca _N_PALLET_WPD/_N_PALLETn_MPF
-        # nelle ultime 2000 righe — il pallet chiamante appare prima del programma figlio
+        # Pallet da workPandProgName: cerca solo nelle righe RECENTI (ultime 20)
+        # Se non trovato, il pallet corrente viene mantenuto dallo stato salvato
         import re as _re_tmp
         RE_PALLET_PATH = _re_tmp.compile(
             r"_N_PALLET_WPD/_N_PALLET(\d)_MPF", _re_tmp.IGNORECASE)
-        for line in reversed(lines[-2000:]):
+        for line in reversed(lines[-20:]):
             mp = RE_PALLET_PATH.search(line)
             if mp:
                 result["pallet_da_path"] = int(mp.group(1))
@@ -494,12 +494,13 @@ async def aggiorna_stati_da_log():
                 break
 
     # Trova pallet:
-    # Fonte 1 (priorità): pallet_attivo dal log (_N_PALLET_WPD/_N_PALLETn_MPF nelle ultime righe)
+    # Fonte 1 (priorità): pallet_attivo dal log — _N_PALLETn_MPF nelle ultime 20 righe
     # Fonte 2: prog_raw corrente contiene direttamente _N_PALLETn_MPF
-    # Fonte 3: pallet assegnato al progetto nei dati DMGDesk
-    pallet_num = data.get("pallet_attivo")  # già normalizzato come int 1-6 o None
+    # Fonte 3: pallet già in_lavorazione nello stato salvato (persistenza)
+    # Fonte 4: pallet assegnato al progetto nei dati DMGDesk
+    pallet_num = data.get("pallet_attivo")  # int 1-6 o None
 
-    # Fonte 2: prog_raw potrebbe essere lui stesso il PALLET
+    # Fonte 2: prog_raw è lui stesso il PALLET
     if not pallet_num:
         m_pal = re.search(r"_N_PALLET_WPD/_N_PALLET(\d)_MPF",
                           prog_raw, re.IGNORECASE)
@@ -510,7 +511,16 @@ async def aggiorna_stati_da_log():
             if 1 <= v <= 6:
                 pallet_num = v
 
-    # Fonte 3: pallet assegnato al progetto
+    # Fonte 3: pallet già in_lavorazione nello stato salvato
+    # Se la macchina sta girando e non vediamo un nuovo PALLET nel log recente,
+    # significa che siamo nel programma figlio — il pallet in_lavorazione è ancora valido
+    if not pallet_num and stato_pgm in (1, 3):
+        for pal in pallets:
+            if (pal.get("stato") or "").lower().replace(" ","_") == "in_lavorazione":
+                pallet_num = pal.get("numero")
+                break
+
+    # Fonte 4: pallet assegnato al progetto
     if not pallet_num and progetto_attivo:
         for pal in pallets:
             if pal.get("progetto_id") == progetto_attivo.get("id"):

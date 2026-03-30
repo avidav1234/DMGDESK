@@ -123,7 +123,7 @@ def _sincronizza_pallet_progetto(config: dict, stato_pallet: str, progetto_id: s
                 if task.get("text", "").strip().lower() != "fresatura":
                     continue
                 for pgm in task.get("programs", []):
-                    if pgm.get("stato") == "in_macchina":
+                    if pgm.get("stato") in ("in_macchina", "in_main", "in_lavorazione"):
                         pgm["stato"]    = "completato"
                         pgm["tempoFine"] = now
                         changed = True
@@ -384,7 +384,7 @@ async def get_progetto_info(numero: int):
 
     totale     = len(all_pgm)
     completati = sum(1 for p in all_pgm if p.get("stato") == "completato")
-    in_mac     = sum(1 for p in all_pgm if p.get("stato") == "in_macchina")
+    in_mac     = sum(1 for p in all_pgm if p.get("stato") in ("in_main", "in_lavorazione"))
     pct        = round(completati / totale * 100, 1) if totale else 0
 
     return {
@@ -428,7 +428,7 @@ async def get_programmi_in_macchina(numero: int):
                 continue
             for pgm in task.get("programs", []):
                 if pgm.get("tipoGruppo") == "ipm": continue
-                if pgm.get("stato") != "in_macchina": continue
+                if pgm.get("stato") not in ("in_macchina", "in_main", "in_lavorazione"): continue
                 programmi.append({
                     "id":           pgm.get("id"),
                     "filename":     pgm.get("filename", ""),
@@ -473,7 +473,7 @@ async def completa_programmi(numero: int, body: dict):
     for step in proj.get("steps", []):
         for task in step.get("tasks", []):
             for pgm in task.get("programs", []):
-                if pgm.get("id") in ids and pgm.get("stato") == "in_macchina":
+                if pgm.get("id") in ids and pgm.get("stato") in ("in_macchina", "in_main", "in_lavorazione"):
                     pgm["stato"]    = "completato"
                     pgm["tempoFine"] = ora
                     count += 1

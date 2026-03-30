@@ -58,7 +58,7 @@ export default function Home(){
     const pct  = tot?Math.round(done/tot*100):0
     return {proj, pal, pct, done, tot,
       daFare:  pgms.filter(p=>p.stato==='da_fare').length,
-      inMac:   pgms.filter(p=>p.stato==='in_macchina').length}
+      inMac:   pgms.filter(p=>['in_macchina','in_main','in_lavorazione'].includes(p.stato)).length}
   }
 
   function palletColors(num){
@@ -81,7 +81,7 @@ export default function Home(){
     .filter(t=>t.text?.trim().toLowerCase()==='fresatura')
     .flatMap(t=>(t.programs||[]).filter(pg=>pg.tipoGruppo!=='ipm'))))
   const daFare   = allPgm.filter(p=>p.stato==='da_fare').length
-  const inMac    = allPgm.filter(p=>p.stato==='in_macchina').length
+  const inMac    = allPgm.filter(p=>['in_macchina','in_main','in_lavorazione'].includes(p.stato)).length
   const oggiStr  = now.toDateString()
   const completatiOggi = allPgm.filter(p=>{
     if(p.stato!=='completato'||!p.tempoFine) return false

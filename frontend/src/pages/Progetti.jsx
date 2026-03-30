@@ -458,7 +458,7 @@ function FresaturaPanel({task,onUpdateTask,toolsDB,projectId}){
         <span style={{fontSize:15}}>⚙️</span>
         <span style={{fontSize:13,fontWeight:800,color:'#0d2d5e',flex:1}}>PROGRAMMI FRESATURA</span>
         {toolsDB&&(()=>{
-          const issues=programs.filter(p=>p.stato==='in_macchina'&&p.utensile&&p.tipoGruppo!=='ipm'&&['mancante','fin_vita','disabilitato'].includes(classifyTool(p.utensile,toolsDB)))
+          const issues=programs.filter(p=>['in_macchina','in_main','in_lavorazione'].includes(p.stato)&&p.utensile&&p.tipoGruppo!=='ipm'&&['mancante','fin_vita','disabilitato'].includes(classifyTool(p.utensile,toolsDB)))
           return issues.length>0?(
             <span style={{fontSize:11,fontWeight:700,color:'#dc2626',background:'#fef2f2',padding:'2px 8px',borderRadius:20,border:'1px solid #C0392B44'}}>
               ⚠ {issues.length} utensil{issues.length===1?'e':'i'} problematic{issues.length===1?'o':'i'}
@@ -580,7 +580,7 @@ function FresaturaPanel({task,onUpdateTask,toolsDB,projectId}){
                   onOperatore={operatore=>updatePgm(pgm.id,{operatore})}
                   onTempo={tempoStimato=>updatePgm(pgm.id,{tempoStimato})}
                   onRemove={()=>updatePrograms(programs.filter(p=>p.id!==pgm.id))}
-                  toolStatus={pgm.stato==='in_macchina'?classifyTool(pgm.utensile,toolsDB):null}/>
+                  toolStatus={['in_macchina','in_main','in_lavorazione'].includes(pgm.stato)?classifyTool(pgm.utensile,toolsDB):null}/>
               ))}
             </div>
           ))}
@@ -961,7 +961,7 @@ function LancioNCModal({project, toolsDB, initialSelectedIds, onLancia, onClose}
 
   const allPgm = fasi.flatMap(f=>f.pgms.map(p=>({...p, _stepId:f.stepId, _stepTitle:f.stepTitle})))
   const da_fare    = allPgm.filter(p=>p.stato==='da_fare')
-  const in_macchina= allPgm.filter(p=>p.stato==='in_macchina')
+  const in_macchina= allPgm.filter(p=>['in_macchina','in_main','in_lavorazione'].includes(p.stato))
   const completati = allPgm.filter(p=>p.stato==='completato')
 
   const [selected, setSelected] = useState(()=>{
@@ -1423,7 +1423,7 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
               {next.task.text?.trim().toLowerCase()==='fresatura'&&Array.isArray(next.task.programs)&&next.task.programs.length>0&&(
                 <div style={{display:'flex',alignItems:'center',gap:8,marginTop:5}}>
                   <span style={{fontSize:13,color:'#0d2d5e',fontWeight:700}}>⚙️ {next.task.programs.filter(p=>p.stato==='completato').length}/{next.task.programs.length} programmi completati</span>
-                  {next.task.programs.filter(p=>p.stato==='in_macchina').length>0&&<span style={{fontSize:12,color:'#0d2d5e',background:'#E8F0FA',padding:'2px 10px',borderRadius:10}}>{next.task.programs.filter(p=>p.stato==='in_macchina').length} in macchina</span>}
+                  {next.task.programs.filter(p=>['in_macchina','in_main','in_lavorazione'].includes(p.stato)).length>0&&<span style={{fontSize:12,color:'#0d2d5e',background:'#E8F0FA',padding:'2px 10px',borderRadius:10}}>{next.task.programs.filter(p=>['in_macchina','in_main','in_lavorazione'].includes(p.stato)).length} in macchina</span>}
                 </div>
               )}
             </div>
@@ -1569,7 +1569,7 @@ function ProjectCard({project,onClick,onDelete,onArchive,delivery,onSetDelivery}
                 <div style={{position:'absolute',left:0,top:0,height:'100%',width:`${Math.round(mpfDone/mpfTot.length*100)}%`,background:'#16a34a',borderRadius:3,transition:'width 0.3s'}}/>
                 {/* in macchina */}
                 <div style={{position:'absolute',left:`${Math.round(mpfDone/mpfTot.length*100)}%`,top:0,height:'100%',
-                  width:`${Math.round(mpfTot.filter(p=>p.stato==='in_macchina').length/mpfTot.length*100)}%`,
+                  width:`${Math.round(mpfTot.filter(p=>['in_macchina','in_main','in_lavorazione'].includes(p.stato)).length/mpfTot.length*100)}%`,
                   background:'#0d2d5e',borderRadius:3,transition:'width 0.3s'}}/>
               </div>
             </div>
@@ -1591,7 +1591,7 @@ function ProjectCard({project,onClick,onDelete,onArchive,delivery,onSetDelivery}
             {next.task.text?.trim().toLowerCase()==='fresatura'&&Array.isArray(next.task.programs)&&next.task.programs.length>0&&(
               <div style={{display:'flex',alignItems:'center',gap:8,marginTop:4}}>
                 <span style={{fontSize:12,color:'#0d2d5e',fontWeight:700}}>⚙️ {next.task.programs.filter(p=>p.stato==='completato').length}/{next.task.programs.length} pgm</span>
-                {next.task.programs.filter(p=>p.stato==='in_macchina').length>0&&<span style={{fontSize:11,color:'#0d2d5e',background:'#E8F0FA',padding:'1px 8px',borderRadius:10}}>{next.task.programs.filter(p=>p.stato==='in_macchina').length} in macchina</span>}
+                {next.task.programs.filter(p=>['in_macchina','in_main','in_lavorazione'].includes(p.stato)).length>0&&<span style={{fontSize:11,color:'#0d2d5e',background:'#E8F0FA',padding:'1px 8px',borderRadius:10}}>{next.task.programs.filter(p=>['in_macchina','in_main','in_lavorazione'].includes(p.stato)).length} in macchina</span>}
               </div>
             )}
           </div>
@@ -1697,7 +1697,7 @@ function HomePage({projects,deliveries,palletState,setupData,onNavigateProject,o
     (p.steps||[]).flatMap(s=>(s.tasks||[]).filter(t=>t.text?.trim().toLowerCase()==='fresatura')
     .flatMap(t=>(t.programs||[]).filter(pg=>pg.tipoGruppo!=='ipm'))))
   const pgmDaFare   = allPgm.filter(p=>p.stato==='da_fare').length
-  const pgmInMac    = allPgm.filter(p=>p.stato==='in_macchina').length
+  const pgmInMac    = allPgm.filter(p=>['in_macchina','in_main','in_lavorazione'].includes(p.stato)).length
   const pgmOggi     = allPgm.filter(p=>{
     if(p.stato!=='completato'||!p.tempoFine) return false
     const d=new Date(p.tempoFine.split(' ').reverse().join('-').replace(/(\d+)\/(\d+)\/(\d+)/,'$3-$2-$1'))
@@ -1777,7 +1777,7 @@ function HomePage({projects,deliveries,palletState,setupData,onNavigateProject,o
     const done = pgms.filter(p=>p.stato==='completato').length
     const pct  = tot ? Math.round(done/tot*100) : 0
     const daFare = pgms.filter(p=>p.stato==='da_fare').length
-    const inMac  = pgms.filter(p=>p.stato==='in_macchina').length
+    const inMac  = pgms.filter(p=>['in_macchina','in_main','in_lavorazione'].includes(p.stato)).length
     return {proj, pct, tot, done, daFare, inMac, colore:proj.color||'#1D5FAD'}
   }
 
@@ -1789,7 +1789,7 @@ function HomePage({projects,deliveries,palletState,setupData,onNavigateProject,o
     const tot  = pgms.length
     const done = pgms.filter(p=>p.stato==='completato').length
     const pct  = tot ? Math.round(done/tot*100) : 0
-    return {pct, done, tot, inMac:pgms.filter(p=>p.stato==='in_macchina').length}
+    return {pct, done, tot, inMac:pgms.filter(p=>['in_macchina','in_main','in_lavorazione'].includes(p.stato)).length}
   })() : null
 
   const critici = conScadenza.filter(x=>x.days!==null&&x.days<=0).length

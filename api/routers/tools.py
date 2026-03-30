@@ -485,7 +485,7 @@ async def analisi_fine_vita(body: dict):
     # Solo programmi attivi con tempo e utensile definiti
     attivi = [
         p for p in programmi
-        if p.get("stato") in ("da_fare", "in_macchina")
+        if p.get("stato") in ("da_fare", "in_macchina", "in_main", "in_lavorazione")
         and p.get("tempoStimato")
         and p.get("utensile")
     ]

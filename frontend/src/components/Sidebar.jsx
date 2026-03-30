@@ -81,6 +81,7 @@ export default function Sidebar() {
   // ── Stato macchina live ───────────────────────────────────────────────
   const [statoMacchina, setStatoMacchina] = useState(null)
   // { attiva, programma, utensile, pallet, progetto, logStale, logAgeSec }
+  // logAgeSec: aggiornato ogni tick dal GlobalPoller (cresce automaticamente)
 
   // ── Alert contatori ───────────────────────────────────────────────────
   const [alerts, setAlerts] = useState({ analisi: 0, utensili: 0 })
@@ -151,12 +152,16 @@ export default function Sidebar() {
     }
     window.addEventListener('dmgdesk:stati-aggiornati', onUpdate)
 
-    // Refresh alert ogni 30s (per utensili fin_vita non triggerati dal poller)
-    const t = setInterval(fetchAlerts, 30000)
+    // Refresh alert ogni 30s + fetchStato ogni 60s come backup
+    // (garantisce recovery se MchnSrv riprende tra un tick e l'altro,
+    //  e aggiorna log_age_sec con il valore preciso da /stato)
+    const t  = setInterval(fetchAlerts, 30000)
+    const t2 = setInterval(fetchStato,  60000)
 
     return () => {
       window.removeEventListener('dmgdesk:stati-aggiornati', onUpdate)
       clearInterval(t)
+      clearInterval(t2)
     }
   }, [])
 

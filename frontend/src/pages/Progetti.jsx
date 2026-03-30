@@ -1285,7 +1285,7 @@ function LancioNCModal({project, toolsDB, initialSelectedIds, onLancia, onClose}
   )
 }
 
-function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onSaveAsTemplate,onLanciaNC,palletDisponibili=[]}){
+function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onSaveAsTemplate,onLanciaNC,palletDisponibili=[],palletStato=[]}){
   // Carica tools_machine una volta sola per questo progetto
   const [toolsDB, setToolsDB] = useState(null)
   const [selectedIds, setSelectedIds] = useState(new Set())
@@ -1367,23 +1367,45 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
           }
           <StatusBadge progress={progress}/>
 
-          {/* Pallet — prominente */}
-          <div style={{display:'flex',alignItems:'center',gap:4,background:'#eef4fb',border:'1px solid #c5d9f0',borderRadius:8,padding:'4px 10px',flexShrink:0}}>
-            <span style={{fontSize:11,fontWeight:700,color:'#0d2d5e'}}>P:</span>
-            <select value={project.pallet_assegnato||''}
-              onChange={async e=>{
-                const val=e.target.value?parseInt(e.target.value):null
-                const old=project.pallet_assegnato
-                if(old&&old!==val){await fetch('/api/pallet/'+old+'/assegna-progetto',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({progetto_id:null,progetto_nome:null,progetto_colore:null})})}
-                if(val){const r=await fetch('/api/pallet/'+val+'/assegna-progetto',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({progetto_id:project.id,progetto_nome:project.name,progetto_colore:project.color||'#0d2d5e'})});if(!r.ok){const err=await r.json().catch(()=>({}));alert(err.detail||'Errore');return}}
-                onUpdate({...project,pallet_assegnato:val})
-              }}
-              style={{fontSize:12,fontWeight:700,background:'transparent',color:'#0d2d5e',border:'none',padding:'0 2px',cursor:'pointer',outline:'none'}}>
-              <option value=''>—</option>
-              {[1,2,3,4,5,6].map(n=>{const disp=palletDisponibili.find(p=>p.numero===n);const isAss=project.pallet_assegnato===n;if(!disp&&!isAss)return null;return <option key={n} value={n}>P{n}{isAss?' ✓':''}</option>})}
-            </select>
-            {project.pallet_assegnato&&<span onClick={()=>window.location.href='/coda'} style={{fontSize:10,color:'#0d2d5e',cursor:'pointer',opacity:0.6}}>→</span>}
-          </div>
+          {/* Pallet — prominente, con indicatore live */}
+          {(()=>{
+            const palInfo = palletStato.find(p=>p.numero===project.pallet_assegnato)
+            const isLav = palInfo && (palInfo.stato||'').toLowerCase().replace('_',' ')==='in lavorazione'
+            return (
+              <div style={{display:'flex',alignItems:'center',gap:4,
+                background: isLav ? '#dbeafe' : '#eef4fb',
+                border: `1px solid ${isLav ? '#1D5FAD' : '#c5d9f0'}`,
+                borderRadius:8,padding:'4px 10px',flexShrink:0,
+                transition:'all 0.3s'}}>
+                {isLav && (
+                  <span style={{width:7,height:7,borderRadius:'50%',background:'#1D5FAD',
+                    flexShrink:0,display:'inline-block',animation:'pulse-dot 1.5s ease-in-out infinite'}}/>
+                )}
+                <span style={{fontSize:11,fontWeight:700,color: isLav?'#0d2d5e':'#0d2d5e'}}>P:</span>
+                <select value={project.pallet_assegnato||''}
+                  onChange={async e=>{
+                    const val=e.target.value?parseInt(e.target.value):null
+                    const old=project.pallet_assegnato
+                    if(old&&old!==val){await fetch('/api/pallet/'+old+'/assegna-progetto',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({progetto_id:null,progetto_nome:null,progetto_colore:null})})}
+                    if(val){const r=await fetch('/api/pallet/'+val+'/assegna-progetto',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({progetto_id:project.id,progetto_nome:project.name,progetto_colore:project.color||'#0d2d5e'})});if(!r.ok){const err=await r.json().catch(()=>({}));alert(err.detail||'Errore');return}}
+                    onUpdate({...project,pallet_assegnato:val})
+                  }}
+                  style={{fontSize:12,fontWeight:700,background:'transparent',
+                    color: isLav?'#1D5FAD':'#0d2d5e',
+                    border:'none',padding:'0 2px',cursor:'pointer',outline:'none'}}>
+                  <option value=''>—</option>
+                  {[1,2,3,4,5,6].map(n=>{const disp=palletDisponibili.find(p=>p.numero===n);const isAss=project.pallet_assegnato===n;if(!disp&&!isAss)return null;return <option key={n} value={n}>P{n}{isAss?' ✓':''}</option>})}
+                </select>
+                {project.pallet_assegnato&&(
+                  <span onClick={()=>window.location.href='/coda'}
+                    style={{fontSize:10,fontWeight:700,cursor:'pointer',
+                      color: isLav?'#1D5FAD':'#0d2d5e',opacity: isLav?1:0.6}}>
+                    {isLav ? 'LIVE →' : '→'}
+                  </span>
+                )}
+              </div>
+            )
+          })()}
 
           {/* Lancia in NC — CTA principale */}
           {mpfList.length>0&&<button onClick={()=>setShowLancioModal(true)}
@@ -2630,7 +2652,7 @@ export default function Progetti(){
 
   return(
     <div style={{height:'100%',display:'flex',flexDirection:'column',background:T.bg,fontFamily:"var(--font-display)",color:T.text}}>
-      <style>{`*{box-sizing:border-box}input,textarea,select{font-family:inherit}`}</style>
+      <style>{`*{box-sizing:border-box}input,textarea,select{font-family:inherit}@keyframes pulse-dot{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.85)}}`}</style>
 
       {/* TOP BAR */}
       {!isOnProject&&!isOnEditor&&(
@@ -2658,7 +2680,7 @@ export default function Progetti(){
           {isOnEditor?(
             <TemplateEditor template={editingTemplate} onSave={saveTemplate} onCancel={()=>{setPage('templates');setEditingTemplate(null)}}/>
           ):isOnProject?(
-            <ProjectDetail project={selectedProject} onBack={()=>setSelectedId(null)} onUpdate={updateProject} onDelete={deleteProject} onArchive={archiveProject} templates={templates} onSaveAsTemplate={tmpl=>{setTemplates(ts=>{const next=ts.some(t=>t.id===tmpl.id)?ts.map(t=>t.id===tmpl.id?tmpl:t):[...ts,tmpl];persistTemplates(next);return next})}} onLanciaNC={lanciaNC} palletDisponibili={palletDisponibili}/>
+            <ProjectDetail project={selectedProject} onBack={()=>setSelectedId(null)} onUpdate={updateProject} onDelete={deleteProject} onArchive={archiveProject} templates={templates} onSaveAsTemplate={tmpl=>{setTemplates(ts=>{const next=ts.some(t=>t.id===tmpl.id)?ts.map(t=>t.id===tmpl.id?tmpl:t):[...ts,tmpl];persistTemplates(next);return next})}} onLanciaNC={lanciaNC} palletDisponibili={palletDisponibili} palletStato={palletState}/>
           ):page==='home'?(
             <HomePage projects={projects} deliveries={deliveries} palletState={palletState} setupData={setupData}
               onNavigateProject={id=>{setSelectedId(id);setPage('projects')}}

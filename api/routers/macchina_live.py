@@ -442,6 +442,7 @@ async def get_live_context():
         "programma_attivo":     mpf_filename,
         "programma_attivo_raw": prog_raw,
         "pallet_attivo":        pallet,
+        "progetto_attivo":      match.get("progetto_nome") if match and "progetto_nome" in match else None,
         "stato_programma":      stato_pgm,
         "utensile_attivo":      data.get("utensile_attivo"),
         "numero_utensile":      data.get("numero_utensile"),

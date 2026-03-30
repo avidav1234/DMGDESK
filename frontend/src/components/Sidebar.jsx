@@ -95,8 +95,10 @@ export default function Sidebar() {
           const attiva = [1, 3].includes(d.stato_programma)
           setStatoMacchina({
             attiva,
-            programma: d.programma_attivo,
-            utensile:  d.utensile_attivo,
+            programma:  d.programma_attivo,
+            utensile:   d.utensile_attivo,
+            pallet:     d.pallet_attivo  || null,
+            progetto:   d.progetto_attivo || null,
           })
         }).catch(() => {})
 
@@ -123,8 +125,10 @@ export default function Sidebar() {
         const attiva = [1, 3].includes(d.stato_macchina)
         setStatoMacchina(prev => ({
           attiva,
-          programma: d.programma_attivo || prev?.programma || null,
+          programma: d.programma_attivo  || prev?.programma  || null,
           utensile:  prev?.utensile || null,
+          pallet:    d.pallet_rilevato   ?? prev?.pallet   ?? null,
+          progetto:  d.progetto_rilevato || prev?.progetto || null,
         }))
       }
       // Ricarica alert se ci sono cambiamenti utensili
@@ -158,44 +162,55 @@ export default function Sidebar() {
       </div>
 
       {/* ── Stato macchina ─────────────────────────────────────────── */}
-      <div style={{
-        width: 58, marginBottom: 6, borderRadius: 8, padding: '5px 6px',
-        background: statoMacchina?.attiva ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.05)',
-        border: `1px solid ${statoMacchina?.attiva ? 'rgba(34,197,94,0.3)' : 'rgba(255,255,255,0.08)'}`,
-        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
-        transition: 'all 0.3s',
-      }}>
-        {/* Dot + status */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <div style={{
-            width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
-            background: statoMacchina?.attiva ? '#22c55e' : '#64748b',
-            animation: statoMacchina?.attiva ? 'pulse-green 2s ease-in-out infinite' : 'none',
-          }}/>
-          <span style={{
-            fontSize: 8, fontWeight: 800, letterSpacing: '0.06em',
-            fontFamily: 'var(--font-mono)',
-            color: statoMacchina?.attiva ? '#86efac' : '#64748b',
-          }}>
-            {statoMacchina?.attiva ? 'LIVE' : 'FERMO'}
-          </span>
+      <NavLink to="/coda" style={{ textDecoration: 'none' }}>
+        <div style={{
+          width: 58, marginBottom: 6, borderRadius: 8, padding: '5px 6px',
+          background: statoMacchina?.attiva ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.05)',
+          border: `1px solid ${statoMacchina?.attiva ? 'rgba(34,197,94,0.3)' : 'rgba(255,255,255,0.08)'}`,
+          display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
+          transition: 'all 0.3s', cursor: 'pointer',
+        }}>
+          {/* Dot + LIVE/FERMO */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <div style={{
+              width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
+              background: statoMacchina?.attiva ? '#22c55e' : '#64748b',
+              animation: statoMacchina?.attiva ? 'pulse-green 2s ease-in-out infinite' : 'none',
+            }}/>
+            <span style={{
+              fontSize: 8, fontWeight: 800, letterSpacing: '0.06em',
+              fontFamily: 'var(--font-mono)',
+              color: statoMacchina?.attiva ? '#86efac' : '#64748b',
+            }}>
+              {statoMacchina?.attiva ? 'LIVE' : 'FERMO'}
+            </span>
+          </div>
+          {/* Pallet attivo */}
+          {statoMacchina?.attiva && statoMacchina?.pallet && (
+            <div style={{
+              fontSize: 9, fontWeight: 800, fontFamily: 'var(--font-mono)',
+              color: '#7eb8f5', letterSpacing: '0.04em',
+            }}>
+              P{statoMacchina.pallet}
+            </div>
+          )}
+          {/* Programma corrente (troncato) */}
+          {statoMacchina?.attiva && statoMacchina?.programma && (
+            <div style={{
+              fontSize: 7, fontFamily: 'var(--font-mono)', color: 'rgba(134,239,172,0.7)',
+              textAlign: 'center', lineHeight: 1.3, wordBreak: 'break-all',
+              maxHeight: 22, overflow: 'hidden',
+            }}>
+              {statoMacchina.programma.replace('.MPF','').replace('.mpf','').split('_').slice(-2).join('_')}
+            </div>
+          )}
+          {!statoMacchina?.attiva && (
+            <div style={{ fontSize: 7, color: 'rgba(100,116,139,0.6)', fontFamily: 'var(--font-mono)' }}>
+              in attesa
+            </div>
+          )}
         </div>
-        {/* Programma corrente (troncato) */}
-        {statoMacchina?.attiva && statoMacchina?.programma && (
-          <div style={{
-            fontSize: 7, fontFamily: 'var(--font-mono)', color: 'rgba(134,239,172,0.7)',
-            textAlign: 'center', lineHeight: 1.3, wordBreak: 'break-all',
-            maxHeight: 28, overflow: 'hidden',
-          }}>
-            {statoMacchina.programma.replace('.MPF','').replace('.mpf','').split('_').slice(-2).join('_')}
-          </div>
-        )}
-        {!statoMacchina?.attiva && (
-          <div style={{ fontSize: 7, color: 'rgba(100,116,139,0.6)', fontFamily: 'var(--font-mono)' }}>
-            in attesa
-          </div>
-        )}
-      </div>
+      </NavLink>
 
       {/* Nav principale */}
       {NAV_PRIMARY.map(item => (

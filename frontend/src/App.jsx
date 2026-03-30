@@ -32,7 +32,7 @@ function GlobalPoller() {
   return null
 }
 
-const FULL_PAGES = ['/home', '/coda', '/analisi-nc', '/macchina', '/progetti']
+const FULL_PAGES = ['/home', '/coda', '/analisi-nc', '/macchina', '/progetti', '/report']
 
 function MainContent() {
   const loc = useLocation()

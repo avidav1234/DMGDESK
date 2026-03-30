@@ -34,17 +34,17 @@ const Card = ({ children, style = {} }) => (
   </div>
 )
 const SectionTitle = ({ children }) => (
-  <div style={{ fontSize:10, fontWeight:700, letterSpacing:'0.1em', color:'var(--text-dim)',
-                textTransform:'uppercase', marginBottom:12 }}>{children}</div>
+  <div style={{ fontSize:11, fontWeight:700, letterSpacing:'0.08em', color:'var(--text-dim)',
+                textTransform:'uppercase', marginBottom:14 }}>{children}</div>
 )
 const KpiCard = ({ label, value, sub, color = 'var(--text-primary)', trend }) => (
-  <Card style={{ padding:'14px 16px', textAlign:'center' }}>
-    <div style={{ fontSize:10, fontWeight:700, letterSpacing:'0.08em', color:'var(--text-dim)',
-                  marginBottom:6, textTransform:'uppercase' }}>{label}</div>
-    <div style={{ fontSize:22, fontWeight:800, color, fontVariantNumeric:'tabular-nums', lineHeight:1 }}>{value}</div>
-    {sub && <div style={{ fontSize:11, color:'var(--text-dim)', marginTop:4 }}>{sub}</div>}
+  <Card style={{ padding:'18px 20px', textAlign:'center' }}>
+    <div style={{ fontSize:11, fontWeight:700, letterSpacing:'0.07em', color:'var(--text-dim)',
+                  marginBottom:8, textTransform:'uppercase' }}>{label}</div>
+    <div style={{ fontSize:28, fontWeight:800, color, fontVariantNumeric:'tabular-nums', lineHeight:1 }}>{value}</div>
+    {sub && <div style={{ fontSize:12, color:'var(--text-dim)', marginTop:6 }}>{sub}</div>}
     {trend !== undefined && (
-      <div style={{ fontSize:11, marginTop:4, color: trend >= 0 ? '#22c55e' : '#ef4444' }}>
+      <div style={{ fontSize:12, marginTop:5, color: trend >= 0 ? '#22c55e' : '#ef4444', fontWeight:600 }}>
         {trend >= 0 ? '▲' : '▼'} {Math.abs(trend).toFixed(1)}%
       </div>
     )}
@@ -56,9 +56,9 @@ function StoricoBars({ storico, selectedData, onSelect }) {
   const maxSec = Math.max(...storico.map(g => g.ore_lavorate_sec || 0), 1)
   return (
     <div>
-      <div style={{ display:'flex', alignItems:'flex-end', gap:2, height:80 }}>
+      <div style={{ display:'flex', alignItems:'flex-end', gap:3, height:100 }}>
         {storico.map((g) => {
-          const hPct = Math.max(4, (g.ore_lavorate_sec / maxSec) * 74)
+          const hPct = Math.max(5, (g.ore_lavorate_sec / maxSec) * 90)
           const isSelected = g.data === selectedData
           const effColor = g.efficienza_pct > 70 ? '#22c55e' : g.efficienza_pct > 40 ? '#f59e0b' : '#ef4444'
           return (
@@ -66,12 +66,12 @@ function StoricoBars({ storico, selectedData, onSelect }) {
                                        alignItems:'center', cursor:'pointer', gap:2 }}
                  onClick={() => onSelect(g.data)}
                  title={`${fmtDay(g.data)}: ${fmtH(g.ore_lavorate_sec)}, ${g.efficienza_pct}% eff.`}>
-              <div style={{ width:'60%', height:3, borderRadius:2,
+              <div style={{ width:'60%', height:4, borderRadius:2,
                             background: isSelected ? effColor : effColor+'88' }} />
-              <div style={{ width:'100%', height:hPct, borderRadius:'3px 3px 0 0',
+              <div style={{ width:'100%', height:hPct, borderRadius:'4px 4px 0 0',
                             background: isSelected ? '#3b82f6' : (g.ore_lavorate_sec > 0 ? '#1D5FAD88' : 'var(--border)'),
                             border: isSelected ? '1px solid #60a5fa' : 'none', transition:'all 0.15s' }} />
-              <div style={{ fontSize:8, color: isSelected ? '#3b82f6' : 'var(--text-dim)',
+              <div style={{ fontSize:9, color: isSelected ? '#3b82f6' : 'var(--text-dim)',
                             fontWeight: isSelected ? 700 : 400 }}>
                 {g.data.slice(8)}
               </div>
@@ -79,13 +79,13 @@ function StoricoBars({ storico, selectedData, onSelect }) {
           )
         })}
       </div>
-      <div style={{ display:'flex', gap:16, marginTop:8, fontSize:10, color:'var(--text-dim)' }}>
+      <div style={{ display:'flex', gap:16, marginTop:10, fontSize:11, color:'var(--text-dim)' }}>
         <span style={{ display:'flex', alignItems:'center', gap:4 }}>
-          <span style={{ display:'inline-block', width:10, height:10, borderRadius:2, background:'#1D5FAD' }}/>
+          <span style={{ display:'inline-block', width:12, height:12, borderRadius:2, background:'#1D5FAD' }}/>
           Ore lavorate
         </span>
         <span style={{ display:'flex', alignItems:'center', gap:4 }}>
-          <span style={{ display:'inline-block', width:24, height:3, borderRadius:2, background:'#22c55e' }}/>
+          <span style={{ display:'inline-block', width:28, height:4, borderRadius:2, background:'#22c55e' }}/>
           Efficienza
         </span>
       </div>
@@ -118,27 +118,27 @@ function TimelineGiornaliera({ sessioni }) {
   const maxSec = Math.max(...ore.map(o => o.lav + o.fermo), 1)
   return (
     <div>
-      <div style={{ display:'flex', gap:1, alignItems:'flex-end', height:60 }}>
+      <div style={{ display:'flex', gap:1, alignItems:'flex-end', height:80 }}>
         {ore.map(o => {
-          const lavH = Math.max(0, Math.round((o.lav / maxSec) * 54))
-          const fermoH = Math.max(0, Math.round((o.fermo / maxSec) * 54))
+          const lavH = Math.max(0, Math.round((o.lav / maxSec) * 72))
+          const fermoH = Math.max(0, Math.round((o.fermo / maxSec) * 72))
           return (
             <div key={o.h} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center' }}
                  title={`${String(o.h).padStart(2,'0')}:00 — Lav: ${fmt(o.lav)}, Fermo: ${fmt(o.fermo)}`}>
-              <div style={{ width:'90%', display:'flex', flexDirection:'column', justifyContent:'flex-end', height:54 }}>
+              <div style={{ width:'90%', display:'flex', flexDirection:'column', justifyContent:'flex-end', height:72 }}>
                 {fermoH > 0 && <div style={{ background:'#f59e0b44', height:fermoH, borderRadius:'2px 2px 0 0' }}/>}
                 {lavH > 0 && <div style={{ background:'#1D5FAD', height:lavH, borderRadius: fermoH>0?0:'2px 2px 0 0' }}/>}
               </div>
-              <div style={{ fontSize:7, color:'var(--text-dim)', marginTop:2 }}>
+              <div style={{ fontSize:8, color:'var(--text-dim)', marginTop:2 }}>
                 {o.h % 4 === 0 ? String(o.h).padStart(2,'0') : ''}
               </div>
             </div>
           )
         })}
       </div>
-      <div style={{ display:'flex', gap:16, marginTop:8, fontSize:10, color:'var(--text-dim)' }}>
+      <div style={{ display:'flex', gap:16, marginTop:10, fontSize:11, color:'var(--text-dim)' }}>
         <span style={{ display:'flex', alignItems:'center', gap:4 }}>
-          <span style={{ display:'inline-block', width:10, height:10, borderRadius:2, background:'#1D5FAD' }}/> Lavorazione
+          <span style={{ display:'inline-block', width:12, height:12, borderRadius:2, background:'#1D5FAD' }}/> Lavorazione
         </span>
         <span style={{ display:'flex', alignItems:'center', gap:4 }}>
           <span style={{ display:'inline-block', width:10, height:10, borderRadius:2, background:'#f59e0b44', border:'1px solid #f59e0b88' }}/> Fermo
@@ -157,21 +157,21 @@ function ProgrammiChart({ sessioni }) {
   )
   const maxSec = allPgm[0].durata_sec
   return (
-    <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
+    <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
       {allPgm.map((p, i) => {
         const pct = (p.durata_sec / maxSec * 100).toFixed(1)
         const color = colorForProject(p.progetto)
         return (
-          <div key={p.filename+i} style={{ display:'flex', alignItems:'center', gap:8 }}>
-            <div style={{ width:130, fontSize:10, fontFamily:'monospace', color:'var(--text-secondary)',
+          <div key={p.filename+i} style={{ display:'flex', alignItems:'center', gap:10 }}>
+            <div style={{ width:160, fontSize:11, fontFamily:'monospace', color:'var(--text-secondary)',
                           textAlign:'right', flexShrink:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}
                  title={p.filename}>
               {(p.filename || '').replace('.MPF','').replace('.mpf','')}
             </div>
-            <div style={{ flex:1, height:16, background:'var(--bg-hover)', borderRadius:3, overflow:'hidden' }}>
-              <div style={{ width:`${pct}%`, height:'100%', background:color, borderRadius:3, transition:'width 0.4s ease' }} />
+            <div style={{ flex:1, height:20, background:'var(--bg-hover)', borderRadius:4, overflow:'hidden' }}>
+              <div style={{ width:`${pct}%`, height:'100%', background:color, borderRadius:4, transition:'width 0.4s ease' }} />
             </div>
-            <div style={{ width:52, fontSize:11, fontFamily:'monospace', color, fontWeight:700, flexShrink:0, textAlign:'right' }}>
+            <div style={{ width:64, fontSize:12, fontFamily:'monospace', color, fontWeight:700, flexShrink:0, textAlign:'right' }}>
               {fmt(p.durata_sec)}
             </div>
           </div>
@@ -211,16 +211,16 @@ function UtensiliDonut({ utensili }) {
             <title>{s.alias}: {s.ore} ({(s.pct*100).toFixed(1)}%)</title>
           </path>
         ))}
-        <text x={CX} y={CY-5} textAnchor="middle" fontSize={10} fill="var(--text-dim)" fontWeight={600}>TOT</text>
-        <text x={CX} y={CY+10} textAnchor="middle" fontSize={11} fill="var(--text-primary)" fontWeight={700}>{fmtH(totSec)}</text>
+        <text x={CX} y={CY-5} textAnchor="middle" fontSize={11} fill="var(--text-dim)" fontWeight={600}>TOT</text>
+        <text x={CX} y={CY+10} textAnchor="middle" fontSize={13} fill="var(--text-primary)" fontWeight={700}>{fmtH(totSec)}</text>
       </svg>
       <div style={{ flex:1, display:'flex', flexDirection:'column', gap:6 }}>
         {slices.map((s, i) => (
           <div key={i} style={{ display:'flex', alignItems:'center', gap:6 }}>
             <div style={{ width:8, height:8, borderRadius:2, background:s.color, flexShrink:0 }}/>
-            <div style={{ flex:1, fontSize:11, fontFamily:'monospace', color:'var(--text-secondary)',
+            <div style={{ flex:1, fontSize:12, fontFamily:'monospace', color:'var(--text-secondary)',
                           overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{s.alias}</div>
-            <div style={{ fontSize:11, fontFamily:'monospace', color:s.color, fontWeight:700, flexShrink:0 }}>{s.ore}</div>
+            <div style={{ fontSize:12, fontFamily:'monospace', color:s.color, fontWeight:700, flexShrink:0 }}>{s.ore}</div>
           </div>
         ))}
       </div>
@@ -252,18 +252,18 @@ function HeatmapFermi({ sessioni }) {
       <div style={{ display:'grid', gridTemplateColumns:`52px repeat(${ORE.length}, 1fr)`, gap:2, minWidth:480 }}>
         <div/>
         {ORE.map(h => (
-          <div key={h} style={{ fontSize:9, color:'var(--text-dim)', textAlign:'center', fontWeight:600 }}>
+          <div key={h} style={{ fontSize:10, color:'var(--text-dim)', textAlign:'center', fontWeight:600 }}>
             {String(h).padStart(2,'0')}
           </div>
         ))}
         {GIORNI.map(g => (
           <React.Fragment key={g}>
-            <div style={{ fontSize:10, color:'var(--text-dim)', fontWeight:600, display:'flex', alignItems:'center' }}>{g}</div>
+            <div style={{ fontSize:11, color:'var(--text-dim)', fontWeight:600, display:'flex', alignItems:'center' }}>{g}</div>
             {ORE.map(h => {
               const val = matrix[g][h]
               const alpha = val > 0 ? Math.max(0.1, val / maxVal) : 0
               return (
-                <div key={h} style={{ height:22, borderRadius:3,
+                <div key={h} style={{ height:26, borderRadius:3,
                                       background: val > 0 ? `rgba(239,68,68,${alpha})` : 'var(--border)',
                                       border:'1px solid var(--border)', opacity: val > 0 ? 1 : 0.3 }}
                      title={val > 0 ? `${g} ${h}:00 — ${fmt(val)}` : `${g} ${h}:00`}/>
@@ -272,10 +272,10 @@ function HeatmapFermi({ sessioni }) {
           </React.Fragment>
         ))}
       </div>
-      <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:8, fontSize:10, color:'var(--text-dim)' }}>
+      <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:10, fontSize:11, color:'var(--text-dim)' }}>
         <span>Nessun fermo</span>
         {[0.1,0.3,0.5,0.7,0.9].map(a => (
-          <div key={a} style={{ width:14, height:14, borderRadius:2, background:`rgba(239,68,68,${a})` }}/>
+          <div key={a} style={{ width:16, height:16, borderRadius:2, background:`rgba(239,68,68,${a})` }}/>
         ))}
         <span>Fermo lungo</span>
       </div>
@@ -303,22 +303,22 @@ function TabellaFermi({ sessioni }) {
       <thead>
         <tr style={{ background:'var(--bg-hover)' }}>
           {['Durata','Ora','Commessa','Da','A'].map(h => (
-            <th key={h} style={{ padding:'7px 10px', textAlign:'left', fontSize:10, color:'var(--text-dim)',
-                                 fontWeight:700, letterSpacing:'0.05em', borderBottom:'1px solid var(--border)' }}>{h}</th>
+            <th key={h} style={{ padding:'9px 12px', textAlign:'left', fontSize:11, color:'var(--text-dim)',
+                                 fontWeight:700, letterSpacing:'0.04em', borderBottom:'1px solid var(--border)' }}>{h}</th>
           ))}
         </tr>
       </thead>
       <tbody>
         {fermi.map((f, i) => (
           <tr key={i} style={{ borderBottom:'1px solid var(--border)' }}>
-            <td style={{ padding:'7px 10px', fontFamily:'monospace', fontWeight:700,
+            <td style={{ padding:'9px 12px', fontFamily:'monospace', fontWeight:700,
                          color: f.gap > 1800 ? '#ef4444' : f.gap > 600 ? '#f59e0b' : 'var(--text-secondary)' }}>
               {fmt(f.gap)}
             </td>
-            <td style={{ padding:'7px 10px', color:'var(--text-dim)', whiteSpace:'nowrap', fontSize:11 }}>{fmtDate(f.inizio)}</td>
-            <td style={{ padding:'7px 10px', fontFamily:'monospace', fontWeight:600, color:colorForProject(f.prog), fontSize:11 }}>{f.prog}</td>
-            <td style={{ padding:'7px 10px', fontFamily:'monospace', fontSize:10, color:'var(--text-dim)' }}>{(f.da||'').replace('.MPF','')}</td>
-            <td style={{ padding:'7px 10px', fontFamily:'monospace', fontSize:10, color:'var(--text-secondary)' }}>{(f.a||'').replace('.MPF','')}</td>
+            <td style={{ padding:'9px 12px', color:'var(--text-dim)', whiteSpace:'nowrap', fontSize:12 }}>{fmtDate(f.inizio)}</td>
+            <td style={{ padding:'9px 12px', fontFamily:'monospace', fontWeight:600, color:colorForProject(f.prog), fontSize:12 }}>{f.prog}</td>
+            <td style={{ padding:'9px 12px', fontFamily:'monospace', fontSize:11, color:'var(--text-dim)' }}>{(f.da||'').replace('.MPF','')}</td>
+            <td style={{ padding:'9px 12px', fontFamily:'monospace', fontSize:11, color:'var(--text-secondary)' }}>{(f.a||'').replace('.MPF','')}</td>
           </tr>
         ))}
       </tbody>
@@ -338,7 +338,7 @@ function ConfrontoSettimane({ storico }) {
   const pgmPrev = prev.reduce((a,g) => a + (g.n_programmi||0), 0)
   const delta = (a, b) => b === 0 ? 0 : ((a - b) / b * 100)
   return (
-    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:10 }}>
+    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:14 }}>
       <KpiCard label="Ore questa settimana" value={fmtH(totCurr)} sub={`Sett. prec.: ${fmtH(totPrev)}`}
                color="#3b82f6" trend={delta(totCurr, totPrev)} />
       <KpiCard label="Efficienza media" value={`${effCurr.toFixed(1)}%`} sub={`Sett. prec.: ${effPrev.toFixed(1)}%`}
@@ -390,11 +390,11 @@ export default function Report() {
   ]
 
   return (
-    <div style={{ padding:'16px 24px', maxWidth:1200, margin:'0 auto' }}>
+    <div style={{ padding:'20px 28px', height:'100%', overflowY:'auto', boxSizing:'border-box' }}>
 
       {/* Header */}
       <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:20, flexWrap:'wrap' }}>
-        <div style={{ fontSize:20, fontWeight:800, color:'var(--text-primary)' }}>Analisi Lavorazioni</div>
+        <div style={{ fontSize:22, fontWeight:800, color:'var(--text-primary)' }}>Analisi Lavorazioni</div>
         <input type="date" value={data} onChange={e => setData(e.target.value)}
           style={{ padding:'6px 12px', borderRadius:6, border:'1px solid var(--border)',
                    background:'var(--bg-card)', color:'var(--text-primary)', fontSize:13 }} />
@@ -410,14 +410,14 @@ export default function Report() {
       </div>
 
       {/* Storico 14gg */}
-      <Card style={{ padding:'14px 18px', marginBottom:16 }}>
+      <Card style={{ padding:'18px 22px', marginBottom:18 }}>
         <SectionTitle>Ultimi 14 giorni — clicca per cambiare data</SectionTitle>
         <StoricoBars storico={storico} selectedData={data} onSelect={setData} />
       </Card>
 
       {/* KPI giornalieri */}
       {rpt && (
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:10, marginBottom:16 }}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:14, marginBottom:18 }}>
           <KpiCard label="Ore lavorate"  value={rpt.ore_lavorate}  color="#22c55e" />
           <KpiCard label="Tempo fermo"   value={rpt.tempo_fermo}   color="#f59e0b" />
           <KpiCard label="Efficienza"    value={`${rpt.efficienza_pct}%`}
@@ -435,10 +435,10 @@ export default function Report() {
 
       {rpt && (<>
         {/* Tab bar */}
-        <div style={{ display:'flex', gap:2, marginBottom:16, borderBottom:'1px solid var(--border)' }}>
+        <div style={{ display:'flex', gap:4, marginBottom:18, borderBottom:'1px solid var(--border)' }}>
           {TABS.map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
-              style={{ padding:'8px 14px', fontSize:12, fontWeight:600, border:'none', cursor:'pointer',
+              style={{ padding:'10px 18px', fontSize:13, fontWeight:600, border:'none', cursor:'pointer',
                        borderBottom: tab===t.id ? '2px solid #3b82f6' : '2px solid transparent',
                        background:'transparent', color: tab===t.id ? '#3b82f6' : 'var(--text-dim)' }}>
               {t.label}
@@ -448,12 +448,12 @@ export default function Report() {
 
         {/* OVERVIEW */}
         {tab === 'overview' && (
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 }}>
-            <Card style={{ padding:'14px 18px' }}>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:18 }}>
+            <Card style={{ padding:'20px 24px' }}>
               <SectionTitle>Timeline giornaliera (per ora)</SectionTitle>
               <TimelineGiornaliera sessioni={rpt.sessioni} />
             </Card>
-            <Card style={{ padding:'14px 18px' }}>
+            <Card style={{ padding:'20px 24px' }}>
               <SectionTitle>Commesse lavorate</SectionTitle>
               {Object.entries(rpt.progetti).length === 0
                 ? <div style={{ color:'var(--text-dim)', fontSize:12 }}>Nessun progetto</div>
@@ -466,8 +466,8 @@ export default function Report() {
                     return (
                       <div key={nome}>
                         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', marginBottom:3 }}>
-                          <span style={{ fontSize:13, fontWeight:700, fontFamily:'monospace', color }}>{nome}</span>
-                          <span style={{ fontSize:11, color:'var(--text-dim)' }}>{fmt(info.durata_sec)} · {info.n_programmi} pgm</span>
+                          <span style={{ fontSize:14, fontWeight:700, fontFamily:'monospace', color }}>{nome}</span>
+                          <span style={{ fontSize:12, color:'var(--text-dim)' }}>{fmt(info.durata_sec)} · {info.n_programmi} pgm</span>
                         </div>
                         <div style={{ height:8, background:'var(--bg-hover)', borderRadius:4, overflow:'hidden' }}>
                           <div style={{ width:`${pct}%`, height:'100%', background:color, borderRadius:4, transition:'width 0.4s' }} />
@@ -478,11 +478,11 @@ export default function Report() {
                 </div>
               )}
             </Card>
-            <Card style={{ padding:'14px 18px' }}>
+            <Card style={{ padding:'20px 24px' }}>
               <SectionTitle>Utilizzo utensili</SectionTitle>
               <UtensiliDonut utensili={rpt.utensili} />
             </Card>
-            <Card style={{ padding:'14px 18px' }}>
+            <Card style={{ padding:'20px 24px', gridColumn:'1 / -1' }}>
               <SectionTitle>Principali fermi macchina</SectionTitle>
               {(() => {
                 const fermi = (rpt.sessioni || []).flatMap(s => {
@@ -495,20 +495,20 @@ export default function Report() {
                     gaps.push({ prog: s.progetto, inizio: prev.fine, gap })
                   }
                   return gaps
-                }).sort((a,b) => b.gap - a.gap).slice(0,6)
-                if (!fermi.length) return <div style={{ color:'var(--text-dim)', fontSize:12 }}>Nessun fermo</div>
+                }).sort((a,b) => b.gap - a.gap).slice(0,8)
+                if (!fermi.length) return <div style={{ color:'var(--text-dim)', fontSize:13 }}>Nessun fermo rilevato oggi</div>
                 const maxGap = fermi[0].gap
                 return (
-                  <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                  <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(300px,1fr))', gap:10 }}>
                     {fermi.map((f, i) => (
-                      <div key={i} style={{ display:'flex', alignItems:'center', gap:8 }}>
-                        <div style={{ width:52, fontSize:11, fontFamily:'monospace', fontWeight:700,
+                      <div key={i} style={{ display:'flex', alignItems:'center', gap:10 }}>
+                        <div style={{ width:64, fontSize:13, fontFamily:'monospace', fontWeight:700,
                                       color: f.gap > 1800 ? '#ef4444' : '#f59e0b', flexShrink:0 }}>{fmt(f.gap)}</div>
-                        <div style={{ flex:1, height:12, background:'var(--bg-hover)', borderRadius:3 }}>
+                        <div style={{ flex:1, height:14, background:'var(--bg-hover)', borderRadius:3 }}>
                           <div style={{ width:`${(f.gap/maxGap*100).toFixed(0)}%`, height:'100%',
                                         background: f.gap > 1800 ? '#ef444488' : '#f59e0b88', borderRadius:3 }} />
                         </div>
-                        <div style={{ fontSize:10, color:'var(--text-dim)', width:40, textAlign:'right', flexShrink:0 }}>
+                        <div style={{ fontSize:12, color:'var(--text-dim)', width:48, textAlign:'right', flexShrink:0 }}>
                           {fmtDate(f.inizio).slice(11)}
                         </div>
                       </div>
@@ -522,7 +522,7 @@ export default function Report() {
 
         {/* PROGRAMMI */}
         {tab === 'programmi' && (
-          <Card style={{ padding:'16px 20px' }}>
+          <Card style={{ padding:'20px 24px' }}>
             <SectionTitle>Durata programmi — top 20</SectionTitle>
             <ProgrammiChart sessioni={rpt.sessioni} />
           </Card>
@@ -531,11 +531,11 @@ export default function Report() {
         {/* FERMI */}
         {tab === 'fermi' && (
           <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
-            <Card style={{ padding:'16px 20px' }}>
+            <Card style={{ padding:'20px 24px' }}>
               <SectionTitle>Pattern fermi per ora del giorno</SectionTitle>
               <HeatmapFermi sessioni={rpt.sessioni} />
             </Card>
-            <Card style={{ padding:'16px 20px', overflow:'auto' }}>
+            <Card style={{ padding:'20px 24px', overflow:'auto' }}>
               <SectionTitle>Dettaglio fermi — {data}</SectionTitle>
               <TabellaFermi sessioni={rpt.sessioni} />
             </Card>
@@ -544,18 +544,18 @@ export default function Report() {
 
         {/* UTENSILI */}
         {tab === 'utensili' && (
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 }}>
-            <Card style={{ padding:'16px 20px' }}>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:18 }}>
+            <Card style={{ padding:'20px 24px' }}>
               <SectionTitle>Distribuzione utilizzo</SectionTitle>
               <UtensiliDonut utensili={rpt.utensili} />
             </Card>
-            <Card style={{ padding:'16px 20px', overflow:'auto' }}>
+            <Card style={{ padding:'20px 24px', overflow:'auto' }}>
               <SectionTitle>Tabella completa</SectionTitle>
               <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
                 <thead>
                   <tr>
                     {['#','Alias','Ore','%'].map(h => (
-                      <th key={h} style={{ padding:'6px 10px', textAlign:'left', fontSize:10, color:'var(--text-dim)',
+                      <th key={h} style={{ padding:'9px 12px', textAlign:'left', fontSize:11, color:'var(--text-dim)',
                                            fontWeight:700, borderBottom:'1px solid var(--border)' }}>{h}</th>
                     ))}
                   </tr>
@@ -566,10 +566,10 @@ export default function Report() {
                     const pct = (info.sec / totSec * 100).toFixed(1)
                     return (
                       <tr key={alias} style={{ borderBottom:'1px solid var(--border)' }}>
-                        <td style={{ padding:'7px 10px', color:'var(--text-dim)', fontSize:11 }}>{i+1}</td>
-                        <td style={{ padding:'7px 10px', fontFamily:'monospace', fontWeight:700 }}>{alias}</td>
-                        <td style={{ padding:'7px 10px', fontFamily:'monospace', color:'#f59e0b', fontWeight:700 }}>{info.ore}</td>
-                        <td style={{ padding:'7px 10px' }}>
+                        <td style={{ padding:'9px 12px', color:'var(--text-dim)', fontSize:12 }}>{i+1}</td>
+                        <td style={{ padding:'9px 12px', fontFamily:'monospace', fontWeight:700 }}>{alias}</td>
+                        <td style={{ padding:'9px 12px', fontFamily:'monospace', color:'#f59e0b', fontWeight:700 }}>{info.ore}</td>
+                        <td style={{ padding:'9px 12px' }}>
                           <div style={{ display:'flex', alignItems:'center', gap:6 }}>
                             <div style={{ width:80, height:6, background:'var(--border)', borderRadius:3, overflow:'hidden' }}>
                               <div style={{ width:`${pct}%`, height:'100%', background:'#3b82f6', borderRadius:3 }} />
@@ -590,7 +590,7 @@ export default function Report() {
         {tab === 'confronto' && (
           <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
             <ConfrontoSettimane storico={storico} />
-            <Card style={{ padding:'16px 20px' }}>
+            <Card style={{ padding:'20px 24px' }}>
               <SectionTitle>Efficienza e ore — ultimi 14 giorni</SectionTitle>
               <div style={{ display:'flex', flexDirection:'column', gap:4, marginTop:4 }}>
                 {storico.map(g => {
@@ -599,7 +599,7 @@ export default function Report() {
                   return (
                     <div key={g.data} style={{ display:'flex', alignItems:'center', gap:10, cursor:'pointer', padding:'2px 0' }}
                          onClick={() => setData(g.data)}>
-                      <div style={{ width:80, fontSize:11, flexShrink:0,
+                      <div style={{ width:90, fontSize:12, flexShrink:0,
                                     color: g.data===data ? '#3b82f6' : 'var(--text-dim)',
                                     fontWeight: g.data===data ? 700 : 400 }}>
                         {fmtDay(g.data)}
@@ -612,7 +612,7 @@ export default function Report() {
                           </div>
                         )}
                       </div>
-                      <div style={{ width:44, fontSize:11, fontFamily:'monospace', color:'var(--text-dim)',
+                      <div style={{ width:52, fontSize:12, fontFamily:'monospace', color:'var(--text-dim)',
                                     textAlign:'right', flexShrink:0 }}>
                         {fmtH(g.ore_lavorate_sec)}
                       </div>

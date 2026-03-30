@@ -259,7 +259,7 @@ function ProgramRow({pgm,gruppo,onStato,onOperatore,onTempo,onRemove,toolStatus,
           <div>
             <div style={{fontSize:10,color:T.textMuted,fontWeight:700,letterSpacing:'0.06em',marginBottom:4}}>STATO</div>
             <div style={{display:'flex',gap:4}}>
-              {Object.entries(STATO_CFG).map(([key,s])=>(
+              {Object.entries(STATO_CFG).filter(([key])=>key!=='in_macchina').map(([key,s])=>(
                 <button key={key} onClick={()=>onStato(key)}
                   style={{background:pgm.stato===key?s.bg:'transparent',
                     border:`1.5px solid ${pgm.stato===key?s.border:T.border}`,

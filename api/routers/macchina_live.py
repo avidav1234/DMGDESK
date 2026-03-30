@@ -383,16 +383,16 @@ async def get_live_context():
                 # Trovato — calcola statistiche
                 totale     = len(all_pgm)
                 completati = sum(1 for p in all_pgm if p.get("stato") == "completato")
-                in_mac     = sum(1 for p in all_pgm if p.get("stato") == "in_macchina")
+                in_mac     = sum(1 for p in all_pgm if p.get("stato") == "in_lavorazione")
                 idx_corrente = all_pgm.index(pgm_match)
                 pct = round(completati / totale * 100, 1) if totale else 0
 
-                # Prossimi programmi (da_fare o in_macchina dopo quello corrente)
+                # Prossimi programmi (da_fare o in_main dopo quello corrente)
                 prossimi = [
                     {"filename": p.get("filename"), "utensile": p.get("utensile"),
                      "stato": p.get("stato"), "numPgm": p.get("numPgm")}
                     for p in all_pgm[idx_corrente+1:]
-                    if p.get("stato") in ("da_fare", "in_macchina")
+                    if p.get("stato") in ("da_fare", "in_main")
                 ][:4]
 
                 # Allerta utensile corrente
@@ -691,15 +691,16 @@ async def aggiorna_stati_da_log():
                             continue
                         fn = (pgm.get("filename") or "").upper().replace(".MPF","").strip()
                         if fn == tgt:
-                            # Programma attivo → in_macchina
-                            if pgm.get("stato") == "da_fare":
-                                pgm["stato"] = "in_macchina"
+                            # Programma attivo → in_lavorazione
+                            # Accetta da_fare e in_main (già inviato ma non ancora partito)
+                            if pgm.get("stato") in ("da_fare", "in_main"):
+                                pgm["stato"] = "in_lavorazione"
                                 pgm["tempoInizio"] = pgm.get("tempoInizio") or now_str
                                 proj_dirty = True
                                 updates["in_macchina"] += 1
                         else:
-                            # Altro programma → se era in_macchina diventa completato
-                            if pgm.get("stato") == "in_macchina":
+                            # Altro programma → se era in_lavorazione diventa completato
+                            if pgm.get("stato") == "in_lavorazione":
                                 pgm["stato"] = "completato"
                                 pgm["tempoFine"] = pgm.get("tempoFine") or now_str
                                 proj_dirty = True

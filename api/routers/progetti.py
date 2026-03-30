@@ -883,7 +883,7 @@ async def avvia_tutti(project_id: str):
                 if pgm.get("tipoGruppo") == "ipm":
                     continue
                 if pgm.get("stato") == "da_fare":
-                    pgm["stato"] = "in_macchina"
+                    pgm["stato"] = "in_main"
                     if not pgm.get("tempoInizio"):
                         pgm["tempoInizio"] = now
                     aggiornati += 1

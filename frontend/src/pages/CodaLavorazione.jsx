@@ -57,6 +57,8 @@ export default function CodaLavorazione() {
   const [pgmInMacchina, setPgmInMacchina] = useState({}); // {palletNum: {progetto, programmi}}
   const [pgmSelezionati, setPgmSelezionati] = useState({}); // {palletNum: Set(ids)}
   const [pgmSaving, setPgmSaving] = useState(false);
+  // Pallet espansi nella coda unificata
+  const [palletEspansi, setPalletEspansi] = useState(new Set());
 
   const fetchLiveContext = async () => {
     try {
@@ -904,46 +906,141 @@ export default function CodaLavorazione() {
 
       <div style={{ flex: '0 0 calc(50% - 8px)', display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0, overflowY: 'auto' }}>
 
-
-        {/* ── Coda Esecuzione ───────────────────────────────────── */}
+        {/* ── CODA UNIFICATA: pallet + programmi inline ──────────── */}
         {assegnatiCoda.length > 0 && (
           <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '12px 16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
               <span style={{ fontSize: 13, fontWeight: 800, color: '#0d2d5e' }}>📋 CODA ESECUZIONE</span>
               {codaSaving && <span style={{ fontSize: 11, color: '#94a3b8' }}>salvataggio…</span>}
-              <span style={{ fontSize: 11, color: '#94a3b8', marginLeft: 'auto' }}>trascina per riordinare</span>
+              {(() => {
+                const totSel = Object.values(pgmSelezionati).reduce((acc, s) => acc + (s?.size || 0), 0)
+                return totSel > 0 ? (
+                  <button onClick={() => Object.entries(pgmSelezionati).forEach(([n, s]) => { if (s?.size > 0) completaPgm(parseInt(n)) })}
+                    disabled={pgmSaving}
+                    style={{ marginLeft: 'auto', background: '#166534', border: 'none', borderRadius: 7,
+                      color: '#fff', fontWeight: 700, fontSize: 12, padding: '5px 14px', cursor: 'pointer' }}>
+                    ✓ Segna {totSel} completat{totSel === 1 ? 'o' : 'i'}
+                  </button>
+                ) : (
+                  <span style={{ fontSize: 11, color: '#94a3b8', marginLeft: 'auto' }}>trascina per riordinare</span>
+                )
+              })()}
             </div>
-            {/* Pallet in coda — drag&drop */}
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: fuoriCodaList.length ? 8 : 0 }}>
-              {inCodaList.map((p, idx) => (
-                <div key={p.numero}
-                  draggable
-                  onDragStart={e => codaDragStart(e, idx)}
-                  onDragOver={e => codaDragOver(e, idx)}
-                  onDrop={codaDrop}
-                  style={{ background: '#eef4fb', border: '2px solid #1D5FAD', borderRadius: 10,
-                    padding: '8px 12px', cursor: 'grab', position: 'relative', userSelect: 'none',
-                    display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ position: 'absolute', top: -8, left: 8, background: '#0d2d5e',
-                    color: '#fff', fontSize: 9, fontWeight: 800, borderRadius: 8, padding: '1px 6px' }}>
-                    {idx + 1}°
-                  </span>
-                  <span style={{ fontSize: 11, color: '#0d2d5e', fontWeight: 700 }}>P{p.numero}</span>
-                  <span style={{ fontSize: 12, fontWeight: 800, color: '#0d2d5e', fontFamily: 'monospace' }}>
-                    {p.progetto_nome}
-                  </span>
-                  <button onClick={() => salvaCoda(codaOrdine.filter(n => n !== p.numero))}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer',
-                      color: '#94a3b8', fontSize: 13, lineHeight: 1, padding: '0 2px' }}>✕</button>
-                </div>
-              ))}
-              {inCodaList.length === 0 && (
-                <span style={{ fontSize: 12, color: '#94a3b8' }}>Nessun progetto in coda — aggiungi ↓</span>
-              )}
+
+            {/* Pallet in coda — drag&drop con programmi espandibili */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {inCodaList.map((p, idx) => {
+                const pgmData = pgmInMacchina[p.numero]
+                const hasPgm  = pgmData?.programmi?.length > 0
+                const espanso = palletEspansi.has(p.numero)
+                const col     = PAL_COLORS[(p.numero - 1) % PAL_COLORS.length]
+                const pal     = pallets.find(pl => pl.id === p.numero)
+                const isLav   = (pal?.stato || '').toUpperCase() === 'IN LAVORAZIONE'
+                const nInLav  = pgmData?.programmi?.filter(pg => pg.stato === 'in_lavorazione').length || 0
+                const nInMain = pgmData?.programmi?.filter(pg => pg.stato === 'in_main').length || 0
+                const sel     = pgmSelezionati[p.numero] || new Set()
+
+                return (
+                  <div key={p.numero}
+                    draggable={!espanso}
+                    onDragStart={e => codaDragStart(e, idx)}
+                    onDragOver={e => codaDragOver(e, idx)}
+                    onDrop={codaDrop}
+                    style={{ border: `1.5px solid ${isLav ? '#1D5FAD' : '#e2e8f0'}`,
+                      borderLeft: `4px solid ${col}`,
+                      borderRadius: 10, overflow: 'hidden',
+                      background: isLav ? '#f0f7ff' : '#f8fafc',
+                      transition: 'all 0.15s' }}>
+                    {/* Riga pallet */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
+                      cursor: hasPgm ? 'pointer' : 'grab', userSelect: 'none' }}
+                      onClick={() => hasPgm && setPalletEspansi(prev => {
+                        const n = new Set(prev)
+                        n.has(p.numero) ? n.delete(p.numero) : n.add(p.numero)
+                        return n
+                      })}>
+                      {/* Posizione coda */}
+                      <span style={{ fontSize: 9, fontWeight: 800, color: col,
+                        background: col + '18', padding: '2px 6px', borderRadius: 8, flexShrink: 0 }}>
+                        {idx + 1}°
+                      </span>
+                      {/* Pallet num */}
+                      <span style={{ fontSize: 13, fontWeight: 900, color: col, minWidth: 24 }}>P{p.numero}</span>
+                      {/* Nome progetto */}
+                      <span style={{ fontSize: 12, fontWeight: 700, color: '#0d2d5e',
+                        fontFamily: 'monospace', flex: 1 }}>{p.progetto_nome}</span>
+                      {/* Badge stato */}
+                      {isLav && <span style={{ fontSize: 10, fontWeight: 700, color: '#1D5FAD',
+                        background: '#dbeafe', padding: '1px 6px', borderRadius: 5, flexShrink: 0 }}>LIVE</span>}
+                      {nInLav > 0 && !isLav && <span style={{ fontSize: 10, color: '#1D5FAD',
+                        background: '#eff6ff', padding: '1px 6px', borderRadius: 5, flexShrink: 0 }}>
+                        {nInLav} lav.</span>}
+                      {nInMain > 0 && <span style={{ fontSize: 10, color: '#92400e',
+                        background: '#fef3c7', padding: '1px 6px', borderRadius: 5, flexShrink: 0 }}>
+                        {nInMain} coda</span>}
+                      {/* Espandi / Rimuovi */}
+                      {hasPgm && <span style={{ fontSize: 11, color: '#94a3b8', flexShrink: 0 }}>
+                        {espanso ? '▴' : '▾'}
+                      </span>}
+                      <button onClick={e => { e.stopPropagation(); salvaCoda(codaOrdine.filter(n => n !== p.numero)) }}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer',
+                          color: '#94a3b8', fontSize: 14, lineHeight: 1, padding: '0 2px', flexShrink: 0 }}>✕</button>
+                    </div>
+
+                    {/* Programmi espansi inline */}
+                    {espanso && hasPgm && (
+                      <div style={{ borderTop: `1px solid ${col}22`, background: '#fff',
+                        padding: '6px 10px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        {pgmData.programmi.map(pgm => {
+                          const checked = sel.has(pgm.id)
+                          const isInLav = pgm.stato === 'in_lavorazione'
+                          return (
+                            <div key={pgm.id}
+                              onClick={() => togglePgm(p.numero, pgm.id)}
+                              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 8px',
+                                borderRadius: 6, cursor: 'pointer', userSelect: 'none',
+                                background: checked ? '#dcfce7' : isInLav ? '#eff6ff' : 'transparent',
+                                border: `1px solid ${checked ? '#166534' : isInLav ? '#1D5FAD' : '#e2e8f0'}`,
+                                transition: 'all 0.1s' }}>
+                              <input type='checkbox' checked={checked}
+                                onChange={() => togglePgm(p.numero, pgm.id)}
+                                onClick={e => e.stopPropagation()}
+                                style={{ accentColor: '#166534', cursor: 'pointer', width: 13, height: 13, flexShrink: 0 }} />
+                              <span style={{ fontSize: 9, fontWeight: 800, padding: '1px 4px', borderRadius: 3,
+                                flexShrink: 0,
+                                background: isInLav ? '#1D5FAD' : '#fef3c7',
+                                color: isInLav ? '#fff' : '#92400e' }}>
+                                {isInLav ? '⚙' : '📋'}
+                              </span>
+                              <span style={{ fontSize: 11, fontWeight: 700, color: col,
+                                fontFamily: 'monospace', minWidth: 28 }}>{pgm.numPgm}</span>
+                              <span style={{ fontSize: 11, fontFamily: 'monospace', color: '#1e293b',
+                                flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {pgm.utensile || '—'}
+                              </span>
+                              <span style={{ fontSize: 10, color: '#94a3b8', fontFamily: 'monospace',
+                                flexShrink: 0, maxWidth: 120, overflow: 'hidden',
+                                textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {(pgm.filename || '').replace('.MPF', '')}
+                              </span>
+                              {pgm.tempoStimato && (
+                                <span style={{ fontSize: 10, color: '#475569', flexShrink: 0 }}>⏱{pgm.tempoStimato}m</span>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
             </div>
+
             {/* Pallet fuori coda */}
             {fuoriCodaList.length > 0 && (
-              <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginTop: 10,
+                paddingTop: 10, borderTop: '1px solid #e2e8f0' }}>
                 <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 700, letterSpacing: '0.06em' }}>+ AGGIUNGI:</span>
                 {fuoriCodaList.map(p => (
                   <button key={p.numero}
@@ -958,146 +1055,13 @@ export default function CodaLavorazione() {
           </div>
         )}
 
-        {/* ── Programmi in coda di esecuzione ─────────────────────── */}
-        {(() => {
-          // Pallet con programmi in_main o in_lavorazione, nell'ordine della coda
-          const ordineEffettivo = codaOrdine.length > 0
-            ? codaOrdine
-            : pallets.filter(p => progettiPallet[p.id]).map(p => p.id)
-          const blocchi = ordineEffettivo
-            .map(n => pgmInMacchina[n])
-            .filter(d => d?.programmi?.length > 0)
-          if (!blocchi.length) return null
-
-          const totPgm    = blocchi.reduce((a, b) => a + b.programmi.length, 0)
-          const totInLav  = blocchi.reduce((a, b) => a + b.programmi.filter(p => p.stato === 'in_lavorazione').length, 0)
-          const totInMain = blocchi.reduce((a, b) => a + b.programmi.filter(p => p.stato === 'in_main').length, 0)
-          const totSel    = Object.values(pgmSelezionati).reduce((acc, s) => acc + (s?.size || 0), 0)
-
-          return (
-            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '12px 16px' }}>
-              {/* Header */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
-                <span style={{ fontSize: 13, fontWeight: 800, color: '#0d2d5e' }}>⚙ CODA PROGRAMMI</span>
-                <span style={{ fontSize: 11, color: '#94a3b8' }}>{totPgm} programmi</span>
-                {totInLav > 0 && (
-                  <span style={{ fontSize: 10, fontWeight: 700, color: '#1D5FAD',
-                    background: '#dbeafe', padding: '2px 8px', borderRadius: 6 }}>
-                    {totInLav} in lavorazione
-                  </span>
-                )}
-                {totInMain > 0 && (
-                  <span style={{ fontSize: 10, fontWeight: 700, color: '#92400e',
-                    background: '#fef3c7', padding: '2px 8px', borderRadius: 6 }}>
-                    {totInMain} in coda
-                  </span>
-                )}
-                {totSel > 0 && (
-                  <button onClick={() => {
-                    Object.entries(pgmSelezionati).forEach(([n, s]) => {
-                      if (s?.size > 0) completaPgm(parseInt(n))
-                    })
-                  }}
-                    disabled={pgmSaving}
-                    style={{ marginLeft: 'auto', background: '#166534', border: 'none', borderRadius: 7,
-                      color: '#fff', fontWeight: 700, fontSize: 12, padding: '5px 14px', cursor: 'pointer' }}>
-                    ✓ Segna {totSel} completat{totSel === 1 ? 'o' : 'i'}
-                  </button>
-                )}
-              </div>
-
-              {/* Blocchi per progetto */}
-              {blocchi.map((d, bi) => {
-                const col = PAL_COLORS[(d.pallet - 1) % PAL_COLORS.length]
-                const sel = pgmSelezionati[d.pallet] || new Set()
-                const tuttiSel = d.programmi.every(p => sel.has(p.id))
-                const nInLav  = d.programmi.filter(p => p.stato === 'in_lavorazione').length
-                const nInMain = d.programmi.filter(p => p.stato === 'in_main').length
-                return (
-                  <div key={d.pallet} style={{ marginBottom: bi < blocchi.length - 1 ? 10 : 0 }}>
-                    {/* Header progetto */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6,
-                      padding: '4px 10px', background: col + '12', borderRadius: 7,
-                      borderLeft: `3px solid ${col}` }}>
-                      <input type='checkbox' checked={tuttiSel}
-                        onChange={() => {
-                          const newSel = tuttiSel ? new Set() : new Set(d.programmi.map(p => p.id))
-                          setPgmSelezionati(prev => ({ ...prev, [d.pallet]: newSel }))
-                        }}
-                        style={{ accentColor: col, cursor: 'pointer', width: 14, height: 14 }} />
-                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: col, flexShrink: 0 }} />
-                      <span style={{ fontSize: 12, fontWeight: 800, color: col }}>P{d.pallet} — {d.progetto.nome}</span>
-                      {nInLav > 0 && (
-                        <span style={{ fontSize: 10, fontWeight: 700, color: '#1D5FAD',
-                          background: '#dbeafe', padding: '1px 6px', borderRadius: 5 }}>
-                          {nInLav} in lavorazione
-                        </span>
-                      )}
-                      {nInMain > 0 && (
-                        <span style={{ fontSize: 10, fontWeight: 700, color: '#92400e',
-                          background: '#fef3c7', padding: '1px 6px', borderRadius: 5 }}>
-                          {nInMain} in coda
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Lista programmi */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, paddingLeft: 8 }}>
-                      {d.programmi.map(pgm => {
-                        const checked   = sel.has(pgm.id)
-                        const isInLav   = pgm.stato === 'in_lavorazione'
-                        const rowBg     = checked ? '#dcfce7' : isInLav ? '#eff6ff' : '#f8fafc'
-                        const rowBorder = checked ? '#166534' : isInLav ? '#1D5FAD' : '#e2e8f0'
-                        return (
-                          <div key={pgm.id}
-                            onClick={() => togglePgm(d.pallet, pgm.id)}
-                            style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 8px',
-                              borderRadius: 7, cursor: 'pointer', userSelect: 'none',
-                              background: rowBg, border: `1px solid ${rowBorder}`,
-                              transition: 'all 0.12s' }}>
-                            <input type='checkbox' checked={checked} onChange={() => togglePgm(d.pallet, pgm.id)}
-                              onClick={e => e.stopPropagation()}
-                              style={{ accentColor: '#166534', cursor: 'pointer', width: 14, height: 14, flexShrink: 0 }} />
-                            {/* Badge stato */}
-                            <span style={{ fontSize: 9, fontWeight: 800, flexShrink: 0, padding: '1px 5px',
-                              borderRadius: 4, letterSpacing: '0.04em',
-                              background: isInLav ? '#1D5FAD' : '#fef3c7',
-                              color: isInLav ? '#fff' : '#92400e' }}>
-                              {isInLav ? '⚙ LAV.' : '📋 CODA'}
-                            </span>
-                            {/* Numero programma */}
-                            <span style={{ fontSize: 12, fontWeight: 800, color: col,
-                              fontFamily: 'monospace', minWidth: 32 }}>{pgm.numPgm}</span>
-                            {/* Utensile */}
-                            <span style={{ fontSize: 11, fontWeight: 600, color: '#1e293b',
-                              fontFamily: 'monospace', flex: 1, overflow: 'hidden',
-                              textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {pgm.utensile || '—'}
-                            </span>
-                            {/* Nome file */}
-                            <span style={{ fontSize: 10, color: '#94a3b8', fontFamily: 'monospace',
-                              flexShrink: 0, maxWidth: 160, overflow: 'hidden',
-                              textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {pgm.filename}
-                            </span>
-                            {pgm.tempoStimato && (
-                              <span style={{ fontSize: 10, fontWeight: 700, color: '#475569',
-                                flexShrink: 0, whiteSpace: 'nowrap' }}>⏱ {pgm.tempoStimato}m</span>
-                            )}
-                            {pgm.tempoInizio && (
-                              <span style={{ fontSize: 10, color: '#0d2d5e', fontFamily: 'monospace',
-                                flexShrink: 0, whiteSpace: 'nowrap' }}>▶ {pgm.tempoInizio}</span>
-                            )}
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )
-        })()}
+        {/* Nessun progetto */}
+        {assegnatiCoda.length === 0 && (
+          <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12,
+            padding: '32px 20px', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
+            Nessun progetto in coda — assegna un progetto a un pallet e genera il MAIN
+          </div>
+        )}
 
       </div>
     </div>

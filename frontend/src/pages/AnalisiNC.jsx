@@ -348,117 +348,108 @@ export default function AnalisiNC() {
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 0, padding: '12px 20px 0' }}>
 
-      {/* ── Top bar: ordine flow ── */}
-      {/* SX: Aggiungi | Nome | Fase(opz.) | Genera MAIN | Reset | banner stato */}
-      {/* DX: Verifica | Invia tutto | Solo MAIN */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 0 10px', flexShrink: 0 }}>
+      {/* ── Top bar: fasi progressive ── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 0 8px', flexShrink: 0 }}>
 
-        {/* 1. Aggiungi file */}
-        <div onClick={() => inputRef.current?.click()}
-          onDragOver={e => { e.preventDefault(); setDragging(true) }}
-          onDragLeave={() => setDragging(false)}
-          onDrop={e => { e.preventDefault(); setDragging(false); addFiles(e.dataTransfer.files) }}
-          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px',
-            border: `1.5px dashed ${dragging ? 'var(--cyan)' : 'var(--border-bright)'}`,
-            borderRadius: 7, cursor: 'pointer',
-            background: dragging ? 'var(--cyan-glow)' : 'var(--navy-700)',
-            transition: 'all 0.15s', flexShrink: 0 }}>
-          <input ref={inputRef} type="file" accept=".mpf,.nc,.spf" multiple style={{ display: 'none' }}
-            onChange={e => { addFiles(e.target.files); e.target.value = '' }} />
-          <span style={{ fontSize: 13, fontWeight: 700, color: 'white' }}>+ Aggiungi file</span>
+        {/* Fase 1 — Carica */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+          <div style={{ width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
+            background: done.length > 0 ? '#15803d' : '#1D5FAD',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 10, fontWeight: 800, color: '#fff' }}>
+            {done.length > 0 ? '✓' : '1'}
+          </div>
+          <div onClick={() => inputRef.current?.click()}
+            onDragOver={e => { e.preventDefault(); setDragging(true) }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={e => { e.preventDefault(); setDragging(false); addFiles(e.dataTransfer.files) }}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px',
+              border: `1.5px dashed ${dragging ? 'var(--cyan)' : done.length > 0 ? 'rgba(21,128,61,0.4)' : 'var(--border-bright)'}`,
+              borderRadius: 7, cursor: 'pointer',
+              background: dragging ? 'var(--cyan-glow)' : done.length > 0 ? 'rgba(21,128,61,0.08)' : 'var(--navy-700)',
+              transition: 'all 0.15s' }}>
+            <input ref={inputRef} type="file" accept=".mpf,.nc,.spf" multiple style={{ display: 'none' }}
+              onChange={e => { addFiles(e.target.files); e.target.value = '' }} />
+            <span style={{ fontSize: 12, fontWeight: 700,
+              color: done.length > 0 ? '#15803d' : 'white' }}>
+              {done.length > 0 ? `${done.length} file` : '+ File NC'}
+            </span>
+          </div>
         </div>
 
-        {/* 2. Nome cartella */}
-        <input value={nomeCartella} onChange={e => {
-                  const v = e.target.value
-                  setNomeCartella(v)
-                  setMainError(null)
-                  // Auto-split: 4297_0005 → commessa=4297, posizione=0005
-                  const parts = v.trim().split('_')
-                  if (parts.length >= 2 && /^\d+$/.test(parts[0])) {
-                    setCommessa(parts[0])
-                    setPosizione(parts[1])
-                  }
-                }}
-          placeholder="Nome cartella"
-          style={{ ...inputStyle, width: 120, fontWeight: 600, fontSize: 12 }}
-          onFocus={e => e.target.style.borderColor = 'var(--cyan)'}
-          onBlur={e => e.target.style.borderColor = 'var(--border)'} />
+        <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>›</span>
 
-        {/* 3. Genera MAIN */}
-        <button onClick={handleGeneraMain}
-          disabled={mainBusy || !done.length || !nomeCartella.trim() || !percorso}
-          style={{ padding: '7px 14px', borderRadius: 7, fontSize: 12, fontWeight: 700,
-            cursor: (mainBusy || !done.length || !nomeCartella.trim() || !percorso) ? 'not-allowed' : 'pointer',
-            background: (!done.length || !nomeCartella.trim() || !percorso) ? 'var(--bg-hover)' : 'var(--navy-700)',
-            border: 'none', color: (!done.length || !nomeCartella.trim() || !percorso) ? 'var(--text-dim)' : 'white',
-            flexShrink: 0 }}>
-          {mainBusy ? '⏳ ...' : '📄 Genera MAIN'}
-        </button>
+        {/* Fase 2 — Nome + MAIN */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+          <div style={{ width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
+            background: mainGeneratoFile ? '#15803d' : done.length > 0 ? '#1D5FAD' : '#475569',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 10, fontWeight: 800, color: '#fff' }}>
+            {mainGeneratoFile ? '✓' : '2'}
+          </div>
+          <input value={nomeCartella} onChange={e => {
+              const v = e.target.value; setNomeCartella(v); setMainError(null)
+              const parts = v.trim().split('_')
+              if (parts.length >= 2 && /^\d+$/.test(parts[0])) { setCommessa(parts[0]); setPosizione(parts[1]) }
+            }}
+            placeholder="Commessa (es. 4297_0005)"
+            style={{ ...inputStyle, width: 130, fontWeight: 600, fontSize: 12,
+              borderColor: mainGeneratoFile ? 'rgba(21,128,61,0.4)' : 'var(--border)' }}
+            onFocus={e => e.target.style.borderColor = 'var(--cyan)'}
+            onBlur={e => e.target.style.borderColor = mainGeneratoFile ? 'rgba(21,128,61,0.4)' : 'var(--border)'} />
+          <button onClick={handleGeneraMain}
+            disabled={mainBusy || !done.length || !nomeCartella.trim() || !percorso}
+            style={{ padding: '6px 12px', borderRadius: 7, fontSize: 12, fontWeight: 700, flexShrink: 0,
+              cursor: (mainBusy || !done.length || !nomeCartella.trim() || !percorso) ? 'not-allowed' : 'pointer',
+              background: mainGeneratoFile ? 'rgba(21,128,61,0.15)' : (!done.length || !nomeCartella.trim() || !percorso) ? 'var(--bg-hover)' : '#D4700A',
+              border: mainGeneratoFile ? '1px solid rgba(21,128,61,0.3)' : 'none',
+              color: mainGeneratoFile ? '#15803d' : (!done.length || !nomeCartella.trim() || !percorso) ? 'var(--text-dim)' : 'white' }}>
+            {mainBusy ? '⏳' : mainGeneratoFile ? `✓ ${mainGeneratoFile.name}` : '📄 Genera MAIN'}
+          </button>
+        </div>
 
-        {/* 5. Reset */}
-        {entries.length > 0 && (
-          <button onClick={clearAll} style={{ ...btnGhost, fontSize: 12 }}>Reset</button>
-        )}
+        <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>›</span>
 
-        {/* Spinner */}
+        {/* Fase 3 — Invia */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+          <div style={{ width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
+            background: invioStatus?.type === 'ok' ? '#15803d' : fileDaInviare.length > 0 ? '#1D5FAD' : '#475569',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 10, fontWeight: 800, color: '#fff' }}>
+            {invioStatus?.type === 'ok' ? '✓' : '3'}
+          </div>
+          {/* Pulsante principale: Verifica+Invia in uno */}
+          {!checkResult?.reachable ? (
+            <button onClick={doCheck}
+              disabled={checking || sending || !fileDaInviare.length || !progetto}
+              style={{ padding: '6px 14px', borderRadius: 7, fontSize: 12, fontWeight: 700,
+                cursor: (checking || !fileDaInviare.length || !progetto) ? 'not-allowed' : 'pointer',
+                background: fileDaInviare.length && progetto ? 'var(--navy-700)' : 'var(--bg-hover)',
+                border: 'none', color: fileDaInviare.length && progetto ? 'white' : 'var(--text-dim)' }}>
+              {checking ? '⏳ Verifica...' : '🔍 Verifica connessione'}
+            </button>
+          ) : (
+            <button onClick={doSendBatch}
+              disabled={sending || !fileDaInviare.length}
+              style={{ padding: '6px 14px', borderRadius: 7, fontSize: 12, fontWeight: 700,
+                cursor: sending ? 'not-allowed' : 'pointer',
+                background: sending ? 'var(--bg-hover)' : '#0369a1',
+                border: 'none', color: sending ? 'var(--text-dim)' : 'white' }}>
+              {sending ? '⏳ Invio...' : `⚡ Invia alla macchina (${fileDaInviare.length} file)`}
+            </button>
+          )}
+        </div>
+
+        {/* Spinner analisi */}
         {analyzing && <span style={{ fontSize: 11, color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}><Spinner small /> Analisi...</span>}
 
-        {/* Banner stato */}
-        {done.length > 0 && !analyzing && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-            {tuttoOk
-              ? <span style={{ fontSize: 11, fontWeight: 700, color: '#15803d' }}>✅ Tutti i {totUtensili} utensili OK</span>
-              : <span style={{ fontSize: 11, fontWeight: 700, color: '#dc2626' }}>
-                  {allMancanti.length > 0 && `✕ ${allMancanti.length} mancanti`}
-                  {allMancanti.length > 0 && allDisab.length > 0 && '  '}
-                  {allDisab.length > 0 && `⚠ ${allDisab.length} disab.`}
-                  <span style={{ color: 'var(--text-dim)', fontWeight: 400, marginLeft: 6 }}>/ {totUtensili}</span>
-                </span>
-            }
-            {fonteDb && <span style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>{fonteDb}</span>}
-          </div>
-        )}
-        {mainGeneratoFile && (
-          <span style={{ fontSize: 10, color: '#15803d', fontFamily: 'var(--font-mono)', flexShrink: 0 }}>✓ {mainGeneratoFile.name}</span>
+        {/* Reset */}
+        {entries.length > 0 && (
+          <button onClick={() => { clearAll(); setCtaStep(null) }} style={{ ...btnGhost, fontSize: 11, marginLeft: 4 }}>Reset</button>
         )}
 
-        {/* Spazio */}
-        <div style={{ flex: 1 }} />
-
-        {/* DESTRA: invio */}
-        <button onClick={doCheck} disabled={checking || sending || !fileDaInviare.length || !progetto}
-          style={{ padding: '7px 12px', borderRadius: 7, fontSize: 12, fontWeight: 600,
-            cursor: (checking || !fileDaInviare.length || !progetto) ? 'not-allowed' : 'pointer',
-            background: 'var(--bg-hover)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>
-          {checking ? '⏳' : '🔍'} Verifica
-        </button>
-        <button onClick={() => doSend(false)}
-          disabled={!checkResult?.reachable || sending || !fileDaInviare.length || !progetto}
-          style={{ padding: '7px 14px', borderRadius: 7, fontSize: 12, fontWeight: 700,
-            cursor: (!checkResult?.reachable || sending) ? 'not-allowed' : 'pointer',
-            background: checkResult?.reachable && !sending ? 'var(--navy-700)' : 'var(--bg-hover)',
-            border: 'none', color: checkResult?.reachable && !sending ? 'white' : 'var(--text-dim)' }}>
-          {sending ? '⏳' : '📤'} Invia tutto
-        </button>
-        <button onClick={doSendBatch}
-          disabled={!checkResult?.reachable || sending || !fileDaInviare.length || !progetto}
-          title="Invia tutti i file in una sola connessione — più veloce, con verifica per ogni file"
-          style={{ padding: '7px 14px', borderRadius: 7, fontSize: 12, fontWeight: 700,
-            cursor: (!checkResult?.reachable || sending) ? 'not-allowed' : 'pointer',
-            background: checkResult?.reachable && !sending ? '#0369a1' : 'var(--bg-hover)',
-            border: 'none', color: checkResult?.reachable && !sending ? 'white' : 'var(--text-dim)' }}>
-          {sending ? '⏳' : '⚡'} Batch
-        </button>
-        {mainGeneratoFile && (
-          <button onClick={() => doSend(true)} disabled={!checkResult?.reachable || sending || !progetto}
-            style={{ padding: '7px 14px', borderRadius: 7, fontSize: 12, fontWeight: 700,
-              cursor: (!checkResult?.reachable || sending) ? 'not-allowed' : 'pointer',
-              background: checkResult?.reachable && !sending ? 'var(--navy-700)' : 'var(--bg-hover)',
-              border: 'none', color: checkResult?.reachable && !sending ? 'white' : 'var(--text-dim)' }}>
-            📤 Solo MAIN
-          </button>
-        )}
+        {/* Fonte DB */}
+        {fonteDb && <span style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginLeft: 4 }}>{fonteDb}</span>}
       </div>
 
       {/* Status invio */}
@@ -560,12 +551,19 @@ export default function AnalisiNC() {
           <div style={{ flex: 1, minHeight: 160, background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
 
             {/* Header tabella */}
-            <div style={{ display: 'grid', gridTemplateColumns: '130px 1fr', padding: '6px 12px',
-              background: 'var(--bg-surface)', borderBottom: '1px solid var(--border)' }}>
-              {['STATO', 'UTENSILE'].map(h => (
-                <span key={h} style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-dim)',
-                  fontFamily: 'var(--font-mono)', letterSpacing: '0.08em' }}>{h}</span>
-              ))}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '6px 12px', background: 'var(--bg-surface)', borderBottom: '1px solid var(--border)' }}>
+              <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-dim)',
+                fontFamily: 'var(--font-mono)', letterSpacing: '0.08em' }}>UTENSILI</span>
+              {done.length > 0 && !analyzing && (
+                <span style={{ fontSize: 11, fontWeight: 700,
+                  color: tuttoOk ? '#15803d' : '#dc2626' }}>
+                  {tuttoOk
+                    ? `✓ tutti OK (${totUtensili})`
+                    : `${allMancanti.length > 0 ? `✕ ${allMancanti.length} mancanti` : ''}${allMancanti.length && allDisab.length ? '  ' : ''}${allDisab.length > 0 ? `⚠ ${allDisab.length} disab.` : ''}`
+                  }
+                </span>
+              )}
             </div>
 
             {/* Righe */}
@@ -575,36 +573,44 @@ export default function AnalisiNC() {
                   Aggiungi file NC per il confronto automatico
                 </div>
               )}
-              {/* Mancanti */}
+              {/* Mancanti — con bottone esplicito */}
               {allMancanti.map(alias => (
                 <div key={alias}
-                  onClick={() => openModal(alias)}
-                  title="Clicca per aggiungere a scaffale"
-                  style={{ display: 'grid', gridTemplateColumns: '130px 1fr', padding: '7px 12px',
-                    borderBottom: '1px solid var(--border)', cursor: 'pointer',
-                    background: 'rgba(220,38,38,0.03)' }}
-                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(220,38,38,0.08)'}
-                  onMouseLeave={e => e.currentTarget.style.background = 'rgba(220,38,38,0.03)'}>
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px',
+                    borderBottom: '1px solid var(--border)',
+                    background: 'rgba(220,38,38,0.04)' }}>
                   <StatoBadge stato="manca" />
-                  <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: '#dc2626', fontWeight: 600 }}>
-                    {alias} <span style={{ fontSize: 10, opacity: 0.6 }}>+ scaffale</span>
-                  </span>
+                  <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: '#dc2626',
+                    fontWeight: 600, flex: 1 }}>{alias}</span>
+                  <button
+                    onClick={() => openModal(alias)}
+                    style={{ flexShrink: 0, padding: '3px 10px', borderRadius: 5, fontSize: 11,
+                      fontWeight: 700, cursor: 'pointer',
+                      background: 'rgba(220,38,38,0.12)', border: '1px solid rgba(220,38,38,0.3)',
+                      color: '#dc2626', transition: 'all 0.12s' }}
+                    onMouseEnter={e => { e.currentTarget.style.background='rgba(220,38,38,0.22)' }}
+                    onMouseLeave={e => { e.currentTarget.style.background='rgba(220,38,38,0.12)' }}>
+                    + Scaffale
+                  </button>
                 </div>
               ))}
               {/* Disabilitati */}
               {allDisab.map(alias => (
-                <div key={alias} style={{ display: 'grid', gridTemplateColumns: '130px 1fr', padding: '7px 12px',
+                <div key={alias} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px',
                   borderBottom: '1px solid var(--border)', background: 'rgba(234,179,8,0.03)' }}>
                   <StatoBadge stato="disab" />
-                  <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: '#a16207' }}>{alias}</span>
+                  <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: '#a16207',
+                    flex: 1 }}>{alias}</span>
+                  <span style={{ fontSize: 10, color: '#a16207', opacity: 0.7 }}>disabilitato</span>
                 </div>
               ))}
               {/* Presenti */}
               {allPresenti.map(alias => (
-                <div key={alias} style={{ display: 'grid', gridTemplateColumns: '130px 1fr', padding: '7px 12px',
+                <div key={alias} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px',
                   borderBottom: '1px solid var(--border)' }}>
                   <StatoBadge stato="ok" />
-                  <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>{alias}</span>
+                  <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)',
+                    flex: 1 }}>{alias}</span>
                 </div>
               ))}
             </div>

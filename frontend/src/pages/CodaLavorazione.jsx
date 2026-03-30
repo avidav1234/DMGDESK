@@ -12,18 +12,28 @@ const STATI = {
 };
 const STATI_ORDER = ["VUOTO", "GREZZO", "FINITO", "GUASTO"];
 
-// Estrae commessa/posizione/fase dal path NC
+// Estrae commessa/posizione/fase/sequenza dal nome programma NC
+// Formato: 4297_0008_01_026.MPF
+//   4297 = commessa
+//   0008 = posizione
+//   01   = fase
+//   026  = numero programma in sequenza
 function parseProgram(path) {
-  if (!path) return null;
-  // Caso 1: path raw completo /_N_WKS_DIR/_N_4349_0221_WPD/_N_4349_0221_03_010_MPF
-  const m = path.match(/_N_(\d+)_(\d+)_WPD\/_N_\d+_\d+_(.+?)_MPF/);
-  if (m) return { commessa: m[1], posizione: m[2], fase: m[3], full: path };
-  // Caso 2: nome file già estratto es. "4348_0301_02_24.MPF"
-  const m2 = path.match(/^(\d+)_(\d+)_(.+?)\.MPF$/i);
-  if (m2) return { commessa: m2[1], posizione: m2[2], fase: m2[3], full: path };
-  // Caso 3: fallback generico — mostra tutto
-  const nome = path.replace(/\/_N_/g, '').replace(/_MPF$/,'').replace(/_/g,' ');
-  return { fase: nome, full: path };
+  if (!path) return null
+  // Rimuovi estensione e path
+  const nome = path.replace(/.*\//, '').replace(/\.MPF$/i, '').replace(/_MPF$/i, '')
+  // Formato standard: COMMESSA_POSIZIONE_FASE_SEQ (4 parti)
+  const p = nome.split('_')
+  if (p.length >= 4) {
+    return { commessa: p[0], posizione: p[1], fase: p[2], seq: p[3], full: nome }
+  }
+  if (p.length === 3) {
+    return { commessa: p[0], posizione: p[1], fase: p[2], seq: null, full: nome }
+  }
+  if (p.length === 2) {
+    return { commessa: p[0], posizione: p[1], fase: null, seq: null, full: nome }
+  }
+  return { commessa: nome, posizione: null, fase: null, seq: null, full: nome }
 }
 
 const REFRESH_MS = 5000;
@@ -653,21 +663,32 @@ export default function CodaLavorazione() {
           {/* Programma + utensile sulla stessa riga */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <div>
-              <div style={{ fontSize: 10, letterSpacing: 1, marginBottom: 4,
+              <div style={{ fontSize: 10, letterSpacing: 1, marginBottom: 6,
                 color: inLavorazione ? "#93c5fd" : "#94a3b8" }}>PROGRAMMA</div>
               {prog ? (
-                <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                  {(prog.commessa || prog.posizione) && (
-                    <div style={{ fontSize: 18, fontWeight: 800,
-                      color: inLavorazione ? "#ffffff" : "#0d2d5e" }}>
-                      {prog.commessa}{prog.posizione ? `_${prog.posizione}` : ""}
-                    </div>
-                  )}
-                  {prog.fase && (
-                    <div style={{ fontSize: 11, color: inLavorazione ? "#93c5fd" : "#64748b" }}>
-                      {prog.fase}
-                    </div>
-                  )}
+                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  {/* Nome completo su una riga */}
+                  <div style={{ fontSize: 13, fontWeight: 700, fontFamily: 'monospace',
+                    color: inLavorazione ? "#ffffff" : "#0d2d5e", letterSpacing: 0.5 }}>
+                    {prog.full}
+                  </div>
+                  {/* Dettaglio strutturato */}
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    {[
+                      { label: "COMM.", val: prog.commessa },
+                      { label: "POS.",  val: prog.posizione },
+                      { label: "FASE",  val: prog.fase },
+                      { label: "N°",    val: prog.seq },
+                    ].filter(x => x.val).map(x => (
+                      <div key={x.label} style={{ display: "flex", flexDirection: "column",
+                        alignItems: "center" }}>
+                        <span style={{ fontSize: 8, letterSpacing: 1,
+                          color: inLavorazione ? "#93c5fd" : "#94a3b8" }}>{x.label}</span>
+                        <span style={{ fontSize: 13, fontWeight: 700,
+                          color: inLavorazione ? "#ffffff" : "#0d2d5e" }}>{x.val}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               ) : (
                 <span style={{ fontSize: 13, color: inLavorazione ? "#4e7aad" : "#94a3b8" }}>—</span>

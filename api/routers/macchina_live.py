@@ -691,13 +691,19 @@ async def aggiorna_stati_da_log():
                             continue
                         fn = (pgm.get("filename") or "").upper().replace(".MPF","").strip()
                         if fn == tgt:
-                            # Programma attivo → in_lavorazione
-                            # Accetta da_fare e in_main (già inviato ma non ancora partito)
-                            if pgm.get("stato") in ("da_fare", "in_main"):
+                            # Log dice che questo programma sta girando → forza in_lavorazione
+                            # da qualsiasi stato tranne completato (non si torna indietro)
+                            stato_attuale = pgm.get("stato")
+                            if stato_attuale != "in_lavorazione" and stato_attuale != "completato":
                                 pgm["stato"] = "in_lavorazione"
                                 pgm["tempoInizio"] = pgm.get("tempoInizio") or now_str
                                 proj_dirty = True
                                 updates["in_macchina"] += 1
+                            elif stato_attuale == "in_lavorazione":
+                                # Già corretto — assicura tempoInizio sia valorizzato
+                                if not pgm.get("tempoInizio"):
+                                    pgm["tempoInizio"] = now_str
+                                    proj_dirty = True
                         else:
                             # Altro programma → se era in_lavorazione diventa completato
                             if pgm.get("stato") == "in_lavorazione":

@@ -497,6 +497,7 @@ async def aggiorna_stati_da_log():
     # Fonte 1 (priorità): pallet_attivo dal log — _N_PALLETn_MPF nelle ultime 20 righe
     # Fonte 2: prog_raw corrente contiene direttamente _N_PALLETn_MPF
     # Fonte 3: pallet già in_lavorazione nello stato salvato (persistenza)
+    #          → rimane finché non appare un nuovo PALLETn nel log
     # Fonte 4: pallet assegnato al progetto nei dati DMGDesk
     pallet_num = data.get("pallet_attivo")  # int 1-6 o None
 
@@ -526,6 +527,10 @@ async def aggiorna_stati_da_log():
             if pal.get("progetto_id") == progetto_attivo.get("id"):
                 pallet_num = pal.get("numero")
                 break
+
+    # Quando macchina si ferma → nessun pallet attivo (gestito da automazione 4)
+    if stato_pgm in (0, 5):
+        pallet_num = None
 
     updates["progetto_rilevato"] = progetto_attivo.get("name") if progetto_attivo else None
     updates["pallet_rilevato"]   = pallet_num

@@ -416,18 +416,84 @@ export default function Home(){
           <div style={{fontSize:10,fontWeight:800,letterSpacing:'0.1em',color:'#64748b',textTransform:'uppercase'}}>
             Metriche turno
           </div>
-          {[
-            {val:daFareTot,       label:'Da fare',         sub:`${projects.length} lavori attivi`, color:'#0d2d5e',bg:'#eff6ff'},
-            {val:inMacTot,        label:'In macchina',     sub:'programmi attivi',                 color:'#1D5FAD', bg:'#dbeafe'},
-            {val:completatiOggi,  label:'Completati oggi', sub:'nel turno corrente',               color:'#166534', bg:'#dcfce7'},
-            {val:critici,         label:'Critici',          sub:'scaduti o oggi',                  color:'#dc2626', bg:'#fef2f2'},
-          ].map(({val,label,sub,color,bg})=>(
-            <div key={label} style={{background:bg,borderRadius:10,padding:'12px 16px'}}>
-              <div style={{fontSize:32,fontWeight:900,color,lineHeight:1,marginBottom:2}}>{val}</div>
-              <div style={{fontSize:12,fontWeight:700,color,marginBottom:1}}>{label}</div>
-              <div style={{fontSize:10,color,opacity:0.7}}>{sub}</div>
-            </div>
-          ))}
+
+          {/* Da fare con % completamento */}
+          {(()=>{
+            const totale = allPgm.length
+            const completatiTot = allPgm.filter(p=>p.stato==='completato').length
+            const pctTot = totale ? Math.round(completatiTot/totale*100) : 0
+            return (
+              <div style={{background:'#eff6ff',borderRadius:10,padding:'12px 16px'}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:2}}>
+                  <div style={{fontSize:32,fontWeight:900,color:'#0d2d5e',lineHeight:1}}>{daFareTot}</div>
+                  <div style={{fontSize:13,fontWeight:700,color:'#1D5FAD'}}>{pctTot}%</div>
+                </div>
+                <div style={{fontSize:12,fontWeight:700,color:'#0d2d5e',marginBottom:4}}>Da fare</div>
+                <div style={{height:4,background:'#bfdbfe',borderRadius:2,overflow:'hidden',marginBottom:4}}>
+                  <div style={{height:'100%',width:`${pctTot}%`,background:'#1D5FAD',borderRadius:2,transition:'width 0.4s'}}/>
+                </div>
+                <div style={{fontSize:10,color:'#1D5FAD',opacity:0.8}}>
+                  {completatiTot}/{totale} pgm · {projects.length} lavori
+                </div>
+              </div>
+            )
+          })()}
+
+          {/* In macchina con ritmo */}
+          {(()=>{
+            // Ritmo: completatiOggi / ore turno trascorse (stimiamo 8h turno dalle 06:00)
+            const ora = now.getHours()
+            const oreTurno = Math.max(0.5, ora >= 6 ? ora - 6 : ora + 18) // ore dall'inizio turno
+            const ritmo = oreTurno > 0 ? (completatiOggi / oreTurno).toFixed(1) : '—'
+            return (
+              <div style={{background:'#dbeafe',borderRadius:10,padding:'12px 16px'}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:2}}>
+                  <div style={{fontSize:32,fontWeight:900,color:'#1D5FAD',lineHeight:1}}>{inMacTot}</div>
+                  {completatiOggi > 0 && <div style={{fontSize:12,fontWeight:700,color:'#1e40af'}}>~{ritmo}/h</div>}
+                </div>
+                <div style={{fontSize:12,fontWeight:700,color:'#1D5FAD',marginBottom:2}}>In macchina</div>
+                <div style={{fontSize:10,color:'#1D5FAD',opacity:0.8}}>
+                  {completatiOggi} completati oggi
+                </div>
+              </div>
+            )
+          })()}
+
+          {/* Completati oggi con stima fine */}
+          {(()=>{
+            const ora = now.getHours()
+            const oreTurno = Math.max(0.5, ora >= 6 ? ora - 6 : ora + 18)
+            const ritmo = completatiOggi > 0 ? completatiOggi / oreTurno : null
+            let stimaLabel = null
+            if (ritmo && daFareTot > 0) {
+              const oreRim = daFareTot / ritmo
+              if (oreRim < 1) stimaLabel = `~${Math.round(oreRim*60)}min`
+              else if (oreRim < 24) stimaLabel = `~${oreRim.toFixed(1)}h`
+              else stimaLabel = `~${Math.round(oreRim/24)}gg`
+            }
+            return (
+              <div style={{background:'#dcfce7',borderRadius:10,padding:'12px 16px'}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:2}}>
+                  <div style={{fontSize:32,fontWeight:900,color:'#166534',lineHeight:1}}>{completatiOggi}</div>
+                  {stimaLabel && <div style={{fontSize:11,fontWeight:700,color:'#15803d',textAlign:'right',lineHeight:1.3}}>
+                    fine<br/>{stimaLabel}
+                  </div>}
+                </div>
+                <div style={{fontSize:12,fontWeight:700,color:'#166534',marginBottom:2}}>Completati oggi</div>
+                <div style={{fontSize:10,color:'#166534',opacity:0.8}}>
+                  {stimaLabel ? `stima al ritmo attuale` : 'nel turno corrente'}
+                </div>
+              </div>
+            )
+          })()}
+
+          {/* Critici */}
+          <div style={{background:'#fef2f2',borderRadius:10,padding:'12px 16px'}}>
+            <div style={{fontSize:32,fontWeight:900,color:'#dc2626',lineHeight:1,marginBottom:2}}>{critici}</div>
+            <div style={{fontSize:12,fontWeight:700,color:'#dc2626',marginBottom:1}}>Critici</div>
+            <div style={{fontSize:10,color:'#dc2626',opacity:0.7}}>scaduti o in scadenza oggi</div>
+          </div>
+
         </div>
 
       </div>

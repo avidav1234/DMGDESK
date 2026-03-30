@@ -130,6 +130,8 @@ const STATO_CFG={
   in_macchina:  {label:'In Lavorazione', short:'In Lav.',   color:'#1e40af',  bg:'#dbeafe',  border:'#3b82f6',  dot:'⚙'},
   completato:   {label:'Completato',     short:'Fatto',     color:'#166534',  bg:'#dcfce7',  border:'#166534',  dot:'✓'},
 }
+const _sc = (stato) => STATO_CFG[stato] || STATO_CFG.da_fare
+const _scNext = (stato) => STATO_CFG[STATO_NEXT[stato] || 'da_fare'] || STATO_CFG.da_fare
 const OPERATORI=['I.Dodon','Operatore 2','Operatore 3']
 const PRIORITY={
   alta: {label:'Alta', color:'#dc2626',bg:'#fef2f2',dot:'🔴'},
@@ -163,7 +165,7 @@ function ProgramRow({pgm,gruppo,onStato,onOperatore,onTempo,onRemove,toolStatus,
   const[expanded,setExpanded]=useState(false)
   const[editTempo,setEditTempo]=useState(pgm.tempoStimato||'')
   const[editingT,setEditingT]=useState(false)
-  const sc=STATO_CFG[pgm.stato]||STATO_CFG.da_fare
+  const sc=_sc(pgm.stato)
   const opClean=(pgm.tipoOp||'').replace(/[-–]\s*NESSUN TESTO\s*/gi,'').replace(/MISURAZIONE NEL PROCESSO[-–]?/gi,'MISURA ').trim()
   return(
     <div style={{borderBottom:`1px solid ${T.border}`,background:selected?'#EFF6FF':pgm.stato==='completato'?'#f0fdf4':['in_main','in_lavorazione','in_macchina'].includes(pgm.stato)?'#eff6ff':T.surface,opacity:pgm.stato==='completato'&&!selected?0.75:1,transition:'background 0.15s'}}>
@@ -175,7 +177,7 @@ function ProgramRow({pgm,gruppo,onStato,onOperatore,onTempo,onRemove,toolStatus,
             {selected&&<span style={{color:'#fff',fontSize:11,fontWeight:800,lineHeight:1}}>✓</span>}
           </div>
         </div>
-        <div onClick={()=>onStato(STATO_NEXT[pgm.stato])} title={`→ ${STATO_CFG[STATO_NEXT[pgm.stato]].label}`}
+        <div onClick={()=>onStato(STATO_NEXT[pgm.stato])} title={`→ ${_scNext(pgm.stato).label}`}
           style={{flexShrink:0,width:110,display:'flex',alignItems:'center',justifyContent:'center',gap:5,padding:'0 10px',cursor:'pointer',borderRight:`1px solid ${T.border}`,background:toolStatus==='mancante'?'#FEE2E2':toolStatus==='fin_vita'?'#FEF9C3':sc.bg,color:toolStatus==='mancante'?'#DC2626':toolStatus==='fin_vita'?'#D97706':sc.color,fontWeight:700,fontSize:12,userSelect:'none',alignSelf:'stretch',transition:'all 0.12s'}}>
           <span style={{fontSize:14}}>{sc.dot}</span>{sc.short}
         </div>

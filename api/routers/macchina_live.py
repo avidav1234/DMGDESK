@@ -692,15 +692,16 @@ async def aggiorna_stati_da_log():
                         fn = (pgm.get("filename") or "").upper().replace(".MPF","").strip()
                         if fn == tgt:
                             # Log dice che questo programma sta girando → forza in_lavorazione
-                            # da qualsiasi stato tranne completato (non si torna indietro)
-                            stato_attuale = pgm.get("stato")
-                            if stato_attuale != "in_lavorazione" and stato_attuale != "completato":
+                            # Il log è fonte di verità assoluta: se sta girando, è in_lavorazione
+                            # anche se era stato marcato completato per errore
+                            if pgm.get("stato") != "in_lavorazione":
                                 pgm["stato"] = "in_lavorazione"
                                 pgm["tempoInizio"] = pgm.get("tempoInizio") or now_str
+                                pgm["tempoFine"]   = None  # annulla eventuale fine errata
                                 proj_dirty = True
                                 updates["in_macchina"] += 1
-                            elif stato_attuale == "in_lavorazione":
-                                # Già corretto — assicura tempoInizio sia valorizzato
+                            else:
+                                # Già in_lavorazione — assicura tempoInizio valorizzato
                                 if not pgm.get("tempoInizio"):
                                     pgm["tempoInizio"] = now_str
                                     proj_dirty = True

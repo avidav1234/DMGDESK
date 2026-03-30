@@ -547,11 +547,30 @@ async def aggiorna_stati_da_log():
                 pallet_num = pal.get("numero")
                 break
 
-    # Fonte 4: pallet assegnato al progetto
+    # Fonte 4: pallet assegnato al progetto (per id o per nome progetto)
     if not pallet_num and progetto_attivo:
+        proj_id   = progetto_attivo.get("id")
+        proj_nome = _norm_nome(progetto_attivo.get("name") or "")
         for pal in pallets:
-            if pal.get("progetto_id") == progetto_attivo.get("id"):
-                pallet_num = pal.get("numero")
+            if pal.get("progetto_id") == proj_id:
+                pallet_num = pal.get("numero"); break
+            pal_nome = _norm_nome(pal.get("progetto_nome") or "")
+            if pal_nome and pal_nome == proj_nome:
+                pallet_num = pal.get("numero"); break
+
+    # Fonte 5: cerca il pallet che ha questo progetto assegnato cercando
+    # tra tutti i progetti quale pallet ha progetto_id = progetto_attivo.id
+    # Già fatto sopra — se ancora None, cerca per nome del progetto in tutti i pallet
+    if not pallet_num and mpf_progetto:
+        mp_norm = _norm_nome(mpf_progetto)
+        for pal in pallets:
+            # Cerca nei dati del pallet il nome del progetto assegnato
+            for key in ["progetto_nome", "progetto_id"]:
+                v = _norm_nome(str(pal.get(key) or ""))
+                if v and v == mp_norm:
+                    pallet_num = pal.get("numero")
+                    break
+            if pallet_num:
                 break
 
     # Quando macchina si ferma → nessun pallet attivo (gestito da automazione 4)
@@ -560,6 +579,11 @@ async def aggiorna_stati_da_log():
 
     updates["progetto_rilevato"] = progetto_attivo.get("name") if progetto_attivo else None
     updates["pallet_rilevato"]   = pallet_num
+    updates["_debug"] = {
+        "wpd_nome": wpd_nome, "mpf_progetto": mpf_progetto,
+        "pallet_num": pallet_num, "stato_pgm": stato_pgm,
+        "mpf_filename": mpf_filename,
+    }
 
     # ── Automazione 1 e 4: stato pallet ──────────────────────────────────
     # Il log è la fonte di verità assoluta:

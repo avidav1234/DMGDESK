@@ -2352,6 +2352,8 @@ export default function Progetti(){
   const importRef=useRef(null)
   const saveTimer=useRef(null)
   const autoBackupTimer=useRef(null)
+  const isSaving=useRef(false)          // lock: true durante debounce+save+grace period
+  const writeLockTimer=useRef(null)     // timer per rilasciare il lock dopo il salvataggio
 
   // ── Carica ──────────────────────────────────────────────────────────────────
   const load=useCallback(async()=>{
@@ -2380,22 +2382,36 @@ export default function Progetti(){
 
   // Polling leggero: ricarica solo i progetti (non deliveries) ogni 8s per sync col desktop
   const silentRefresh=useCallback(async()=>{
+    // Non sovrascrivere mentre l'utente sta modificando e salvando
+    if(isSaving.current) return
     try{
       const r=await fetch(API+'/')
       if(!r.ok) return
+      // Ricontrolla dopo la fetch — potrebbe essere partita una modifica nel frattempo
+      if(isSaving.current) return
       const d=await r.json()
       const projs=(d.projects||[]).map(p=>({pallet_assegnato:null,...p}))
-      // Merge: aggiorna solo i progetti non in editing (nessun selectedId attivo)
       setProjects(curr=>{
-        // Confronta per aggiornamento selettivo — non sovrascrive se uguale
-        const hasChanges=projs.some(np=>{
-          const op=curr.find(p=>p.id===np.id)
-          return op&&JSON.stringify(op.steps)!==JSON.stringify(np.steps)
+        // Merge chirurgico: aggiorna solo i progetti che il server ha cambiato
+        // e che NON sono selezionati (aperti in edit dall'utente)
+        let changed=false
+        const next=curr.map(cp=>{
+          const sp=projs.find(p=>p.id===cp.id)
+          if(!sp) return cp
+          // Non toccare il progetto aperto (selectedId) — l'utente potrebbe star editando
+          if(cp.id===selectedId) return cp
+          // Aggiorna solo se il server ha una versione diversa
+          if(JSON.stringify(cp.steps)!==JSON.stringify(sp.steps)){
+            changed=true
+            return sp
+          }
+          return cp
         })
-        return hasChanges ? projs : curr
+        return changed ? next : curr
       })
     }catch{}
-  },[])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[selectedId])
   useEffect(()=>{
     load()
     function caricaPalletDisp(){
@@ -2448,6 +2464,9 @@ export default function Progetti(){
 
   // ── Salva progetti (debounced) ───────────────────────────────────────────────
   const persistProjects=useCallback((projs)=>{
+    // Attiva il lock immediatamente al primo click — il refresh non sovrascriverà
+    isSaving.current=true
+    clearTimeout(writeLockTimer.current)
     clearTimeout(saveTimer.current)
     saveTimer.current=setTimeout(async()=>{
       try{
@@ -2456,7 +2475,11 @@ export default function Progetti(){
           await fetch(`${API}/${p.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({data:p})})
         }
         setLastSavedProj(nowStr())
-      }catch{}
+      }catch{}finally{
+        // Grace period: mantieni il lock 3s dopo il salvataggio per evitare
+        // che il silentRefresh immediatamente successivo sovrascriva
+        writeLockTimer.current=setTimeout(()=>{ isSaving.current=false },3000)
+      }
     },800)
   },[])
 

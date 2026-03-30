@@ -1,5 +1,5 @@
-// Home.jsx — Cruscotto turno
-import { useState, useEffect, useRef } from 'react'
+// Home.jsx — Cruscotto turno (redesign V2)
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 function daysUntil(dateStr){
@@ -25,7 +25,7 @@ export default function Home(){
   const [pallet,    setPallet]    = useState([])
   const [setup,     setSetup]     = useState({})
   const [sessLive,  setSessLive]  = useState(null)
-  const [tickSec,   setTickSec]   = useState(0)   // tick locale ogni 1s
+  const [tickSec,   setTickSec]   = useState(0)
   const [loading,   setLoading]   = useState(true)
 
   useEffect(()=>{
@@ -44,238 +44,241 @@ export default function Home(){
     const t=setInterval(()=>
       fetch('/api/pallet/').then(r=>r.ok?r.json():{pallet:[]}).then(d=>setPallet(d.pallet||[]))
     ,15000)
-    // Sessione live: aggiorna ogni 10s per il timer
-    const fetchSessLive = () =>
+    const fetchSessLive=()=>
       fetch('/api/report/sessione-live').then(r=>r.ok?r.json():null).then(d=>setSessLive(d)).catch(()=>{})
     fetchSessLive()
-    const t2 = setInterval(fetchSessLive, 10000)
-    // Ticker locale ogni 1s — aggiorna i timer senza aspettare il polling
-    const t3 = setInterval(()=>setTickSec(s=>s+1), 1000)
+    const t2=setInterval(fetchSessLive,10000)
+    const t3=setInterval(()=>setTickSec(s=>s+1),1000)
     return()=>{clearInterval(t);clearInterval(t2);clearInterval(t3)}
   },[])
 
-  const now   = new Date()
-  const DAYS  = ['Domenica','Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato']
-  const MONTHS= ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre']
+  const now    = new Date()
+  const DAYS   = ['Domenica','Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato']
+  const MONTHS = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre']
   const dayLabel = `${DAYS[now.getDay()]} ${now.getDate()} ${MONTHS[now.getMonth()]} ${now.getFullYear()}`
 
-  // ── Pallet helpers ──────────────────────────────────────────────────────
+  // ── Helpers ──────────────────────────────────────────────────────────────
   function palletInfo(num){
-    const pal = pallet.find(p=>p.numero===num)
+    const pal=pallet.find(p=>p.numero===num)
     if(!pal?.progetto_id) return null
-    const proj = projects.find(p=>p.id===pal.progetto_id)
+    const proj=projects.find(p=>p.id===pal.progetto_id)
     if(!proj) return null
-    const pgms = (proj.steps||[]).flatMap(s=>(s.tasks||[])
+    const pgms=(proj.steps||[]).flatMap(s=>(s.tasks||[])
       .filter(t=>t.text?.trim().toLowerCase()==='fresatura')
       .flatMap(t=>(t.programs||[]).filter(pg=>pg.tipoGruppo!=='ipm')))
-    const tot  = pgms.length
-    const done = pgms.filter(p=>p.stato==='completato').length
-    const pct  = tot?Math.round(done/tot*100):0
-    return {proj, pal, pct, done, tot,
-      daFare:  pgms.filter(p=>p.stato==='da_fare').length,
-      inMac:   pgms.filter(p=>['in_macchina','in_main','in_lavorazione'].includes(p.stato)).length}
+    const tot=pgms.length
+    const done=pgms.filter(p=>p.stato==='completato').length
+    const pct=tot?Math.round(done/tot*100):0
+    return {proj,pal,pct,done,tot,
+      daFare:pgms.filter(p=>p.stato==='da_fare').length,
+      inMac:pgms.filter(p=>['in_macchina','in_main','in_lavorazione'].includes(p.stato)).length}
   }
 
   function palletColors(num){
-    const pal = pallet.find(p=>p.numero===num)
-    const stato = (pal?.stato||'').toLowerCase().replace('_',' ')
-    const info  = palletInfo(num)
-    if(stato==='in lavorazione') return {bg:'#dbeafe',fg:'#0d2d5e',border:'#1D5FAD',label:'IN LAV.'}
-    if(info?.pct>=100||stato==='finito') return {bg:'#dcfce7',fg:'#14532d',border:'#16a34a',label:'FINITO'}
-    if(info) return {bg:'#fefce8',fg:'#854d0e',border:'#eab308',label:'GREZZO'}
-    return {bg:'#f1f5f9',fg:'#94a3b8',border:'#e2e8f0',label:'VUOTO'}
+    const pal=pallet.find(p=>p.numero===num)
+    const stato=(pal?.stato||'').toLowerCase().replace('_',' ')
+    const info=palletInfo(num)
+    // Controlla se ha scadenza critica
+    const proj=info?.proj
+    const del=proj?deliveries.find(d=>d.projectId===proj.id):null
+    const days=del?.dueDate&&!del.delivered?daysUntil(del.dueDate):null
+    const isScaduto=days!==null&&days<=0
+    if(stato==='in lavorazione') return {bg:'#dbeafe',fg:'#0d2d5e',border:'#1D5FAD',label:'LIVE',accent:'#1D5FAD'}
+    if(info?.pct>=100||stato==='finito') return {bg:'#dcfce7',fg:'#14532d',border:'#16a34a',label:'FINITO',accent:'#16a34a'}
+    if(isScaduto) return {bg:'#fef2f2',fg:'#991b1b',border:'#ef4444',label:'SCADUTO',accent:'#ef4444'}
+    if(info) return {bg:'#fefce8',fg:'#854d0e',border:'#eab308',label:'GREZZO',accent:'#eab308'}
+    return {bg:'#f8fafc',fg:'#94a3b8',border:'#e2e8f0',label:'VUOTO',accent:null}
   }
 
-  // ── Timer live calcolati dai timestamp (aggiornati ogni 1s da tickSec) ──
-  const durataSessioneLive = (() => {
+  // ── Timer live ───────────────────────────────────────────────────────────
+  void tickSec
+  const durataSessioneLive=(()=>{
     if(!sessLive?.attiva||!sessLive?.inizio_sessione) return null
-    try{
-      const diff = Math.floor((Date.now() - new Date(sessLive.inizio_sessione).getTime()) / 1000)
-      return diff >= 0 ? diff : null
-    }catch{ return null }
+    try{ const d=Math.floor((Date.now()-new Date(sessLive.inizio_sessione).getTime())/1000); return d>=0?d:null }catch{return null}
   })()
-  const durataProgrammaLive = (() => {
+  const durataProgrammaLive=(()=>{
     if(!sessLive?.attiva||!sessLive?.inizio_programma) return null
-    try{
-      const diff = Math.floor((Date.now() - new Date(sessLive.inizio_programma).getTime()) / 1000)
-      return diff >= 0 ? diff : null
-    }catch{ return null }
+    try{ const d=Math.floor((Date.now()-new Date(sessLive.inizio_programma).getTime())/1000); return d>=0?d:null }catch{return null}
   })()
-  // eslint-disable-next-line no-unused-vars
-  void tickSec // forza re-render ogni secondo
 
-  // ── Progetto IN LAVORAZIONE ─────────────────────────────────────────────
-  const palletLav    = pallet.find(p=>(p.stato||'').toLowerCase().replace('_',' ')==='in lavorazione')
-  const progettoLav  = palletLav?projects.find(p=>p.id===palletLav.progetto_id):null
-  const lavInfo      = progettoLav?palletInfo(palletLav.numero):null
+  // ── Pallet attivo ────────────────────────────────────────────────────────
+  const palletLav   = pallet.find(p=>(p.stato||'').toLowerCase().replace('_',' ')==='in lavorazione')
+  const progettoLav = palletLav?projects.find(p=>p.id===palletLav.progetto_id):null
+  const lavInfo     = progettoLav?palletInfo(palletLav.numero):null
+  const sessMatch   = sessLive?.attiva&&sessLive?.pallet===palletLav?.numero
 
-  // ── Metriche turno ──────────────────────────────────────────────────────
-  const allPgm   = projects.flatMap(p=>(p.steps||[]).flatMap(s=>(s.tasks||[])
+  // ── Metriche ─────────────────────────────────────────────────────────────
+  const allPgm=projects.flatMap(p=>(p.steps||[]).flatMap(s=>(s.tasks||[])
     .filter(t=>t.text?.trim().toLowerCase()==='fresatura')
     .flatMap(t=>(t.programs||[]).filter(pg=>pg.tipoGruppo!=='ipm'))))
-  const daFare   = allPgm.filter(p=>p.stato==='da_fare').length
-  const inMac    = allPgm.filter(p=>['in_macchina','in_main','in_lavorazione'].includes(p.stato)).length
-  const oggiStr  = now.toDateString()
-  const completatiOggi = allPgm.filter(p=>{
+  const daFareTot=allPgm.filter(p=>p.stato==='da_fare').length
+  const inMacTot =allPgm.filter(p=>['in_macchina','in_main','in_lavorazione'].includes(p.stato)).length
+  const oggiStr  =now.toDateString()
+  const completatiOggi=allPgm.filter(p=>{
     if(p.stato!=='completato'||!p.tempoFine) return false
-    try{
-      const raw=p.tempoFine; const parts=raw.split(' ')
-      const dp=parts[0].split('/'); const d=new Date(dp[2],dp[1]-1,dp[0])
-      return d.toDateString()===oggiStr
-    }catch{return false}
+    try{ const parts=p.tempoFine.split(' '); const dp=parts[0].split('/'); return new Date(dp[2],dp[1]-1,dp[0]).toDateString()===oggiStr }catch{return false}
   }).length
 
-  // ── Scadenze ────────────────────────────────────────────────────────────
-  const conScadenza = projects
-    .map(p=>({p, d:deliveries.find(d=>d.projectId===p.id), pNum:pallet.find(x=>x.progetto_id===p.id)?.numero}))
+  // ── Scadenze ─────────────────────────────────────────────────────────────
+  const conScadenza=projects
+    .map(p=>({p,d:deliveries.find(d=>d.projectId===p.id),pNum:pallet.find(x=>x.progetto_id===p.id)?.numero}))
     .filter(({d})=>d?.dueDate&&!d.delivered)
-    .map(({p,d,pNum})=>({p, days:daysUntil(d.dueDate), pNum}))
+    .map(({p,d,pNum})=>({p,days:daysUntil(d.dueDate),pNum}))
     .sort((a,b)=>a.days-b.days)
-  const critici = conScadenza.filter(x=>x.days!==null&&x.days<=0).length
+  const critici=conScadenza.filter(x=>x.days!==null&&x.days<=0).length
+  const scadutiCount=conScadenza.filter(x=>x.days!==null&&x.days<0).length
 
-  // ── Utensili con problemi ───────────────────────────────────────────────
-  const utensiliProblema = (()=>{
+  // ── Utensili problemi ────────────────────────────────────────────────────
+  const utensiliProblema=(()=>{
     const map={}
     ;(setup.non_utilizzati||[]).filter(u=>u.provenienza==='richiesto_da_progetto').forEach(u=>{
-      map[u.alias]={alias:u.alias,tipo:'mancante',label:'MANCANTE',color:'#dc2626',
-        bg:'#fef2f2',border:'#fca5a5',detail:(u.progetti||[]).map(r=>r.progetto).join(', ')}
+      map[u.alias]={alias:u.alias,tipo:'mancante',label:'MANCANTE',color:'#dc2626',bg:'#fef2f2',border:'#fca5a5',detail:(u.progetti||[]).map(r=>r.progetto).join(', ')}
     })
     ;(setup.da_montare||[]).forEach(u=>{
-      if(!map[u.alias]) map[u.alias]={alias:u.alias,tipo:'da_montare',label:'DA MONTARE',
-        color:'#d97706',bg:'#fffbeb',border:'#fcd34d',detail:`pos. ${u.posizione||'—'}`}
+      if(!map[u.alias]) map[u.alias]={alias:u.alias,tipo:'da_montare',label:'DA MONTARE',color:'#d97706',bg:'#fffbeb',border:'#fcd34d',detail:`pos. ${u.posizione||'—'}`}
     })
     ;(setup.fin_vita||[]).forEach(u=>{
       const pct=typeof u.life_percent==='number'?u.life_percent:null
-      if(!map[u.alias]) map[u.alias]={alias:u.alias,tipo:'fin_vita',
-        label:pct!==null?`${pct.toFixed(0)}%`:'FINE VITA',
-        color:'#c2410c',bg:'#fff7ed',border:'#fdba74',detail:`pos. ${u.posizione||'—'}`}
+      if(!map[u.alias]) map[u.alias]={alias:u.alias,tipo:'fin_vita',label:pct!==null?`${pct.toFixed(0)}%`:'FINE VITA',color:'#c2410c',bg:'#fff7ed',border:'#fdba74',detail:`pos. ${u.posizione||'—'}`}
     })
     ;(setup.previsione_vita?.utensili_critici||[]).forEach(u=>{
-      if(!map[u.alias]) map[u.alias]={alias:u.alias,tipo:'rischio',
-        label:`pgm ${u.programma_critico||'?'}`,
-        color:'#7c3aed',bg:'#f5f3ff',border:'#c4b5fd',detail:u.progetto||''}
+      if(!map[u.alias]) map[u.alias]={alias:u.alias,tipo:'rischio',label:`pgm ${u.programma_critico||'?'}`,color:'#7c3aed',bg:'#f5f3ff',border:'#c4b5fd',detail:u.progetto||''}
     })
     return Object.values(map).sort((a,b)=>({mancante:0,da_montare:1,fin_vita:2,rischio:3}[a.tipo]||9)-({mancante:0,da_montare:1,fin_vita:2,rischio:3}[b.tipo]||9))
   })()
 
   if(loading) return(
     <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',
-      background:'#eef2f7',fontSize:14,color:'#94a3b8'}}>Caricamento…</div>
+      background:'#f0f4f8',fontSize:14,color:'#94a3b8'}}>Caricamento…</div>
   )
 
   return(
-    <div style={{flex:1,overflowY:'auto',background:'#eef2f7',fontFamily:'var(--font-display)'}}>
-      {/* Header */}
-      <div style={{background:'#fff',borderBottom:'1px solid #e2e8f0',padding:'12px 24px',
-        display:'flex',alignItems:'baseline',gap:12}}>
-        <span style={{fontSize:20,fontWeight:800,color:'#0d2d5e'}}>Cruscotto turno</span>
-        <span style={{fontSize:13,color:'#94a3b8'}}>{dayLabel}</span>
-      </div>
+    <div style={{flex:1,overflowY:'auto',background:'#f0f4f8',fontFamily:'var(--font-display)',display:'flex',flexDirection:'column'}}>
 
-      {/* Body — 3 colonne */}
-      <div style={{display:'grid',gridTemplateColumns:'420px 1fr 200px',gap:16,
-        padding:'16px 20px',alignItems:'start'}}>
-
-        {/* ── COL 1: PALLET ─────────────────────────────────────────── */}
-        <div style={{display:'flex',flexDirection:'column',gap:10}}>
-          <div style={{fontSize:11,fontWeight:800,letterSpacing:'0.08em',color:'#0d2d5e'}}>PALLET</div>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
-            {[1,2,3,4,5,6].map(n=>{
-              const info = palletInfo(n)
-              const c    = palletColors(n)
-              const isLav= c.label==='IN LAV.'
-              return(
-                <div key={n}
-                  onClick={info?()=>nav('/progetti',{state:{openId:info.proj.id}}):undefined}
-                  style={{background:c.bg,border:`2px solid ${c.border}`,borderRadius:10,
-                    padding:'10px 12px',cursor:info?'pointer':'default',
-                    minHeight:115,display:'flex',flexDirection:'column',
-                    justifyContent:'space-between',transition:'box-shadow 0.15s'}}
-                  onMouseEnter={e=>{if(info)e.currentTarget.style.boxShadow='0 4px 12px rgba(0,0,0,0.1)'}}
-                  onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
-                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
-                    <span style={{fontSize:26,fontWeight:900,color:c.fg,lineHeight:1}}>P{n}</span>
-                    {isLav&&<span style={{fontSize:8,fontWeight:800,color:'#1D5FAD',
-                      background:'#eff6ff',padding:'2px 6px',borderRadius:4,letterSpacing:1}}>● LIVE</span>}
-                  </div>
-                  {info?(
-                    <div>
-                      <div style={{fontSize:11,fontWeight:800,color:c.fg,
-                        overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',marginBottom:4}}>
-                        {info.proj.name}
-                      </div>
-                      <div style={{height:4,background:'rgba(0,0,0,0.1)',borderRadius:2,overflow:'hidden',marginBottom:3}}>
-                        <div style={{height:'100%',width:`${info.pct}%`,
-                          background:info.proj.color||'#1D5FAD',borderRadius:2}}/>
-                      </div>
-                      <div style={{display:'flex',justifyContent:'space-between'}}>
-                        <span style={{fontSize:9,color:c.fg,opacity:0.7}}>{info.done}/{info.tot} pgm</span>
-                        <span style={{fontSize:11,fontWeight:800,color:c.fg}}>{info.pct}%</span>
-                      </div>
-                      <div style={{fontSize:8,fontWeight:700,color:c.fg,letterSpacing:1,marginTop:2,opacity:0.8}}>
-                        {c.label}
-                      </div>
-                    </div>
-                  ):(
-                    <div style={{fontSize:10,fontWeight:600,color:c.fg,letterSpacing:1}}>VUOTO</div>
-                  )}
-                </div>
-              )
-            })}
+      {/* ── TOPBAR ─────────────────────────────────────────────────────── */}
+      <div style={{background:'#fff',borderBottom:'1px solid #e2e8f0',padding:'10px 24px',
+        display:'flex',alignItems:'center',gap:16,flexShrink:0}}>
+        <span style={{fontSize:17,fontWeight:800,color:'#0d2d5e'}}>Cruscotto turno</span>
+        <span style={{fontSize:12,color:'#94a3b8'}}>{dayLabel}</span>
+        {/* Banner IN ESECUZIONE */}
+        {sessLive?.attiva&&sessLive?.programma_corrente&&(
+          <div style={{marginLeft:'auto',background:'#dbeafe',border:'1px solid #1D5FAD',
+            borderRadius:8,padding:'5px 14px',display:'flex',alignItems:'center',gap:8}}>
+            <span style={{width:8,height:8,borderRadius:'50%',background:'#1D5FAD',
+              flexShrink:0,display:'inline-block',animation:'pulse-dot 1.5s ease-in-out infinite'}}/>
+            <span style={{fontSize:11,fontWeight:800,color:'#0d2d5e',letterSpacing:'0.05em'}}>IN ESECUZIONE</span>
+            <span style={{fontSize:12,fontWeight:700,color:'#1D5FAD',fontFamily:'monospace'}}>
+              {sessLive.programma_corrente.replace('.MPF','').replace('.mpf','')}
+            </span>
           </div>
-        </div>
+        )}
+      </div>
+      <style>{`@keyframes pulse-dot{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.85)}}`}</style>
 
-        {/* ── COL 2: PROGETTO ATTIVO + SCADENZE + UTENSILI ────────────── */}
-        <div style={{display:'flex',flexDirection:'column',gap:12}}>
+      {/* ── BODY: col-main | col-side ──────────────────────────────────── */}
+      <div style={{flex:1,display:'grid',gridTemplateColumns:'1fr 300px',gap:14,
+        padding:'14px 20px',alignItems:'start',minHeight:0}}>
 
-          {/* Progetto in lavorazione + timer sessione */}
-          {lavInfo&&(
-            <div style={{background:'#f0f7ff',border:'1.5px solid #1D5FAD',borderRadius:12,padding:'14px 18px'}}>
+        {/* ══ COL MAIN ══════════════════════════════════════════════════ */}
+        <div style={{display:'flex',flexDirection:'column',gap:14}}>
+
+          {/* ── PALLET GRID ─────────────────────────────────────────── */}
+          <div style={{background:'#fff',border:'1px solid #e2e8f0',borderRadius:12,padding:'14px 18px'}}>
+            <div style={{fontSize:10,fontWeight:800,letterSpacing:'0.1em',color:'#64748b',
+              textTransform:'uppercase',marginBottom:10}}>Pallet macchina</div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(6,1fr)',gap:8}}>
+              {[1,2,3,4,5,6].map(n=>{
+                const info=palletInfo(n)
+                const c=palletColors(n)
+                const isLav=c.label==='LIVE'
+                const isVuoto=c.label==='VUOTO'
+                return(
+                  <div key={n}
+                    onClick={info?()=>nav('/progetti',{state:{openId:info.proj.id}}):undefined}
+                    style={{background:c.bg,border:`1.5px solid ${c.border}`,borderRadius:10,
+                      padding:'11px 12px',cursor:info?'pointer':'default',
+                      minHeight:105,display:'flex',flexDirection:'column',gap:5,
+                      transition:'transform 0.12s, box-shadow 0.12s',position:'relative'}}
+                    onMouseEnter={e=>{if(info){e.currentTarget.style.transform='translateY(-2px)';e.currentTarget.style.boxShadow='0 4px 14px rgba(0,0,0,.08)'}}}
+                    onMouseLeave={e=>{e.currentTarget.style.transform='none';e.currentTarget.style.boxShadow='none'}}>
+
+                    {/* Numero + badge stato */}
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+                      <span style={{fontSize:24,fontWeight:900,color:c.fg,lineHeight:1}}>P{n}</span>
+                      {!isVuoto&&(
+                        <span style={{fontSize:9,fontWeight:800,color:c.accent||c.fg,
+                          background:'#fff',padding:'2px 6px',borderRadius:4,
+                          border:`1px solid ${c.border}`,letterSpacing:'0.05em',lineHeight:1.4}}>
+                          {c.label}
+                        </span>
+                      )}
+                    </div>
+
+                    {info?(
+                      <>
+                        <div style={{fontSize:11,fontWeight:800,color:c.fg,
+                          overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                          {info.proj.name}
+                        </div>
+                        <div style={{height:4,background:'rgba(0,0,0,0.1)',borderRadius:2,overflow:'hidden'}}>
+                          <div style={{height:'100%',width:`${info.pct}%`,
+                            background:c.accent||info.proj.color||'#1D5FAD',borderRadius:2}}/>
+                        </div>
+                        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                          <span style={{fontSize:10,color:c.fg,opacity:0.7}}>{info.done}/{info.tot} pgm</span>
+                          <span style={{fontSize:12,fontWeight:800,color:c.fg}}>{info.pct}%</span>
+                        </div>
+                      </>
+                    ):(
+                      <div style={{fontSize:11,fontWeight:600,color:'#cbd5e1',marginTop:'auto'}}>Vuoto</div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* ── CARD PROGETTO ATTIVO ────────────────────────────────── */}
+          {lavInfo?(
+            <div style={{background:'#f0f7ff',border:'1.5px solid #1D5FAD',borderRadius:12,padding:'16px 20px'}}>
               {/* Header */}
-              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
-                <div style={{width:10,height:10,borderRadius:2,background:lavInfo.proj.color||'#1D5FAD',flexShrink:0}}/>
-                <span style={{fontSize:15,fontWeight:800,color:'#0d2d5e',flex:1,
+              <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:14}}>
+                <div style={{width:11,height:11,borderRadius:2,
+                  background:lavInfo.proj.color||'#1D5FAD',flexShrink:0}}/>
+                <span style={{fontSize:16,fontWeight:800,color:'#0d2d5e',flex:1,
                   overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
                   {lavInfo.proj.name}
                 </span>
                 <span style={{fontSize:11,fontWeight:700,color:'#1D5FAD',
-                  background:'#dbeafe',padding:'2px 8px',borderRadius:5}}>
-                  P{palletLav.numero}
+                  background:'#dbeafe',padding:'3px 10px',borderRadius:6}}>
+                  Pallet {palletLav.numero}
                 </span>
               </div>
 
-              {/* Timers — riga principale */}
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:10}}>
-                {/* Timer sessione pallet */}
-                <div style={{background:'#fff',borderRadius:8,padding:'10px 14px',
+              {/* Timers */}
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:14}}>
+                <div style={{background:'#fff',borderRadius:9,padding:'12px 16px',
                   border:'1px solid #bfdbfe',textAlign:'center'}}>
                   <div style={{fontSize:10,fontWeight:700,color:'#1D5FAD',letterSpacing:'0.07em',
-                    textTransform:'uppercase',marginBottom:4}}>Sessione pallet</div>
-                  <div style={{fontSize:24,fontWeight:900,color:'#0d2d5e',fontFamily:'monospace',
-                    letterSpacing:'0.02em',lineHeight:1}}>
-                    {sessLive?.attiva&&sessLive?.pallet===palletLav.numero
-                      ? fmtTimer(durataSessioneLive)
-                      : '—:——:——'}
+                    textTransform:'uppercase',marginBottom:5}}>Sessione pallet</div>
+                  <div style={{fontSize:28,fontWeight:900,color:'#0d2d5e',fontFamily:'monospace',lineHeight:1}}>
+                    {sessMatch?fmtTimer(durataSessioneLive):'—:——:——'}
                   </div>
-                  {sessLive?.attiva&&sessLive?.inizio_sessione&&sessLive?.pallet===palletLav.numero&&(
-                    <div style={{fontSize:10,color:'#64748b',marginTop:3}}>
+                  {sessMatch&&sessLive?.inizio_sessione&&(
+                    <div style={{fontSize:10,color:'#64748b',marginTop:4}}>
                       dal {sessLive.inizio_sessione.slice(11,16)}
                     </div>
                   )}
                 </div>
-                {/* Timer programma corrente */}
-                <div style={{background:'#fff',borderRadius:8,padding:'10px 14px',
+                <div style={{background:'#fff',borderRadius:9,padding:'12px 16px',
                   border:'1px solid #e2e8f0',textAlign:'center'}}>
                   <div style={{fontSize:10,fontWeight:700,color:'#64748b',letterSpacing:'0.07em',
-                    textTransform:'uppercase',marginBottom:4}}>Programma corrente</div>
-                  <div style={{fontSize:24,fontWeight:900,color:'#475569',fontFamily:'monospace',
-                    letterSpacing:'0.02em',lineHeight:1}}>
-                    {sessLive?.attiva&&sessLive?.pallet===palletLav.numero&&durataProgrammaLive!=null
-                      ? fmtTimer(durataProgrammaLive)
-                      : '—:——:——'}
+                    textTransform:'uppercase',marginBottom:5}}>Programma corrente</div>
+                  <div style={{fontSize:28,fontWeight:900,color:'#475569',fontFamily:'monospace',lineHeight:1}}>
+                    {sessMatch&&durataProgrammaLive!=null?fmtTimer(durataProgrammaLive):'—:——:——'}
                   </div>
-                  {sessLive?.attiva&&sessLive?.programma_corrente&&sessLive?.pallet===palletLav.numero&&(
-                    <div style={{fontSize:10,color:'#64748b',marginTop:3,fontFamily:'monospace',
+                  {sessMatch&&sessLive?.programma_corrente&&(
+                    <div style={{fontSize:10,color:'#64748b',marginTop:4,fontFamily:'monospace',
                       overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
                       {sessLive.programma_corrente.replace('.MPF','').replace('.mpf','')}
                     </div>
@@ -283,45 +286,60 @@ export default function Home(){
                 </div>
               </div>
 
-              {/* Barra avanzamento */}
-              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
-                <div style={{flex:1,height:7,background:'rgba(29,95,173,0.15)',borderRadius:4,overflow:'hidden'}}>
+              {/* Barra */}
+              <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:10}}>
+                <div style={{flex:1,height:8,background:'rgba(29,95,173,0.15)',borderRadius:4,overflow:'hidden'}}>
                   <div style={{height:'100%',width:`${lavInfo.pct}%`,
                     background:lavInfo.proj.color||'#1D5FAD',borderRadius:4,transition:'width 0.4s'}}/>
                 </div>
-                <span style={{fontSize:13,fontWeight:800,color:'#0d2d5e',minWidth:36,textAlign:'right'}}>
+                <span style={{fontSize:14,fontWeight:800,color:'#0d2d5e',minWidth:38,textAlign:'right'}}>
                   {lavInfo.pct}%
                 </span>
               </div>
 
-              {/* Statistiche pgm + utensile */}
-              <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
-                <span style={{fontSize:11,color:'#64748b'}}>
-                  <b style={{color:'#16a34a'}}>{lavInfo.done}</b> completati ·{' '}
-                  <b style={{color:'#1D5FAD'}}>{lavInfo.inMac}</b> in corso ·{' '}
+              {/* Stats + utensile */}
+              <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+                <span style={{fontSize:12,color:'#64748b'}}>
+                  <b style={{color:'#16a34a'}}>{lavInfo.done}</b> completati &nbsp;·&nbsp;
+                  <b style={{color:'#1D5FAD'}}>{lavInfo.inMac}</b> in corso &nbsp;·&nbsp;
                   <b style={{color:'#94a3b8'}}>{lavInfo.daFare}</b> da fare
                 </span>
-                {sessLive?.attiva&&sessLive?.utensile&&sessLive?.pallet===palletLav.numero&&(
+                {sessMatch&&sessLive?.utensile&&(
                   <span style={{marginLeft:'auto',fontSize:11,fontWeight:700,color:'#0d2d5e',
-                    background:'#eff6ff',padding:'2px 8px',borderRadius:5,
-                    fontFamily:'monospace',flexShrink:0}}>
+                    background:'#eff6ff',padding:'3px 10px',borderRadius:6,fontFamily:'monospace',flexShrink:0}}>
                     {sessLive.utensile}
-                    {sessLive.t_number&&<span style={{color:'#1D5FAD',marginLeft:6}}>T{sessLive.t_number}</span>}
+                    {sessLive.t_number&&(
+                      <span style={{color:'#1D5FAD',marginLeft:8}}>T{sessLive.t_number}</span>
+                    )}
                   </span>
                 )}
               </div>
             </div>
+          ):(
+            <div style={{background:'#fff',border:'1px solid #e2e8f0',borderRadius:12,
+              padding:'24px',textAlign:'center',color:'#94a3b8',fontSize:13}}>
+              Nessun pallet in lavorazione
+            </div>
           )}
 
-          {/* Scadenze */}
+          {/* ── SCADENZE ────────────────────────────────────────────── */}
           <div style={{background:'#fff',border:'1px solid #e2e8f0',borderRadius:12,padding:'14px 18px'}}>
-            <div style={{fontSize:11,fontWeight:800,letterSpacing:'0.08em',color:'#0d2d5e',marginBottom:10}}>
-              SCADENZE PROGETTI
-              {conScadenza.length>0&&<span style={{marginLeft:8,fontSize:11,
-                color:'#94a3b8',fontWeight:500}}>{conScadenza.length} totali</span>}
+            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12}}>
+              <span style={{fontSize:10,fontWeight:800,letterSpacing:'0.1em',color:'#64748b',textTransform:'uppercase'}}>
+                Scadenze progetti
+              </span>
+              {conScadenza.length>0&&(
+                <span style={{fontSize:11,color:'#94a3b8',fontWeight:500}}>{conScadenza.length} totali</span>
+              )}
+              {scadutiCount>0&&(
+                <span style={{marginLeft:'auto',fontSize:10,fontWeight:800,color:'#dc2626',
+                  background:'#fef2f2',padding:'2px 8px',borderRadius:8}}>
+                  {scadutiCount} scadut{scadutiCount===1?'o':'i'}
+                </span>
+              )}
             </div>
             {conScadenza.length===0?(
-              <div style={{color:'#94a3b8',fontSize:13,fontStyle:'italic'}}>Nessun progetto con scadenza impostata</div>
+              <div style={{color:'#94a3b8',fontSize:13,fontStyle:'italic'}}>Nessuna scadenza impostata</div>
             ):(
               <div style={{display:'flex',flexDirection:'column',gap:5}}>
                 {conScadenza.map(({p,days,pNum})=>{
@@ -332,15 +350,17 @@ export default function Home(){
                   return(
                     <div key={p.id} onClick={()=>nav('/progetti',{state:{openId:p.id}})}
                       style={{display:'flex',alignItems:'center',gap:10,background:bg,
-                        borderRadius:8,padding:'7px 12px',cursor:'pointer',
-                        border:`1px solid ${color}33`}}>
+                        borderRadius:8,padding:'8px 12px',cursor:'pointer',
+                        border:`1px solid ${color}33`,transition:'opacity .12s'}}
+                      onMouseEnter={e=>e.currentTarget.style.opacity='.85'}
+                      onMouseLeave={e=>e.currentTarget.style.opacity='1'}>
                       <div style={{width:7,height:7,borderRadius:'50%',background:color,flexShrink:0}}/>
-                      <span style={{fontSize:12,fontWeight:700,color:'#1e293b',flex:1,
+                      <span style={{fontSize:13,fontWeight:700,color:'#1e293b',flex:1,
                         overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}</span>
                       {pNum&&<span style={{fontSize:10,fontWeight:700,color:'#0d2d5e',
-                        background:'#eff6ff',padding:'1px 6px',borderRadius:4,flexShrink:0}}>P{pNum}</span>}
-                      <span style={{fontSize:11,fontWeight:800,color,flexShrink:0,
-                        background:'#fff',padding:'1px 8px',borderRadius:10,
+                        background:'#eff6ff',padding:'2px 7px',borderRadius:4,flexShrink:0}}>P{pNum}</span>}
+                      <span style={{fontSize:12,fontWeight:800,color,flexShrink:0,
+                        background:'#fff',padding:'2px 10px',borderRadius:10,
                         border:`1px solid ${color}44`}}>{badge}</span>
                     </div>
                   )
@@ -349,63 +369,67 @@ export default function Home(){
             )}
           </div>
 
-          {/* Utensili con problemi */}
+          {/* ── UTENSILI ────────────────────────────────────────────── */}
           <div style={{background:'#fff',border:'1px solid #e2e8f0',borderRadius:12,padding:'14px 18px'}}>
-            <div style={{fontSize:11,fontWeight:800,letterSpacing:'0.08em',color:'#0d2d5e',marginBottom:10}}>
-              UTENSILI — ATTENZIONE
+            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12}}>
+              <span style={{fontSize:10,fontWeight:800,letterSpacing:'0.1em',color:'#64748b',textTransform:'uppercase'}}>
+                Utensili — attenzione
+              </span>
               {utensiliProblema.length>0?(
-                <span style={{marginLeft:8,fontSize:11,fontWeight:800,color:'#dc2626',
-                  background:'#fef2f2',padding:'1px 8px',borderRadius:10}}>
+                <span style={{fontSize:10,fontWeight:800,color:'#dc2626',
+                  background:'#fef2f2',padding:'2px 8px',borderRadius:8}}>
                   {utensiliProblema.length}
                 </span>
               ):(
-                <span style={{marginLeft:8,fontSize:11,color:'#94a3b8',fontWeight:400}}>
-                  — in attesa dati
-                </span>
+                <span style={{fontSize:11,color:'#94a3b8'}}>— in attesa dati</span>
               )}
             </div>
             {utensiliProblema.length===0?(
               <div style={{color:'#22c55e',fontSize:13,fontWeight:600}}>✓ Nessun problema rilevato</div>
             ):(
-              <div style={{display:'flex',flexDirection:'column',gap:4}}>
+              <div style={{display:'flex',flexDirection:'column',gap:5}}>
                 {utensiliProblema.map(u=>(
                   <div key={u.alias}
                     style={{display:'flex',alignItems:'center',gap:10,
                       background:u.bg,border:`1px solid ${u.border}`,
-                      borderRadius:8,padding:'7px 12px'}}>
+                      borderRadius:8,padding:'8px 12px'}}>
                     <span style={{fontSize:10,fontWeight:800,color:u.color,
-                      background:'#fff',padding:'1px 7px',borderRadius:4,
+                      background:'#fff',padding:'2px 8px',borderRadius:4,
                       border:`1px solid ${u.border}`,flexShrink:0,
-                      minWidth:65,textAlign:'center'}}>{u.label}</span>
+                      minWidth:68,textAlign:'center'}}>{u.label}</span>
                     <span style={{fontSize:12,fontWeight:700,color:'#1e293b',
                       fontFamily:'monospace',flex:1,
                       overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{u.alias}</span>
-                    {u.detail&&<span style={{fontSize:10,color:u.color,opacity:0.8,
-                      flexShrink:0,maxWidth:150,overflow:'hidden',
+                    {u.detail&&<span style={{fontSize:11,color:u.color,opacity:0.8,
+                      flexShrink:0,maxWidth:160,overflow:'hidden',
                       textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{u.detail}</span>}
                   </div>
                 ))}
               </div>
             )}
           </div>
-        </div>
 
-        {/* ── COL 3: METRICHE ────────────────────────────────────────── */}
-        <div style={{display:'flex',flexDirection:'column',gap:10}}>
-          <div style={{fontSize:11,fontWeight:800,letterSpacing:'0.08em',color:'#0d2d5e'}}>METRICHE TURNO</div>
+        </div>{/* fine col-main */}
+
+        {/* ══ COL SIDE ═══════════════════════════════════════════════ */}
+        <div style={{display:'flex',flexDirection:'column',gap:10,position:'sticky',top:0}}>
+          <div style={{fontSize:10,fontWeight:800,letterSpacing:'0.1em',color:'#64748b',textTransform:'uppercase'}}>
+            Metriche turno
+          </div>
           {[
-            {val:daFare,         label:'Da fare',         sub:`${projects.length} lavori attivi`, color:'#0d2d5e', bg:'#eff6ff'},
-            {val:inMac,          label:'In macchina',     sub:'programmi attivi',                 color:'#1D5FAD', bg:'#dbeafe'},
-            {val:completatiOggi, label:'Completati oggi', sub:'nel turno corrente',               color:'#166534', bg:'#dcfce7'},
-            {val:critici,        label:'Critici',          sub:'scaduti o oggi',                  color:'#dc2626', bg:'#fef2f2'},
+            {val:daFareTot,       label:'Da fare',         sub:`${projects.length} lavori attivi`, color:'#0d2d5e',bg:'#eff6ff'},
+            {val:inMacTot,        label:'In macchina',     sub:'programmi attivi',                 color:'#1D5FAD', bg:'#dbeafe'},
+            {val:completatiOggi,  label:'Completati oggi', sub:'nel turno corrente',               color:'#166534', bg:'#dcfce7'},
+            {val:critici,         label:'Critici',          sub:'scaduti o oggi',                  color:'#dc2626', bg:'#fef2f2'},
           ].map(({val,label,sub,color,bg})=>(
-            <div key={label} style={{background:bg,borderRadius:10,padding:'14px 16px'}}>
-              <div style={{fontSize:32,fontWeight:800,color,lineHeight:1,marginBottom:2}}>{val}</div>
-              <div style={{fontSize:12,fontWeight:700,color,marginBottom:2}}>{label}</div>
-              <div style={{fontSize:10,color,opacity:0.7}}>{sub}</div>
+            <div key={label} style={{background:bg,borderRadius:10,padding:'16px 18px'}}>
+              <div style={{fontSize:36,fontWeight:900,color,lineHeight:1,marginBottom:2}}>{val}</div>
+              <div style={{fontSize:13,fontWeight:700,color,marginBottom:2}}>{label}</div>
+              <div style={{fontSize:11,color,opacity:0.7}}>{sub}</div>
             </div>
           ))}
         </div>
+
       </div>
     </div>
   )

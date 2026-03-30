@@ -153,7 +153,8 @@ def _normalizza(raw: dict) -> dict:
 
     # programma_attivo — filtra path di sistema, estrai solo nome file
     prog = raw.get("programma_attivo", "") or ""
-    if prog and "_N_SYF_DIR" not in prog and "_N_CST_DIR" not in prog and prog != "0":
+    if prog and "_N_SYF_DIR" not in prog and "_N_CST_DIR" not in prog \
+            and "_N_MPF_DIR" not in prog and prog != "0":
         # Estrai nome file dal path: /_N_WKS_DIR/_N_WPD/_N_NOME_MPF → NOME.MPF
         m_mpf = _re.search(r"/_N_([^/]+)_MPF$", prog)
         if m_mpf:
@@ -167,9 +168,18 @@ def _normalizza(raw: dict) -> dict:
     ut = raw.get("utensile_attivo", "")
     out["utensile_attivo"] = ut if ut and ut != "0" else None
 
-    # allarme — stringa vuota = nessun allarme
+    # allarme — formato Sinumerik: |702028|30.03.26 08:48:47| MESS.,  testo
     al = raw.get("allarme", "").strip()
-    out["allarme"] = al if al else None
+    if al:
+        # Estrai codice e testo: |702028|data| testo → "702028: testo"
+        import re as _re2
+        m_al = _re2.match(r"\|(\d+)\|[^|]+\|\s*(?:MESS\.\s*,\s*)?(.+)", al)
+        if m_al:
+            out["allarme"] = f"{m_al.group(1)}: {m_al.group(2).strip()}"
+        else:
+            out["allarme"] = al
+    else:
+        out["allarme"] = None
 
     return out
 

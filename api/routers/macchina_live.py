@@ -465,12 +465,19 @@ async def aggiorna_stati_da_log():
     stato_pgm = data.get("stato_programma", 0)
     now_str   = _dt.now().strftime("%d/%m/%Y %H:%M")
 
-    # Parsing path: /_N_WKS_DIR/_N_4349_0301_WPD/_N_4348_0301_02_24_MPF
+    # Parsing path: /_N_WKS_DIR/_N_4298_0008_WPD/_N_4297_0008_01_31_MPF
     wpd_m   = re.search(r"_N_([^/]+)_WPD", prog_raw)
     mpf_m   = re.search(r"/_N_([^/]+)_MPF", prog_raw)
-    wpd_nome    = wpd_m.group(1) if wpd_m else None   # "4349_0301"
-    mpf_nome    = mpf_m.group(1) if mpf_m else None   # "4348_0301_02_24"
+    wpd_nome    = wpd_m.group(1) if wpd_m else None   # "4298_0008" (può differire dal nome progetto)
+    mpf_nome    = mpf_m.group(1) if mpf_m else None   # "4297_0008_01_31"
     mpf_filename = (mpf_nome + ".MPF") if mpf_nome else None
+
+    # Estrai commessa_posizione dal nome MPF: "4297_0008_01_31" → "4297_0008"
+    mpf_progetto = None
+    if mpf_nome:
+        parts = mpf_nome.split("_")
+        if len(parts) >= 2:
+            mpf_progetto = f"{parts[0]}_{parts[1]}"  # "4297_0008"
 
     updates = {
         "pallet": 0, "in_macchina": 0, "completato": 0,
@@ -484,14 +491,20 @@ async def aggiorna_stati_da_log():
     pallets     = pallet_data.get("pallet", [])
     proj_dirty = pallet_dirty = False
 
-    # Trova progetto dal nome WPD
+    # Trova progetto:
+    # Fonte 1: nome WPD (es. 4298_0008)
+    # Fonte 2: commessa_posizione dal nome MPF (es. 4297_0008) — più affidabile
     progetto_attivo = None
-    if wpd_nome:
+    for nome_ricerca in [mpf_progetto, wpd_nome]:
+        if not nome_ricerca:
+            continue
         for p in projects:
             pname = (p.get("name") or "").upper().replace(" ","_").replace("-","_")
-            if pname == wpd_nome.upper() or wpd_nome.upper() in pname:
+            if pname == nome_ricerca.upper() or nome_ricerca.upper() in pname:
                 progetto_attivo = p
                 break
+        if progetto_attivo:
+            break
 
     # Trova pallet:
     # Fonte 1 (priorità): pallet_attivo dal log — _N_PALLETn_MPF nelle ultime 20 righe
@@ -586,30 +599,51 @@ async def aggiorna_stati_da_log():
 
 
     # ── Automazione 2 e 3: stati programmi ───────────────────────────────
-    if progetto_attivo and mpf_filename and stato_pgm in (1, 3):
-        for step in progetto_attivo.get("steps", []):
-            for task in step.get("tasks", []):
-                if task.get("text","").strip().lower() != "fresatura":
-                    continue
-                for pgm in task.get("programs", []):
-                    if pgm.get("tipoGruppo") == "ipm":
+    if mpf_filename and stato_pgm in (1, 3):
+        # Cerca il programma attivo in TUTTI i progetti (non solo quello dal WPD)
+        # perché WPD e nome progetto possono differire (es. 4298_0008 vs 4297_0008)
+        progetto_con_match = progetto_attivo  # già trovato sopra
+
+        # Se non trovato, cerca in tutti i progetti quale contiene questo filename
+        if not progetto_con_match:
+            tgt_search = mpf_filename.upper().replace(".MPF","").strip()
+            for p in projects:
+                for s in p.get("steps",[]):
+                    for t in s.get("tasks",[]):
+                        if t.get("text","").strip().lower() != "fresatura": continue
+                        for pgm in t.get("programs",[]):
+                            fn = (pgm.get("filename") or "").upper().replace(".MPF","").strip()
+                            if fn == tgt_search:
+                                progetto_con_match = p
+                                break
+                        if progetto_con_match: break
+                    if progetto_con_match: break
+                if progetto_con_match: break
+
+        if progetto_con_match:
+            tgt = mpf_filename.upper().replace(".MPF","").strip()
+            for step in progetto_con_match.get("steps", []):
+                for task in step.get("tasks", []):
+                    if task.get("text","").strip().lower() != "fresatura":
                         continue
-                    fn = (pgm.get("filename") or "").upper().replace(".MPF","").strip()
-                    tgt = mpf_filename.upper().replace(".MPF","").strip()
-                    if fn == tgt:
-                        # Programma attivo → in_macchina
-                        if pgm.get("stato") == "da_fare":
-                            pgm["stato"] = "in_macchina"
-                            pgm["tempoInizio"] = pgm.get("tempoInizio") or now_str
-                            proj_dirty = True
-                            updates["in_macchina"] += 1
-                    else:
-                        # Altro programma → se era in_macchina diventa completato
-                        if pgm.get("stato") == "in_macchina":
-                            pgm["stato"] = "completato"
-                            pgm["tempoFine"] = pgm.get("tempoFine") or now_str
-                            proj_dirty = True
-                            updates["completato"] += 1
+                    for pgm in task.get("programs", []):
+                        if pgm.get("tipoGruppo") == "ipm":
+                            continue
+                        fn = (pgm.get("filename") or "").upper().replace(".MPF","").strip()
+                        if fn == tgt:
+                            # Programma attivo → in_macchina
+                            if pgm.get("stato") == "da_fare":
+                                pgm["stato"] = "in_macchina"
+                                pgm["tempoInizio"] = pgm.get("tempoInizio") or now_str
+                                proj_dirty = True
+                                updates["in_macchina"] += 1
+                        else:
+                            # Altro programma → se era in_macchina diventa completato
+                            if pgm.get("stato") == "in_macchina":
+                                pgm["stato"] = "completato"
+                                pgm["tempoFine"] = pgm.get("tempoFine") or now_str
+                                proj_dirty = True
+                                updates["completato"] += 1
 
     if proj_dirty:
         _save_progetti(config, proj_data)

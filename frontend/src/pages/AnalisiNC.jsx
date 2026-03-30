@@ -5,6 +5,7 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { api } from '../api/client'
+import { useNavigate } from 'react-router-dom'
 
 // ── Spinner ────────────────────────────────────────────────────────────────
 function Spinner({ small }) {
@@ -86,6 +87,9 @@ export default function AnalisiNC() {
   const [lancioProgetto, setLancioProgetto] = useState(null)
   const [lancioLoading,  setLancioLoading]  = useState(false)
   const [lancioError,    setLancioError]    = useState(null)
+  // CTA guidate — passo successivo
+  const navigate = useNavigate()
+  const [ctaStep, setCtaStep] = useState(null) // null | 'invia' | 'coda'
 
   useEffect(() => {
     api.getPercorsoNc().then(r => { if (r.percorso_nc_base) setRadiceNcInput(r.percorso_nc_base) }).catch(() => {})
@@ -242,6 +246,7 @@ export default function AnalisiNC() {
       setMainGeneratoFile(new File([blob], res.nome_file, { type: 'text/plain' }))
       api.cartelleRecenti().then(r => setCartelleRecenti(r.cartelle || [])).catch(() => {})
       setCheckResult(null); setInvioResults([])
+      setCtaStep('invia') // ← guida verso invio
 
       // Aggiorna stato programmi → in_macchina nel progetto di origine
       try {
@@ -289,9 +294,12 @@ export default function AnalisiNC() {
     try {
       const r = await api.inviaMacchina(progetto, files)
       setInvioResults(r.risultati)
-      setInvioStatus(r.n_err === 0
-        ? { type: 'ok',  msg: `✓ ${r.n_ok} file inviati` }
-        : { type: 'warn', msg: `${r.n_ok} OK · ${r.n_err} errori` })
+      if (r.n_err === 0) {
+        setInvioStatus({ type: 'ok', msg: `✓ ${r.n_ok} file inviati` })
+        setCtaStep('coda')
+      } else {
+        setInvioStatus({ type: 'warn', msg: `${r.n_ok} OK · ${r.n_err} errori` })
+      }
     } catch (e) { setInvioStatus({ type: 'err', msg: e.message }) }
     finally { setSending(false) }
   }
@@ -302,9 +310,12 @@ export default function AnalisiNC() {
     try {
       const r = await api.inviaBatch(progetto, fileDaInviare)
       setInvioResults(r.risultati || [])
-      setInvioStatus(r.n_err === 0
-        ? { type: 'ok',  msg: `⚡ ${r.n_ok} file batch — monitoraggio completato` }
-        : { type: 'warn', msg: `${r.n_ok} OK · ${r.n_err} errori` })
+      if (r.n_err === 0) {
+        setInvioStatus({ type: 'ok', msg: `⚡ ${r.n_ok} file batch — monitoraggio completato` })
+        setCtaStep('coda') // ← guida verso coda lavorazione
+      } else {
+        setInvioStatus({ type: 'warn', msg: `${r.n_ok} OK · ${r.n_err} errori` })
+      }
     } catch (e) { setInvioStatus({ type: 'err', msg: e.message }) }
     finally { setSending(false) }
   }
@@ -467,6 +478,52 @@ export default function AnalisiNC() {
           display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span>✓ {globalSuccess}</span>
           <button onClick={() => setGlobalSuccess(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#15803d', fontSize: 14 }}>✕</button>
+        </div>
+      )}
+
+      {/* ── CTA Passo successivo ── */}
+      {ctaStep === 'invia' && !invioStatus && (
+        <div style={{ padding: '10px 14px', borderRadius: 8, marginBottom: 6, flexShrink: 0,
+          background: 'rgba(29,95,173,0.08)', border: '1.5px solid rgba(29,95,173,0.25)',
+          display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#0d2d5e', marginBottom: 2 }}>
+              MAIN generato — passo successivo
+            </div>
+            <div style={{ fontSize: 11, color: '#1D5FAD' }}>
+              Verifica la connessione e invia i file alla macchina
+            </div>
+          </div>
+          <button onClick={doCheck}
+            style={{ background: '#1D5FAD', border: 'none', borderRadius: 7,
+              color: '#fff', fontWeight: 700, fontSize: 12, padding: '7px 16px',
+              cursor: 'pointer', flexShrink: 0 }}>
+            🔍 Verifica e invia →
+          </button>
+          <button onClick={() => setCtaStep(null)}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: 14, padding: 0 }}>✕</button>
+        </div>
+      )}
+      {ctaStep === 'coda' && (
+        <div style={{ padding: '10px 14px', borderRadius: 8, marginBottom: 6, flexShrink: 0,
+          background: 'rgba(22,163,74,0.08)', border: '1.5px solid rgba(22,163,74,0.25)',
+          display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#166534', marginBottom: 2 }}>
+              File inviati alla macchina
+            </div>
+            <div style={{ fontSize: 11, color: '#15803d' }}>
+              I programmi sono in coda — monitora l'esecuzione
+            </div>
+          </div>
+          <button onClick={() => navigate('/coda')}
+            style={{ background: '#166534', border: 'none', borderRadius: 7,
+              color: '#fff', fontWeight: 700, fontSize: 12, padding: '7px 16px',
+              cursor: 'pointer', flexShrink: 0 }}>
+            Vai a Coda lavorazione →
+          </button>
+          <button onClick={() => setCtaStep(null)}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: 14, padding: 0 }}>✕</button>
         </div>
       )}
 

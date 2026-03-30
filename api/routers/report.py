@@ -213,6 +213,27 @@ def aggiorna_da_log(
                         dirty = True
             sc["ultimo_tick"] = now
 
+        # ── Rilevamento anomalia ciclo in tempo reale ─────────────────────────
+        # Ogni tick confronta elapsed con la media storica del programma.
+        # Se elapsed > media + 2σ (e n >= 3 campioni) → flag anomalia_ciclo.
+        # Questo viene propagato al frontend nella prossima chiamata sessione-live.
+        if sc.get("inizio_programma") and sc.get("programma_corrente"):
+            try:
+                elapsed = int((datetime.fromisoformat(now) -
+                               datetime.fromisoformat(sc["inizio_programma"])).total_seconds())
+                fname = sc["programma_corrente"].upper()
+                idx   = data.get("cicli_utensile", {})
+                entry = idx.get(fname)
+                if entry and entry.get("n", 0) >= 3:
+                    soglia = entry["media"] + 2 * entry["std"]
+                    sc["anomalia_ciclo"] = elapsed > soglia
+                    sc["anomalia_soglia_sec"] = int(soglia)
+                    sc["anomalia_elapsed_sec"] = elapsed
+                else:
+                    sc["anomalia_ciclo"] = False
+            except Exception:
+                sc["anomalia_ciclo"] = False
+
     if dirty:
         _save_log(config, data)
 
@@ -245,6 +266,44 @@ def _chiudi_programma(data: dict, sc: dict, now: str):
         "utensile":  sc.get("utensile_programma"),
         "t_number":  sc.get("t_number_programma"),
     })
+
+    # ── Aggiorna indice cicli per (utensile, filename) ────────────────────────
+    # Questo indice permette di rilevare cicli anomali in tempo reale.
+    # Soglia: durata valida = 10s … 8h (filtra errori di timing)
+    if durata and 10 <= durata <= 28800:
+        fname   = sc["programma_corrente"].upper()
+        utensile = (sc.get("utensile_programma") or "").upper().strip()
+        idx = data.setdefault("cicli_utensile", {})
+
+        # Chiave 1: per filename (indipendente dall'utensile — per ETA programma)
+        idx.setdefault(fname, {"campioni": [], "n": 0, "media": 0, "std": 0})
+        _aggiorna_media_incrementale(idx[fname], durata)
+
+        # Chiave 2: per coppia (utensile, filename) — per anomalie utensile specifico
+        if utensile:
+            chiave_ut = f"{utensile}|{fname}"
+            idx.setdefault(chiave_ut, {"campioni": [], "n": 0, "media": 0, "std": 0})
+            _aggiorna_media_incrementale(idx[chiave_ut], durata)
+
+
+def _aggiorna_media_incrementale(entry: dict, nuovo_valore: float):
+    """
+    Mantiene media e deviazione standard incrementale (algoritmo Welford).
+    Mantiene gli ultimi 50 campioni per evitare crescita illimitata del file.
+    """
+    campioni = entry.get("campioni", [])
+    campioni.append(nuovo_valore)
+    if len(campioni) > 50:
+        campioni = campioni[-50:]  # finestra scorrevole: ultimi 50 cicli
+    entry["campioni"] = campioni
+    entry["n"]        = len(campioni)
+    entry["media"]    = round(sum(campioni) / len(campioni))
+    if len(campioni) > 1:
+        media = entry["media"]
+        varianza = sum((x - media) ** 2 for x in campioni) / (len(campioni) - 1)
+        entry["std"] = round(varianza ** 0.5)
+    else:
+        entry["std"] = 0
 
 def _chiudi_sessione(data: dict, sc: dict, now: str):
     if not sc.get("sessione_id"):
@@ -538,6 +597,19 @@ async def get_sessione_live():
     if sc.get("programma_corrente"):
         n_pgm += 1  # aggiungi quello in corso
 
+    # Statistiche ciclo storico per il programma corrente
+    ciclo_stats = None
+    fname_curr = (sc.get("programma_corrente") or "").upper()
+    if fname_curr:
+        idx   = data.get("cicli_utensile", {})
+        entry = idx.get(fname_curr)
+        if entry and entry.get("n", 0) >= 2:
+            ciclo_stats = {
+                "media_sec": entry["media"],
+                "std_sec":   entry["std"],
+                "n":         entry["n"],
+            }
+
     return {
         "attiva":                True,
         "inizio_sessione":       inizio_sess,
@@ -552,6 +624,12 @@ async def get_sessione_live():
         "n_programmi_sessione":  n_pgm,
         "progetto":              sess.get("progetto"),
         "pallet":                sess.get("pallet"),
+        # Anomalia ciclo — True se elapsed > media + 2σ (rilevato ogni 5s)
+        "anomalia_ciclo":        sc.get("anomalia_ciclo", False),
+        "anomalia_soglia_sec":   sc.get("anomalia_soglia_sec"),
+        "anomalia_elapsed_sec":  sc.get("anomalia_elapsed_sec"),
+        # Statistiche ciclo storico per questo programma
+        "ciclo_stats":           ciclo_stats,
     }
 
 
@@ -852,4 +930,54 @@ async def get_tempi_ciclo():
         "cicli":                  cicli,
         "n_programmi_con_dati":   len(cicli),
         "sessioni_analizzate":    len(sessioni),
+    }
+
+
+@router.get("/cicli-utensile")
+async def get_cicli_utensile(utensile: str = None):
+    """
+    Ritorna l'indice cicli_utensile dal log — dati live aggiornati ogni completamento.
+    Differisce da /tempi-ciclo che ricalcola da zero sulle sessioni storiche:
+    questo usa l'indice incrementale (finestra scorrevole 50 campioni).
+
+    Opzionale: ?utensile=FS16R2L85 filtra per utensile specifico.
+
+    Usato per:
+    - Pagina diagnostica utensili (tempi ciclo per alias)
+    - Rilevamento degradazione utensile (ciclo si allunga nel tempo)
+    """
+    config = carica_configurazione()
+    data   = _load_log(config)
+    idx    = data.get("cicli_utensile", {})
+
+    if utensile:
+        # Filtra per utensile specifico: chiavi del tipo "ALIAS|FILENAME.MPF"
+        filtro = utensile.upper().strip()
+        idx = {k: v for k, v in idx.items() if k.startswith(filtro + "|")}
+
+    # Separa indici per filename puro da indici per coppia utensile|filename
+    per_file   = {k: v for k, v in idx.items() if "|" not in k}
+    per_ut_pgm = {k: v for k, v in idx.items() if "|" in k}
+
+    # Estrai utensili unici con statistiche aggregate
+    utensili_stats = {}
+    for chiave, entry in per_ut_pgm.items():
+        alias = chiave.split("|")[0]
+        if alias not in utensili_stats:
+            utensili_stats[alias] = {"n_programmi": 0, "n_cicli": 0, "programmi": []}
+        us = utensili_stats[alias]
+        us["n_programmi"] += 1
+        us["n_cicli"]     += entry.get("n", 0)
+        us["programmi"].append({
+            "filename":  chiave.split("|", 1)[1] if "|" in chiave else chiave,
+            "media_sec": entry.get("media", 0),
+            "std_sec":   entry.get("std", 0),
+            "n":         entry.get("n", 0),
+        })
+
+    return {
+        "per_file":       per_file,
+        "per_utensile":   utensili_stats,
+        "n_file_tracciati": len(per_file),
+        "n_utensili":     len(utensili_stats),
     }

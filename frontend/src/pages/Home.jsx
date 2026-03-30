@@ -332,16 +332,33 @@ export default function Home(){
                   )}
                 </div>
                 <div style={{background:'#fff',borderRadius:9,padding:'8px 12px',
-                  border:'1px solid #e2e8f0',textAlign:'center'}}>
-                  <div style={{fontSize:10,fontWeight:700,color:'#64748b',letterSpacing:'0.07em',
-                    textTransform:'uppercase',marginBottom:5}}>Programma corrente</div>
-                  <div style={{fontSize:26,fontWeight:900,color:'#475569',fontFamily:'monospace',lineHeight:1}}>
+                  border: sessMatch&&sessLive?.anomalia_ciclo ? '1.5px solid #ef4444' : '1px solid #e2e8f0',
+                  textAlign:'center',
+                  background: sessMatch&&sessLive?.anomalia_ciclo ? '#fef2f2' : '#fff' }}>
+                  <div style={{fontSize:10,fontWeight:700,
+                    color: sessMatch&&sessLive?.anomalia_ciclo ? '#dc2626' : '#64748b',
+                    letterSpacing:'0.07em',textTransform:'uppercase',marginBottom:5,
+                    display:'flex',alignItems:'center',justifyContent:'center',gap:5}}>
+                    {sessMatch&&sessLive?.anomalia_ciclo&&(
+                      <span style={{fontSize:9,fontWeight:800,color:'#dc2626',
+                        background:'#fef2f2',padding:'1px 5px',borderRadius:3,
+                        border:'1px solid #fca5a5'}}>LUNGO</span>
+                    )}
+                    Programma corrente
+                  </div>
+                  <div style={{fontSize:26,fontWeight:900,fontFamily:'monospace',lineHeight:1,
+                    color: sessMatch&&sessLive?.anomalia_ciclo ? '#dc2626' : '#475569'}}>
                     {sessMatch&&durataProgrammaLive!=null?fmtTimer(durataProgrammaLive):'—:——:——'}
                   </div>
                   {sessMatch&&sessLive?.programma_corrente&&(
                     <div style={{fontSize:10,color:'#64748b',marginTop:4,fontFamily:'monospace',
                       overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
                       {sessLive.programma_corrente.replace('.MPF','').replace('.mpf','')}
+                    </div>
+                  )}
+                  {sessMatch&&sessLive?.ciclo_stats&&(
+                    <div style={{fontSize:9,color:'#94a3b8',marginTop:3}}>
+                      media: {fmtTimer(sessLive.ciclo_stats.media_sec)} ({sessLive.ciclo_stats.n} cicli)
                     </div>
                   )}
                 </div>

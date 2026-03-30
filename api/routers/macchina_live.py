@@ -108,6 +108,17 @@ def _parse_log(log_path: str) -> dict:
                     result["pallet_attivo"] = m.group(2).strip()
                     break
 
+        # Pallet da workPandProgName: cerca _N_PALLET_WPD/_N_PALLETn_MPF
+        # nelle ultime 2000 righe — il pallet chiamante appare prima del programma figlio
+        import re as _re_tmp
+        RE_PALLET_PATH = _re_tmp.compile(
+            r"_N_PALLET_WPD/_N_PALLET(\d)_MPF", _re_tmp.IGNORECASE)
+        for line in reversed(lines[-2000:]):
+            mp = RE_PALLET_PATH.search(line)
+            if mp:
+                result["pallet_da_path"] = int(mp.group(1))
+                break
+
     except Exception as e:
         result["errore_parse"] = str(e)
 
@@ -131,17 +142,28 @@ def _normalizza(raw: dict) -> dict:
         out["numero_utensile"] = None
 
     # pallet_attivo → int (1-6)
-    # Fonte primaria: workPandProgName — sempre nel log OpcUa
-    # es. /_N_WKS_DIR/_N_PALLET_WPD/_N_PALLET4_MPF → 4
-    # Fallback: DB0.DBB67 se presente nel log
+    # Fonte 1 (priorità massima): _N_PALLET_WPD/_N_PALLETn_MPF nel log recente
+    # Fonte 2: workPandProgName corrente se contiene PALLET
+    # Fonte 3: DB0.DBB67 dal PLC
     import re as _re
     pallet = None
-    prog = raw.get("programma_attivo", "") or ""
-    m = _re.search(r"_N_PALLET(\d)_MPF", prog, _re.IGNORECASE)
-    if m:
-        v = int(m.group(1))
+
+    # Fonte 1: pallet_da_path trovato da _parse_log
+    if raw.get("pallet_da_path"):
+        v = int(raw["pallet_da_path"])
         if 1 <= v <= 6:
             pallet = v
+
+    # Fonte 2: programma_attivo corrente contiene PALLET
+    if pallet is None:
+        prog = raw.get("programma_attivo", "") or ""
+        m = _re.search(r"_N_PALLET(\d)_MPF", prog, _re.IGNORECASE)
+        if m:
+            v = int(m.group(1))
+            if 1 <= v <= 6:
+                pallet = v
+
+    # Fonte 3: DB0.DBB67
     if pallet is None:
         try:
             v = int(raw.get("pallet_attivo", 0))
@@ -471,9 +493,11 @@ async def aggiorna_stati_da_log():
                 progetto_attivo = p
                 break
 
-    # Trova pallet dal progetto
-    pallet_num = None
-    if progetto_attivo:
+    # Trova pallet:
+    # Fonte 1 (priorità): pallet_attivo dal log (_N_PALLET_WPD/_N_PALLETn_MPF)
+    # Fonte 2: pallet assegnato al progetto nei dati DMGDesk
+    pallet_num = data.get("pallet_attivo")  # già normalizzato come int 1-6 o None
+    if not pallet_num and progetto_attivo:
         for pal in pallets:
             if pal.get("progetto_id") == progetto_attivo.get("id"):
                 pallet_num = pal.get("numero")

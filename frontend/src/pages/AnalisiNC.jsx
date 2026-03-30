@@ -7,6 +7,80 @@ import { useState, useRef, useCallback, useEffect } from 'react'
 import { api } from '../api/client'
 import { useNavigate } from 'react-router-dom'
 
+// ── PercorsoPanel: collassabile, con proprio stato locale ──────────────────
+function PercorsoPanel({ daProgetti, radiceNcInput, setRadiceNcInput, commessa, setCommessa,
+  posizione, setPosizione, fase, setFase, cartelleRecenti, percorso, nomeCompleto,
+  inputStyle, setMainError, onSaveRadice }) {
+  const [aperto, setAperto] = useState(!daProgetti)
+  const preview = percorso && nomeCompleto
+  return (
+    <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
+      {/* Header cliccabile */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px',
+        cursor: 'pointer', userSelect: 'none',
+        background: preview ? 'rgba(21,128,61,0.06)' : 'transparent',
+        borderBottom: aperto ? '1px solid var(--border)' : 'none' }}
+        onClick={() => setAperto(v => !v)}>
+        <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-dim)',
+          fontFamily: 'var(--font-mono)', letterSpacing: '0.08em', flex: 1 }}>
+          PERCORSO SALVATAGGIO
+        </span>
+        {preview && !aperto && (
+          <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: '#15803d',
+            flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            ✓ {commessa}\{posizione}
+          </span>
+        )}
+        <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>{aperto ? '▴' : '▾'}</span>
+      </div>
+      {aperto && (
+        <div style={{ padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <input value={radiceNcInput}
+            onChange={e => setRadiceNcInput(e.target.value)}
+            onBlur={async () => { const v = radiceNcInput.trim().replace(/[\\/]+$/, ''); if (v) await onSaveRadice(v) }}
+            placeholder="P:\DMG_DMC_160U"
+            style={{ ...inputStyle, fontSize: 11, color: 'var(--text-dim)', width: '100%' }} />
+          <div style={{ display: 'flex', gap: 6 }}>
+            <input value={commessa}
+              onChange={e => setCommessa(e.target.value.replace(/[^a-zA-Z0-9_-]/g,''))}
+              placeholder="4348" style={{ ...inputStyle, width: '50%', fontWeight: 700 }} />
+            <input value={posizione}
+              onChange={e => setPosizione(e.target.value.replace(/[^a-zA-Z0-9_-]/g,''))}
+              placeholder="0221" style={{ ...inputStyle, width: '50%', fontWeight: 700 }} />
+          </div>
+          <input value={fase}
+            onChange={e => { setFase(e.target.value); setMainError(null) }}
+            placeholder="Sottocartella (opz.)"
+            style={{ ...inputStyle, width: '100%', fontSize: 10, color: 'var(--text-dim)' }}
+            onFocus={e => e.target.style.borderColor = 'var(--cyan)'}
+            onBlur={e => e.target.style.borderColor = 'var(--border)'} />
+          {cartelleRecenti.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+              {cartelleRecenti.slice(0,4).map(c => {
+                const pts = c.replace(/\\/g,'/').split('/'); const pos=pts.at(-1)||''; const com=pts.at(-2)||''
+                return (
+                  <button key={c} onClick={() => { setCommessa(com); setPosizione(pos) }}
+                    style={{ padding: '2px 8px', borderRadius: 4, fontSize: 10, fontFamily: 'var(--font-mono)', cursor: 'pointer',
+                      background: commessa===com&&posizione===pos ? 'rgba(0,225,255,0.12)' : 'var(--bg-base)',
+                      border: `1px solid ${commessa===com&&posizione===pos ? 'var(--cyan)' : 'var(--border)'}`,
+                      color: commessa===com&&posizione===pos ? 'var(--cyan)' : 'var(--text-secondary)' }}>
+                    {com}\{pos}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+          {preview && (
+            <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: '#15803d' }}>
+              → {percorso}\0_MAIN_{nomeCompleto.toUpperCase()}.MPF
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Spinner ────────────────────────────────────────────────────────────────
 function Spinner({ small }) {
   const sz = small ? 10 : 14
@@ -636,79 +710,18 @@ export default function AnalisiNC() {
           )}
 
           {/* Percorso salvataggio — collassato se arriva da Progetti (tutto già noto) */}
-          {(()=>{
-            const daProgetti = !!lancioProgetto
-            const [percorsoAperto, setPercorsoAperto] = React.useState(!daProgetti)
-            return (
-              <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
-                {/* Header cliccabile */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px',
-                  cursor: 'pointer', userSelect: 'none',
-                  background: percorso && nomeCompleto ? 'rgba(21,128,61,0.06)' : 'transparent',
-                  borderBottom: percorsoAperto ? '1px solid var(--border)' : 'none' }}
-                  onClick={() => setPercorsoAperto(v => !v)}>
-                  <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-dim)',
-                    fontFamily: 'var(--font-mono)', letterSpacing: '0.08em', flex: 1 }}>
-                    PERCORSO SALVATAGGIO
-                  </span>
-                  {percorso && nomeCompleto && !percorsoAperto && (
-                    <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: '#15803d',
-                      flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      ✓ {commessa}\{posizione}
-                    </span>
-                  )}
-                  <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>{percorsoAperto ? '▴' : '▾'}</span>
-                </div>
-
-                {percorsoAperto && (
-                  <div style={{ padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    <input value={radiceNcInput}
-                      onChange={e => setRadiceNcInput(e.target.value)}
-                      onBlur={async () => { const v = radiceNcInput.trim().replace(/[\\/]+$/, ''); if (v) { try { await api.setPercorsoNc(v) } catch {} } }}
-                      placeholder="P:\DMG_DMC_160U"
-                      style={{ ...inputStyle, fontSize: 11, color: 'var(--text-dim)', width: '100%' }} />
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <input value={commessa}
-                        onChange={e => setCommessa(e.target.value.replace(/[^a-zA-Z0-9_-]/g,''))}
-                        placeholder="4348"
-                        style={{ ...inputStyle, width: '50%', fontWeight: 700 }} />
-                      <input value={posizione}
-                        onChange={e => setPosizione(e.target.value.replace(/[^a-zA-Z0-9_-]/g,''))}
-                        placeholder="0221"
-                        style={{ ...inputStyle, width: '50%', fontWeight: 700 }} />
-                    </div>
-                    <input value={fase}
-                      onChange={e => { setFase(e.target.value); setMainError(null) }}
-                      placeholder="Sottocartella (opz.)"
-                      style={{ ...inputStyle, width: '100%', fontSize: 10, color: 'var(--text-dim)' }}
-                      onFocus={e => e.target.style.borderColor = 'var(--cyan)'}
-                      onBlur={e => e.target.style.borderColor = 'var(--border)'} />
-                    {cartelleRecenti.length > 0 && (
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                        {cartelleRecenti.slice(0,4).map(c => {
-                          const pts = c.replace(/\\/g,'/').split('/'); const pos=pts.at(-1)||''; const com=pts.at(-2)||''
-                          return (
-                            <button key={c} onClick={() => { setCommessa(com); setPosizione(pos) }}
-                              style={{ padding: '2px 8px', borderRadius: 4, fontSize: 10, fontFamily: 'var(--font-mono)', cursor: 'pointer',
-                                background: commessa===com&&posizione===pos ? 'rgba(0,225,255,0.12)' : 'var(--bg-base)',
-                                border: `1px solid ${commessa===com&&posizione===pos ? 'var(--cyan)' : 'var(--border)'}`,
-                                color: commessa===com&&posizione===pos ? 'var(--cyan)' : 'var(--text-secondary)' }}>
-                              {com}\{pos}
-                            </button>
-                          )
-                        })}
-                      </div>
-                    )}
-                    {percorso && nomeCompleto && (
-                      <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: '#15803d' }}>
-                        → {percorso}\0_MAIN_{nomeCompleto.toUpperCase()}.MPF
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )
-          })()}
+          <PercorsoPanel
+            daProgetti={!!lancioProgetto}
+            radiceNcInput={radiceNcInput} setRadiceNcInput={setRadiceNcInput}
+            commessa={commessa} setCommessa={setCommessa}
+            posizione={posizione} setPosizione={setPosizione}
+            fase={fase} setFase={setFase}
+            cartelleRecenti={cartelleRecenti}
+            percorso={percorso} nomeCompleto={nomeCompleto}
+            inputStyle={inputStyle}
+            setMainError={setMainError}
+            onSaveRadice={async (v) => { try { await api.setPercorsoNc(v) } catch {} }}
+          />
 
           {/* Genera MAIN */}
           <div style={{ background: 'var(--bg-card)', border: '1.5px solid #D4700A44', borderRadius: 8, padding: '12px 14px' }}>

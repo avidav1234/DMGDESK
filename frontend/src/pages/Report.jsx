@@ -1,13 +1,355 @@
-// pages/Report.jsx — Report lavorazioni giornaliero
-import { useState, useEffect, useCallback } from 'react'
+// pages/Report.jsx — Analytics lavorazioni CNC
+import { useState, useEffect, useCallback, useRef } from 'react'
 
 const API = (path) => `/api/report${path}`
+
 const fmt = (sec) => {
-  if (!sec) return '—'
+  if (!sec && sec !== 0) return '—'
   const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60
   return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`
 }
+const fmtH = (sec) => {
+  if (!sec) return '0h'
+  return `${(sec / 3600).toFixed(1)}h`
+}
 const fmtDate = (iso) => iso ? iso.replace('T',' ').slice(0,16) : '—'
+const fmtDay  = (iso) => {
+  if (!iso) return ''
+  const d = new Date(iso+'T00:00')
+  return d.toLocaleDateString('it-IT',{weekday:'short',day:'numeric',month:'short'})
+}
+
+const PALETTE = ['#1D5FAD','#D97706','#7C3AED','#059669','#DC2626','#0891B2','#9333EA','#B45309','#065F46','#991B1B']
+const _colorMap = {}
+let _colorIdx = 0
+const colorForProject = (name) => {
+  if (!name) return '#888'
+  if (!_colorMap[name]) _colorMap[name] = PALETTE[_colorIdx++ % PALETTE.length]
+  return _colorMap[name]
+}
+
+const Card = ({ children, style = {} }) => (
+  <div style={{ background:'var(--bg-card)', border:'1px solid var(--border)', borderRadius:10, ...style }}>
+    {children}
+  </div>
+)
+const SectionTitle = ({ children }) => (
+  <div style={{ fontSize:10, fontWeight:700, letterSpacing:'0.1em', color:'var(--text-dim)',
+                textTransform:'uppercase', marginBottom:12 }}>{children}</div>
+)
+const KpiCard = ({ label, value, sub, color = 'var(--text-primary)', trend }) => (
+  <Card style={{ padding:'14px 16px', textAlign:'center' }}>
+    <div style={{ fontSize:10, fontWeight:700, letterSpacing:'0.08em', color:'var(--text-dim)',
+                  marginBottom:6, textTransform:'uppercase' }}>{label}</div>
+    <div style={{ fontSize:22, fontWeight:800, color, fontVariantNumeric:'tabular-nums', lineHeight:1 }}>{value}</div>
+    {sub && <div style={{ fontSize:11, color:'var(--text-dim)', marginTop:4 }}>{sub}</div>}
+    {trend !== undefined && (
+      <div style={{ fontSize:11, marginTop:4, color: trend >= 0 ? '#22c55e' : '#ef4444' }}>
+        {trend >= 0 ? '▲' : '▼'} {Math.abs(trend).toFixed(1)}%
+      </div>
+    )}
+  </Card>
+)
+
+function StoricoBars({ storico, selectedData, onSelect }) {
+  if (!storico.length) return null
+  const maxSec = Math.max(...storico.map(g => g.ore_lavorate_sec || 0), 1)
+  return (
+    <div>
+      <div style={{ display:'flex', alignItems:'flex-end', gap:2, height:80 }}>
+        {storico.map((g) => {
+          const hPct = Math.max(4, (g.ore_lavorate_sec / maxSec) * 74)
+          const isSelected = g.data === selectedData
+          const effColor = g.efficienza_pct > 70 ? '#22c55e' : g.efficienza_pct > 40 ? '#f59e0b' : '#ef4444'
+          return (
+            <div key={g.data} style={{ flex:1, display:'flex', flexDirection:'column',
+                                       alignItems:'center', cursor:'pointer', gap:2 }}
+                 onClick={() => onSelect(g.data)}
+                 title={`${fmtDay(g.data)}: ${fmtH(g.ore_lavorate_sec)}, ${g.efficienza_pct}% eff.`}>
+              <div style={{ width:'60%', height:3, borderRadius:2,
+                            background: isSelected ? effColor : effColor+'88' }} />
+              <div style={{ width:'100%', height:hPct, borderRadius:'3px 3px 0 0',
+                            background: isSelected ? '#3b82f6' : (g.ore_lavorate_sec > 0 ? '#1D5FAD88' : 'var(--border)'),
+                            border: isSelected ? '1px solid #60a5fa' : 'none', transition:'all 0.15s' }} />
+              <div style={{ fontSize:8, color: isSelected ? '#3b82f6' : 'var(--text-dim)',
+                            fontWeight: isSelected ? 700 : 400 }}>
+                {g.data.slice(8)}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      <div style={{ display:'flex', gap:16, marginTop:8, fontSize:10, color:'var(--text-dim)' }}>
+        <span style={{ display:'flex', alignItems:'center', gap:4 }}>
+          <span style={{ display:'inline-block', width:10, height:10, borderRadius:2, background:'#1D5FAD' }}/>
+          Ore lavorate
+        </span>
+        <span style={{ display:'flex', alignItems:'center', gap:4 }}>
+          <span style={{ display:'inline-block', width:24, height:3, borderRadius:2, background:'#22c55e' }}/>
+          Efficienza
+        </span>
+      </div>
+    </div>
+  )
+}
+
+function TimelineGiornaliera({ sessioni }) {
+  if (!sessioni?.length) return (
+    <div style={{ color:'var(--text-dim)', fontSize:12, textAlign:'center', padding:20 }}>Nessuna sessione</div>
+  )
+  const ore = Array.from({length:24}, (_,h) => ({ h, lav:0, fermo:0 }))
+  for (const s of sessioni) {
+    for (const pgm of (s.programmi || [])) {
+      if (!pgm.inizio || !pgm.fine) continue
+      const dur = Math.max(0, (new Date(pgm.fine) - new Date(pgm.inizio)) / 1000)
+      const h = new Date(pgm.inizio).getHours()
+      if (ore[h]) ore[h].lav += dur
+    }
+    for (let i = 1; i < (s.programmi||[]).length; i++) {
+      const prev = s.programmi[i-1], curr = s.programmi[i]
+      if (!prev.fine || !curr.inizio) continue
+      const gap = Math.max(0, (new Date(curr.inizio) - new Date(prev.fine)) / 1000)
+      if (gap > 10) {
+        const h = new Date(prev.fine).getHours()
+        if (ore[h]) ore[h].fermo += gap
+      }
+    }
+  }
+  const maxSec = Math.max(...ore.map(o => o.lav + o.fermo), 1)
+  return (
+    <div>
+      <div style={{ display:'flex', gap:1, alignItems:'flex-end', height:60 }}>
+        {ore.map(o => {
+          const lavH = Math.max(0, Math.round((o.lav / maxSec) * 54))
+          const fermoH = Math.max(0, Math.round((o.fermo / maxSec) * 54))
+          return (
+            <div key={o.h} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center' }}
+                 title={`${String(o.h).padStart(2,'0')}:00 — Lav: ${fmt(o.lav)}, Fermo: ${fmt(o.fermo)}`}>
+              <div style={{ width:'90%', display:'flex', flexDirection:'column', justifyContent:'flex-end', height:54 }}>
+                {fermoH > 0 && <div style={{ background:'#f59e0b44', height:fermoH, borderRadius:'2px 2px 0 0' }}/>}
+                {lavH > 0 && <div style={{ background:'#1D5FAD', height:lavH, borderRadius: fermoH>0?0:'2px 2px 0 0' }}/>}
+              </div>
+              <div style={{ fontSize:7, color:'var(--text-dim)', marginTop:2 }}>
+                {o.h % 4 === 0 ? String(o.h).padStart(2,'0') : ''}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      <div style={{ display:'flex', gap:16, marginTop:8, fontSize:10, color:'var(--text-dim)' }}>
+        <span style={{ display:'flex', alignItems:'center', gap:4 }}>
+          <span style={{ display:'inline-block', width:10, height:10, borderRadius:2, background:'#1D5FAD' }}/> Lavorazione
+        </span>
+        <span style={{ display:'flex', alignItems:'center', gap:4 }}>
+          <span style={{ display:'inline-block', width:10, height:10, borderRadius:2, background:'#f59e0b44', border:'1px solid #f59e0b88' }}/> Fermo
+        </span>
+      </div>
+    </div>
+  )
+}
+
+function ProgrammiChart({ sessioni }) {
+  const allPgm = (sessioni || []).flatMap(s =>
+    (s.programmi || []).map(p => ({ ...p, progetto: s.progetto }))
+  ).filter(p => p.durata_sec > 0).sort((a,b) => b.durata_sec - a.durata_sec).slice(0, 20)
+  if (!allPgm.length) return (
+    <div style={{ color:'var(--text-dim)', fontSize:12, textAlign:'center', padding:20 }}>Nessun programma</div>
+  )
+  const maxSec = allPgm[0].durata_sec
+  return (
+    <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
+      {allPgm.map((p, i) => {
+        const pct = (p.durata_sec / maxSec * 100).toFixed(1)
+        const color = colorForProject(p.progetto)
+        return (
+          <div key={p.filename+i} style={{ display:'flex', alignItems:'center', gap:8 }}>
+            <div style={{ width:130, fontSize:10, fontFamily:'monospace', color:'var(--text-secondary)',
+                          textAlign:'right', flexShrink:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}
+                 title={p.filename}>
+              {(p.filename || '').replace('.MPF','').replace('.mpf','')}
+            </div>
+            <div style={{ flex:1, height:16, background:'var(--bg-hover)', borderRadius:3, overflow:'hidden' }}>
+              <div style={{ width:`${pct}%`, height:'100%', background:color, borderRadius:3, transition:'width 0.4s ease' }} />
+            </div>
+            <div style={{ width:52, fontSize:11, fontFamily:'monospace', color, fontWeight:700, flexShrink:0, textAlign:'right' }}>
+              {fmt(p.durata_sec)}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function UtensiliDonut({ utensili }) {
+  const entries = Object.entries(utensili || {}).slice(0, 8)
+  if (!entries.length) return (
+    <div style={{ color:'var(--text-dim)', fontSize:12, textAlign:'center', padding:20 }}>Nessun utensile</div>
+  )
+  const totSec = entries.reduce((a, [, v]) => a + v.sec, 0) || 1
+  const colors = ['#1D5FAD','#D97706','#7C3AED','#059669','#DC2626','#0891B2','#9333EA','#B45309']
+  const R = 52, CX = 64, CY = 64
+  let cumPct = 0
+  const slices = entries.map(([alias, info], i) => {
+    const pct = info.sec / totSec
+    const startAngle = cumPct * 2 * Math.PI - Math.PI / 2
+    cumPct += pct
+    const endAngle = cumPct * 2 * Math.PI - Math.PI / 2
+    const x1 = CX + R * Math.cos(startAngle), y1 = CY + R * Math.sin(startAngle)
+    const x2 = CX + R * Math.cos(endAngle),   y2 = CY + R * Math.sin(endAngle)
+    const large = pct > 0.5 ? 1 : 0
+    const path = pct > 0.999
+      ? `M ${CX} ${CY - R} A ${R} ${R} 0 1 1 ${CX - 0.01} ${CY - R} Z`
+      : `M ${x1} ${y1} A ${R} ${R} 0 ${large} 1 ${x2} ${y2}`
+    return { alias, sec: info.sec, ore: info.ore, pct, path, color: colors[i % colors.length] }
+  })
+  return (
+    <div style={{ display:'flex', gap:20, alignItems:'center' }}>
+      <svg width={128} height={128} viewBox="0 0 128 128" style={{ flexShrink:0 }}>
+        {slices.map((s, i) => (
+          <path key={i} d={s.path} fill="none" stroke={s.color} strokeWidth={28} strokeLinecap="butt" opacity={0.9}>
+            <title>{s.alias}: {s.ore} ({(s.pct*100).toFixed(1)}%)</title>
+          </path>
+        ))}
+        <text x={CX} y={CY-5} textAnchor="middle" fontSize={10} fill="var(--text-dim)" fontWeight={600}>TOT</text>
+        <text x={CX} y={CY+10} textAnchor="middle" fontSize={11} fill="var(--text-primary)" fontWeight={700}>{fmtH(totSec)}</text>
+      </svg>
+      <div style={{ flex:1, display:'flex', flexDirection:'column', gap:6 }}>
+        {slices.map((s, i) => (
+          <div key={i} style={{ display:'flex', alignItems:'center', gap:6 }}>
+            <div style={{ width:8, height:8, borderRadius:2, background:s.color, flexShrink:0 }}/>
+            <div style={{ flex:1, fontSize:11, fontFamily:'monospace', color:'var(--text-secondary)',
+                          overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{s.alias}</div>
+            <div style={{ fontSize:11, fontFamily:'monospace', color:s.color, fontWeight:700, flexShrink:0 }}>{s.ore}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function HeatmapFermi({ sessioni }) {
+  const GIORNI = ['Lun','Mar','Mer','Gio','Ven','Sab','Dom']
+  const ORE = [6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22]
+  const matrix = {}
+  GIORNI.forEach(g => { matrix[g] = {}; ORE.forEach(h => { matrix[g][h] = 0 }) })
+  for (const sess of (sessioni || [])) {
+    if (!sess.data) continue
+    const dow = new Date(sess.data+'T00:00').getDay()
+    const label = GIORNI[dow === 0 ? 6 : dow - 1]
+    for (let i = 1; i < (sess.programmi||[]).length; i++) {
+      const prev = sess.programmi[i-1], curr = sess.programmi[i]
+      if (!prev.fine || !curr.inizio) continue
+      const gap = Math.max(0, (new Date(curr.inizio) - new Date(prev.fine)) / 1000)
+      if (gap < 30) continue
+      const h = new Date(prev.fine).getHours()
+      if (matrix[label] && matrix[label][h] !== undefined) matrix[label][h] += gap
+    }
+  }
+  const maxVal = Math.max(...GIORNI.flatMap(g => ORE.map(h => matrix[g][h])), 1)
+  return (
+    <div style={{ overflowX:'auto' }}>
+      <div style={{ display:'grid', gridTemplateColumns:`52px repeat(${ORE.length}, 1fr)`, gap:2, minWidth:480 }}>
+        <div/>
+        {ORE.map(h => (
+          <div key={h} style={{ fontSize:9, color:'var(--text-dim)', textAlign:'center', fontWeight:600 }}>
+            {String(h).padStart(2,'0')}
+          </div>
+        ))}
+        {GIORNI.map(g => (
+          <React.Fragment key={g}>
+            <div style={{ fontSize:10, color:'var(--text-dim)', fontWeight:600, display:'flex', alignItems:'center' }}>{g}</div>
+            {ORE.map(h => {
+              const val = matrix[g][h]
+              const alpha = val > 0 ? Math.max(0.1, val / maxVal) : 0
+              return (
+                <div key={h} style={{ height:22, borderRadius:3,
+                                      background: val > 0 ? `rgba(239,68,68,${alpha})` : 'var(--border)',
+                                      border:'1px solid var(--border)', opacity: val > 0 ? 1 : 0.3 }}
+                     title={val > 0 ? `${g} ${h}:00 — ${fmt(val)}` : `${g} ${h}:00`}/>
+              )
+            })}
+          </React.Fragment>
+        ))}
+      </div>
+      <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:8, fontSize:10, color:'var(--text-dim)' }}>
+        <span>Nessun fermo</span>
+        {[0.1,0.3,0.5,0.7,0.9].map(a => (
+          <div key={a} style={{ width:14, height:14, borderRadius:2, background:`rgba(239,68,68,${a})` }}/>
+        ))}
+        <span>Fermo lungo</span>
+      </div>
+    </div>
+  )
+}
+
+function TabellaFermi({ sessioni }) {
+  const fermi = (sessioni || []).flatMap(s => {
+    const gaps = []
+    for (let i = 1; i < (s.programmi||[]).length; i++) {
+      const prev = s.programmi[i-1], curr = s.programmi[i]
+      if (!prev.fine || !curr.inizio) continue
+      const gap = Math.round((new Date(curr.inizio) - new Date(prev.fine)) / 1000)
+      if (gap < 10) continue
+      gaps.push({ prog: s.progetto, da: prev.filename, a: curr.filename, inizio: prev.fine, gap })
+    }
+    return gaps
+  }).sort((a,b) => b.gap - a.gap)
+  if (!fermi.length) return (
+    <div style={{ color:'var(--text-dim)', fontSize:12, textAlign:'center', padding:20 }}>Nessun fermo rilevato</div>
+  )
+  return (
+    <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
+      <thead>
+        <tr style={{ background:'var(--bg-hover)' }}>
+          {['Durata','Ora','Commessa','Da','A'].map(h => (
+            <th key={h} style={{ padding:'7px 10px', textAlign:'left', fontSize:10, color:'var(--text-dim)',
+                                 fontWeight:700, letterSpacing:'0.05em', borderBottom:'1px solid var(--border)' }}>{h}</th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {fermi.map((f, i) => (
+          <tr key={i} style={{ borderBottom:'1px solid var(--border)' }}>
+            <td style={{ padding:'7px 10px', fontFamily:'monospace', fontWeight:700,
+                         color: f.gap > 1800 ? '#ef4444' : f.gap > 600 ? '#f59e0b' : 'var(--text-secondary)' }}>
+              {fmt(f.gap)}
+            </td>
+            <td style={{ padding:'7px 10px', color:'var(--text-dim)', whiteSpace:'nowrap', fontSize:11 }}>{fmtDate(f.inizio)}</td>
+            <td style={{ padding:'7px 10px', fontFamily:'monospace', fontWeight:600, color:colorForProject(f.prog), fontSize:11 }}>{f.prog}</td>
+            <td style={{ padding:'7px 10px', fontFamily:'monospace', fontSize:10, color:'var(--text-dim)' }}>{(f.da||'').replace('.MPF','')}</td>
+            <td style={{ padding:'7px 10px', fontFamily:'monospace', fontSize:10, color:'var(--text-secondary)' }}>{(f.a||'').replace('.MPF','')}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
+}
+
+function ConfrontoSettimane({ storico }) {
+  if (!storico || storico.length < 14) return null
+  const curr = storico.slice(-7)
+  const prev = storico.slice(-14, -7)
+  const totCurr = curr.reduce((a,g) => a + (g.ore_lavorate_sec||0), 0)
+  const totPrev = prev.reduce((a,g) => a + (g.ore_lavorate_sec||0), 0)
+  const effCurr = curr.reduce((a,g) => a + (g.efficienza_pct||0), 0) / 7
+  const effPrev = prev.reduce((a,g) => a + (g.efficienza_pct||0), 0) / 7
+  const pgmCurr = curr.reduce((a,g) => a + (g.n_programmi||0), 0)
+  const pgmPrev = prev.reduce((a,g) => a + (g.n_programmi||0), 0)
+  const delta = (a, b) => b === 0 ? 0 : ((a - b) / b * 100)
+  return (
+    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:10 }}>
+      <KpiCard label="Ore questa settimana" value={fmtH(totCurr)} sub={`Sett. prec.: ${fmtH(totPrev)}`}
+               color="#3b82f6" trend={delta(totCurr, totPrev)} />
+      <KpiCard label="Efficienza media" value={`${effCurr.toFixed(1)}%`} sub={`Sett. prec.: ${effPrev.toFixed(1)}%`}
+               color={effCurr > 70 ? '#22c55e' : '#f59e0b'} trend={delta(effCurr, effPrev)} />
+      <KpiCard label="Programmi eseguiti" value={pgmCurr} sub={`Sett. prec.: ${pgmPrev}`}
+               color="#8b5cf6" trend={delta(pgmCurr, pgmPrev)} />
+    </div>
+  )
+}
+
+import React from 'react'
 
 export default function Report() {
   const today = new Date().toISOString().slice(0,10)
@@ -15,7 +357,7 @@ export default function Report() {
   const [rpt,     setRpt]     = useState(null)
   const [storico, setStorico] = useState([])
   const [loading, setLoading] = useState(false)
-  const [tab,     setTab]     = useState('riepilogo') // riepilogo | programmi | fermi | utensili
+  const [tab,     setTab]     = useState('overview')
 
   const carica = useCallback(async () => {
     setLoading(true)
@@ -31,369 +373,254 @@ export default function Report() {
   }, [data])
 
   useEffect(() => { carica() }, [carica])
-
-  // Ricarica quando GlobalPoller segnala aggiornamenti
   useEffect(() => {
     const onUpdate = () => carica()
     window.addEventListener('dmgdesk:stati-aggiornati', onUpdate)
     return () => window.removeEventListener('dmgdesk:stati-aggiornati', onUpdate)
   }, [carica])
 
-  const scaricaExcel = () => {
-    window.open(API(`/export-excel-download?data=${data}`), '_blank')
-  }
+  const scaricaExcel = () => window.open(API(`/export-excel-download?data=${data}`), '_blank')
 
-  if (loading) return (
-    <div style={{ padding: 32, color: 'var(--text-dim)' }}>Caricamento report...</div>
-  )
+  const TABS = [
+    { id:'overview',  label:'📊 Overview' },
+    { id:'programmi', label:'⚙ Programmi' },
+    { id:'fermi',     label:'⏸ Fermi' },
+    { id:'utensili',  label:'🔧 Utensili' },
+    { id:'confronto', label:'📈 Settimana' },
+  ]
 
   return (
-    <div style={{ padding: '16px 24px', maxWidth: 1200, margin: '0 auto' }}>
+    <div style={{ padding:'16px 24px', maxWidth:1200, margin:'0 auto' }}>
 
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20, flexWrap: 'wrap' }}>
-        <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--text-primary)' }}>
-          📊 Report Lavorazioni
-        </div>
+      <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:20, flexWrap:'wrap' }}>
+        <div style={{ fontSize:20, fontWeight:800, color:'var(--text-primary)' }}>Analisi Lavorazioni</div>
         <input type="date" value={data} onChange={e => setData(e.target.value)}
-          style={{ padding: '6px 12px', borderRadius: 6, border: '1px solid var(--border)',
-                   background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: 13 }} />
+          style={{ padding:'6px 12px', borderRadius:6, border:'1px solid var(--border)',
+                   background:'var(--bg-card)', color:'var(--text-primary)', fontSize:13 }} />
         <button onClick={carica}
-          style={{ padding: '6px 14px', borderRadius: 6, fontSize: 13, fontWeight: 600,
-                   background: 'var(--bg-hover)', border: '1px solid var(--border)',
-                   color: 'var(--text-secondary)', cursor: 'pointer' }}>
-          🔄 Aggiorna
-        </button>
+          style={{ padding:'6px 14px', borderRadius:6, fontSize:13, fontWeight:600,
+                   background:'var(--bg-hover)', border:'1px solid var(--border)',
+                   color:'var(--text-secondary)', cursor:'pointer' }}>↺ Aggiorna</button>
+        {loading && <span style={{ fontSize:12, color:'var(--text-dim)' }}>Caricamento...</span>}
         <button onClick={scaricaExcel}
-          style={{ padding: '6px 14px', borderRadius: 6, fontSize: 13, fontWeight: 700,
-                   background: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.3)',
-                   color: '#22c55e', cursor: 'pointer', marginLeft: 'auto' }}>
-          📥 Scarica Excel
-        </button>
+          style={{ padding:'6px 14px', borderRadius:6, fontSize:13, fontWeight:700,
+                   background:'rgba(34,197,94,0.12)', border:'1px solid rgba(34,197,94,0.3)',
+                   color:'#22c55e', cursor:'pointer', marginLeft:'auto' }}>↓ Excel</button>
       </div>
 
-      {/* Grafico storico 14 giorni */}
-      {storico.length > 0 && (
-        <div style={{ background: 'var(--bg-card)', borderRadius: 10, padding: '14px 18px',
-                      border: '1px solid var(--border)', marginBottom: 20 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1,
-                        color: 'var(--text-dim)', marginBottom: 10 }}>ORE LAVORATE — ULTIMI 14 GIORNI</div>
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: 60 }}>
-            {storico.map(g => {
-              const maxSec = Math.max(...storico.map(x => x.ore_lavorate_sec || 0)) || 1
-              const h = Math.max(4, Math.round((g.ore_lavorate_sec / maxSec) * 56))
-              const isToday = g.data === data
-              return (
-                <div key={g.data} style={{ flex: 1, display: 'flex', flexDirection: 'column',
-                                           alignItems: 'center', cursor: 'pointer' }}
-                     onClick={() => setData(g.data)} title={`${g.data}: ${g.ore_lavorate}`}>
-                  <div style={{ width: '100%', height: h, borderRadius: '3px 3px 0 0',
-                                background: isToday ? '#3b82f6' : 'var(--navy-500)',
-                                opacity: g.ore_lavorate_sec > 0 ? 1 : 0.2 }} />
-                  <div style={{ fontSize: 8, color: isToday ? '#3b82f6' : 'var(--text-dim)',
-                                marginTop: 2, fontWeight: isToday ? 700 : 400 }}>
-                    {g.data.slice(5)}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
+      {/* Storico 14gg */}
+      <Card style={{ padding:'14px 18px', marginBottom:16 }}>
+        <SectionTitle>Ultimi 14 giorni — clicca per cambiare data</SectionTitle>
+        <StoricoBars storico={storico} selectedData={data} onSelect={setData} />
+      </Card>
+
+      {/* KPI giornalieri */}
+      {rpt && (
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:10, marginBottom:16 }}>
+          <KpiCard label="Ore lavorate"  value={rpt.ore_lavorate}  color="#22c55e" />
+          <KpiCard label="Tempo fermo"   value={rpt.tempo_fermo}   color="#f59e0b" />
+          <KpiCard label="Efficienza"    value={`${rpt.efficienza_pct}%`}
+                   color={rpt.efficienza_pct > 70 ? '#22c55e' : rpt.efficienza_pct > 40 ? '#f59e0b' : '#ef4444'} />
+          <KpiCard label="Programmi"     value={rpt.n_programmi}   color="#3b82f6" />
+          <KpiCard label="Sessioni"      value={rpt.n_sessioni}     color="#8b5cf6" />
         </div>
       )}
 
-      {!rpt && <div style={{ color: 'var(--text-dim)' }}>Nessun dato per questa data.</div>}
-      {rpt && (<>
-
-        {/* KPI Cards */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10, marginBottom: 20 }}>
-          {[
-            { label: 'Ore lavorate',   val: rpt.ore_lavorate,         color: '#22c55e' },
-            { label: 'Tempo fermo',    val: rpt.tempo_fermo,          color: '#f59e0b' },
-            { label: 'Efficienza',     val: `${rpt.efficienza_pct}%`, color: rpt.efficienza_pct > 70 ? '#22c55e' : '#ef4444' },
-            { label: 'Programmi',      val: rpt.n_programmi,          color: '#3b82f6' },
-            { label: 'Sessioni',       val: rpt.n_sessioni,           color: '#8b5cf6' },
-          ].map(k => (
-            <div key={k.label} style={{ background: 'var(--bg-card)', borderRadius: 8,
-                                        padding: '12px 14px', border: '1px solid var(--border)',
-                                        textAlign: 'center' }}>
-              <div style={{ fontSize: 10, letterSpacing: 1, color: 'var(--text-dim)',
-                            marginBottom: 4 }}>{k.label.toUpperCase()}</div>
-              <div style={{ fontSize: 20, fontWeight: 800, color: k.color, fontVariantNumeric: 'tabular-nums' }}>
-                {k.val}
-              </div>
-            </div>
-          ))}
+      {!rpt && !loading && (
+        <div style={{ color:'var(--text-dim)', textAlign:'center', padding:'40px 0' }}>
+          Nessun dato per {data}
         </div>
+      )}
 
-        {/* Tab selector */}
-        <div style={{ display: 'flex', gap: 2, marginBottom: 16,
-                      borderBottom: '1px solid var(--border)' }}>
-          {[
-            ['riepilogo',  '📋 Riepilogo'],
-            ['programmi',  '⚙️ Programmi'],
-            ['fermi',      '⏸ Fermi'],
-            ['utensili',   '🔧 Utensili'],
-          ].map(([id, label]) => (
-            <button key={id} onClick={() => setTab(id)}
-              style={{ padding: '8px 16px', fontSize: 13, fontWeight: 600,
-                       border: 'none', cursor: 'pointer',
-                       borderBottom: tab === id ? '2px solid #3b82f6' : '2px solid transparent',
-                       background: 'transparent',
-                       color: tab === id ? '#3b82f6' : 'var(--text-dim)' }}>
-              {label}
+      {rpt && (<>
+        {/* Tab bar */}
+        <div style={{ display:'flex', gap:2, marginBottom:16, borderBottom:'1px solid var(--border)' }}>
+          {TABS.map(t => (
+            <button key={t.id} onClick={() => setTab(t.id)}
+              style={{ padding:'8px 14px', fontSize:12, fontWeight:600, border:'none', cursor:'pointer',
+                       borderBottom: tab===t.id ? '2px solid #3b82f6' : '2px solid transparent',
+                       background:'transparent', color: tab===t.id ? '#3b82f6' : 'var(--text-dim)' }}>
+              {t.label}
             </button>
           ))}
         </div>
 
-        {/* Tab Riepilogo */}
-        {tab === 'riepilogo' && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-            {/* Progetti */}
-            <div style={{ background: 'var(--bg-card)', borderRadius: 8,
-                          border: '1px solid var(--border)', overflow: 'hidden' }}>
-              <div style={{ padding: '10px 16px', background: '#1D5FAD',
-                            fontSize: 11, fontWeight: 700, letterSpacing: 1, color: 'white' }}>
-                PROGETTI LAVORATI
-              </div>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                <thead>
-                  <tr style={{ background: 'var(--bg-hover)' }}>
-                    {['Progetto','Pallet','Ore','Pgm'].map(h => (
-                      <th key={h} style={{ padding: '7px 12px', textAlign: 'left',
-                                           fontSize: 11, color: 'var(--text-dim)',
-                                           fontWeight: 600, letterSpacing: 0.5 }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {Object.entries(rpt.progetti).map(([prog, info], i) => (
-                    <tr key={prog} style={{ borderTop: '1px solid var(--border)',
-                                            background: i % 2 === 0 ? 'transparent' : 'var(--bg-hover)' }}>
-                      <td style={{ padding: '8px 12px', fontWeight: 700,
-                                   color: 'var(--text-primary)', fontFamily: 'monospace' }}>{prog}</td>
-                      <td style={{ padding: '8px 12px', color: 'var(--text-secondary)' }}>
-                        {info.pallet ? `P${info.pallet}` : '—'}
-                      </td>
-                      <td style={{ padding: '8px 12px', fontFamily: 'monospace',
-                                   color: '#22c55e', fontWeight: 600 }}>
-                        {fmt(info.durata_sec)}
-                      </td>
-                      <td style={{ padding: '8px 12px', color: 'var(--text-secondary)' }}>
-                        {info.n_programmi}
-                      </td>
-                    </tr>
-                  ))}
-                  {Object.keys(rpt.progetti).length === 0 && (
-                    <tr><td colSpan={4} style={{ padding: 16, color: 'var(--text-dim)',
-                                                  textAlign: 'center' }}>Nessun progetto</td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Utensili top */}
-            <div style={{ background: 'var(--bg-card)', borderRadius: 8,
-                          border: '1px solid var(--border)', overflow: 'hidden' }}>
-              <div style={{ padding: '10px 16px', background: '#1D5FAD',
-                            fontSize: 11, fontWeight: 700, letterSpacing: 1, color: 'white' }}>
-                TOP UTENSILI (ore utilizzo)
-              </div>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                <thead>
-                  <tr style={{ background: 'var(--bg-hover)' }}>
-                    {['Alias','Ore','%'].map(h => (
-                      <th key={h} style={{ padding: '7px 12px', textAlign: 'left',
-                                           fontSize: 11, color: 'var(--text-dim)', fontWeight: 600 }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {Object.entries(rpt.utensili).slice(0,10).map(([alias, info], i) => {
-                    const totSec = Object.values(rpt.utensili).reduce((a,v) => a + v.sec, 0) || 1
-                    const pct = Math.round(info.sec / totSec * 100)
+        {/* OVERVIEW */}
+        {tab === 'overview' && (
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 }}>
+            <Card style={{ padding:'14px 18px' }}>
+              <SectionTitle>Timeline giornaliera (per ora)</SectionTitle>
+              <TimelineGiornaliera sessioni={rpt.sessioni} />
+            </Card>
+            <Card style={{ padding:'14px 18px' }}>
+              <SectionTitle>Commesse lavorate</SectionTitle>
+              {Object.entries(rpt.progetti).length === 0
+                ? <div style={{ color:'var(--text-dim)', fontSize:12 }}>Nessun progetto</div>
+                : (
+                <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                  {Object.entries(rpt.progetti).map(([nome, info]) => {
+                    const tot = Object.values(rpt.progetti).reduce((a,v)=>a+(v.durata_sec||0),0) || 1
+                    const pct = (info.durata_sec / tot * 100).toFixed(0)
+                    const color = colorForProject(nome)
                     return (
-                      <tr key={alias} style={{ borderTop: '1px solid var(--border)',
-                                               background: i%2===0?'transparent':'var(--bg-hover)' }}>
-                        <td style={{ padding: '8px 12px', fontWeight: 600, fontFamily: 'monospace',
-                                     color: 'var(--text-primary)', fontSize: 12 }}>{alias}</td>
-                        <td style={{ padding: '8px 12px', fontFamily: 'monospace',
-                                     color: '#f59e0b', fontWeight: 600 }}>{info.ore}</td>
-                        <td style={{ padding: '8px 12px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <div style={{ flex: 1, height: 6, background: 'var(--border)',
-                                          borderRadius: 3, overflow: 'hidden' }}>
-                              <div style={{ width: `${pct}%`, height: '100%',
-                                            background: '#3b82f6', borderRadius: 3 }} />
+                      <div key={nome}>
+                        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', marginBottom:3 }}>
+                          <span style={{ fontSize:13, fontWeight:700, fontFamily:'monospace', color }}>{nome}</span>
+                          <span style={{ fontSize:11, color:'var(--text-dim)' }}>{fmt(info.durata_sec)} · {info.n_programmi} pgm</span>
+                        </div>
+                        <div style={{ height:8, background:'var(--bg-hover)', borderRadius:4, overflow:'hidden' }}>
+                          <div style={{ width:`${pct}%`, height:'100%', background:color, borderRadius:4, transition:'width 0.4s' }} />
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </Card>
+            <Card style={{ padding:'14px 18px' }}>
+              <SectionTitle>Utilizzo utensili</SectionTitle>
+              <UtensiliDonut utensili={rpt.utensili} />
+            </Card>
+            <Card style={{ padding:'14px 18px' }}>
+              <SectionTitle>Principali fermi macchina</SectionTitle>
+              {(() => {
+                const fermi = (rpt.sessioni || []).flatMap(s => {
+                  const gaps = []
+                  for (let i = 1; i < (s.programmi||[]).length; i++) {
+                    const prev = s.programmi[i-1], curr = s.programmi[i]
+                    if (!prev.fine || !curr.inizio) continue
+                    const gap = Math.round((new Date(curr.inizio) - new Date(prev.fine)) / 1000)
+                    if (gap < 30) continue
+                    gaps.push({ prog: s.progetto, inizio: prev.fine, gap })
+                  }
+                  return gaps
+                }).sort((a,b) => b.gap - a.gap).slice(0,6)
+                if (!fermi.length) return <div style={{ color:'var(--text-dim)', fontSize:12 }}>Nessun fermo</div>
+                const maxGap = fermi[0].gap
+                return (
+                  <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                    {fermi.map((f, i) => (
+                      <div key={i} style={{ display:'flex', alignItems:'center', gap:8 }}>
+                        <div style={{ width:52, fontSize:11, fontFamily:'monospace', fontWeight:700,
+                                      color: f.gap > 1800 ? '#ef4444' : '#f59e0b', flexShrink:0 }}>{fmt(f.gap)}</div>
+                        <div style={{ flex:1, height:12, background:'var(--bg-hover)', borderRadius:3 }}>
+                          <div style={{ width:`${(f.gap/maxGap*100).toFixed(0)}%`, height:'100%',
+                                        background: f.gap > 1800 ? '#ef444488' : '#f59e0b88', borderRadius:3 }} />
+                        </div>
+                        <div style={{ fontSize:10, color:'var(--text-dim)', width:40, textAlign:'right', flexShrink:0 }}>
+                          {fmtDate(f.inizio).slice(11)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )
+              })()}
+            </Card>
+          </div>
+        )}
+
+        {/* PROGRAMMI */}
+        {tab === 'programmi' && (
+          <Card style={{ padding:'16px 20px' }}>
+            <SectionTitle>Durata programmi — top 20</SectionTitle>
+            <ProgrammiChart sessioni={rpt.sessioni} />
+          </Card>
+        )}
+
+        {/* FERMI */}
+        {tab === 'fermi' && (
+          <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+            <Card style={{ padding:'16px 20px' }}>
+              <SectionTitle>Pattern fermi per ora del giorno</SectionTitle>
+              <HeatmapFermi sessioni={rpt.sessioni} />
+            </Card>
+            <Card style={{ padding:'16px 20px', overflow:'auto' }}>
+              <SectionTitle>Dettaglio fermi — {data}</SectionTitle>
+              <TabellaFermi sessioni={rpt.sessioni} />
+            </Card>
+          </div>
+        )}
+
+        {/* UTENSILI */}
+        {tab === 'utensili' && (
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 }}>
+            <Card style={{ padding:'16px 20px' }}>
+              <SectionTitle>Distribuzione utilizzo</SectionTitle>
+              <UtensiliDonut utensili={rpt.utensili} />
+            </Card>
+            <Card style={{ padding:'16px 20px', overflow:'auto' }}>
+              <SectionTitle>Tabella completa</SectionTitle>
+              <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
+                <thead>
+                  <tr>
+                    {['#','Alias','Ore','%'].map(h => (
+                      <th key={h} style={{ padding:'6px 10px', textAlign:'left', fontSize:10, color:'var(--text-dim)',
+                                           fontWeight:700, borderBottom:'1px solid var(--border)' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(rpt.utensili).map(([alias, info], i) => {
+                    const totSec = Object.values(rpt.utensili).reduce((a,v)=>a+v.sec,0) || 1
+                    const pct = (info.sec / totSec * 100).toFixed(1)
+                    return (
+                      <tr key={alias} style={{ borderBottom:'1px solid var(--border)' }}>
+                        <td style={{ padding:'7px 10px', color:'var(--text-dim)', fontSize:11 }}>{i+1}</td>
+                        <td style={{ padding:'7px 10px', fontFamily:'monospace', fontWeight:700 }}>{alias}</td>
+                        <td style={{ padding:'7px 10px', fontFamily:'monospace', color:'#f59e0b', fontWeight:700 }}>{info.ore}</td>
+                        <td style={{ padding:'7px 10px' }}>
+                          <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                            <div style={{ width:80, height:6, background:'var(--border)', borderRadius:3, overflow:'hidden' }}>
+                              <div style={{ width:`${pct}%`, height:'100%', background:'#3b82f6', borderRadius:3 }} />
                             </div>
-                            <span style={{ fontSize: 11, color: 'var(--text-dim)', minWidth: 30 }}>{pct}%</span>
+                            <span style={{ fontSize:11, color:'#3b82f6', fontWeight:700 }}>{pct}%</span>
                           </div>
                         </td>
                       </tr>
                     )
                   })}
-                  {Object.keys(rpt.utensili).length === 0 && (
-                    <tr><td colSpan={3} style={{ padding: 16, color: 'var(--text-dim)',
-                                                  textAlign: 'center' }}>Nessun utensile tracciato</td></tr>
-                  )}
                 </tbody>
               </table>
-            </div>
+            </Card>
           </div>
         )}
 
-        {/* Tab Programmi */}
-        {tab === 'programmi' && (
-          <div style={{ background: 'var(--bg-card)', borderRadius: 8,
-                        border: '1px solid var(--border)', overflow: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-              <thead>
-                <tr style={{ background: '#1D5FAD' }}>
-                  {['Progetto','Comm.','Pos.','Fase','N°','Inizio','Fine','Durata','Utensile'].map(h => (
-                    <th key={h} style={{ padding: '8px 10px', textAlign: 'left',
-                                         color: 'white', fontWeight: 700, fontSize: 11,
-                                         whiteSpace: 'nowrap' }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {rpt.sessioni.flatMap(s =>
-                  s.programmi.map((pgm, i) => (
-                    <tr key={pgm.filename+i} style={{ borderTop: '1px solid var(--border)',
-                                                       background: i%2===0?'transparent':'var(--bg-hover)' }}>
-                      <td style={{ padding: '7px 10px', fontWeight: 600,
-                                   fontFamily: 'monospace', fontSize: 11 }}>{s.progetto}</td>
-                      <td style={{ padding: '7px 10px', fontFamily: 'monospace' }}>{pgm.commessa}</td>
-                      <td style={{ padding: '7px 10px', fontFamily: 'monospace' }}>{pgm.posizione}</td>
-                      <td style={{ padding: '7px 10px', fontFamily: 'monospace' }}>{pgm.fase}</td>
-                      <td style={{ padding: '7px 10px', fontFamily: 'monospace' }}>{pgm.seq}</td>
-                      <td style={{ padding: '7px 10px', color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>
-                        {fmtDate(pgm.inizio)}
-                      </td>
-                      <td style={{ padding: '7px 10px', color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>
-                        {fmtDate(pgm.fine)}
-                      </td>
-                      <td style={{ padding: '7px 10px', fontFamily: 'monospace',
-                                   color: '#22c55e', fontWeight: 700 }}>
-                        {fmt(pgm.durata_sec)}
-                      </td>
-                      <td style={{ padding: '7px 10px', fontFamily: 'monospace',
-                                   fontSize: 11, color: '#f59e0b' }}>
-                        {pgm.utensile || '—'}
-                      </td>
-                    </tr>
-                  ))
-                )}
-                {rpt.sessioni.flatMap(s => s.programmi).length === 0 && (
-                  <tr><td colSpan={9} style={{ padding: 20, textAlign: 'center',
-                                               color: 'var(--text-dim)' }}>
-                    Nessun programma registrato per questa data
-                  </td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {/* Tab Fermi */}
-        {tab === 'fermi' && (
-          <div style={{ background: 'var(--bg-card)', borderRadius: 8,
-                        border: '1px solid var(--border)', overflow: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-              <thead>
-                <tr style={{ background: '#92400E' }}>
-                  {['Progetto','Programma precedente','Programma successivo','Inizio fermo','Durata fermo'].map(h => (
-                    <th key={h} style={{ padding: '8px 12px', textAlign: 'left',
-                                         color: 'white', fontWeight: 700, fontSize: 11 }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {rpt.sessioni.flatMap(s => {
-                  const gaps = []
-                  for (let i = 1; i < s.programmi.length; i++) {
-                    const prev = s.programmi[i-1], curr = s.programmi[i]
-                    if (!prev.fine || !curr.inizio) continue
-                    const gap = Math.round(
-                      (new Date(curr.inizio) - new Date(prev.fine)) / 1000)
-                    if (gap < 10) continue
-                    gaps.push({ prog: s.progetto, prev, curr, gap })
-                  }
-                  return gaps
-                }).map((g, i) => (
-                  <tr key={i} style={{ borderTop: '1px solid var(--border)',
-                                       background: i%2===0?'#FEF9C3':'#FFFBEB' }}>
-                    <td style={{ padding: '8px 12px', fontWeight: 600,
-                                 fontFamily: 'monospace', fontSize: 11 }}>{g.prog}</td>
-                    <td style={{ padding: '8px 12px', fontFamily: 'monospace',
-                                 color: '#92400E', fontSize: 11 }}>{g.prev.filename}</td>
-                    <td style={{ padding: '8px 12px', fontFamily: 'monospace',
-                                 fontSize: 11 }}>{g.curr.filename}</td>
-                    <td style={{ padding: '8px 12px', color: '#78350F',
-                                 whiteSpace: 'nowrap' }}>{fmtDate(g.prev.fine)}</td>
-                    <td style={{ padding: '8px 12px', fontFamily: 'monospace',
-                                 fontWeight: 700, color: '#D97706' }}>{fmt(g.gap)}</td>
-                  </tr>
-                ))}
-                {rpt.sessioni.flatMap(s => s.programmi).length < 2 && (
-                  <tr><td colSpan={5} style={{ padding: 20, textAlign: 'center',
-                                               color: 'var(--text-dim)' }}>
-                    Nessun fermo rilevato
-                  </td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {/* Tab Utensili */}
-        {tab === 'utensili' && (
-          <div style={{ background: 'var(--bg-card)', borderRadius: 8,
-                        border: '1px solid var(--border)', overflow: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-              <thead>
-                <tr style={{ background: '#1D5FAD' }}>
-                  {['#','Alias utensile','Ore di utilizzo','Secondi','% sul totale'].map(h => (
-                    <th key={h} style={{ padding: '9px 14px', textAlign: 'left',
-                                         color: 'white', fontWeight: 700, fontSize: 11 }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {Object.entries(rpt.utensili).map(([alias, info], i) => {
-                  const totSec = Object.values(rpt.utensili).reduce((a,v) => a+v.sec, 0) || 1
-                  const pct = (info.sec / totSec * 100).toFixed(1)
+        {/* CONFRONTO SETTIMANE */}
+        {tab === 'confronto' && (
+          <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+            <ConfrontoSettimane storico={storico} />
+            <Card style={{ padding:'16px 20px' }}>
+              <SectionTitle>Efficienza e ore — ultimi 14 giorni</SectionTitle>
+              <div style={{ display:'flex', flexDirection:'column', gap:4, marginTop:4 }}>
+                {storico.map(g => {
+                  const eff = g.efficienza_pct || 0
+                  const effColor = eff > 70 ? '#22c55e' : eff > 40 ? '#f59e0b' : eff > 0 ? '#ef4444' : 'var(--border)'
                   return (
-                    <tr key={alias} style={{ borderTop: '1px solid var(--border)',
-                                             background: i%2===0?'transparent':'var(--bg-hover)' }}>
-                      <td style={{ padding: '9px 14px', color: 'var(--text-dim)',
-                                   fontSize: 12 }}>{i+1}</td>
-                      <td style={{ padding: '9px 14px', fontWeight: 700,
-                                   fontFamily: 'monospace', color: 'var(--text-primary)' }}>{alias}</td>
-                      <td style={{ padding: '9px 14px', fontFamily: 'monospace',
-                                   color: '#f59e0b', fontWeight: 700, fontSize: 15 }}>{info.ore}</td>
-                      <td style={{ padding: '9px 14px', color: 'var(--text-dim)',
-                                   fontFamily: 'monospace' }}>{info.sec}s</td>
-                      <td style={{ padding: '9px 14px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <div style={{ width: 140, height: 8, background: 'var(--border)',
-                                        borderRadius: 4, overflow: 'hidden' }}>
-                            <div style={{ width: `${pct}%`, height: '100%',
-                                          background: '#3b82f6', borderRadius: 4 }} />
+                    <div key={g.data} style={{ display:'flex', alignItems:'center', gap:10, cursor:'pointer', padding:'2px 0' }}
+                         onClick={() => setData(g.data)}>
+                      <div style={{ width:80, fontSize:11, flexShrink:0,
+                                    color: g.data===data ? '#3b82f6' : 'var(--text-dim)',
+                                    fontWeight: g.data===data ? 700 : 400 }}>
+                        {fmtDay(g.data)}
+                      </div>
+                      <div style={{ flex:1, height:18, background:'var(--bg-hover)', borderRadius:4, overflow:'hidden' }}>
+                        {eff > 0 && (
+                          <div style={{ width:`${eff}%`, height:'100%', background:effColor, borderRadius:4,
+                                        display:'flex', alignItems:'center', paddingLeft:6, transition:'width 0.3s' }}>
+                            {eff > 15 && <span style={{ fontSize:10, fontWeight:700, color:'#fff' }}>{eff.toFixed(0)}%</span>}
                           </div>
-                          <span style={{ fontWeight: 700, color: '#3b82f6' }}>{pct}%</span>
-                        </div>
-                      </td>
-                    </tr>
+                        )}
+                      </div>
+                      <div style={{ width:44, fontSize:11, fontFamily:'monospace', color:'var(--text-dim)',
+                                    textAlign:'right', flexShrink:0 }}>
+                        {fmtH(g.ore_lavorate_sec)}
+                      </div>
+                    </div>
                   )
                 })}
-                {Object.keys(rpt.utensili).length === 0 && (
-                  <tr><td colSpan={5} style={{ padding: 20, textAlign: 'center',
-                                               color: 'var(--text-dim)' }}>
-                    Nessun utensile tracciato oggi
-                  </td></tr>
-                )}
-              </tbody>
-            </table>
+              </div>
+            </Card>
           </div>
         )}
 

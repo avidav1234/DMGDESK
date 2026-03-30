@@ -405,7 +405,79 @@ async def get_storico(giorni: int = Query(default=7)):
         })
     return result
 
-# ── Export Excel ──────────────────────────────────────────────────────────────
+# ── Sessione live ─────────────────────────────────────────────────────────────
+
+@router.get("/sessione-live")
+async def get_sessione_live():
+    """
+    Restituisce i dati della sessione di lavorazione attualmente in corso.
+    Chiamato dalla Home ogni 10s per mostrare il timer del pallet attivo.
+
+    Risposta:
+    {
+      "attiva": true,
+      "inizio_sessione": "2026-03-30T08:12:00",
+      "durata_sec": 7543,
+      "durata_str": "02:05:43",
+      "inizio_programma": "2026-03-30T10:16:46",
+      "durata_programma_sec": 312,
+      "programma_corrente": "4297_005_01_14.MPF",
+      "utensile": "FS16R2L80F85E6",
+      "n_programmi_sessione": 14
+    }
+    """
+    config  = carica_configurazione()
+    data    = _load_log(config)
+    sc      = data.get("stato_corrente", {})
+    now_iso = datetime.now().isoformat(timespec="seconds")
+
+    if not sc.get("in_esecuzione") or not sc.get("sessione_id"):
+        return {"attiva": False}
+
+    sess = _find_sess(data, sc["sessione_id"])
+    if not sess:
+        return {"attiva": False}
+
+    # Durata totale sessione (da inizio pallet)
+    inizio_sess = sess.get("inizio")
+    durata_sess = 0
+    if inizio_sess:
+        try:
+            durata_sess = int((datetime.fromisoformat(now_iso) -
+                               datetime.fromisoformat(inizio_sess)).total_seconds())
+        except Exception:
+            pass
+
+    # Durata programma corrente
+    inizio_pgm = sc.get("inizio_programma")
+    durata_pgm = 0
+    if inizio_pgm:
+        try:
+            durata_pgm = int((datetime.fromisoformat(now_iso) -
+                              datetime.fromisoformat(inizio_pgm)).total_seconds())
+        except Exception:
+            pass
+
+    n_pgm = len(sess.get("programmi", []))  # già chiusi + quello corrente
+    if sc.get("programma_corrente"):
+        n_pgm += 1  # aggiungi quello in corso
+
+    return {
+        "attiva":                True,
+        "inizio_sessione":       inizio_sess,
+        "durata_sec":            durata_sess,
+        "durata_str":            _durata_str(durata_sess),
+        "inizio_programma":      inizio_pgm,
+        "durata_programma_sec":  durata_pgm,
+        "durata_programma_str":  _durata_str(durata_pgm),
+        "programma_corrente":    sc.get("programma_corrente"),
+        "utensile":              sc.get("utensile_programma"),
+        "t_number":              sc.get("t_number_programma"),
+        "n_programmi_sessione":  n_pgm,
+        "progetto":              sess.get("progetto"),
+        "pallet":                sess.get("pallet"),
+    }
+
 
 @router.get("/export-excel")
 async def export_excel(data: str = Query(default=None)):

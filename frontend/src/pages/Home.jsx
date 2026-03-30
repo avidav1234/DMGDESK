@@ -1,5 +1,5 @@
 // Home.jsx — Cruscotto turno
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 function daysUntil(dateStr){
@@ -12,12 +12,20 @@ function daysUntil(dateStr){
   }catch{return null}
 }
 
+function fmtTimer(sec){
+  if(sec==null||sec<0) return '—:——:——'
+  const h=Math.floor(sec/3600), m=Math.floor((sec%3600)/60), s=sec%60
+  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`
+}
+
 export default function Home(){
   const nav = useNavigate()
   const [projects,  setProjects]  = useState([])
   const [deliveries,setDeliveries]= useState([])
   const [pallet,    setPallet]    = useState([])
   const [setup,     setSetup]     = useState({})
+  const [sessLive,  setSessLive]  = useState(null)
+  const [tickSec,   setTickSec]   = useState(0)   // tick locale ogni 1s
   const [loading,   setLoading]   = useState(true)
 
   useEffect(()=>{
@@ -36,7 +44,14 @@ export default function Home(){
     const t=setInterval(()=>
       fetch('/api/pallet/').then(r=>r.ok?r.json():{pallet:[]}).then(d=>setPallet(d.pallet||[]))
     ,15000)
-    return()=>clearInterval(t)
+    // Sessione live: aggiorna ogni 10s per il timer
+    const fetchSessLive = () =>
+      fetch('/api/report/sessione-live').then(r=>r.ok?r.json():null).then(d=>setSessLive(d)).catch(()=>{})
+    fetchSessLive()
+    const t2 = setInterval(fetchSessLive, 10000)
+    // Ticker locale ogni 1s — aggiorna i timer senza aspettare il polling
+    const t3 = setInterval(()=>setTickSec(s=>s+1), 1000)
+    return()=>{clearInterval(t);clearInterval(t2);clearInterval(t3)}
   },[])
 
   const now   = new Date()
@@ -70,6 +85,24 @@ export default function Home(){
     if(info) return {bg:'#fefce8',fg:'#854d0e',border:'#eab308',label:'GREZZO'}
     return {bg:'#f1f5f9',fg:'#94a3b8',border:'#e2e8f0',label:'VUOTO'}
   }
+
+  // ── Timer live calcolati dai timestamp (aggiornati ogni 1s da tickSec) ──
+  const durataSessioneLive = (() => {
+    if(!sessLive?.attiva||!sessLive?.inizio_sessione) return null
+    try{
+      const diff = Math.floor((Date.now() - new Date(sessLive.inizio_sessione).getTime()) / 1000)
+      return diff >= 0 ? diff : null
+    }catch{ return null }
+  })()
+  const durataProgrammaLive = (() => {
+    if(!sessLive?.attiva||!sessLive?.inizio_programma) return null
+    try{
+      const diff = Math.floor((Date.now() - new Date(sessLive.inizio_programma).getTime()) / 1000)
+      return diff >= 0 ? diff : null
+    }catch{ return null }
+  })()
+  // eslint-disable-next-line no-unused-vars
+  void tickSec // forza re-render ogni secondo
 
   // ── Progetto IN LAVORAZIONE ─────────────────────────────────────────────
   const palletLav    = pallet.find(p=>(p.stato||'').toLowerCase().replace('_',' ')==='in lavorazione')
@@ -194,6 +227,91 @@ export default function Home(){
 
         {/* ── COL 2: PROGETTO ATTIVO + SCADENZE + UTENSILI ────────────── */}
         <div style={{display:'flex',flexDirection:'column',gap:12}}>
+
+          {/* Progetto in lavorazione + timer sessione */}
+          {lavInfo&&(
+            <div style={{background:'#f0f7ff',border:'1.5px solid #1D5FAD',borderRadius:12,padding:'14px 18px'}}>
+              {/* Header */}
+              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
+                <div style={{width:10,height:10,borderRadius:2,background:lavInfo.proj.color||'#1D5FAD',flexShrink:0}}/>
+                <span style={{fontSize:15,fontWeight:800,color:'#0d2d5e',flex:1,
+                  overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                  {lavInfo.proj.name}
+                </span>
+                <span style={{fontSize:11,fontWeight:700,color:'#1D5FAD',
+                  background:'#dbeafe',padding:'2px 8px',borderRadius:5}}>
+                  P{palletLav.numero}
+                </span>
+              </div>
+
+              {/* Timers — riga principale */}
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:10}}>
+                {/* Timer sessione pallet */}
+                <div style={{background:'#fff',borderRadius:8,padding:'10px 14px',
+                  border:'1px solid #bfdbfe',textAlign:'center'}}>
+                  <div style={{fontSize:10,fontWeight:700,color:'#1D5FAD',letterSpacing:'0.07em',
+                    textTransform:'uppercase',marginBottom:4}}>Sessione pallet</div>
+                  <div style={{fontSize:24,fontWeight:900,color:'#0d2d5e',fontFamily:'monospace',
+                    letterSpacing:'0.02em',lineHeight:1}}>
+                    {sessLive?.attiva&&sessLive?.pallet===palletLav.numero
+                      ? fmtTimer(durataSessioneLive)
+                      : '—:——:——'}
+                  </div>
+                  {sessLive?.attiva&&sessLive?.inizio_sessione&&sessLive?.pallet===palletLav.numero&&(
+                    <div style={{fontSize:10,color:'#64748b',marginTop:3}}>
+                      dal {sessLive.inizio_sessione.slice(11,16)}
+                    </div>
+                  )}
+                </div>
+                {/* Timer programma corrente */}
+                <div style={{background:'#fff',borderRadius:8,padding:'10px 14px',
+                  border:'1px solid #e2e8f0',textAlign:'center'}}>
+                  <div style={{fontSize:10,fontWeight:700,color:'#64748b',letterSpacing:'0.07em',
+                    textTransform:'uppercase',marginBottom:4}}>Programma corrente</div>
+                  <div style={{fontSize:24,fontWeight:900,color:'#475569',fontFamily:'monospace',
+                    letterSpacing:'0.02em',lineHeight:1}}>
+                    {sessLive?.attiva&&sessLive?.pallet===palletLav.numero&&durataProgrammaLive!=null
+                      ? fmtTimer(durataProgrammaLive)
+                      : '—:——:——'}
+                  </div>
+                  {sessLive?.attiva&&sessLive?.programma_corrente&&sessLive?.pallet===palletLav.numero&&(
+                    <div style={{fontSize:10,color:'#64748b',marginTop:3,fontFamily:'monospace',
+                      overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                      {sessLive.programma_corrente.replace('.MPF','').replace('.mpf','')}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Barra avanzamento */}
+              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
+                <div style={{flex:1,height:7,background:'rgba(29,95,173,0.15)',borderRadius:4,overflow:'hidden'}}>
+                  <div style={{height:'100%',width:`${lavInfo.pct}%`,
+                    background:lavInfo.proj.color||'#1D5FAD',borderRadius:4,transition:'width 0.4s'}}/>
+                </div>
+                <span style={{fontSize:13,fontWeight:800,color:'#0d2d5e',minWidth:36,textAlign:'right'}}>
+                  {lavInfo.pct}%
+                </span>
+              </div>
+
+              {/* Statistiche pgm + utensile */}
+              <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
+                <span style={{fontSize:11,color:'#64748b'}}>
+                  <b style={{color:'#16a34a'}}>{lavInfo.done}</b> completati ·{' '}
+                  <b style={{color:'#1D5FAD'}}>{lavInfo.inMac}</b> in corso ·{' '}
+                  <b style={{color:'#94a3b8'}}>{lavInfo.daFare}</b> da fare
+                </span>
+                {sessLive?.attiva&&sessLive?.utensile&&sessLive?.pallet===palletLav.numero&&(
+                  <span style={{marginLeft:'auto',fontSize:11,fontWeight:700,color:'#0d2d5e',
+                    background:'#eff6ff',padding:'2px 8px',borderRadius:5,
+                    fontFamily:'monospace',flexShrink:0}}>
+                    {sessLive.utensile}
+                    {sessLive.t_number&&<span style={{color:'#1D5FAD',marginLeft:6}}>T{sessLive.t_number}</span>}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Scadenze */}
           <div style={{background:'#fff',border:'1px solid #e2e8f0',borderRadius:12,padding:'14px 18px'}}>

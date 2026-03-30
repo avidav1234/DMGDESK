@@ -172,23 +172,17 @@ export default function CodaLavorazione() {
     }
   }, []);
 
-  // Polling aggiornamento automatico stati da log OpcUa (ogni 5s)
+  // Ricarica quando il GlobalPoller segnala aggiornamenti
   useEffect(() => {
-    const aggiornaStati = async () => {
-      try {
-        const r = await fetch('/api/macchina-live/aggiorna-stati-da-log', { method: 'POST' })
-        if (!r.ok) return
-        const d = await r.json()
-        // Se ci sono stati aggiornamenti → ricarica tutto
-        if (d.pallet > 0 || d.in_macchina > 0 || d.completato > 0) {
-          await fetchAll()
-          await caricaPgmInMacchina()
-        }
-      } catch {}
+    const onUpdate = (e) => {
+      const d = e.detail || {}
+      if (d.pallet > 0 || d.in_macchina > 0 || d.completato > 0) {
+        fetchAll()
+        caricaPgmInMacchina()
+      }
     }
-    aggiornaStati()
-    const t2 = setInterval(aggiornaStati, 5000)
-    return () => clearInterval(t2)
+    window.addEventListener('dmgdesk:stati-aggiornati', onUpdate)
+    return () => window.removeEventListener('dmgdesk:stati-aggiornati', onUpdate)
   }, [fetchAll])
 
   useEffect(() => {

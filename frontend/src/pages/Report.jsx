@@ -32,6 +32,13 @@ export default function Report() {
 
   useEffect(() => { carica() }, [carica])
 
+  // Ricarica quando GlobalPoller segnala aggiornamenti
+  useEffect(() => {
+    const onUpdate = () => carica()
+    window.addEventListener('dmgdesk:stati-aggiornati', onUpdate)
+    return () => window.removeEventListener('dmgdesk:stati-aggiornati', onUpdate)
+  }, [carica])
+
   const scaricaExcel = () => {
     window.open(API(`/export-excel-download?data=${data}`), '_blank')
   }

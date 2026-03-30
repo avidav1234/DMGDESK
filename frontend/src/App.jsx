@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { useEffect } from 'react'
 import Sidebar       from './components/Sidebar'
 import Home          from './pages/Home'
 import CodaLavorazione from './pages/CodaLavorazione'
@@ -11,6 +12,25 @@ import AnalisiNC     from './pages/AnalisiNC'
 import InvioMacchina from './pages/InvioMacchina'
 import Progetti      from './pages/Progetti'
 import Report        from './pages/Report'
+
+// Polling globale — gira sempre, indipendentemente dalla pagina aperta
+function GlobalPoller() {
+  useEffect(() => {
+    const tick = async () => {
+      try {
+        const r = await fetch('/api/macchina-live/aggiorna-stati-da-log', { method: 'POST' })
+        if (!r.ok) return
+        const d = await r.json()
+        // Notifica le pagine interessate
+        window.dispatchEvent(new CustomEvent('dmgdesk:stati-aggiornati', { detail: d }))
+      } catch {}
+    }
+    tick()
+    const t = setInterval(tick, 5000)
+    return () => clearInterval(t)
+  }, [])
+  return null
+}
 
 const FULL_PAGES = ['/home', '/coda', '/analisi-nc', '/macchina', '/progetti']
 
@@ -42,6 +62,7 @@ function MainContent() {
 export default function App() {
   return (
     <BrowserRouter>
+      <GlobalPoller />
       <div style={{ display:'flex', height:'100vh', overflow:'hidden', background:'var(--bg-base)' }}>
         <Sidebar />
         <MainContent />

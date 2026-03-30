@@ -1605,6 +1605,62 @@ function ProjectCard({project,onClick,onDelete,onArchive,delivery,onSetDelivery}
   )
 }
 // ── TemplateEditor ─────────────────────────────────────────────────────────────
+// ── TemplatesPage — Lista template ─────────────────────────────────────────
+function TemplatesPage({templates,onEdit,onCreate,onDelete,onDuplicate,onUseTemplate,lastSaved}){
+  return(
+    <div style={{display:'flex',flexDirection:'column',height:'100%',background:T.bg,fontFamily:"var(--font-display)"}}>
+      {/* Header */}
+      <div style={{padding:'18px 28px',borderBottom:`1px solid ${T.border}`,flexShrink:0,background:T.surface,display:'flex',alignItems:'center',gap:12}}>
+        <div style={{fontSize:18,fontWeight:800,color:T.text,flex:1}}>📋 Template Progetto</div>
+        {lastSaved&&<span style={{fontSize:11,color:T.textMuted}}>Salvato {lastSaved}</span>}
+        <button onClick={onCreate} style={{background:T.accent,border:'none',borderRadius:8,color:'#fff',fontWeight:700,fontSize:14,padding:'9px 20px',cursor:'pointer'}}>+ Nuovo Template</button>
+      </div>
+      {/* Lista */}
+      <div style={{flex:1,overflowY:'auto',padding:'24px 28px'}}>
+        {templates.length===0?(
+          <div style={{textAlign:'center',padding:'60px 20px',color:T.textMuted}}>
+            <div style={{fontSize:48,marginBottom:16}}>📋</div>
+            <div style={{fontSize:16,fontWeight:600,marginBottom:8}}>Nessun template</div>
+            <div style={{fontSize:13,marginBottom:24}}>Crea un template per velocizzare la creazione di nuovi progetti</div>
+            <button onClick={onCreate} style={{background:T.accent,border:'none',borderRadius:10,color:'#fff',fontWeight:700,fontSize:14,padding:'10px 24px',cursor:'pointer'}}>+ Crea primo template</button>
+          </div>
+        ):(
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(320px,1fr))',gap:16}}>
+            {templates.map(tmpl=>(
+              <div key={tmpl.id} style={{background:T.surface,border:`1.5px solid ${T.border}`,borderLeft:`5px solid ${tmpl.color||T.accent}`,borderRadius:12,padding:'16px 18px',display:'flex',flexDirection:'column',gap:10}}>
+                {/* Titolo */}
+                <div style={{display:'flex',alignItems:'center',gap:10}}>
+                  <span style={{fontSize:26}}>{tmpl.icon||'📋'}</span>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:15,fontWeight:800,color:T.text}}>{tmpl.name}</div>
+                    {tmpl.description&&<div style={{fontSize:12,color:T.textMuted,marginTop:2}}>{tmpl.description}</div>}
+                  </div>
+                </div>
+                {/* Fasi */}
+                <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
+                  {(tmpl.steps||[]).map((s,i)=>(
+                    <span key={s.id||i} style={{fontSize:11,background:T.surface2,border:`1px solid ${T.border}`,borderRadius:6,padding:'3px 8px',color:T.textSub,fontWeight:600}}>
+                      {i+1}. {s.title}
+                    </span>
+                  ))}
+                  {(tmpl.steps||[]).length===0&&<span style={{fontSize:12,color:T.textMuted}}>Nessuna fase</span>}
+                </div>
+                {/* Azioni */}
+                <div style={{display:'flex',gap:8,marginTop:4}}>
+                  <button onClick={()=>onUseTemplate(tmpl)} style={{flex:1,background:tmpl.color||T.accent,border:'none',borderRadius:8,color:'#fff',fontWeight:700,fontSize:13,padding:'8px',cursor:'pointer'}}>▶ Usa</button>
+                  <button onClick={()=>onEdit(tmpl)} style={{background:T.surface2,border:`1px solid ${T.border}`,borderRadius:8,color:T.textSub,fontWeight:600,fontSize:13,padding:'8px 12px',cursor:'pointer'}}>✏</button>
+                  <button onClick={()=>onDuplicate(tmpl)} style={{background:T.surface2,border:`1px solid ${T.border}`,borderRadius:8,color:T.textSub,fontWeight:600,fontSize:13,padding:'8px 12px',cursor:'pointer'}}>⧉</button>
+                  <button onClick={()=>onDelete(tmpl.id)} style={{background:T.redBg,border:`1px solid ${T.red}44`,borderRadius:8,color:T.red,fontWeight:600,fontSize:13,padding:'8px 12px',cursor:'pointer'}}>✕</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function TemplateEditor({template,onSave,onCancel}){
   const[name,setName]=useState(template.name)
   const[description,setDescription]=useState(template.description||'')

@@ -110,6 +110,18 @@ def aggiorna_da_log(
     now  = _now_iso()
     dirty = False
 
+    # ── Sanità: chiudi sessioni orfane da riavvio backend ─────────────────────
+    # Se il backend è stato riavviato mentre la macchina girava, la sessione
+    # corrente è rimasta aperta (fine=None). Se ora la macchina è ferma,
+    # chiudiamo la sessione orfana usando l'ultimo_tick come timestamp di fine.
+    if stato_pgm in (0, 5) and sc.get("sessione_id"):
+        sess_orfana = _find_sess(data, sc["sessione_id"])
+        if sess_orfana and sess_orfana.get("fine") is None:
+            fine_orfana = sc.get("ultimo_tick") or now
+            _chiudi_sessione(data, sc, fine_orfana)
+            sc.clear()
+            dirty = True
+
     # ── Macchina FERMA ────────────────────────────────────────────────────────
     if stato_pgm in (0, 5):
         if sc.get("in_esecuzione"):
@@ -130,6 +142,15 @@ def aggiorna_da_log(
 
     if stato_pgm in (1, 3) and programma_attivo:
         prev_prog = sc.get("programma_corrente")
+
+        # ── Cambio data (mezzanotte): chiudi sessione del giorno precedente ──
+        sess_corrente = _find_sess(data, sc["sessione_id"]) if sc.get("sessione_id") else None
+        if sess_corrente and sess_corrente.get("data") != now[:10]:
+            # Chiudi la sessione di ieri con il timestamp di mezzanotte
+            mezzanotte = now[:10] + "T00:00:00"
+            _chiudi_sessione(data, sc, mezzanotte)
+            sc.clear()
+            prev_prog = None  # Forza apertura nuova sessione sotto
 
         # Prima volta o cambio programma
         if prev_prog != programma_attivo:

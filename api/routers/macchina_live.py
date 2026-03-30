@@ -706,6 +706,30 @@ async def aggiorna_stati_da_log():
                                 proj_dirty = True
                                 updates["completato"] += 1
 
+    # ── Automazione 5: stop macchina → completa ultimo programma ─────────
+    # Quando stato_pgm torna a 0/5, l'ultimo programma girato resta in_lavorazione
+    # perché non c'è un "programma successivo" che triggera la transizione.
+    # Fix: al fermo, tutti i programmi in_lavorazione del progetto attivo → completato.
+    # Usiamo progetto_attivo (identificato dall'ultimo programma noto prima dello stop).
+    elif stato_pgm in (0, 5):
+        # Recupera l'ultimo progetto noto dal log precedente (salvato nello stato)
+        # attraverso tutti i progetti con programmi in_lavorazione
+        for p in projects:
+            pgm_in_lav = []
+            for s in p.get("steps", []):
+                for t in s.get("tasks", []):
+                    if t.get("text","").strip().lower() != "fresatura": continue
+                    for pgm in t.get("programs", []):
+                        if pgm.get("tipoGruppo") == "ipm": continue
+                        if pgm.get("stato") == "in_lavorazione":
+                            pgm_in_lav.append(pgm)
+            if pgm_in_lav:
+                for pgm in pgm_in_lav:
+                    pgm["stato"] = "completato"
+                    pgm["tempoFine"] = pgm.get("tempoFine") or now_str
+                    proj_dirty = True
+                    updates["completato"] += 1
+
     if proj_dirty:
         _save_progetti(config, proj_data)
         _invalidate_analisi_cache()

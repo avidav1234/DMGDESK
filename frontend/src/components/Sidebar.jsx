@@ -73,6 +73,7 @@ const NAV_PRIMARY = [
   { to: '/coda',       icon: 'macchina', label: 'Macchina', title: 'Macchina' },
   { to: '/analisi-nc', icon: 'analisi',  label: 'Analisi',  title: 'Analisi NC' },
   { to: '/macchina',   icon: 'utensili', label: 'Utensili', title: 'Utensili' },
+  { to: '/report',     icon: 'utilita',  label: 'Report',   title: 'Report Lavorazioni' },
 ]
 const NAV_UTILITA = [
   { to: '/scaffale',       icon: 'scaffale',   label: 'Scaffale' },

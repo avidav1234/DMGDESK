@@ -10,6 +10,7 @@ import Generatore    from './pages/Generatore'
 import AnalisiNC     from './pages/AnalisiNC'
 import InvioMacchina from './pages/InvioMacchina'
 import Progetti      from './pages/Progetti'
+import Report        from './pages/Report'
 
 const FULL_PAGES = ['/home', '/coda', '/analisi-nc', '/macchina', '/progetti']
 
@@ -30,6 +31,7 @@ function MainContent() {
         <Route path="/generatore"     element={<Generatore />} />
         <Route path="/analisi-nc"     element={<AnalisiNC />} />
         <Route path="/invia"          element={<InvioMacchina />} />
+        <Route path="/report"         element={<Report />} />
         <Route path="/magazzino"      element={<Smontati />} />
         <Route path="/progetti"       element={<Progetti />} />
       </Routes>

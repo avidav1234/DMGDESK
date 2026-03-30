@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from api.routers import (
     macchina, scaffale, smontati, holder_bussole,
     generatore, analisi_nc, config_router, tools,
-    macchina_live, pallet, macchina_invio,
+    macchina_live, pallet, macchina_invio, report,
 )
 from utils.logger import get_logger
 
@@ -48,6 +48,7 @@ app.include_router(pallet.router,         prefix="/api/pallet",         tags=["G
 app.include_router(macchina_invio.router,  prefix="/api/macchina-invio",  tags=["Invio Macchina"])
 from api.routers import progetti
 app.include_router(progetti.router,       prefix="/api/progetti",         tags=["Progetti WorkTrack"])
+app.include_router(report.router,         prefix="/api/report",           tags=["Report & Statistiche"])
 
 
 @app.on_event("startup")

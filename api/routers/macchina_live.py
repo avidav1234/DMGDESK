@@ -617,4 +617,19 @@ async def aggiorna_stati_da_log():
     if pallet_dirty:
         _save_pallet(config, pallet_data)
 
+    # ── Registrazione tempi lavorazione ──────────────────────────────────────
+    try:
+        from api.routers.report import aggiorna_da_log
+        aggiorna_da_log(
+            programma_attivo = mpf_filename,
+            stato_pgm        = stato_pgm,
+            pallet_num       = pallet_num,
+            progetto_nome    = updates.get("progetto_rilevato"),
+            utensile         = data.get("utensile_attivo"),
+            t_number         = data.get("numero_utensile"),
+            config           = config,
+        )
+    except Exception as _e:
+        updates["_report_err"] = str(_e)
+
     return updates

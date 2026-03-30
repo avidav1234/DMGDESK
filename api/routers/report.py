@@ -102,6 +102,7 @@ def aggiorna_da_log(
     config: dict,
     override_feed: Optional[int] = None,
     override_mandrino: Optional[int] = None,
+    stop_type: Optional[str] = None,   # "reset" | "stop" | "search" | None
 ):
     """
     Chiamato da aggiorna-stati-da-log ogni 5 secondi.
@@ -128,6 +129,19 @@ def aggiorna_da_log(
     # ── Macchina FERMA ────────────────────────────────────────────────────────
     if stato_pgm in (0, 5):
         if sc.get("in_esecuzione"):
+            # Registra tipo di fermo prima di chiudere la sessione
+            sess_corrente2 = _find_sess(data, sc.get("sessione_id", ""))
+            if sess_corrente2 and stop_type:
+                sess_corrente2.setdefault("fermi", [])
+                sess_corrente2["fermi"].append({
+                    "ts":   now,
+                    "tipo": stop_type,  # "reset" = anomalo, "stop" = pianificato
+                })
+                # Contatori separati per OEE
+                if stop_type == "reset":
+                    sess_corrente2["n_fermi_anomali"] = sess_corrente2.get("n_fermi_anomali", 0) + 1
+                elif stop_type == "stop":
+                    sess_corrente2["n_fermi_pianificati"] = sess_corrente2.get("n_fermi_pianificati", 0) + 1
             # Chiudi sessione corrente
             _chiudi_sessione(data, sc, now)
             sc.clear()
@@ -413,6 +427,10 @@ async def get_report_giornaliero(data: str = Query(default=None)):
     # Disponibilità: tempo macchina in produzione / tempo turno
     disponibilita = ore_totali / tempo_turno if tempo_turno > 0 else 0
 
+    # Fermi anomali (reset/spegnimento improvviso) vs pianificati (M0/M1)
+    n_fermi_anomali   = sum(s.get("n_fermi_anomali", 0)   for s in sessioni_giorno)
+    n_fermi_pianif    = sum(s.get("n_fermi_pianificati", 0) for s in sessioni_giorno)
+
     # Performance: paragona cicli reali con tempi stimati CAM
     # Se non ci sono tempi stimati usa disponibilità come proxy
     sec_teorici = sum(
@@ -430,7 +448,6 @@ async def get_report_giornaliero(data: str = Query(default=None)):
     performance = min(1.0, sec_teorici / sec_reali) if sec_reali > 0 and sec_teorici > 0 else disponibilita
 
     # Qualità: proxy per CNC stampi (rarissimi scarti) = 98%
-    # In futuro: n_pezzi_ok / n_pezzi_totali
     qualita = 0.98
 
     oee = round(disponibilita * performance * qualita * 100, 1)
@@ -477,11 +494,13 @@ async def get_report_giornaliero(data: str = Query(default=None)):
                             if (ore_totali + gap_totale) > 0 else 0,
         # OEE
         "oee": {
-            "valore":        oee,
-            "disponibilita": round(disponibilita * 100, 1),
-            "performance":   round(performance   * 100, 1),
-            "qualita":       round(qualita       * 100, 1),
-            "ore_turno_sec": tempo_turno,
+            "valore":              oee,
+            "disponibilita":       round(disponibilita * 100, 1),
+            "performance":         round(performance   * 100, 1),
+            "qualita":             round(qualita       * 100, 1),
+            "ore_turno_sec":       tempo_turno,
+            "n_fermi_anomali":     n_fermi_anomali,
+            "n_fermi_pianificati": n_fermi_pianif,
         },
         # Override ridotto
         "override_ridotto": {

@@ -399,6 +399,7 @@ export default function Macchina() {
   const [checking, setChecking]       = useState(false)
   const [checkResult, setCheckResult] = useState(null)
   const [checkError, setCheckError]   = useState(null)
+  const [cicliUtensile, setCicliUtensile] = useState({})  // { "ALIAS": {n_cicli, programmi:[]} }
   const fileInputRef = useRef()
 
   useEffect(() => { loadSync() }, [])
@@ -410,6 +411,11 @@ export default function Macchina() {
       setTools(t); setSyncStatus(s)
     } catch (e) { setErrorSync(e.message) }
     finally { setLoading(false) }
+    // Carica cicli utensile in background (dati storici)
+    fetch('/api/report/cicli-utensile')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.per_utensile) setCicliUtensile(d.per_utensile) })
+      .catch(() => {})
   }
 
   async function handleSync() {
@@ -640,7 +646,7 @@ export default function Macchina() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ borderBottom: '2px solid var(--border)', background: '#f8fafc' }}>
-                {['Pos', 'Nome utensile', 'Duplo', 'L (mm)', 'R (mm)', 'Vita %', 'Stato'].map(h => (
+                {['Pos', 'Nome utensile', 'Duplo', 'L (mm)', 'R (mm)', 'Vita %', 'Cicli', 'Stato'].map(h => (
                   <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontSize: 10,
                     fontFamily: 'var(--font-mono)', color: 'var(--text-dim)',
                     fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em',
@@ -687,6 +693,46 @@ export default function Macchina() {
                       color: 'var(--text-secondary)' }}>{t.radius?.toFixed(3)}</td>
                     {/* Vita */}
                     <td style={{ padding: '9px 14px' }}><LifeBar pct={t.life_percent} /></td>
+                    {/* Cicli — dati storici da lavorazioni_log */}
+                    {(()=>{
+                      const alias = (t.name||'').toUpperCase().trim()
+                      const info  = cicliUtensile[alias]
+                      if (!info || info.n_cicli < 1) return (
+                        <td style={{ padding: '9px 14px' }}>
+                          <span style={{ fontSize:11, color:'var(--text-dim)' }}>—</span>
+                        </td>
+                      )
+                      // Calcola media ponderata del ciclo tra tutti i programmi
+                      const pgms = info.programmi || []
+                      const mediaMs = pgms.length > 0
+                        ? pgms.reduce((a,p)=>a+p.media_sec*p.n,0) / pgms.reduce((a,p)=>a+p.n,0)
+                        : null
+                      const fmtSec = s => s<60?`${s}s`:s<3600?`${Math.round(s/60)}m`:`${(s/3600).toFixed(1)}h`
+                      const hasAnomalia = pgms.some(p=>p.std_sec>0 && p.std_sec/p.media_sec > 0.3)
+                      return (
+                        <td style={{ padding: '9px 14px' }}
+                          title={pgms.slice(0,5).map(p=>`${p.filename.replace('.MPF','')}: ${fmtSec(p.media_sec)} ±${fmtSec(p.std_sec)} (${p.n})`).join('\n')}>
+                          <div style={{ display:'flex', alignItems:'center', gap:5 }}>
+                            <span style={{ fontSize:12, fontFamily:'var(--font-mono)',
+                              fontWeight:700, color: hasAnomalia?'#d97706':'#0d2d5e' }}>
+                              {info.n_cicli}
+                            </span>
+                            {mediaMs && (
+                              <span style={{ fontSize:10, color:'var(--text-dim)' }}>
+                                ~{fmtSec(Math.round(mediaMs))}
+                              </span>
+                            )}
+                            {hasAnomalia && (
+                              <span style={{ fontSize:9, fontWeight:800, color:'#d97706',
+                                background:'#fef3c7', padding:'1px 4px', borderRadius:3 }}>σ</span>
+                            )}
+                          </div>
+                          <div style={{ fontSize:9, color:'var(--text-dim)', marginTop:1 }}>
+                            {pgms.length} pgm tracciati
+                          </div>
+                        </td>
+                      )
+                    })()}
                     {/* Stato */}
                     <td style={{ padding: '9px 14px' }}>
                       {fuoriMag

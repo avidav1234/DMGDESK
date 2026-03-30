@@ -680,6 +680,23 @@ async def aggiorna_stati_da_log():
 
     updates["progetto_rilevato"] = progetto_attivo.get("name") if progetto_attivo else None
     updates["pallet_rilevato"]   = pallet_num
+
+    # Classifica il tipo di fermo — importante per OEE e diagnostica
+    # Sinumerik 840D progStatus:
+    #   0 = reset / spento / pronto senza programma  → fermo non pianificato
+    #   1 = in esecuzione
+    #   2 = ricerca blocco (jog, posizionamento)
+    #   3 = in esecuzione (conferma)
+    #   5 = stop / interrotto (M0, M1, E-Stop, allarme NCK) → fermo pianificato o anomalia
+    if stato_pgm == 0:
+        updates["stop_type"] = "reset"       # fermo non pianificato / riavvio
+    elif stato_pgm == 5:
+        updates["stop_type"] = "stop"        # M0/M1/E-Stop — può essere pianificato
+    elif stato_pgm == 2:
+        updates["stop_type"] = "search"      # ricerca blocco, non è un vero fermo
+    else:
+        updates["stop_type"] = None          # in esecuzione
+
     updates["_debug"] = {
         "wpd_nome": wpd_nome, "mpf_progetto": mpf_progetto,
         "pallet_num": pallet_num, "stato_pgm": stato_pgm,
@@ -835,6 +852,7 @@ async def aggiorna_stati_da_log():
             config             = config,
             override_feed      = data.get("override_feed"),
             override_mandrino  = data.get("override_mandrino"),
+            stop_type          = updates.get("stop_type"),
         )
     except Exception as _e:
         updates["_report_err"] = str(_e)

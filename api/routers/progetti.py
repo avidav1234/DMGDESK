@@ -935,6 +935,14 @@ async def segna_in_macchina(project_id: str, body: dict):
         data_to_save = {"projects": projects, "ultimo_aggiornamento": now}
         path.write_text(json.dumps(data_to_save, ensure_ascii=False, indent=2), encoding="utf-8")
 
+        # Sincronizza la coda automaticamente:
+        # se questo progetto ha un pallet assegnato, entra in coda
+        try:
+            from api.routers.pallet import sincronizza_coda
+            await sincronizza_coda()
+        except Exception:
+            pass
+
     return {"aggiornati": aggiornati, "project_id": project_id}
 
 

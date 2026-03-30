@@ -349,6 +349,13 @@ async def assegna_progetto(numero: int, body: AssegnaProgettoBody):
                     p["stato"] = "vuoto"
 
             _save(config, state)
+
+            # Sincronizza coda automaticamente dopo assegnazione
+            try:
+                await sincronizza_coda()
+            except Exception:
+                pass
+
             return {"ok": True, "pallet": numero,
                     "progetto_id": body.progetto_id,
                     "stato": p["stato"]}
@@ -626,3 +633,72 @@ async def set_ordine_esecuzione(body: dict):
     state["ordine_esecuzione"] = ordine
     _save(config, state)
     return {"ok": True, "ordine": ordine}
+
+
+@router.post("/sincronizza-coda")
+async def sincronizza_coda():
+    """
+    Sincronizza automaticamente la coda di esecuzione:
+    - Aggiunge pallet che hanno programmi in_main non ancora in coda
+    - Rimuove pallet i cui programmi sono tutti completati
+    - Preserva l'ordine manuale esistente
+
+    Chiamato da:
+    - assegna-progetto (quando si assegna un progetto con programmi in_main)
+    - segna-in-macchina (quando si genera il MAIN)
+    - frontend al mount della pagina CodaLavorazione
+    """
+    from api.routers.progetti import _load_progetti
+    config = carica_configurazione()
+    state  = _load(config)
+    data   = _load_progetti(config)
+    pallets = state.get("pallet", [])
+    ordine  = list(state.get("ordine_esecuzione", []))
+    dirty   = False
+
+    STATI_ATTIVI = {"in_main", "in_lavorazione", "in_macchina"}
+
+    for pal in pallets:
+        num = pal.get("numero")
+        pid = pal.get("progetto_id")
+        if not pid:
+            # Pallet senza progetto → rimuovi dalla coda se c'era
+            if num in ordine:
+                ordine.remove(num)
+                dirty = True
+            continue
+
+        proj = next((p for p in data.get("projects", []) if p.get("id") == pid), None)
+        if not proj:
+            continue
+
+        all_pgm = [pg for s in proj.get("steps", [])
+                   for t in s.get("tasks", [])
+                   if t.get("text", "").strip().lower() == "fresatura"
+                   for pg in t.get("programs", [])
+                   if pg.get("tipoGruppo") != "ipm"]
+
+        if not all_pgm:
+            continue
+
+        ha_attivi   = any(pg.get("stato") in STATI_ATTIVI for pg in all_pgm)
+        tutti_done  = all(pg.get("stato") == "completato" for pg in all_pgm)
+
+        if ha_attivi and num not in ordine:
+            # Aggiungi in fondo alla coda
+            ordine.append(num)
+            dirty = True
+        elif tutti_done and num in ordine:
+            # Rimuovi dalla coda — lavoro finito
+            ordine.remove(num)
+            dirty = True
+
+    if dirty:
+        state["ordine_esecuzione"] = ordine
+        _save(config, state)
+
+    return {
+        "ok":    True,
+        "ordine": ordine,
+        "aggiornato": dirty,
+    }

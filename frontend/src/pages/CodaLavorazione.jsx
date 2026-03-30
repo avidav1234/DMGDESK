@@ -87,7 +87,11 @@ export default function CodaLavorazione() {
       alert(err.detail || 'Errore assegnazione pallet')
       fetchAll(); return
     }
+    // Il backend ha già chiamato sincronizza-coda — carica ordine aggiornato
+    const coda = await fetch('/api/pallet/ordine-esecuzione').then(r=>r.ok?r.json():null).catch(()=>null)
+    if (coda) setCodaOrdine(coda.ordine || [])
     fetchAll()
+    caricaPgmInMacchina()
   }
 
   async function avviaProgetto(palletNum) {
@@ -179,6 +183,11 @@ export default function CodaLavorazione() {
       if (d.pallet > 0 || d.in_macchina > 0 || d.completato > 0) {
         fetchAll()
         caricaPgmInMacchina()
+        // Risincronizza la coda: un completato potrebbe rimuovere un pallet
+        fetch('/api/pallet/sincronizza-coda', { method: 'POST' })
+          .then(r => r.ok ? r.json() : null)
+          .then(d => { if (d?.aggiornato) setCodaOrdine(d.ordine || []) })
+          .catch(() => {})
       }
     }
     window.addEventListener('dmgdesk:stati-aggiornati', onUpdate)
@@ -187,10 +196,17 @@ export default function CodaLavorazione() {
 
   useEffect(() => {
     fetchAll()
-    fetch('/api/pallet/ordine-esecuzione')
+    // Sincronizza coda al mount — aggiunge automaticamente pallet con in_main
+    fetch('/api/pallet/sincronizza-coda', { method: 'POST' })
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d) setCodaOrdine(d.ordine || []) })
-      .catch(() => {})
+      .catch(() =>
+        // Fallback: carica ordine esistente
+        fetch('/api/pallet/ordine-esecuzione')
+          .then(r => r.ok ? r.json() : null)
+          .then(d => { if (d) setCodaOrdine(d.ordine || []) })
+          .catch(() => {})
+      )
     const t = setInterval(() => {
       fetchAll()
       caricaPgmInMacchina()
@@ -588,13 +604,6 @@ export default function CodaLavorazione() {
                           <span style={{fontSize:10,color:cardFg,opacity:0.8}}>{progettiPallet[p.id].completati}/{progettiPallet[p.id].totale} pgm</span>
                           <span style={{fontSize:12,fontWeight:800,color:cardFg}}>{progettiPallet[p.id].pct}%</span>
                         </div>
-                        {(progettiPallet[p.id].da_fare > 0 || progettiPallet[p.id].in_macchina > 0) && !isAvviato && (
-                          <button onClick={e=>{e.stopPropagation();avviaProgetto(p.id)}}
-                            style={{marginTop:4,width:'100%',background:'#1D5FAD',border:'none',borderRadius:4,
-                              color:'#fff',fontWeight:700,fontSize:10,padding:'4px 0',cursor:'pointer'}}>
-                            ▶ Avvia ({progettiPallet[p.id].da_fare + progettiPallet[p.id].in_macchina})
-                          </button>
-                        )}
                         {progettiPallet[p.id].pct===100 && p.stato!=='FINITO' && (
                           <button onClick={e=>{e.stopPropagation();setPalletStato(p.id,'FINITO')}}
                             style={{marginTop:3,width:'100%',background:'#166534',border:'none',borderRadius:4,
@@ -949,9 +958,9 @@ export default function CodaLavorazione() {
           </div>
         )}
 
-        {/* ── Programmi in macchina ─────────────────────────────── */}
+        {/* ── Programmi in coda di esecuzione ─────────────────────── */}
         {(() => {
-          // Pallet con almeno un programma in_macchina, nell'ordine della coda
+          // Pallet con programmi in_main o in_lavorazione, nell'ordine della coda
           const ordineEffettivo = codaOrdine.length > 0
             ? codaOrdine
             : pallets.filter(p => progettiPallet[p.id]).map(p => p.id)
@@ -959,18 +968,32 @@ export default function CodaLavorazione() {
             .map(n => pgmInMacchina[n])
             .filter(d => d?.programmi?.length > 0)
           if (!blocchi.length) return null
-          const totSel = Object.values(pgmSelezionati).reduce((acc, s) => acc + (s?.size || 0), 0)
+
+          const totPgm    = blocchi.reduce((a, b) => a + b.programmi.length, 0)
+          const totInLav  = blocchi.reduce((a, b) => a + b.programmi.filter(p => p.stato === 'in_lavorazione').length, 0)
+          const totInMain = blocchi.reduce((a, b) => a + b.programmi.filter(p => p.stato === 'in_main').length, 0)
+          const totSel    = Object.values(pgmSelezionati).reduce((acc, s) => acc + (s?.size || 0), 0)
+
           return (
             <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '12px 16px' }}>
               {/* Header */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-                <span style={{ fontSize: 13, fontWeight: 800, color: '#0d2d5e' }}>⚙ PROGRAMMI IN MACCHINA</span>
-                <span style={{ fontSize: 11, color: '#94a3b8' }}>
-                  {blocchi.reduce((a, b) => a + b.programmi.length, 0)} programmi attivi
-                </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 13, fontWeight: 800, color: '#0d2d5e' }}>⚙ CODA PROGRAMMI</span>
+                <span style={{ fontSize: 11, color: '#94a3b8' }}>{totPgm} programmi</span>
+                {totInLav > 0 && (
+                  <span style={{ fontSize: 10, fontWeight: 700, color: '#1D5FAD',
+                    background: '#dbeafe', padding: '2px 8px', borderRadius: 6 }}>
+                    {totInLav} in lavorazione
+                  </span>
+                )}
+                {totInMain > 0 && (
+                  <span style={{ fontSize: 10, fontWeight: 700, color: '#92400e',
+                    background: '#fef3c7', padding: '2px 8px', borderRadius: 6 }}>
+                    {totInMain} in coda
+                  </span>
+                )}
                 {totSel > 0 && (
                   <button onClick={() => {
-                    // Completa per tutti i pallet con selezioni
                     Object.entries(pgmSelezionati).forEach(([n, s]) => {
                       if (s?.size > 0) completaPgm(parseInt(n))
                     })
@@ -988,6 +1011,8 @@ export default function CodaLavorazione() {
                 const col = PAL_COLORS[(d.pallet - 1) % PAL_COLORS.length]
                 const sel = pgmSelezionati[d.pallet] || new Set()
                 const tuttiSel = d.programmi.every(p => sel.has(p.id))
+                const nInLav  = d.programmi.filter(p => p.stato === 'in_lavorazione').length
+                const nInMain = d.programmi.filter(p => p.stato === 'in_main').length
                 return (
                   <div key={d.pallet} style={{ marginBottom: bi < blocchi.length - 1 ? 10 : 0 }}>
                     {/* Header progetto */}
@@ -1002,26 +1027,44 @@ export default function CodaLavorazione() {
                         style={{ accentColor: col, cursor: 'pointer', width: 14, height: 14 }} />
                       <span style={{ width: 8, height: 8, borderRadius: '50%', background: col, flexShrink: 0 }} />
                       <span style={{ fontSize: 12, fontWeight: 800, color: col }}>P{d.pallet} — {d.progetto.nome}</span>
-                      <span style={{ fontSize: 11, color: '#94a3b8', marginLeft: 4 }}>
-                        {d.programmi.length} in macchina
-                      </span>
+                      {nInLav > 0 && (
+                        <span style={{ fontSize: 10, fontWeight: 700, color: '#1D5FAD',
+                          background: '#dbeafe', padding: '1px 6px', borderRadius: 5 }}>
+                          {nInLav} in lavorazione
+                        </span>
+                      )}
+                      {nInMain > 0 && (
+                        <span style={{ fontSize: 10, fontWeight: 700, color: '#92400e',
+                          background: '#fef3c7', padding: '1px 6px', borderRadius: 5 }}>
+                          {nInMain} in coda
+                        </span>
+                      )}
                     </div>
 
                     {/* Lista programmi */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 2, paddingLeft: 8 }}>
                       {d.programmi.map(pgm => {
-                        const checked = sel.has(pgm.id)
+                        const checked   = sel.has(pgm.id)
+                        const isInLav   = pgm.stato === 'in_lavorazione'
+                        const rowBg     = checked ? '#dcfce7' : isInLav ? '#eff6ff' : '#f8fafc'
+                        const rowBorder = checked ? '#166534' : isInLav ? '#1D5FAD' : '#e2e8f0'
                         return (
                           <div key={pgm.id}
                             onClick={() => togglePgm(d.pallet, pgm.id)}
                             style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 8px',
                               borderRadius: 7, cursor: 'pointer', userSelect: 'none',
-                              background: checked ? '#dcfce7' : '#f8fafc',
-                              border: `1px solid ${checked ? '#166534' : '#e2e8f0'}`,
+                              background: rowBg, border: `1px solid ${rowBorder}`,
                               transition: 'all 0.12s' }}>
                             <input type='checkbox' checked={checked} onChange={() => togglePgm(d.pallet, pgm.id)}
                               onClick={e => e.stopPropagation()}
                               style={{ accentColor: '#166534', cursor: 'pointer', width: 14, height: 14, flexShrink: 0 }} />
+                            {/* Badge stato */}
+                            <span style={{ fontSize: 9, fontWeight: 800, flexShrink: 0, padding: '1px 5px',
+                              borderRadius: 4, letterSpacing: '0.04em',
+                              background: isInLav ? '#1D5FAD' : '#fef3c7',
+                              color: isInLav ? '#fff' : '#92400e' }}>
+                              {isInLav ? '⚙ LAV.' : '📋 CODA'}
+                            </span>
                             {/* Numero programma */}
                             <span style={{ fontSize: 12, fontWeight: 800, color: col,
                               fontFamily: 'monospace', minWidth: 32 }}>{pgm.numPgm}</span>
@@ -1037,12 +1080,10 @@ export default function CodaLavorazione() {
                               textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                               {pgm.filename}
                             </span>
-                            {/* Tempo */}
                             {pgm.tempoStimato && (
                               <span style={{ fontSize: 10, fontWeight: 700, color: '#475569',
                                 flexShrink: 0, whiteSpace: 'nowrap' }}>⏱ {pgm.tempoStimato}m</span>
                             )}
-                            {/* Orario inizio */}
                             {pgm.tempoInizio && (
                               <span style={{ fontSize: 10, color: '#0d2d5e', fontFamily: 'monospace',
                                 flexShrink: 0, whiteSpace: 'nowrap' }}>▶ {pgm.tempoInizio}</span>

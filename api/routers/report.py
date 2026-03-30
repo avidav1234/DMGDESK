@@ -273,47 +273,100 @@ async def get_report_giornaliero(data: str = Query(default=None)):
     config = carica_configurazione()
     log    = _load_log(config)
     target = data or datetime.now().strftime("%Y-%m-%d")
+    now_iso = datetime.now().isoformat(timespec="seconds")
 
     sessioni_giorno = [
         s for s in log.get("sessioni", [])
         if s.get("data") == target
     ]
 
-    # Aggregazioni
-    ore_totali   = sum(s.get("durata_sec") or 0 for s in sessioni_giorno)
-    gap_totale   = sum(s.get("gap_sec") or 0 for s in sessioni_giorno)
-    n_programmi  = sum(len(s.get("programmi", [])) for s in sessioni_giorno)
+    def _durata_effettiva(s):
+        """Durata reale: usa durata_sec se chiusa, altrimenti calcola live da inizio."""
+        if s.get("durata_sec") is not None:
+            return s["durata_sec"]
+        # Sessione ancora aperta — calcola da inizio a adesso
+        inizio = s.get("inizio")
+        if not inizio:
+            return 0
+        try:
+            return int((datetime.fromisoformat(now_iso) -
+                        datetime.fromisoformat(inizio)).total_seconds())
+        except Exception:
+            return 0
 
-    # Utensili aggregati
+    def _programmi_effettivi(s):
+        """Programmi della sessione, aggiungendo durata live all'ultimo se ancora aperto."""
+        pgms = list(s.get("programmi", []))
+        sc = log.get("stato_corrente", {})
+        # Se questa è la sessione corrente e c'è un programma in corso non chiuso
+        if s.get("id") == sc.get("sessione_id") and sc.get("programma_corrente"):
+            prog_corrente = sc["programma_corrente"]
+            inizio_pgm = sc.get("inizio_programma")
+            # Controlla se il programma corrente non è già nell'elenco chiuso
+            già_chiuso = any(p.get("filename","").upper().replace(".MPF","") ==
+                             prog_corrente.upper().replace(".MPF","") and p.get("fine")
+                             for p in pgms)
+            if not già_chiuso and inizio_pgm:
+                try:
+                    dur = int((datetime.fromisoformat(now_iso) -
+                               datetime.fromisoformat(inizio_pgm)).total_seconds())
+                except Exception:
+                    dur = None
+                info = _parse_nome(prog_corrente) if prog_corrente else {}
+                pgms = pgms + [{
+                    "filename":    prog_corrente,
+                    **info,
+                    "inizio":      inizio_pgm,
+                    "fine":        None,
+                    "durata_sec":  dur,
+                    "utensile":    sc.get("utensile_programma"),
+                    "t_number":    sc.get("t_number_programma"),
+                    "_live":       True,
+                }]
+        return pgms
+
+    # Aggregazioni con durata live
+    ore_totali  = sum(_durata_effettiva(s) for s in sessioni_giorno)
+    gap_totale  = sum(s.get("gap_sec") or 0 for s in sessioni_giorno)
+    n_programmi = sum(len(_programmi_effettivi(s)) for s in sessioni_giorno)
+
+    # Utensili aggregati (usa accumulo tick — già corretto anche live)
     utensili_agg = {}
     for s in sessioni_giorno:
         for ut, sec in (s.get("utensili") or {}).items():
             utensili_agg[ut] = utensili_agg.get(ut, 0) + sec
 
-    # Progetti aggregati
+    # Progetti aggregati con durata live
     progetti_agg = {}
     for s in sessioni_giorno:
         prog = s.get("progetto") or "—"
         if prog not in progetti_agg:
             progetti_agg[prog] = {"durata_sec": 0, "n_programmi": 0, "pallet": s.get("pallet")}
-        progetti_agg[prog]["durata_sec"] += s.get("durata_sec") or 0
-        progetti_agg[prog]["n_programmi"] += len(s.get("programmi", []))
+        progetti_agg[prog]["durata_sec"] += _durata_effettiva(s)
+        progetti_agg[prog]["n_programmi"] += len(_programmi_effettivi(s))
+
+    # Sessioni con programmi arricchiti (live) e durata calcolata
+    sessioni_output = []
+    for s in sessioni_giorno:
+        s_out = dict(s)
+        s_out["programmi"]  = _programmi_effettivi(s)
+        s_out["durata_sec"] = _durata_effettiva(s)
+        sessioni_output.append(s_out)
 
     return {
-        "data":          target,
-        "ore_lavorate":  _durata_str(ore_totali),
+        "data":             target,
+        "ore_lavorate":     _durata_str(ore_totali),
         "ore_lavorate_sec": ore_totali,
-        "tempo_fermo_sec": gap_totale,
-        "tempo_fermo":   _durata_str(gap_totale),
-        "n_sessioni":    len(sessioni_giorno),
-        "n_programmi":   n_programmi,
-        "efficienza_pct": round(ore_totali / (ore_totali + gap_totale) * 100, 1)
-                          if (ore_totali + gap_totale) > 0 else 0,
-        "progetti":      progetti_agg,
-        "utensili":      {k: {"sec": v, "ore": _durata_str(v)}
-                          for k, v in sorted(utensili_agg.items(),
-                                             key=lambda x: -x[1])},
-        "sessioni":      sessioni_giorno,
+        "tempo_fermo_sec":  gap_totale,
+        "tempo_fermo":      _durata_str(gap_totale),
+        "n_sessioni":       len(sessioni_giorno),
+        "n_programmi":      n_programmi,
+        "efficienza_pct":   round(ore_totali / (ore_totali + gap_totale) * 100, 1)
+                            if (ore_totali + gap_totale) > 0 else 0,
+        "progetti":         progetti_agg,
+        "utensili":         {k: {"sec": v, "ore": _durata_str(v)}
+                              for k, v in sorted(utensili_agg.items(), key=lambda x: -x[1])},
+        "sessioni":         sessioni_output,
     }
 
 @router.get("/storico")
@@ -321,11 +374,26 @@ async def get_storico(giorni: int = Query(default=7)):
     """Ultimi N giorni — per grafici trend."""
     config = carica_configurazione()
     log    = _load_log(config)
+    now_iso = datetime.now().isoformat(timespec="seconds")
+    today   = datetime.now().strftime("%Y-%m-%d")
     result = []
     for i in range(giorni - 1, -1, -1):
-        d = (datetime.now() - timedelta(days=i)).strftime("%Y-%m-%d")
+        d    = (datetime.now() - timedelta(days=i)).strftime("%Y-%m-%d")
         sess = [s for s in log.get("sessioni", []) if s.get("data") == d]
-        ore  = sum(s.get("durata_sec") or 0 for s in sess)
+        # Per il giorno corrente usa durata live se sessione ancora aperta
+        def _dur(s):
+            if s.get("durata_sec") is not None:
+                return s["durata_sec"]
+            if d == today:
+                inizio = s.get("inizio")
+                if inizio:
+                    try:
+                        return int((datetime.fromisoformat(now_iso) -
+                                    datetime.fromisoformat(inizio)).total_seconds())
+                    except Exception:
+                        pass
+            return 0
+        ore  = sum(_dur(s) for s in sess)
         gap  = sum(s.get("gap_sec") or 0 for s in sess)
         result.append({
             "data": d,

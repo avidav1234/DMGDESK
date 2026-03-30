@@ -193,15 +193,33 @@ def _normalizza(raw: dict) -> dict:
     # allarme — formato Sinumerik: |702028|30.03.26 08:48:47| MESS.,  testo
     al = raw.get("allarme", "").strip()
     if al:
-        # Estrai codice e testo: |702028|data| testo → "702028: testo"
         import re as _re2
         m_al = _re2.match(r"\|(\d+)\|[^|]+\|\s*(?:MESS\.\s*,\s*)?(.+)", al)
         if m_al:
-            out["allarme"] = f"{m_al.group(1)}: {m_al.group(2).strip()}"
+            codice = m_al.group(1)
+            testo  = m_al.group(2).strip()
+            # Classificazione Sinumerik 840D:
+            # 700000-709999 = messaggi/avvertenze PLC (non fermano la macchina)
+            # < 700000      = allarmi NCK (fermano la macchina)
+            try:
+                n = int(codice)
+                if 700000 <= n <= 709999:
+                    tipo = "messaggio"
+                else:
+                    tipo = "allarme"
+            except ValueError:
+                tipo = "allarme"
+            out["allarme"]      = f"{codice}: {testo}"
+            out["allarme_tipo"] = tipo   # "allarme" | "messaggio"
+            out["allarme_codice"] = codice
         else:
-            out["allarme"] = al
+            out["allarme"]      = al
+            out["allarme_tipo"] = "allarme"
+            out["allarme_codice"] = None
     else:
-        out["allarme"] = None
+        out["allarme"]      = None
+        out["allarme_tipo"] = None
+        out["allarme_codice"] = None
 
     return out
 

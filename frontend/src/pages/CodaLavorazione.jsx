@@ -263,7 +263,8 @@ export default function CodaLavorazione() {
   const prog          = parseProgram(macchina?.programma_attivo);
   const utensile      = macchina?.utensile_attivo || null;
   const tNum          = macchina?.numero_utensile   || null;
-  const alarm         = macchina?.allarme?.replace(/^\|[^|]*\|[^|]*\| ?/, "") || null;
+  const alarm         = macchina?.allarme || null;
+  const alarmTipo     = macchina?.allarme_tipo || 'allarme'; // 'allarme' | 'messaggio'
 
   // Carica lista progetti per il modal
   const [listaProgetti, setListaProgetti] = useState([]);
@@ -741,21 +742,33 @@ export default function CodaLavorazione() {
           </div>
         )}
 
-        {/* Allarmi */}
-        {alarm && (
+        {/* Allarmi e messaggi */}
+        {alarm && alarmTipo === 'allarme' && (
           <div style={{
-            background:   "#fef2f2",
-            border:       "1px solid #fca5a5",
-            borderRadius: 12,
-            padding:      "12px 16px",
+            background: '#fef2f2', border: '1px solid #fca5a5',
+            borderRadius: 12, padding: '12px 16px',
           }}>
-            <div style={{ fontSize: 10, color: "#991b1b", letterSpacing: 1, marginBottom: 4, fontWeight: 700 }}>
-              ⚠ ALLARME MACCHINA
+            <div style={{ fontSize: 10, color: '#991b1b', letterSpacing: 1,
+                          marginBottom: 4, fontWeight: 700 }}>
+              🔴 ALLARME MACCHINA
             </div>
-            <div style={{ fontSize: 12, color: "#991b1b", fontWeight: 500 }}>
-              {alarm.startsWith('MESS.') || alarm.startsWith('MESS,')
-                ? 'Macchina ferma — nessun programma in esecuzione'
-                : alarm}
+            <div style={{ fontSize: 12, color: '#991b1b', fontWeight: 500 }}>
+              {alarm}
+            </div>
+          </div>
+        )}
+
+        {alarm && alarmTipo === 'messaggio' && (
+          <div style={{
+            background: '#fffbeb', border: '1px solid #fcd34d',
+            borderRadius: 12, padding: '12px 16px',
+          }}>
+            <div style={{ fontSize: 10, color: '#92400e', letterSpacing: 1,
+                          marginBottom: 4, fontWeight: 700 }}>
+              🟡 MESSAGGIO MACCHINA
+            </div>
+            <div style={{ fontSize: 12, color: '#92400e', fontWeight: 500 }}>
+              {alarm}
             </div>
           </div>
         )}

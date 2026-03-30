@@ -472,12 +472,24 @@ async def aggiorna_stati_da_log():
     mpf_nome    = mpf_m.group(1) if mpf_m else None   # "4297_0008_01_31"
     mpf_filename = (mpf_nome + ".MPF") if mpf_nome else None
 
-    # Estrai commessa_posizione dal nome MPF: "4297_0008_01_31" → "4297_0008"
+    # Estrai commessa_posizione dal nome MPF: "4297_007_03_RIP" → "4297_007"
+    # poi normalizza a 4 cifre: "4297_0007"
     mpf_progetto = None
     if mpf_nome:
         parts = mpf_nome.split("_")
         if len(parts) >= 2:
-            mpf_progetto = f"{parts[0]}_{parts[1]}"  # "4297_0008"
+            comm = parts[0]
+            pos  = parts[1].zfill(4)  # "007" → "0007", "0008" → "0008"
+            mpf_progetto = f"{comm}_{pos}"
+
+    def _norm_nome(n):
+        """Normalizza nome progetto: spazi→_, maiuscolo, posizione con zeri."""
+        n = (n or "").upper().replace(" ","_").replace("-","_")
+        # Normalizza la seconda parte a 4 cifre se è numerica
+        parts = n.split("_")
+        if len(parts) >= 2 and parts[1].isdigit():
+            parts[1] = parts[1].zfill(4)
+        return "_".join(parts)
 
     updates = {
         "pallet": 0, "in_macchina": 0, "completato": 0,
@@ -492,15 +504,16 @@ async def aggiorna_stati_da_log():
     proj_dirty = pallet_dirty = False
 
     # Trova progetto:
-    # Fonte 1: nome WPD (es. 4298_0008)
-    # Fonte 2: commessa_posizione dal nome MPF (es. 4297_0008) — più affidabile
+    # Fonte 1: commessa_posizione dal nome MPF (normalizzata con zeri)
+    # Fonte 2: nome WPD
     progetto_attivo = None
     for nome_ricerca in [mpf_progetto, wpd_nome]:
         if not nome_ricerca:
             continue
+        nr_norm = _norm_nome(nome_ricerca)
         for p in projects:
-            pname = (p.get("name") or "").upper().replace(" ","_").replace("-","_")
-            if pname == nome_ricerca.upper() or nome_ricerca.upper() in pname:
+            pname = _norm_nome(p.get("name") or "")
+            if pname == nr_norm or nr_norm in pname or pname in nr_norm:
                 progetto_attivo = p
                 break
         if progetto_attivo:

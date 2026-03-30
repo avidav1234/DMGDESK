@@ -30,6 +30,12 @@ VAR_MAP = {
     "progStatus":        "stato_programma",
     "OpcUaAlarm1":       "allarme",
     "DB0.DBB67":         "pallet_attivo",
+    # Override operatore — fondamentali per rilevare rallentamenti/problemi
+    "feedRateOvr":       "override_feed",       # % avanzamento (0-120)
+    "spindleOvr":        "override_mandrino",   # % mandrino (0-120)
+    # Valori effettivi — utili per OEE performance
+    "actFeedRate":       "feed_attuale",        # mm/min effettivi
+    "actSpindleSpeed":   "rpm_attuale",         # rpm effettivi
 }
 
 RE_LINE = re.compile(
@@ -220,6 +226,46 @@ def _normalizza(raw: dict) -> dict:
         out["allarme"]      = None
         out["allarme_tipo"] = None
         out["allarme_codice"] = None
+
+    # ── Override feed e mandrino ──────────────────────────────────────────────
+    # Sinumerik esprime override come intero 0-120 (100 = 100%)
+    def _parse_ovr(key):
+        try:
+            v = int(raw.get(key, 100) or 100)
+            return max(0, min(200, v))  # clamp ragionevole
+        except (ValueError, TypeError):
+            return None
+
+    ovr_feed     = _parse_ovr("override_feed")
+    ovr_mandrino = _parse_ovr("override_mandrino")
+    out["override_feed"]     = ovr_feed
+    out["override_mandrino"] = ovr_mandrino
+
+    # Classificazione override:
+    # NORMALE  ≥ 90%   (tolleranza ±10% per aggiustamenti fini)
+    # RIDOTTO  50-89%  (operatore ha rallentato — attenzione)
+    # BASSO    < 50%   (problema significativo o setup)
+    def _classifica_ovr(v):
+        if v is None: return None
+        if v >= 90:   return "normale"
+        if v >= 50:   return "ridotto"
+        return "basso"
+
+    out["override_feed_stato"]     = _classifica_ovr(ovr_feed)
+    out["override_mandrino_stato"] = _classifica_ovr(ovr_mandrino)
+
+    # Flag unico: True se almeno uno dei due override è ridotto/basso
+    ovr_ridotto = (
+        (ovr_feed is not None and ovr_feed < 90) or
+        (ovr_mandrino is not None and ovr_mandrino < 90)
+    )
+    out["override_ridotto"] = ovr_ridotto
+
+    # Valori effettivi feed e rpm
+    try:    out["feed_attuale"] = float(raw.get("feed_attuale") or 0) or None
+    except: out["feed_attuale"] = None
+    try:    out["rpm_attuale"]  = float(raw.get("rpm_attuale") or 0) or None
+    except: out["rpm_attuale"]  = None
 
     return out
 
@@ -544,6 +590,12 @@ async def aggiorna_stati_da_log():
         "pallet": 0, "in_macchina": 0, "completato": 0,
         "progetto_rilevato": None, "pallet_rilevato": None,
         "programma_attivo": mpf_filename, "stato_macchina": stato_pgm,
+        # Override operatore — propagati al frontend per alert live
+        "override_feed":           data.get("override_feed"),
+        "override_mandrino":       data.get("override_mandrino"),
+        "override_ridotto":        data.get("override_ridotto", False),
+        "override_feed_stato":     data.get("override_feed_stato"),
+        "override_mandrino_stato": data.get("override_mandrino_stato"),
     }
 
     proj_data   = _load_progetti(config)
@@ -774,13 +826,15 @@ async def aggiorna_stati_da_log():
     try:
         from api.routers.report import aggiorna_da_log
         aggiorna_da_log(
-            programma_attivo = mpf_filename,
-            stato_pgm        = stato_pgm,
-            pallet_num       = pallet_num,
-            progetto_nome    = updates.get("progetto_rilevato"),
-            utensile         = data.get("utensile_attivo"),
-            t_number         = data.get("numero_utensile"),
-            config           = config,
+            programma_attivo   = mpf_filename,
+            stato_pgm          = stato_pgm,
+            pallet_num         = pallet_num,
+            progetto_nome      = updates.get("progetto_rilevato"),
+            utensile           = data.get("utensile_attivo"),
+            t_number           = data.get("numero_utensile"),
+            config             = config,
+            override_feed      = data.get("override_feed"),
+            override_mandrino  = data.get("override_mandrino"),
         )
     except Exception as _e:
         updates["_report_err"] = str(_e)

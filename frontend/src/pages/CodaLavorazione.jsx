@@ -49,6 +49,9 @@ export default function CodaLavorazione() {
   const [liveCtx, setLiveCtx]        = useState(null);
   const [progettiPallet, setProgettiPallet] = useState({});
   const [modalAssegna, setModalAssegna]     = useState(null);
+  // Override feed/mandrino — aggiornato dal GlobalPoller
+  const [overrideStato, setOverrideStato] = useState(null);
+  // { feed: 85, mandrino: 100, ridotto: true, feed_stato: 'ridotto' }
   // ── Coda esecuzione ────────────────────────────────────────────
   const [codaOrdine, setCodaOrdine] = useState([]);   // [3,4,5]
   const [codaSaving, setCodaSaving] = useState(false);
@@ -182,6 +185,16 @@ export default function CodaLavorazione() {
   useEffect(() => {
     const onUpdate = (e) => {
       const d = e.detail || {}
+      // Aggiorna override a ogni tick (arriva sempre dal poller)
+      if (d.override_feed !== undefined || d.override_mandrino !== undefined) {
+        setOverrideStato({
+          feed:         d.override_feed,
+          mandrino:     d.override_mandrino,
+          ridotto:      d.override_ridotto || false,
+          feed_stato:   d.override_feed_stato,
+          mandrino_stato: d.override_mandrino_stato,
+        })
+      }
       if (d.pallet > 0 || d.in_macchina > 0 || d.completato > 0) {
         fetchAll()
         caricaPgmInMacchina()
@@ -502,6 +515,33 @@ export default function CodaLavorazione() {
           fontSize: 12, color: '#9A978E', display: 'flex', gap: 8 }}>
           <span>⚙</span>
           <span>In esecuzione: <code style={{ fontFamily: 'monospace' }}>{liveCtx.programma_attivo}</code> — nessun progetto associato</span>
+        </div>
+      )}
+
+      {/* ── Banner override ridotto ─────────────────────────────────── */}
+      {overrideStato?.ridotto && (
+        <div style={{ marginBottom: 12, padding: '10px 16px', borderRadius: 10,
+          background: '#fffbeb', border: '1.5px solid #f59e0b',
+          display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 12, fontWeight: 800, color: '#92400e',
+            background: '#fef3c7', padding: '3px 10px', borderRadius: 6, flexShrink: 0 }}>
+            OVERRIDE RIDOTTO
+          </span>
+          {overrideStato.feed != null && overrideStato.feed < 90 && (
+            <span style={{ fontSize: 13, fontFamily: 'monospace', color: '#92400e' }}>
+              Feed: <b>{overrideStato.feed}%</b>
+            </span>
+          )}
+          {overrideStato.mandrino != null && overrideStato.mandrino < 90 && (
+            <span style={{ fontSize: 13, fontFamily: 'monospace', color: '#92400e' }}>
+              Mandrino: <b>{overrideStato.mandrino}%</b>
+            </span>
+          )}
+          <span style={{ fontSize: 11, color: '#a16207', marginLeft: 'auto', fontStyle: 'italic' }}>
+            {overrideStato.feed_stato === 'basso' || overrideStato.mandrino_stato === 'basso'
+              ? 'Override molto basso — controllare setup o utensile'
+              : 'Operatore ha rallentato la macchina'}
+          </span>
         </div>
       )}
 

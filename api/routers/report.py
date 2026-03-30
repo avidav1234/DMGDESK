@@ -100,10 +100,13 @@ def aggiorna_da_log(
     utensile: Optional[str],
     t_number: Optional[str],
     config: dict,
+    override_feed: Optional[int] = None,
+    override_mandrino: Optional[int] = None,
 ):
     """
     Chiamato da aggiorna-stati-da-log ogni 5 secondi.
     Registra inizio/fine programmi e accumula tempi utensili.
+    Registra anche periodi con override ridotto per diagnostica.
     """
     data = _load_log(config)
     sc   = data.setdefault("stato_corrente", {})
@@ -188,13 +191,26 @@ def aggiorna_da_log(
             dirty = True
 
         else:
-            # Stesso programma — accumula tick utensile (5s)
+            # Stesso programma — accumula tick utensile (5s) e override ridotto
             if sc.get("sessione_id") and utensile:
                 sess = _find_sess(data, sc["sessione_id"])
                 if sess:
                     sess.setdefault("utensili", {})
                     sess["utensili"][utensile] = sess["utensili"].get(utensile, 0) + 5
                     dirty = True
+            # Registra secondi con override ridotto (feed < 90% o mandrino < 90%)
+            if sc.get("sessione_id"):
+                ovr_f = override_feed     if override_feed     is not None else 100
+                ovr_m = override_mandrino if override_mandrino is not None else 100
+                if ovr_f < 90 or ovr_m < 90:
+                    sess = _find_sess(data, sc["sessione_id"])
+                    if sess:
+                        sess["sec_override_ridotto"] = sess.get("sec_override_ridotto", 0) + 5
+                        # Registra il valore minimo visto per diagnostica
+                        min_ovr = min(ovr_f, ovr_m)
+                        if "min_override" not in sess or min_ovr < sess["min_override"]:
+                            sess["min_override"] = min_ovr
+                        dirty = True
             sc["ultimo_tick"] = now
 
     if dirty:
@@ -330,6 +346,43 @@ async def get_report_giornaliero(data: str = Query(default=None)):
     gap_totale  = sum(s.get("gap_sec") or 0 for s in sessioni_giorno)
     n_programmi = sum(len(_programmi_effettivi(s)) for s in sessioni_giorno)
 
+    # ── OEE — Overall Equipment Effectiveness ─────────────────────────────────
+    # Turno standard 8h = 28800s. Se le ore lavorate superano 8h usiamo quelle.
+    ORE_TURNO_SEC = 28800
+    tempo_turno = max(ore_totali + gap_totale, ORE_TURNO_SEC)
+
+    # Disponibilità: tempo macchina in produzione / tempo turno
+    disponibilita = ore_totali / tempo_turno if tempo_turno > 0 else 0
+
+    # Performance: paragona cicli reali con tempi stimati CAM
+    # Se non ci sono tempi stimati usa disponibilità come proxy
+    sec_teorici = sum(
+        pgm.get("durata_sec_teorica") or pgm.get("durata_sec") or 0
+        for s in sessioni_giorno
+        for pgm in _programmi_effettivi(s)
+        if pgm.get("durata_sec")
+    )
+    sec_reali = sum(
+        pgm.get("durata_sec") or 0
+        for s in sessioni_giorno
+        for pgm in _programmi_effettivi(s)
+        if pgm.get("durata_sec")
+    )
+    performance = min(1.0, sec_teorici / sec_reali) if sec_reali > 0 and sec_teorici > 0 else disponibilita
+
+    # Qualità: proxy per CNC stampi (rarissimi scarti) = 98%
+    # In futuro: n_pezzi_ok / n_pezzi_totali
+    qualita = 0.98
+
+    oee = round(disponibilita * performance * qualita * 100, 1)
+
+    # Override ridotto — tempo totale con feed/mandrino < 90%
+    sec_ovr_ridotto = sum(s.get("sec_override_ridotto") or 0 for s in sessioni_giorno)
+    min_ovr_giorno  = min(
+        (s["min_override"] for s in sessioni_giorno if "min_override" in s),
+        default=None
+    )
+
     # Utensili aggregati (usa accumulo tick — già corretto anche live)
     utensili_agg = {}
     for s in sessioni_giorno:
@@ -363,6 +416,21 @@ async def get_report_giornaliero(data: str = Query(default=None)):
         "n_programmi":      n_programmi,
         "efficienza_pct":   round(ore_totali / (ore_totali + gap_totale) * 100, 1)
                             if (ore_totali + gap_totale) > 0 else 0,
+        # OEE
+        "oee": {
+            "valore":        oee,
+            "disponibilita": round(disponibilita * 100, 1),
+            "performance":   round(performance   * 100, 1),
+            "qualita":       round(qualita       * 100, 1),
+            "ore_turno_sec": tempo_turno,
+        },
+        # Override ridotto
+        "override_ridotto": {
+            "sec_totale":    sec_ovr_ridotto,
+            "durata":        _durata_str(sec_ovr_ridotto),
+            "pct_tempo":     round(sec_ovr_ridotto / ore_totali * 100, 1) if ore_totali > 0 else 0,
+            "min_valore":    min_ovr_giorno,
+        },
         "progetti":         progetti_agg,
         "utensili":         {k: {"sec": v, "ore": _durata_str(v)}
                               for k, v in sorted(utensili_agg.items(), key=lambda x: -x[1])},
@@ -395,6 +463,12 @@ async def get_storico(giorni: int = Query(default=7)):
             return 0
         ore  = sum(_dur(s) for s in sess)
         gap  = sum(s.get("gap_sec") or 0 for s in sess)
+        # OEE semplificato per lo storico (disponibilità * 0.98 qualità)
+        ORE_TURNO = 28800
+        tempo_turno = max(ore + gap, ORE_TURNO)
+        disponibilita = ore / tempo_turno if tempo_turno > 0 else 0
+        oee_valore = round(disponibilita * 1.0 * 0.98 * 100, 1)  # performance=1.0 senza cicli teorici
+        sec_ovr = sum(s.get("sec_override_ridotto") or 0 for s in sess)
         result.append({
             "data": d,
             "ore_lavorate_sec": ore,
@@ -402,6 +476,8 @@ async def get_storico(giorni: int = Query(default=7)):
             "tempo_fermo_sec": gap,
             "n_programmi": sum(len(s.get("programmi", [])) for s in sess),
             "efficienza_pct": round(ore / (ore + gap) * 100, 1) if (ore + gap) > 0 else 0,
+            "oee": {"valore": oee_valore, "disponibilita": round(disponibilita*100,1)} if ore > 0 else None,
+            "sec_override_ridotto": sec_ovr,
         })
     return result
 

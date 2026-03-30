@@ -336,15 +336,27 @@ function ConfrontoSettimane({ storico }) {
   const effPrev = prev.reduce((a,g) => a + (g.efficienza_pct||0), 0) / 7
   const pgmCurr = curr.reduce((a,g) => a + (g.n_programmi||0), 0)
   const pgmPrev = prev.reduce((a,g) => a + (g.n_programmi||0), 0)
+  // OEE medio — solo giorni con dati
+  const oeeCurrGiorni = curr.filter(g => g.oee?.valore)
+  const oeePrevGiorni = prev.filter(g => g.oee?.valore)
+  const oeeCurr = oeeCurrGiorni.length ? oeeCurrGiorni.reduce((a,g)=>a+(g.oee.valore||0),0)/oeeCurrGiorni.length : null
+  const oeePrev = oeePrevGiorni.length ? oeePrevGiorni.reduce((a,g)=>a+(g.oee.valore||0),0)/oeePrevGiorni.length : null
   const delta = (a, b) => b === 0 ? 0 : ((a - b) / b * 100)
   return (
-    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:14 }}>
+    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', gap:14 }}>
       <KpiCard label="Ore questa settimana" value={fmtH(totCurr)} sub={`Sett. prec.: ${fmtH(totPrev)}`}
                color="#3b82f6" trend={delta(totCurr, totPrev)} />
       <KpiCard label="Efficienza media" value={`${effCurr.toFixed(1)}%`} sub={`Sett. prec.: ${effPrev.toFixed(1)}%`}
                color={effCurr > 70 ? '#22c55e' : '#f59e0b'} trend={delta(effCurr, effPrev)} />
       <KpiCard label="Programmi eseguiti" value={pgmCurr} sub={`Sett. prec.: ${pgmPrev}`}
                color="#8b5cf6" trend={delta(pgmCurr, pgmPrev)} />
+      {oeeCurr != null
+        ? <KpiCard label="OEE medio" value={`${oeeCurr.toFixed(1)}%`}
+            sub={oeePrev != null ? `Sett. prec.: ${oeePrev.toFixed(1)}%` : 'Prima settimana'}
+            color={oeeCurr >= 75 ? '#22c55e' : oeeCurr >= 50 ? '#f59e0b' : '#ef4444'}
+            trend={oeePrev != null ? delta(oeeCurr, oeePrev) : null} />
+        : <KpiCard label="OEE" value="—" sub="Dati insufficienti" color="#94a3b8" />
+      }
     </div>
   )
 }
@@ -423,7 +435,31 @@ export default function Report() {
           <KpiCard label="Efficienza"    value={`${rpt.efficienza_pct}%`}
                    color={rpt.efficienza_pct > 70 ? '#22c55e' : rpt.efficienza_pct > 40 ? '#f59e0b' : '#ef4444'} />
           <KpiCard label="Programmi"     value={rpt.n_programmi}   color="#3b82f6" />
-          <KpiCard label="Sessioni"      value={rpt.n_sessioni}     color="#8b5cf6" />
+          {/* OEE — se disponibile, sostituisce Sessioni */}
+          {rpt.oee
+            ? <KpiCard label="OEE"
+                value={`${rpt.oee.valore}%`}
+                color={rpt.oee.valore >= 75 ? '#22c55e' : rpt.oee.valore >= 50 ? '#f59e0b' : '#ef4444'}
+                sub={`D:${rpt.oee.disponibilita}% P:${rpt.oee.performance}%`} />
+            : <KpiCard label="Sessioni" value={rpt.n_sessioni} color="#8b5cf6" />
+          }
+        </div>
+      )}
+
+      {/* Banner override ridotto se presente */}
+      {rpt?.override_ridotto?.sec_totale > 0 && (
+        <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:14,
+          padding:'9px 16px', borderRadius:8, background:'#fffbeb', border:'1px solid #f59e0b' }}>
+          <span style={{ fontSize:11, fontWeight:800, color:'#92400e',
+            background:'#fef3c7', padding:'2px 8px', borderRadius:5 }}>OVERRIDE RIDOTTO</span>
+          <span style={{ fontSize:13, color:'#92400e' }}>
+            <b>{rpt.override_ridotto.durata}</b> con feed/mandrino &lt; 90%
+            {rpt.override_ridotto.min_valore != null &&
+              ` · minimo rilevato: ${rpt.override_ridotto.min_valore}%`}
+          </span>
+          <span style={{ fontSize:11, color:'#a16207', marginLeft:'auto' }}>
+            {rpt.override_ridotto.pct_tempo}% del tempo di lavorazione
+          </span>
         </div>
       )}
 

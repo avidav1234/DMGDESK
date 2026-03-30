@@ -153,12 +153,12 @@ export default function Home(){
   )
 
   return(
-    <div style={{flex:1,overflowY:'auto',background:'#f0f4f8',fontFamily:'var(--font-display)',display:'flex',flexDirection:'column'}}>
+    <div style={{flex:1,overflow:'hidden',background:'#f0f4f8',fontFamily:'var(--font-display)',display:'flex',flexDirection:'column',height:'100%'}}>
 
       {/* ── TOPBAR ─────────────────────────────────────────────────────── */}
-      <div style={{background:'#fff',borderBottom:'1px solid #e2e8f0',padding:'10px 24px',
+      <div style={{background:'#fff',borderBottom:'1px solid #e2e8f0',padding:'8px 20px',
         display:'flex',alignItems:'center',gap:16,flexShrink:0}}>
-        <span style={{fontSize:17,fontWeight:800,color:'#0d2d5e'}}>Cruscotto turno</span>
+        <span style={{fontSize:15,fontWeight:800,color:'#0d2d5e'}}>Cruscotto turno</span>
         <span style={{fontSize:12,color:'#94a3b8'}}>{dayLabel}</span>
         {/* Banner IN ESECUZIONE */}
         {sessLive?.attiva&&sessLive?.programma_corrente&&(
@@ -176,16 +176,16 @@ export default function Home(){
       <style>{`@keyframes pulse-dot{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.85)}}`}</style>
 
       {/* ── BODY: col-main | col-side ──────────────────────────────────── */}
-      <div style={{flex:1,display:'grid',gridTemplateColumns:'1fr 300px',gap:14,
-        padding:'14px 20px',alignItems:'start',minHeight:0}}>
+      <div style={{flex:1,display:'grid',gridTemplateColumns:'1fr 280px',gap:12,
+        padding:'12px 18px',alignItems:'stretch',overflow:'hidden',minHeight:0}}>
 
         {/* ══ COL MAIN ══════════════════════════════════════════════════ */}
-        <div style={{display:'flex',flexDirection:'column',gap:14}}>
+        <div style={{display:'flex',flexDirection:'column',gap:10,overflowY:'auto',minHeight:0}}>
 
           {/* ── PALLET GRID ─────────────────────────────────────────── */}
-          <div style={{background:'#fff',border:'1px solid #e2e8f0',borderRadius:12,padding:'14px 18px'}}>
+          <div style={{background:'#fff',border:'1px solid #e2e8f0',borderRadius:12,padding:'12px 16px',flexShrink:0}}>
             <div style={{fontSize:10,fontWeight:800,letterSpacing:'0.1em',color:'#64748b',
-              textTransform:'uppercase',marginBottom:10}}>Pallet macchina</div>
+              textTransform:'uppercase',marginBottom:8}}>Pallet macchina</div>
             <div style={{display:'grid',gridTemplateColumns:'repeat(6,1fr)',gap:8}}>
               {[1,2,3,4,5,6].map(n=>{
                 const info=palletInfo(n)
@@ -196,15 +196,15 @@ export default function Home(){
                   <div key={n}
                     onClick={info?()=>nav('/progetti',{state:{openId:info.proj.id}}):undefined}
                     style={{background:c.bg,border:`1.5px solid ${c.border}`,borderRadius:10,
-                      padding:'11px 12px',cursor:info?'pointer':'default',
-                      minHeight:105,display:'flex',flexDirection:'column',gap:5,
+                      padding:'14px 14px',cursor:info?'pointer':'default',
+                      minHeight:130,display:'flex',flexDirection:'column',gap:6,
                       transition:'transform 0.12s, box-shadow 0.12s',position:'relative'}}
                     onMouseEnter={e=>{if(info){e.currentTarget.style.transform='translateY(-2px)';e.currentTarget.style.boxShadow='0 4px 14px rgba(0,0,0,.08)'}}}
                     onMouseLeave={e=>{e.currentTarget.style.transform='none';e.currentTarget.style.boxShadow='none'}}>
 
                     {/* Numero + badge stato */}
                     <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
-                      <span style={{fontSize:24,fontWeight:900,color:c.fg,lineHeight:1}}>P{n}</span>
+                      <span style={{fontSize:30,fontWeight:900,color:c.fg,lineHeight:1}}>P{n}</span>
                       {!isVuoto&&(
                         <span style={{fontSize:9,fontWeight:800,color:c.accent||c.fg,
                           background:'#fff',padding:'2px 6px',borderRadius:4,
@@ -216,7 +216,7 @@ export default function Home(){
 
                     {info?(
                       <>
-                        <div style={{fontSize:11,fontWeight:800,color:c.fg,
+                        <div style={{fontSize:12,fontWeight:800,color:c.fg,
                           overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
                           {info.proj.name}
                         </div>
@@ -225,8 +225,8 @@ export default function Home(){
                             background:c.accent||info.proj.color||'#1D5FAD',borderRadius:2}}/>
                         </div>
                         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                          <span style={{fontSize:10,color:c.fg,opacity:0.7}}>{info.done}/{info.tot} pgm</span>
-                          <span style={{fontSize:12,fontWeight:800,color:c.fg}}>{info.pct}%</span>
+                          <span style={{fontSize:11,color:c.fg,opacity:0.7}}>{info.done}/{info.tot} pgm</span>
+                          <span style={{fontSize:13,fontWeight:800,color:c.fg}}>{info.pct}%</span>
                         </div>
                       </>
                     ):(
@@ -240,9 +240,9 @@ export default function Home(){
 
           {/* ── CARD PROGETTO ATTIVO ────────────────────────────────── */}
           {lavInfo?(
-            <div style={{background:'#f0f7ff',border:'1.5px solid #1D5FAD',borderRadius:12,padding:'16px 20px'}}>
+            <div style={{background:'#f0f7ff',border:'1.5px solid #1D5FAD',borderRadius:12,padding:'12px 16px',flexShrink:0}}>
               {/* Header */}
-              <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:14}}>
+              <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:8}}>
                 <div style={{width:11,height:11,borderRadius:2,
                   background:lavInfo.proj.color||'#1D5FAD',flexShrink:0}}/>
                 <span style={{fontSize:16,fontWeight:800,color:'#0d2d5e',flex:1,
@@ -256,12 +256,12 @@ export default function Home(){
               </div>
 
               {/* Timers */}
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:14}}>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:10}}>
                 <div style={{background:'#fff',borderRadius:9,padding:'12px 16px',
-                  border:'1px solid #bfdbfe',textAlign:'center'}}>
+                  border:'1px solid #bfdbfe',textAlign:'center',padding:'6px 10px'}}>
                   <div style={{fontSize:10,fontWeight:700,color:'#1D5FAD',letterSpacing:'0.07em',
                     textTransform:'uppercase',marginBottom:5}}>Sessione pallet</div>
-                  <div style={{fontSize:28,fontWeight:900,color:'#0d2d5e',fontFamily:'monospace',lineHeight:1}}>
+                  <div style={{fontSize:26,fontWeight:900,color:'#0d2d5e',fontFamily:'monospace',lineHeight:1}}>
                     {sessMatch?fmtTimer(durataSessioneLive):'—:——:——'}
                   </div>
                   {sessMatch&&sessLive?.inizio_sessione&&(
@@ -270,11 +270,11 @@ export default function Home(){
                     </div>
                   )}
                 </div>
-                <div style={{background:'#fff',borderRadius:9,padding:'12px 16px',
+                <div style={{background:'#fff',borderRadius:9,padding:'8px 12px',
                   border:'1px solid #e2e8f0',textAlign:'center'}}>
                   <div style={{fontSize:10,fontWeight:700,color:'#64748b',letterSpacing:'0.07em',
                     textTransform:'uppercase',marginBottom:5}}>Programma corrente</div>
-                  <div style={{fontSize:28,fontWeight:900,color:'#475569',fontFamily:'monospace',lineHeight:1}}>
+                  <div style={{fontSize:26,fontWeight:900,color:'#475569',fontFamily:'monospace',lineHeight:1}}>
                     {sessMatch&&durataProgrammaLive!=null?fmtTimer(durataProgrammaLive):'—:——:——'}
                   </div>
                   {sessMatch&&sessLive?.programma_corrente&&(
@@ -323,8 +323,8 @@ export default function Home(){
           )}
 
           {/* ── SCADENZE ────────────────────────────────────────────── */}
-          <div style={{background:'#fff',border:'1px solid #e2e8f0',borderRadius:12,padding:'14px 18px'}}>
-            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12}}>
+          <div style={{background:'#fff',border:'1px solid #e2e8f0',borderRadius:12,padding:'10px 16px'}}>
+            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
               <span style={{fontSize:10,fontWeight:800,letterSpacing:'0.1em',color:'#64748b',textTransform:'uppercase'}}>
                 Scadenze progetti
               </span>
@@ -350,12 +350,12 @@ export default function Home(){
                   return(
                     <div key={p.id} onClick={()=>nav('/progetti',{state:{openId:p.id}})}
                       style={{display:'flex',alignItems:'center',gap:10,background:bg,
-                        borderRadius:8,padding:'8px 12px',cursor:'pointer',
+                        borderRadius:8,padding:'6px 12px',cursor:'pointer',
                         border:`1px solid ${color}33`,transition:'opacity .12s'}}
                       onMouseEnter={e=>e.currentTarget.style.opacity='.85'}
                       onMouseLeave={e=>e.currentTarget.style.opacity='1'}>
                       <div style={{width:7,height:7,borderRadius:'50%',background:color,flexShrink:0}}/>
-                      <span style={{fontSize:13,fontWeight:700,color:'#1e293b',flex:1,
+                      <span style={{fontSize:12,fontWeight:700,color:'#1e293b',flex:1,
                         overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}</span>
                       {pNum&&<span style={{fontSize:10,fontWeight:700,color:'#0d2d5e',
                         background:'#eff6ff',padding:'2px 7px',borderRadius:4,flexShrink:0}}>P{pNum}</span>}
@@ -370,8 +370,8 @@ export default function Home(){
           </div>
 
           {/* ── UTENSILI ────────────────────────────────────────────── */}
-          <div style={{background:'#fff',border:'1px solid #e2e8f0',borderRadius:12,padding:'14px 18px'}}>
-            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12}}>
+          <div style={{background:'#fff',border:'1px solid #e2e8f0',borderRadius:12,padding:'10px 16px'}}>
+            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
               <span style={{fontSize:10,fontWeight:800,letterSpacing:'0.1em',color:'#64748b',textTransform:'uppercase'}}>
                 Utensili — attenzione
               </span>
@@ -392,7 +392,7 @@ export default function Home(){
                   <div key={u.alias}
                     style={{display:'flex',alignItems:'center',gap:10,
                       background:u.bg,border:`1px solid ${u.border}`,
-                      borderRadius:8,padding:'8px 12px'}}>
+                      borderRadius:8,padding:'6px 10px'}}>
                     <span style={{fontSize:10,fontWeight:800,color:u.color,
                       background:'#fff',padding:'2px 8px',borderRadius:4,
                       border:`1px solid ${u.border}`,flexShrink:0,
@@ -412,7 +412,7 @@ export default function Home(){
         </div>{/* fine col-main */}
 
         {/* ══ COL SIDE ═══════════════════════════════════════════════ */}
-        <div style={{display:'flex',flexDirection:'column',gap:10,position:'sticky',top:0}}>
+        <div style={{display:'flex',flexDirection:'column',gap:8,overflowY:'auto',minHeight:0}}>
           <div style={{fontSize:10,fontWeight:800,letterSpacing:'0.1em',color:'#64748b',textTransform:'uppercase'}}>
             Metriche turno
           </div>
@@ -422,10 +422,10 @@ export default function Home(){
             {val:completatiOggi,  label:'Completati oggi', sub:'nel turno corrente',               color:'#166534', bg:'#dcfce7'},
             {val:critici,         label:'Critici',          sub:'scaduti o oggi',                  color:'#dc2626', bg:'#fef2f2'},
           ].map(({val,label,sub,color,bg})=>(
-            <div key={label} style={{background:bg,borderRadius:10,padding:'16px 18px'}}>
-              <div style={{fontSize:36,fontWeight:900,color,lineHeight:1,marginBottom:2}}>{val}</div>
-              <div style={{fontSize:13,fontWeight:700,color,marginBottom:2}}>{label}</div>
-              <div style={{fontSize:11,color,opacity:0.7}}>{sub}</div>
+            <div key={label} style={{background:bg,borderRadius:10,padding:'12px 16px'}}>
+              <div style={{fontSize:32,fontWeight:900,color,lineHeight:1,marginBottom:2}}>{val}</div>
+              <div style={{fontSize:12,fontWeight:700,color,marginBottom:1}}>{label}</div>
+              <div style={{fontSize:10,color,opacity:0.7}}>{sub}</div>
             </div>
           ))}
         </div>

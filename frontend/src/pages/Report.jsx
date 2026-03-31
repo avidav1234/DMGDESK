@@ -149,9 +149,24 @@ function TimelineGiornaliera({ sessioni }) {
 }
 
 function ProgrammiChart({ sessioni }) {
-  const allPgm = (sessioni || []).flatMap(s =>
-    (s.programmi || []).map(p => ({ ...p, progetto: s.progetto }))
-  ).filter(p => p.durata_sec > 0).sort((a,b) => b.durata_sec - a.durata_sec).slice(0, 20)
+  // Aggrega per filename: somma durata_sec di tutte le esecuzioni dello stesso programma
+  // (un programma può apparire in più sessioni o essere stato stoppato e riavviato)
+  const aggMap = {}
+  for (const s of (sessioni || [])) {
+    for (const p of (s.programmi || [])) {
+      if (!p.filename || !(p.durata_sec > 0)) continue
+      const key = (p.filename || '').toUpperCase()
+      if (!aggMap[key]) {
+        aggMap[key] = { filename: p.filename, durata_sec: 0, n_esecuzioni: 0, progetto: s.progetto }
+      }
+      aggMap[key].durata_sec   += p.durata_sec
+      aggMap[key].n_esecuzioni += 1
+    }
+  }
+  const allPgm = Object.values(aggMap)
+    .sort((a, b) => b.durata_sec - a.durata_sec)
+    .slice(0, 20)
+
   if (!allPgm.length) return (
     <div style={{ color:'var(--text-dim)', fontSize:12, textAlign:'center', padding:20 }}>Nessun programma</div>
   )
@@ -165,7 +180,7 @@ function ProgrammiChart({ sessioni }) {
           <div key={p.filename+i} style={{ display:'flex', alignItems:'center', gap:10 }}>
             <div style={{ width:160, fontSize:11, fontFamily:'monospace', color:'var(--text-secondary)',
                           textAlign:'right', flexShrink:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}
-                 title={p.filename}>
+                 title={p.filename + (p.n_esecuzioni > 1 ? ` (${p.n_esecuzioni} esecuzioni aggregate)` : '')}>
               {(p.filename || '').replace('.MPF','').replace('.mpf','')}
             </div>
             <div style={{ flex:1, height:20, background:'var(--bg-hover)', borderRadius:4, overflow:'hidden' }}>
@@ -174,6 +189,12 @@ function ProgrammiChart({ sessioni }) {
             <div style={{ width:64, fontSize:12, fontFamily:'monospace', color, fontWeight:700, flexShrink:0, textAlign:'right' }}>
               {fmt(p.durata_sec)}
             </div>
+            {p.n_esecuzioni > 1 && (
+              <div style={{ fontSize:10, color:'var(--text-dim)', flexShrink:0, width:24, textAlign:'left' }}
+                   title={`${p.n_esecuzioni} esecuzioni aggregate`}>
+                ×{p.n_esecuzioni}
+              </div>
+            )}
           </div>
         )
       })}

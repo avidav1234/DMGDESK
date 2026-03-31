@@ -28,6 +28,16 @@ const colorForProject = (name) => {
   return _colorMap[name]
 }
 
+// ── Parsing date locale (evita shift UTC su timestamp senza Z) ───────────────
+const parseLocal = (iso) => {
+  if (!iso) return null
+  const s = iso.includes('T') ? iso : iso.replace(' ', 'T')
+  const d = new Date(s)
+  return isNaN(d.getTime()) ? null : d
+}
+
+
+
 const Card = ({ children, style = {} }) => (
   <div style={{ background:'var(--bg-card)', border:'1px solid var(--border)', borderRadius:10, ...style }}>
     {children}
@@ -128,51 +138,108 @@ function TimelineGiornaliera({ sessioni }) {
   if (!sessioni?.length) return (
     <div style={{ color:'var(--text-dim)', fontSize:12, textAlign:'center', padding:20 }}>Nessuna sessione</div>
   )
+
+  // Accumula lavorazione e fermo per slot orario (0-23)
   const ore = Array.from({length:24}, (_,h) => ({ h, lav:0, fermo:0 }))
+
   for (const s of sessioni) {
-    for (const pgm of (s.programmi || [])) {
+    const pgms = s.programmi || []
+
+    // Lavorazione: distribuisce la durata di ogni programma tra le ore che tocca
+    for (const pgm of pgms) {
       if (!pgm.inizio || !pgm.fine) continue
-      const dur = Math.max(0, (new Date(pgm.fine) - new Date(pgm.inizio)) / 1000)
-      const h = new Date(pgm.inizio).getHours()
-      if (ore[h]) ore[h].lav += dur
-    }
-    for (let i = 1; i < (s.programmi||[]).length; i++) {
-      const prev = s.programmi[i-1], curr = s.programmi[i]
-      if (!prev.fine || !curr.inizio) continue
-      const gap = Math.max(0, (new Date(curr.inizio) - new Date(prev.fine)) / 1000)
-      if (gap > 10) {
-        const h = new Date(prev.fine).getHours()
-        if (ore[h]) ore[h].fermo += gap
+      const t0 = parseLocal(pgm.inizio)
+      const t1 = parseLocal(pgm.fine)
+      if (!t0 || !t1 || t1 <= t0) continue
+      // Distribuisce tra gli slot orari coperti
+      let cur = new Date(t0)
+      while (cur < t1) {
+        const h = cur.getHours()
+        const slotFine = new Date(cur)
+        slotFine.setHours(h + 1, 0, 0, 0)
+        const fine = slotFine < t1 ? slotFine : t1
+        const sec = Math.max(0, (fine - cur) / 1000)
+        if (ore[h]) ore[h].lav += sec
+        cur = slotFine
       }
     }
+
+    // Fermo: gap tra programmi consecutivi
+    for (let i = 1; i < pgms.length; i++) {
+      const prev = pgms[i-1], curr = pgms[i]
+      if (!prev.fine || !curr.inizio) continue
+      const t0 = parseLocal(prev.fine)
+      const t1 = parseLocal(curr.inizio)
+      if (!t0 || !t1) continue
+      const gap = Math.max(0, (t1 - t0) / 1000)
+      if (gap < 10) continue
+      const h = t0.getHours()
+      if (ore[h]) ore[h].fermo += gap
+    }
   }
-  const maxSec = Math.max(...ore.map(o => o.lav + o.fermo), 1)
+
+  // Solo ore con almeno qualcosa (± 1 ora di contesto)
+  const oreConDati = ore.filter(o => o.lav > 0 || o.fermo > 0)
+  if (!oreConDati.length) return (
+    <div style={{ color:'var(--text-dim)', fontSize:12, textAlign:'center', padding:20 }}>
+      Nessun dato di lavorazione per questa giornata
+    </div>
+  )
+
+  // Range: prima ora con dati - 1 … ultima ora con dati
+  const hMin = Math.max(0,  oreConDati[0].h - 1)
+  const hMax = Math.min(23, oreConDati[oreConDati.length-1].h + 1)
+  const oreVis = ore.slice(hMin, hMax + 1)
+
+  const maxSec = Math.max(...oreVis.map(o => o.lav + o.fermo), 1)
+  const BAR_H = 80
+
   return (
     <div>
-      <div style={{ display:'flex', gap:1, alignItems:'flex-end', height:80 }}>
-        {ore.map(o => {
-          const lavH = Math.max(0, Math.round((o.lav / maxSec) * 72))
-          const fermoH = Math.max(0, Math.round((o.fermo / maxSec) * 72))
+      <div style={{ display:'flex', gap:2, alignItems:'flex-end', height:BAR_H + 20 }}>
+        {oreVis.map(o => {
+          const lavH   = Math.round((o.lav   / maxSec) * BAR_H)
+          const fermoH = Math.round((o.fermo / maxSec) * BAR_H)
+          const haQcs  = lavH > 0 || fermoH > 0
+          const tooltip = `${String(o.h).padStart(2,'0')}:00\nLav: ${fmt(o.lav)}\nFermo: ${fmt(o.fermo)}`
           return (
-            <div key={o.h} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center' }}
-                 title={`${String(o.h).padStart(2,'0')}:00 — Lav: ${fmt(o.lav)}, Fermo: ${fmt(o.fermo)}`}>
-              <div style={{ width:'90%', display:'flex', flexDirection:'column', justifyContent:'flex-end', height:72 }}>
-                {fermoH > 0 && <div style={{ background:'#f59e0b44', height:fermoH, borderRadius:'2px 2px 0 0' }}/>}
-                {lavH > 0 && <div style={{ background:'#1D5FAD', height:lavH, borderRadius: fermoH>0?0:'2px 2px 0 0' }}/>}
+            <div key={o.h} title={tooltip}
+              style={{ flex:1, display:'flex', flexDirection:'column',
+                       alignItems:'center', cursor: haQcs ? 'default' : 'default' }}>
+              {/* Barra impilata: fermo sopra, lavorazione sotto */}
+              <div style={{ width:'80%', display:'flex', flexDirection:'column',
+                            justifyContent:'flex-end', height:BAR_H }}>
+                {fermoH > 0 && (
+                  <div style={{ height:fermoH, background:'#f59e0b',
+                                opacity:0.75, borderRadius:'2px 2px 0 0' }}/>
+                )}
+                {lavH > 0 && (
+                  <div style={{ height:lavH, background:'#1D5FAD',
+                                borderRadius: fermoH > 0 ? 0 : '2px 2px 0 0' }}/>
+                )}
+                {!haQcs && (
+                  <div style={{ height:2, background:'var(--border)', borderRadius:1 }}/>
+                )}
               </div>
-              <div style={{ fontSize:8, color:'var(--text-dim)', marginTop:2 }}>
-                {o.h % 4 === 0 ? String(o.h).padStart(2,'0') : ''}
+              {/* Etichetta ora */}
+              <div style={{ fontSize:9, color:'var(--text-dim)', marginTop:3, fontFamily:'monospace' }}>
+                {String(o.h).padStart(2,'0')}
               </div>
             </div>
           )
         })}
       </div>
-      <div style={{ display:'flex', gap:16, marginTop:10, fontSize:11, color:'var(--text-dim)' }}>
+      <div style={{ display:'flex', gap:16, marginTop:8, fontSize:11, color:'var(--text-dim)' }}>
         <span style={{ display:'flex', alignItems:'center', gap:4 }}>
-          <span style={{ display:'inline-block', width:12, height:12, borderRadius:2, background:'#1D5FAD' }}/> Lavorazione
+          <span style={{ display:'inline-block', width:12, height:12,
+                         borderRadius:2, background:'#1D5FAD' }}/> Lavorazione
         </span>
         <span style={{ display:'flex', alignItems:'center', gap:4 }}>
-          <span style={{ display:'inline-block', width:10, height:10, borderRadius:2, background:'#f59e0b44', border:'1px solid #f59e0b88' }}/> Fermo
+          <span style={{ display:'inline-block', width:12, height:12,
+                         borderRadius:2, background:'#f59e0b' }}/> Fermo
+        </span>
+        <span style={{ marginLeft:'auto', fontSize:10, color:'var(--text-dim)' }}>
+          ore {String(hMin).padStart(2,'0')}:00 – {String(hMax).padStart(2,'0')}:59
         </span>
       </div>
     </div>
@@ -292,9 +359,11 @@ function HeatmapFermi({ sessioni }) {
     for (let i = 1; i < (sess.programmi||[]).length; i++) {
       const prev = sess.programmi[i-1], curr = sess.programmi[i]
       if (!prev.fine || !curr.inizio) continue
-      const gap = Math.max(0, (new Date(curr.inizio) - new Date(prev.fine)) / 1000)
+      const t0 = parseLocal(prev.fine), t1 = parseLocal(curr.inizio)
+      if (!t0 || !t1) continue
+      const gap = Math.max(0, (t1 - t0) / 1000)
       if (gap < 30) continue
-      const h = new Date(prev.fine).getHours()
+      const h = t0.getHours()
       if (matrix[label] && matrix[label][h] !== undefined) matrix[label][h] += gap
     }
   }
@@ -341,7 +410,9 @@ function TabellaFermi({ sessioni }) {
     for (let i = 1; i < (s.programmi||[]).length; i++) {
       const prev = s.programmi[i-1], curr = s.programmi[i]
       if (!prev.fine || !curr.inizio) continue
-      const gap = Math.round((new Date(curr.inizio) - new Date(prev.fine)) / 1000)
+      const t0 = parseLocal(prev.fine), t1 = parseLocal(curr.inizio)
+      if (!t0 || !t1) continue
+      const gap = Math.round((t1 - t0) / 1000)
       if (gap < 10) continue
       gaps.push({ prog: s.progetto, da: prev.filename, a: curr.filename, inizio: prev.fine, gap })
     }

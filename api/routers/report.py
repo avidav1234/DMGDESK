@@ -196,10 +196,36 @@ def aggiorna_da_log(
         # ── Macchina FERMA ────────────────────────────────────────────────────────
         # GRACE PERIOD: se la macchina si ferma (M0, E-Stop, pausa operatore)
         # non chiudiamo immediatamente la sessione. Aspettiamo fino a 15 minuti.
-        # Se il MEDESIMO programma riprende entro quel tempo → continuazione, non nuovo ciclo.
+        # Se il MEDESIMO programma riprende entro quel tempo → continuazione.
         # Se passa più tempo o cambia programma → chiudi normalmente.
+        #
+        # TEMPO FERMO: accumulato in sc["fermo_sec_giornaliero"] ad ogni tick
+        # con stato=5/0, indipendentemente dall'esistenza di una sessione aperta.
+        # Questo copre anche il caso "macchina ferma dall'inizio del turno".
         GRACE_SEC = 900  # 15 minuti
         if stato_pgm in (0, 5):
+            # ── Accumulo tempo fermo giornaliero (sempre, con o senza sessione) ──
+            # Ogni tick è ~4s (frequenza log OpcUa). Usiamo il delta reale
+            # tra now e ultimo_tick_fermo per evitare drift su tick irregolari.
+            ultimo_fermo = sc.get("ultimo_tick_fermo")
+            if ultimo_fermo:
+                try:
+                    delta_fermo = int((datetime.fromisoformat(now) -
+                                       datetime.fromisoformat(ultimo_fermo)).total_seconds())
+                    # Filtra gap anomali (>120s = backend era giù, non fermo macchina)
+                    if 0 < delta_fermo <= 120:
+                        today = now[:10]
+                        # Resetta il contatore se cambia giorno
+                        if sc.get("fermo_data") != today:
+                            sc["fermo_sec_giornaliero"] = 0
+                            sc["fermo_data"] = today
+                        sc["fermo_sec_giornaliero"] = sc.get("fermo_sec_giornaliero", 0) + delta_fermo
+                        dirty = True
+                except Exception:
+                    pass
+            sc["ultimo_tick_fermo"] = now
+            dirty = True
+
             if sc.get("in_esecuzione"):
                 # Registra tipo di fermo e timestamp pausa
                 sess_corrente2 = _find_sess(data, sc.get("sessione_id", ""))
@@ -215,17 +241,32 @@ def aggiorna_da_log(
                         sess_corrente2["n_fermi_pianificati"] = sess_corrente2.get("n_fermi_pianificati", 0) + 1
 
                 # Entra in grace period invece di chiudere subito
-                sc["in_pausa"]    = True
-                sc["pausa_inizio"] = now
+                sc["in_pausa"]      = True
+                sc["pausa_inizio"]  = now
                 sc["in_esecuzione"] = False
                 dirty = True
+
             elif sc.get("in_pausa"):
-                # Già in pausa — controlla se il grace period è scaduto
+                # Già in pausa — accumula tempo pausa in gap_sec della sessione
+                # e controlla se il grace period è scaduto
                 try:
                     pausa_sec = int((datetime.fromisoformat(now) -
                                      datetime.fromisoformat(sc["pausa_inizio"])).total_seconds())
                 except Exception:
                     pausa_sec = GRACE_SEC + 1
+
+                # Accumula il tempo di pausa direttamente in gap_sec della sessione
+                if sc.get("sessione_id"):
+                    sess_p = _find_sess(data, sc["sessione_id"])
+                    if sess_p and ultimo_fermo:
+                        try:
+                            delta_p = int((datetime.fromisoformat(now) -
+                                           datetime.fromisoformat(ultimo_fermo)).total_seconds())
+                            if 0 < delta_p <= 120:
+                                sess_p["gap_sec"] = sess_p.get("gap_sec", 0) + delta_p
+                                dirty = True
+                        except Exception:
+                            pass
 
                 if pausa_sec > GRACE_SEC:
                     # Grace scaduto → chiudi definitivamente
@@ -245,6 +286,9 @@ def aggiorna_da_log(
 
         if stato_pgm in (1, 3) and programma_attivo:
             prev_prog = sc.get("programma_corrente")
+
+            # Quando la macchina riparte, azzera il tracker del fermo
+            sc.pop("ultimo_tick_fermo", None)
 
             # ── Ripresa dopo grace period (stesso programma) ──────────────────────
             # Se eravamo in pausa e il MEDESIMO programma riprende entro 15min:
@@ -587,8 +631,28 @@ async def get_report_giornaliero(data: str = Query(default=None)):
 
     # Aggregazioni con durata live
     ore_totali  = sum(_durata_effettiva(s) for s in sessioni_giorno)
-    gap_totale  = sum(s.get("gap_sec") or 0 for s in sessioni_giorno)
+    gap_sessioni = sum(s.get("gap_sec") or 0 for s in sessioni_giorno)
     n_programmi = sum(len(_programmi_effettivi(s)) for s in sessioni_giorno)
+
+    # Fermo accumulato nello stato_corrente (macchina ferma senza sessione aperta,
+    # o durante grace period prima che la sessione venga chiusa).
+    # Viene sommato al gap delle sessioni SOLO se non c'è sovrapposizione:
+    # se c'è una sessione aperta il grace period scrive già in sess.gap_sec,
+    # altrimenti fermo_sec_giornaliero è l'unica fonte.
+    sc_oggi = log.get("stato_corrente", {})
+    fermo_sc = 0
+    if sc_oggi.get("fermo_data") == target:
+        fermo_sc = sc_oggi.get("fermo_sec_giornaliero", 0)
+
+    # Se non ci sono sessioni oggi, il fermo è tutto in fermo_sc
+    # Se ci sono sessioni, gap_sessioni già include i fermi inter-programma;
+    # fermo_sc aggiunge il fermo "prima della prima sessione" o "dopo l'ultima"
+    if not sessioni_giorno:
+        gap_totale = fermo_sc
+    else:
+        # Evita doppio conteggio: fermo_sc è resettato ogni giorno, include
+        # tutto il fermo del giorno. Prendiamo il massimo tra le due misure.
+        gap_totale = max(gap_sessioni, fermo_sc)
 
     # ── OEE — Overall Equipment Effectiveness ─────────────────────────────────
     # Turno standard 8h = 28800s. Se le ore lavorate superano 8h usiamo quelle.
@@ -815,18 +879,20 @@ async def get_sessione_live():
     sc      = data.get("stato_corrente", {})
     now_iso = datetime.now().isoformat(timespec="seconds")
 
-    # Durante grace period (in_pausa): la sessione esiste ancora ma non sta girando.
-    # Ritorna attiva=True ma con in_pausa=True così il frontend può mostrare
-    # il timer congelato invece di azzerarlo.
+    # Tempo fermo giornaliero — disponibile sempre, anche senza sessione
+    today      = now_iso[:10]
+    fermo_oggi = sc.get("fermo_sec_giornaliero", 0) if sc.get("fermo_data") == today else 0
+
+    # Durante grace period (in_pausa): sessione aperta ma non in esecuzione
     in_pausa = sc.get("in_pausa", False)
     if not sc.get("in_esecuzione") and not in_pausa:
-        return {"attiva": False}
+        return {"attiva": False, "fermo_sec_giornaliero": fermo_oggi}
     if not sc.get("sessione_id"):
-        return {"attiva": False}
+        return {"attiva": False, "fermo_sec_giornaliero": fermo_oggi}
 
     sess = _find_sess(data, sc["sessione_id"])
     if not sess:
-        return {"attiva": False}
+        return {"attiva": False, "fermo_sec_giornaliero": fermo_oggi}
 
     # Durata totale sessione (da inizio pallet)
     inizio_sess = sess.get("inizio")
@@ -867,7 +933,8 @@ async def get_sessione_live():
 
     return {
         "attiva":                True,
-        "in_pausa":              in_pausa,   # True = grace period, timer congelato
+        "in_pausa":              in_pausa,
+        "fermo_sec_giornaliero": fermo_oggi,
         "inizio_sessione":       inizio_sess,
         "durata_sec":            durata_sess,
         "durata_str":            _durata_str(durata_sess),

@@ -61,7 +61,10 @@ export default function Home(){
         .then(d=>{ if(!sig.aborted && d?.cicli) setTempiCiclo(d.cicli) }).catch(()=>{})
     fetchTempiCiclo()
     const t4=setInterval(fetchTempiCiclo,300000)
-    return()=>{ ac.abort(); clearInterval(t);clearInterval(t2);clearInterval(t3);clearInterval(t4) }
+    // Refresh ore progetto ogni 5min (per aggiornarsi quando sessioni si chiudono)
+    const refreshOreProgetto = () => { progettoCorrenteRef.current = null }
+    const t5=setInterval(refreshOreProgetto, 300000)
+    return()=>{ ac.abort(); clearInterval(t);clearInterval(t2);clearInterval(t3);clearInterval(t4);clearInterval(t5) }
   },[])
 
   // Fetch ore storiche progetto ogni volta che cambia il progetto in lavorazione
@@ -69,11 +72,12 @@ export default function Home(){
   useEffect(()=>{
     const palletLavNow = pallet.find(p=>(p.stato||'').toLowerCase().replace('_',' ')==='in lavorazione')
     const progNow = palletLavNow ? projects.find(p=>p.id===palletLavNow.progetto_id) : null
-    if(!progNow) { setOreProgetto(null); return }
-    const chiave = progNow.id  // usa id come chiave stabile per il ref
-    if(chiave === progettoCorrenteRef.current) return
+    if(!progNow) { setOreProgetto(null); progettoCorrenteRef.current = null; return }
+    const chiave = progNow.id
+    if(chiave === progettoCorrenteRef.current) return  // stesso progetto, già caricato
+    // Progetto cambiato — reset e fetch
     progettoCorrenteRef.current = chiave
-    // Passa sia il nome (come salvato nel log) che l'id come fallback
+    setOreProgetto(null)  // reset mentre carica
     const params = new URLSearchParams({
       progetto: progNow.name,
       project_id: progNow.id,

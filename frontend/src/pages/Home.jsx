@@ -224,7 +224,7 @@ export default function Home(){
         display:'flex',alignItems:'center',gap:16,flexShrink:0}}>
         <span style={{fontSize:15,fontWeight:800,color:'#0d2d5e'}}>Cruscotto turno</span>
         <span style={{fontSize:12,color:'#94a3b8'}}>{dayLabel}</span>
-        {/* Banner IN ESECUZIONE */}
+        {/* Banner stato macchina */}
         {sessLive?.attiva&&sessLive?.programma_corrente&&(
           <div style={{marginLeft:'auto',background:'#dbeafe',border:'1px solid #1D5FAD',
             borderRadius:8,padding:'5px 14px',display:'flex',alignItems:'center',gap:8}}>
@@ -234,6 +234,13 @@ export default function Home(){
             <span style={{fontSize:12,fontWeight:700,color:'#1D5FAD',fontFamily:'monospace'}}>
               {sessLive.programma_corrente.replace('.MPF','').replace('.mpf','')}
             </span>
+          </div>
+        )}
+        {!sessLive?.attiva&&(sessLive?.fermo_sec_giornaliero||0)>0&&(
+          <div style={{marginLeft:'auto',background:'#fef2f2',border:'1px solid #fca5a5',
+            borderRadius:8,padding:'5px 14px',display:'flex',alignItems:'center',gap:8}}>
+            <span style={{width:8,height:8,borderRadius:'50%',background:'#ef4444',flexShrink:0,display:'inline-block'}}/>
+            <span style={{fontSize:11,fontWeight:800,color:'#dc2626',letterSpacing:'0.05em'}}>MACCHINA FERMA</span>
           </div>
         )}
       </div>
@@ -594,6 +601,45 @@ export default function Home(){
                 <div style={{fontSize:12,fontWeight:700,color:'#166534',marginBottom:2}}>Completati oggi</div>
                 <div style={{fontSize:10,color:'#166534',opacity:0.8}}>
                   {stimaLabel ? `stima al ritmo attuale` : 'nel turno corrente'}
+                </div>
+              </div>
+            )
+          })()}
+
+          {/* Tempo fermo giornaliero — sempre visibile, anche a macchina ferma */}
+          {(()=>{
+            const fermoSec = sessLive?.fermo_sec_giornaliero || 0
+            if (fermoSec === 0 && sessLive?.attiva) return null  // in esecuzione, nessun fermo ancora
+            const hh = Math.floor(fermoSec / 3600)
+            const mm = Math.floor((fermoSec % 3600) / 60)
+            const ss = fermoSec % 60
+            const fermoFmt = hh > 0
+              ? `${hh}h ${String(mm).padStart(2,'0')}m`
+              : mm > 0
+                ? `${mm}m ${String(ss).padStart(2,'0')}s`
+                : `${ss}s`
+            const isFermo = !sessLive?.attiva || sessLive?.in_pausa
+            const fermoColor   = fermoSec > 3600 ? '#dc2626' : fermoSec > 1800 ? '#d97706' : '#64748b'
+            const fermoBg      = fermoSec > 3600 ? '#fef2f2' : fermoSec > 1800 ? '#fffbeb' : '#f8fafc'
+            return (
+              <div style={{background:fermoBg,border:`1px solid ${fermoColor}33`,
+                borderRadius:10,padding:'12px 16px'}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:2}}>
+                  <div style={{fontSize:28,fontWeight:900,color:fermoColor,lineHeight:1,
+                    fontFamily:'monospace'}}>{fermoFmt}</div>
+                  {isFermo&&(
+                    <span style={{fontSize:10,fontWeight:800,color:fermoColor,
+                      background:`${fermoColor}18`,padding:'2px 7px',borderRadius:4,
+                      letterSpacing:'0.05em'}}>
+                      FERMO
+                    </span>
+                  )}
+                </div>
+                <div style={{fontSize:12,fontWeight:700,color:fermoColor,marginBottom:1}}>
+                  Tempo fermo oggi
+                </div>
+                <div style={{fontSize:10,color:fermoColor,opacity:0.7}}>
+                  {isFermo ? 'macchina ferma adesso' : 'accumulato nel turno'}
                 </div>
               </div>
             )

@@ -587,14 +587,11 @@ def _chiudi_sessione(data: dict, sc: dict, now: str):
     sess = _find_sess(data, sc["sessione_id"])
     if not sess:
         return
-    inizio = sess.get("inizio")
-    if inizio:
-        try:
-            sess["durata_sec"] = int(
-                (datetime.fromisoformat(now) -
-                 datetime.fromisoformat(inizio)).total_seconds())
-        except Exception:
-            pass
+    # durata_sec = somma programmi chiusi (tempo macchina reale)
+    # NON usare (fine - inizio): se la sessione è rimasta aperta nel log
+    # mentre la macchina era ferma, il wall-clock include ore di inattività.
+    pgms_chiusi = [p for p in sess.get("programmi", []) if p.get("fine") and (p.get("durata_sec") or 0) > 0]
+    sess["durata_sec"] = sum(p.get("durata_sec") or 0 for p in pgms_chiusi)
     sess["fine"] = now
     # Calcola gap totale (fermo tra programmi)
     programmi = sess.get("programmi", [])

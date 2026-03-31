@@ -69,11 +69,16 @@ export default function Home(){
   useEffect(()=>{
     const palletLavNow = pallet.find(p=>(p.stato||'').toLowerCase().replace('_',' ')==='in lavorazione')
     const progNow = palletLavNow ? projects.find(p=>p.id===palletLavNow.progetto_id) : null
-    const nomeProgetto = progNow?.name
-    if(!nomeProgetto) { setOreProgetto(null); return }
-    if(nomeProgetto === progettoCorrenteRef.current) return  // già caricato
-    progettoCorrenteRef.current = nomeProgetto
-    fetch(`/api/report/ore-progetto?progetto=${encodeURIComponent(nomeProgetto)}`)
+    if(!progNow) { setOreProgetto(null); return }
+    const chiave = progNow.id  // usa id come chiave stabile per il ref
+    if(chiave === progettoCorrenteRef.current) return
+    progettoCorrenteRef.current = chiave
+    // Passa sia il nome (come salvato nel log) che l'id come fallback
+    const params = new URLSearchParams({
+      progetto: progNow.name,
+      project_id: progNow.id,
+    })
+    fetch(`/api/report/ore-progetto?${params}`)
       .then(r=>r.ok?r.json():null)
       .then(d=>{ if(d) setOreProgetto(d) })
       .catch(()=>{})

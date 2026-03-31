@@ -683,7 +683,8 @@ async def aggiorna_stati_da_log():
     if stato_pgm in (0, 5):
         pallet_num = None
 
-    updates["progetto_rilevato"] = progetto_attivo.get("name") if progetto_attivo else None
+    updates["progetto_rilevato"]    = progetto_attivo.get("name") if progetto_attivo else None
+    updates["progetto_id_rilevato"] = progetto_attivo.get("id")   if progetto_attivo else None
     updates["pallet_rilevato"]   = pallet_num
 
     # Classifica il tipo di fermo — importante per OEE e diagnostica
@@ -874,6 +875,7 @@ async def aggiorna_stati_da_log():
             stato_pgm          = stato_pgm,
             pallet_num         = pallet_num,
             progetto_nome      = updates.get("progetto_rilevato"),
+            progetto_id        = updates.get("progetto_id_rilevato"),
             utensile           = data.get("utensile_attivo"),
             t_number           = data.get("numero_utensile"),
             config             = config,

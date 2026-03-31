@@ -1289,6 +1289,7 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
   const navPD = useNavigate()
   // Carica tools_machine una volta sola per questo progetto
   const [toolsDB, setToolsDB] = useState(null)
+  const [palletError, setPalletError] = useState(null)  // errore assegnazione pallet
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [showLancioModal, setShowLancioModal] = useState(()=>{
     // Apri automaticamente se arrivato dalla Coda con bottone Avvia
@@ -1388,7 +1389,7 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
                     const val=e.target.value?parseInt(e.target.value):null
                     const old=project.pallet_assegnato
                     if(old&&old!==val){await fetch('/api/pallet/'+old+'/assegna-progetto',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({progetto_id:null,progetto_nome:null,progetto_colore:null})})}
-                    if(val){const r=await fetch('/api/pallet/'+val+'/assegna-progetto',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({progetto_id:project.id,progetto_nome:project.name,progetto_colore:project.color||'#0d2d5e'})});if(!r.ok){const err=await r.json().catch(()=>({}));alert(err.detail||'Errore');return}}
+                    if(val){const r=await fetch('/api/pallet/'+val+'/assegna-progetto',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({progetto_id:project.id,progetto_nome:project.name,progetto_colore:project.color||'#0d2d5e'})});if(!r.ok){const err=await r.json().catch(()=>({}));setPalletError(err.detail||'Errore assegnazione pallet');setTimeout(()=>setPalletError(null),4000);return}}
                     onUpdate({...project,pallet_assegnato:val})
                   }}
                   style={{fontSize:12,fontWeight:700,background:'transparent',
@@ -1407,6 +1408,13 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
               </div>
             )
           })()}
+          {palletError&&(
+            <div style={{fontSize:11,fontWeight:700,color:'#dc2626',
+              background:'#fef2f2',border:'1px solid #fca5a5',
+              borderRadius:6,padding:'5px 10px',marginTop:4,flexShrink:0}}>
+              ⚠ {palletError}
+            </div>
+          )}
 
           {/* Lancia in NC — CTA principale */}
           {mpfList.length>0&&<button onClick={()=>setShowLancioModal(true)}
@@ -2554,7 +2562,9 @@ export default function Progetti(){
       const toSave=next
       setTimeout(()=>{
         fetch(API+'/deliveries',{method:'PUT',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify(toSave)}).catch(()=>{})
+          body:JSON.stringify(toSave)})
+          .then(r=>{ if(!r.ok) console.warn('[Deliveries] PUT fallito:', r.status) })
+          .catch(e=>console.warn('[Deliveries] PUT errore rete:', e.message))
       },0)
       return next
     })

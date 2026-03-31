@@ -64,6 +64,9 @@ def _load(config: dict) -> dict:
     if path.exists():
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
+            # Verifica struttura minima
+            if not isinstance(data, dict) or not isinstance(data.get("pallet"), list):
+                raise ValueError("struttura pallet_state.json non valida")
             # Migrazione: aggiunge campi mancanti ai pallet esistenti
             for p in data.get("pallet", []):
                 p.setdefault("progetto_id", None)
@@ -71,6 +74,11 @@ def _load(config: dict) -> dict:
                 p.setdefault("progetto_colore", None)
                 p.setdefault("pct_avanzamento", None)
             return data
+        except (json.JSONDecodeError, ValueError) as e:
+            from utils.logger import get_logger as _get_log
+            _get_log("routers.pallet").error(
+                f"pallet_state.json corrotto: {e} — uso struttura di default"
+            )
         except Exception:
             pass
     return _default_state()

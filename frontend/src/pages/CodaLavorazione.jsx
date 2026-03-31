@@ -89,7 +89,8 @@ export default function CodaLavorazione() {
     })
     if(!res.ok) {
       const err = await res.json().catch(()=>({}))
-      alert(err.detail || 'Errore assegnazione pallet')
+      setError(err.detail || 'Errore assegnazione pallet')
+      setTimeout(() => setError(null), 4000)
       fetchAll(); return
     }
     // Il backend ha già chiamato sincronizza-coda — carica ordine aggiornato

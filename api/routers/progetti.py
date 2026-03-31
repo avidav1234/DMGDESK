@@ -49,10 +49,22 @@ def _load_progetti(config: dict) -> dict:
                     _progetti_cache["data"] is not None):
                 return _progetti_cache["data"]
             data = json.loads(path.read_text(encoding="utf-8"))
+            # Verifica integrità struttura minima
+            if not isinstance(data, dict):
+                raise ValueError("Root non è un oggetto JSON")
+            if "projects" not in data:
+                data["projects"] = []
+            if not isinstance(data["projects"], list):
+                raise ValueError("projects non è una lista")
             _progetti_cache["data"]  = data
             _progetti_cache["path"]  = str(path)
             _progetti_cache["mtime"] = mtime
             return data
+        except (json.JSONDecodeError, ValueError) as e:
+            from utils.logger import get_logger as _get_log
+            _get_log("routers.progetti").error(
+                f"worktrack_projects.json corrotto: {e} — uso struttura vuota"
+            )
         except Exception:
             pass
     return {"projects": [], "ultimo_aggiornamento": None}

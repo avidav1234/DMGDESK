@@ -62,7 +62,20 @@ def _load_log(config: dict) -> dict:
     p = _log_path(config)
     if p.exists():
         try:
-            return json.loads(p.read_text(encoding="utf-8"))
+            data = json.loads(p.read_text(encoding="utf-8"))
+            # Verifica struttura minima
+            if not isinstance(data, dict):
+                raise ValueError("Root non è un oggetto JSON")
+            if not isinstance(data.get("sessioni"), list):
+                data["sessioni"] = []
+            if not isinstance(data.get("stato_corrente"), dict):
+                data["stato_corrente"] = {}
+            return data
+        except (json.JSONDecodeError, ValueError) as e:
+            from utils.logger import get_logger as _get_log
+            _get_log("routers.report").error(
+                f"lavorazioni_log.json corrotto: {e} — uso struttura vuota"
+            )
         except Exception:
             pass
     return {"sessioni": [], "stato_corrente": {}}
@@ -303,8 +316,8 @@ def aggiorna_da_log(
                     sc["anomalia_ciclo"] = False
 
     except Exception as _e:
-        import logging as _log
-        _log.getLogger("dmgdesk.report").warning(f"aggiorna_da_log errore parziale: {_e}")
+        from utils.logger import get_logger as _get_log
+        _get_log("routers.report").warning(f"aggiorna_da_log errore parziale: {_e}")
     finally:
         if dirty:
             _save_log(config, data)

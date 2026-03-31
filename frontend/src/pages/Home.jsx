@@ -574,51 +574,78 @@ export default function Home(){
             </div>
           )}
 
-          {/* ── SCADENZE ────────────────────────────────────────────── */}
+          {/* ── PROGRAMMI ATTIVI DEL PROGETTO IN LAVORAZIONE ─────────── */}
           <div style={{background:'#fff',border:'1px solid #e2e8f0',borderRadius:12,padding:'10px 16px'}}>
             <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
               <span style={{fontSize:10,fontWeight:800,letterSpacing:'0.1em',color:'#64748b',textTransform:'uppercase'}}>
-                Scadenze progetti
+                Programmi attivi
               </span>
-              {conScadenza.length>0&&(
-                <span style={{fontSize:11,color:'#94a3b8',fontWeight:500}}>{conScadenza.length} totali</span>
-              )}
-              {scadutiCount>0&&(
-                <span style={{marginLeft:'auto',fontSize:10,fontWeight:800,color:'#dc2626',
-                  background:'#fef2f2',padding:'2px 8px',borderRadius:8}}>
-                  {scadutiCount} scadut{scadutiCount===1?'o':'i'}
-                </span>
+              {progettoLav&&(
+                <span style={{fontSize:11,color:'#1D5FAD',fontWeight:700,
+                  fontFamily:'monospace'}}>{progettoLav.name}</span>
               )}
             </div>
-            {conScadenza.length===0?(
-              <div style={{color:'#94a3b8',fontSize:13,fontStyle:'italic'}}>Nessuna scadenza impostata</div>
-            ):(
-              <div style={{display:'flex',flexDirection:'column',gap:5}}>
-                {conScadenza.map(({p,days,pNum})=>{
-                  const over=days<0,today=days===0,soon=days>0&&days<=3
-                  const color=over?'#dc2626':today?'#d97706':soon?'#c2410c':'#475569'
-                  const bg=over?'#fef2f2':today?'#fffbeb':soon?'#fff7ed':'#f8fafc'
-                  const badge=over?`${Math.abs(days)}gg fa`:today?'OGGI':`${days}gg`
-                  return(
-                    <div key={p.id} onClick={()=>nav('/progetti',{state:{openId:p.id}})}
-                      style={{display:'flex',alignItems:'center',gap:10,background:bg,
-                        borderRadius:8,padding:'6px 12px',cursor:'pointer',
-                        border:`1px solid ${color}33`,transition:'opacity .12s'}}
-                      onMouseEnter={e=>e.currentTarget.style.opacity='.85'}
-                      onMouseLeave={e=>e.currentTarget.style.opacity='1'}>
-                      <div style={{width:7,height:7,borderRadius:'50%',background:color,flexShrink:0}}/>
-                      <span style={{fontSize:12,fontWeight:700,color:'#1e293b',flex:1,
-                        overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}</span>
-                      {pNum&&<span style={{fontSize:10,fontWeight:700,color:'#0d2d5e',
-                        background:'#eff6ff',padding:'2px 7px',borderRadius:4,flexShrink:0}}>P{pNum}</span>}
-                      <span style={{fontSize:12,fontWeight:800,color,flexShrink:0,
-                        background:'#fff',padding:'2px 10px',borderRadius:10,
-                        border:`1px solid ${color}44`}}>{badge}</span>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
+            {!progettoLav ? (
+              <div style={{color:'#94a3b8',fontSize:13,fontStyle:'italic'}}>Nessun progetto in lavorazione</div>
+            ) : (()=>{
+              // Tutti i programmi fresatura del progetto (esclusi IPM)
+              const pgmFresatura = (progettoLav.steps||[]).flatMap(s=>
+                (s.tasks||[]).filter(t=>t.text?.trim().toLowerCase()==='fresatura')
+                  .flatMap(t=>(t.programs||[]).filter(pg=>pg.tipoGruppo!=='ipm'))
+              )
+              const attivi = pgmFresatura.filter(p=>
+                ['in_lavorazione','in_main','in_macchina'].includes(p.stato)
+              )
+              const corrente = sessLive?.programma_corrente?.toUpperCase().replace('.MPF','')
+
+              if(attivi.length===0) return (
+                <div style={{color:'#94a3b8',fontSize:13,fontStyle:'italic'}}>
+                  Nessun programma in_main o in_lavorazione
+                </div>
+              )
+
+              return (
+                <div style={{display:'flex',flexDirection:'column',gap:4}}>
+                  {attivi.map((pg,i)=>{
+                    const fn = (pg.filename||'').toUpperCase().replace('.MPF','')
+                    const isCorr = corrente && fn.includes(corrente.replace('.MPF',''))
+                    const isInLav = pg.stato==='in_lavorazione'
+                    const isInMain = pg.stato==='in_main' || pg.stato==='in_macchina'
+                    const stima = pg.tempoStimato ? `${pg.tempoStimato}min` : null
+                    return (
+                      <div key={pg.filename||i} style={{
+                        display:'flex',alignItems:'center',gap:8,
+                        background: isCorr ? '#eff6ff' : isInLav ? '#f0fdf4' : '#fafafa',
+                        border: `1px solid ${isCorr ? '#bfdbfe' : isInLav ? '#bbf7d0' : '#e2e8f0'}`,
+                        borderRadius:8,padding:'5px 10px',
+                      }}>
+                        {/* Badge stato */}
+                        <span style={{
+                          fontSize:9,fontWeight:800,padding:'2px 6px',borderRadius:4,
+                          flexShrink:0,
+                          background: isCorr ? '#1D5FAD' : isInLav ? '#16a34a' : '#64748b',
+                          color:'#fff',letterSpacing:'0.04em'
+                        }}>
+                          {isCorr ? 'IN ESEC.' : isInLav ? 'IN LAV.' : 'IN MAIN'}
+                        </span>
+                        {/* Nome file */}
+                        <span style={{
+                          fontSize:11,fontWeight:700,color:'#0d2d5e',
+                          fontFamily:'monospace',flex:1,
+                          overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'
+                        }}>
+                          {(pg.filename||'').replace('.MPF','').replace('.mpf','')}
+                        </span>
+                        {/* Tempo stimato */}
+                        {stima&&(
+                          <span style={{fontSize:10,color:'#94a3b8',flexShrink:0}}>{stima}</span>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )
+            })()}
           </div>
 
           {/* ── UTENSILI ────────────────────────────────────────────── */}

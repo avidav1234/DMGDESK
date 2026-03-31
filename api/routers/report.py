@@ -1535,10 +1535,14 @@ async def get_ore_progetto(progetto: str = None, project_id: str = None):
     for s in data.get("sessioni", []):
         _aggiungi(s)
 
-    # Carica anche archivi annuali se presenti
+    # Carica anche archivi annuali se presenti (es. lavorazioni_2025.json)
+    # ESCLUDI lavorazioni_log.json che è già stato caricato sopra
     base = (config.get("tools_toa_folder") or
             config.get("percorso_nc_base") or ".")
+    log_principale = Path(base) / "lavorazioni_log.json"
     for arch_path in sorted(Path(base).glob("lavorazioni_*.json")):
+        if arch_path.resolve() == log_principale.resolve():
+            continue  # già caricato — evita doppio conteggio
         try:
             arch = json.loads(arch_path.read_text(encoding="utf-8"))
             for s in arch.get("sessioni", []):

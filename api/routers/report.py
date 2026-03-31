@@ -530,6 +530,63 @@ async def get_report_giornaliero(data: str = Query(default=None)):
         default=None
     )
 
+    # ── Perdite TPM classificate ───────────────────────────────────────────────
+    # Modello 6 grandi perdite adattato a CNC monomacchina:
+    # 1. Guasti/reset anomali     → n_fermi_anomali × durata_media_fermo
+    # 2. Setup/cambio pallet      → gap tra fine sessione e inizio successiva
+    # 3. Microfermi tra programmi → gap_sec dentro sessione (cambio utensile, misura)
+    # 4. Velocità ridotta         → sec_override_ridotto (feed/mandrino < 90%)
+    # 5. Produzione netta         → ore_totali - velocità ridotta
+    # 6. Tempo libero turno       → ore_turno - tutto il resto
+
+    # Gap setup: tempo tra fine di una sessione e inizio della successiva (stesso giorno)
+    sec_setup = 0
+    sessioni_sorted = sorted(
+        [s for s in sessioni_giorno if s.get("inizio") and s.get("fine")],
+        key=lambda s: s["inizio"]
+    )
+    for i in range(1, len(sessioni_sorted)):
+        prev_fine   = sessioni_sorted[i-1].get("fine")
+        curr_inizio = sessioni_sorted[i].get("inizio")
+        if prev_fine and curr_inizio:
+            try:
+                g = int((datetime.fromisoformat(curr_inizio) -
+                         datetime.fromisoformat(prev_fine)).total_seconds())
+                if 60 <= g <= 7200:   # tra 1 min e 2h — filtra valori anomali
+                    sec_setup += g
+            except Exception:
+                pass
+
+    # Microfermi: gap tra programmi dentro ogni sessione (già in gap_sec)
+    sec_microfermi = gap_totale  # gap_sec accumula già i gap inter-programma
+
+    # Stima durata media fermo anomalo (se disponibile)
+    sec_fermi_anomali = 0
+    for s in sessioni_giorno:
+        fermi = s.get("fermi", [])
+        n_anom = s.get("n_fermi_anomali", 0)
+        if n_anom > 0 and fermi:
+            anom = [f for f in fermi if f.get("tipo") == "reset"]
+            sec_fermi_anomali += len(anom) * 300  # stima 5 min per fermo anomalo
+        elif n_anom > 0:
+            sec_fermi_anomali += n_anom * 300
+
+    sec_libero = max(0, tempo_turno - ore_totali - sec_setup - sec_fermi_anomali)
+    sec_produzione_netta = max(0, ore_totali - sec_ovr_ridotto)
+
+    perdite_tpm = {
+        "produzione_netta_sec":  sec_produzione_netta,
+        "velocita_ridotta_sec":  sec_ovr_ridotto,
+        "microfermi_sec":        sec_microfermi,
+        "setup_sec":             sec_setup,
+        "guasti_sec":            sec_fermi_anomali,
+        "libero_sec":            sec_libero,
+        "n_setup":               max(0, len(sessioni_sorted) - 1),
+        "n_guasti":              n_fermi_anomali,
+        "media_setup_sec":       round(sec_setup / max(1, len(sessioni_sorted) - 1))
+                                 if len(sessioni_sorted) > 1 else 0,
+    }
+
     # Utensili aggregati (usa accumulo tick — già corretto anche live)
     utensili_agg = {}
     for s in sessioni_giorno:
@@ -580,6 +637,8 @@ async def get_report_giornaliero(data: str = Query(default=None)):
             "pct_tempo":     round(sec_ovr_ridotto / ore_totali * 100, 1) if ore_totali > 0 else 0,
             "min_valore":    min_ovr_giorno,
         },
+        # Perdite TPM classificate
+        "perdite_tpm":      perdite_tpm,
         "progetti":         progetti_agg,
         "utensili":         {k: {"sec": v, "ore": _durata_str(v)}
                               for k, v in sorted(utensili_agg.items(), key=lambda x: -x[1])},
@@ -1071,3 +1130,85 @@ async def get_cicli_utensile(utensile: str = None):
         "n_file_tracciati": len(per_file),
         "n_utensili":     len(utensili_stats),
     }
+
+
+@router.get("/cicli-dettaglio")
+async def get_cicli_dettaglio(filename: str = None):
+    """
+    Restituisce i campioni grezzi di ciclo per un programma specifico.
+    Usato dalla tab SPC del Report per run chart e calcolo indici statistici.
+
+    ?filename=4297_005_01_18.MPF → campioni, media, std, CV%, p95, trend slope
+    Senza parametro → lista programmi con >=5 campioni (per selettore UI)
+    """
+    config = carica_configurazione()
+    data   = _load_log(config)
+    idx    = data.get("cicli_utensile", {})
+
+    def _statistiche(campioni: list) -> dict:
+        if not campioni:
+            return {}
+        n = len(campioni)
+        media = sum(campioni) / n
+        std   = (sum((x - media)**2 for x in campioni) / max(1, n-1)) ** 0.5
+        cv    = round(std / media * 100, 1) if media > 0 else 0
+        sorted_c = sorted(campioni)
+        p95   = sorted_c[int(n * 0.95)] if n >= 5 else sorted_c[-1]
+        mediana = sorted_c[n // 2]
+        # Slope lineare (regressione semplice) per rilevare trend degradazione
+        if n >= 3:
+            xs = list(range(n))
+            x_mean = (n - 1) / 2
+            slope_num = sum((xs[i] - x_mean) * (campioni[i] - media) for i in range(n))
+            slope_den = sum((x - x_mean)**2 for x in xs)
+            slope = round(slope_num / slope_den, 2) if slope_den > 0 else 0
+        else:
+            slope = 0
+        return {
+            "n":        n,
+            "media":    round(media),
+            "std":      round(std),
+            "cv_pct":   cv,
+            "p95":      p95,
+            "mediana":  mediana,
+            "min":      sorted_c[0],
+            "max":      sorted_c[-1],
+            "slope":    slope,            # sec per ciclo — positivo = degrado
+            "stabile":  cv < 10,          # CV < 10% = processo stabile
+        }
+
+    if filename:
+        fname = filename.upper().strip()
+        entry = idx.get(fname)
+        if not entry:
+            return {"filename": filename, "campioni": [], "stats": {}}
+        campioni = entry.get("campioni", [])
+        stats = _statistiche(campioni)
+        # Ultime 20 per il run chart (più recenti)
+        return {
+            "filename":  filename,
+            "campioni":  campioni[-50:],   # tutti (max 50 per finestra scorrevole)
+            "run_chart": campioni[-20:],   # ultimi 20 per visualizzazione
+            "stats":     stats,
+        }
+    else:
+        # Lista programmi con sufficienti campioni per analisi SPC
+        programmi = []
+        for fname, entry in idx.items():
+            if "|" in fname:
+                continue  # skip coppie utensile|filename
+            campioni = entry.get("campioni", [])
+            if len(campioni) < 5:
+                continue
+            stats = _statistiche(campioni)
+            programmi.append({
+                "filename":  fname,
+                "n":         stats["n"],
+                "media_sec": stats["media"],
+                "cv_pct":    stats["cv_pct"],
+                "stabile":   stats["stabile"],
+                "slope":     stats["slope"],
+            })
+        # Ordina per CV% decrescente (i più instabili prima)
+        programmi.sort(key=lambda p: -p["cv_pct"])
+        return {"programmi": programmi, "n_totale": len(programmi)}

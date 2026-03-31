@@ -382,7 +382,457 @@ function ConfrontoSettimane({ storico }) {
   )
 }
 
-import React from 'react'
+// ── Tab Perdite TPM ──────────────────────────────────────────────────────────
+function TabPerdite({ rpt }) {
+  const p = rpt?.perdite_tpm
+  const oee = rpt?.oee
+  if (!p) return <div style={{ color:'var(--text-dim)', fontSize:12, textAlign:'center', padding:40 }}>Dati non disponibili</div>
+
+  const turno = oee?.ore_turno_sec || 28800
+  const colori = {
+    produzione_netta: '#22c55e',
+    velocita_ridotta: '#f59e0b',
+    microfermi:       '#ef4444',
+    setup:            '#8b5cf6',
+    guasti:           '#dc2626',
+    libero:           '#94a3b8',
+  }
+  const voci = [
+    { k: 'produzione_netta', label: 'Produzione netta', sec: p.produzione_netta_sec },
+    { k: 'velocita_ridotta', label: 'Velocità ridotta (override <90%)', sec: p.velocita_ridotta_sec },
+    { k: 'microfermi',       label: 'Microfermi inter-programma', sec: p.microfermi_sec },
+    { k: 'setup',            label: 'Setup / cambio pallet', sec: p.setup_sec },
+    { k: 'guasti',           label: 'Fermi anomali (reset)', sec: p.guasti_sec },
+    { k: 'libero',           label: 'Tempo non programmato', sec: p.libero_sec },
+  ].filter(v => v.sec > 0)
+  const totale = voci.reduce((a, v) => a + v.sec, 0) || 1
+
+  return (
+    <div style={{ display:'flex', flexDirection:'column', gap:18 }}>
+
+      {/* Waterfall OEE */}
+      <Card style={{ padding:'20px 24px' }}>
+        <SectionTitle>Waterfall OEE — decomposizione perdite</SectionTitle>
+        <div style={{ display:'flex', alignItems:'flex-end', gap:8, height:140, marginBottom:12 }}>
+          {[
+            { label:'Turno',       val:100,                         col:'#1D5FAD' },
+            { label:'Disponib.',   val:oee?.disponibilita||0,       col:'#0891B2' },
+            { label:'Performance', val:oee?.performance||0,         col:'#7C3AED' },
+            { label:'Qualità',     val:oee?.qualita||0,             col:'#059669' },
+            { label:'OEE',         val:oee?.valore||0,              col: (oee?.valore||0)>=75?'#22c55e':(oee?.valore||0)>=50?'#f59e0b':'#ef4444', bold:true },
+          ].map((b, i) => (
+            <div key={i} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:4 }}>
+              <div style={{ fontSize:13, fontWeight:700, color: b.col, fontVariantNumeric:'tabular-nums' }}>
+                {b.val.toFixed(1)}%
+              </div>
+              <div style={{ width:'100%', borderRadius:'4px 4px 0 0',
+                height: Math.max(8, b.val * 1.2),
+                background: b.col, opacity: b.bold ? 1 : 0.8,
+                border: b.bold ? `2px solid ${b.col}` : 'none',
+                transition: 'height 0.4s' }}/>
+              <div style={{ fontSize:10, color:'var(--text-dim)', textAlign:'center', lineHeight:1.2 }}>{b.label}</div>
+            </div>
+          ))}
+        </div>
+        {/* Frecce perdita */}
+        <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginTop:8 }}>
+          {[
+            { label:`Indisponibilità`, val: 100 - (oee?.disponibilita||0), col:'#ef4444' },
+            { label:`Perdita velocità`, val: (oee?.disponibilita||0) - (oee?.performance||oee?.disponibilita||0), col:'#f59e0b' },
+            { label:`Difettosità`, val: 2, col:'#94a3b8' },
+          ].filter(f => f.val > 0.1).map((f, i) => (
+            <div key={i} style={{ display:'flex', alignItems:'center', gap:5,
+              padding:'4px 10px', background:'var(--bg-hover)', borderRadius:6, fontSize:11 }}>
+              <div style={{ width:8, height:8, borderRadius:2, background:f.col }}/>
+              <span style={{ color:'var(--text-secondary)' }}>{f.label}:</span>
+              <span style={{ fontWeight:700, color:f.col }}>{f.val.toFixed(1)}%</span>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {/* Torta perdite + KPI */}
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:18 }}>
+        <Card style={{ padding:'20px 24px' }}>
+          <SectionTitle>Distribuzione tempo turno</SectionTitle>
+          <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+            {voci.map(v => {
+              const pct = (v.sec / turno * 100).toFixed(1)
+              return (
+                <div key={v.k} style={{ display:'flex', alignItems:'center', gap:10 }}>
+                  <div style={{ width:10, height:10, borderRadius:2, background:colori[v.k], flexShrink:0 }}/>
+                  <div style={{ flex:1, fontSize:12, color:'var(--text-secondary)' }}>{v.label}</div>
+                  <div style={{ width:60, height:6, background:'var(--border)', borderRadius:3, overflow:'hidden', flexShrink:0 }}>
+                    <div style={{ width:`${Math.min(100,pct)}%`, height:'100%', background:colori[v.k], borderRadius:3 }}/>
+                  </div>
+                  <div style={{ width:44, fontSize:12, fontFamily:'monospace', fontWeight:700,
+                    color:colori[v.k], textAlign:'right', flexShrink:0 }}>{pct}%</div>
+                  <div style={{ width:52, fontSize:11, fontFamily:'monospace', color:'var(--text-dim)',
+                    textAlign:'right', flexShrink:0 }}>{fmt(v.sec)}</div>
+                </div>
+              )
+            })}
+          </div>
+        </Card>
+
+        <Card style={{ padding:'20px 24px' }}>
+          <SectionTitle>KPI processo</SectionTitle>
+          <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+            {[
+              { label:'OEE', value:`${oee?.valore||'—'}%`,
+                color:(oee?.valore||0)>=75?'#22c55e':(oee?.valore||0)>=50?'#f59e0b':'#ef4444',
+                sub:`Target industriale stampi: 65-75%` },
+              { label:'Setup medio / cambio pallet', value: p.n_setup > 0 ? fmt(p.media_setup_sec) : '—',
+                color:'#8b5cf6', sub:`${p.n_setup} cambi rilevati oggi` },
+              { label:'Fermi anomali', value: p.n_guasti,
+                color: p.n_guasti > 2 ? '#ef4444' : p.n_guasti > 0 ? '#f59e0b' : '#22c55e',
+                sub: p.n_guasti === 0 ? 'Nessun reset anomalo ✓' : 'Reset/spegnimenti imprevisti' },
+              { label:'Tempo con override ridotto', value: p.velocita_ridotta_sec > 0 ? fmt(p.velocita_ridotta_sec) : '—',
+                color: p.velocita_ridotta_sec > 1800 ? '#f59e0b' : '#22c55e',
+                sub: p.velocita_ridotta_sec > 0
+                  ? `${rpt.override_ridotto?.pct_tempo||0}% del tempo di taglio`
+                  : 'Feed/mandrino sempre al 100%' },
+            ].map((kpi, i) => (
+              <div key={i} style={{ padding:'10px 14px', background:'var(--bg-hover)',
+                borderRadius:8, borderLeft:`3px solid ${kpi.color}` }}>
+                <div style={{ fontSize:10, fontWeight:700, color:'var(--text-dim)',
+                  letterSpacing:'0.07em', textTransform:'uppercase', marginBottom:3 }}>{kpi.label}</div>
+                <div style={{ fontSize:22, fontWeight:800, color:kpi.color, lineHeight:1 }}>{kpi.value}</div>
+                <div style={{ fontSize:11, color:'var(--text-dim)', marginTop:3 }}>{kpi.sub}</div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      </div>
+    </div>
+  )
+}
+
+// ── Tab Cicli SPC ────────────────────────────────────────────────────────────
+function TabCicli() {
+  const [lista, setLista]       = useState([])
+  const [sel,   setSel]         = useState(null)
+  const [det,   setDet]         = useState(null)
+  const [loading, setLoading]   = useState(false)
+
+  useEffect(() => {
+    fetch('/api/report/cicli-dettaglio')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.programmi) setLista(d.programmi) })
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    if (!sel) return
+    setLoading(true)
+    fetch(`/api/report/cicli-dettaglio?filename=${encodeURIComponent(sel)}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { setDet(d); setLoading(false) })
+      .catch(() => setLoading(false))
+  }, [sel])
+
+  if (!lista.length) return (
+    <div style={{ color:'var(--text-dim)', fontSize:12, textAlign:'center', padding:40 }}>
+      Dati insufficienti — servono ≥5 esecuzioni per programma per l'analisi SPC
+    </div>
+  )
+
+  const cvColor = (cv) => cv < 10 ? '#22c55e' : cv < 20 ? '#f59e0b' : '#ef4444'
+  const slopeLabel = (s) => Math.abs(s) < 1 ? '→ stabile' : s > 0 ? '↗ degrado' : '↘ migliora'
+  const slopeColor = (s) => Math.abs(s) < 1 ? '#94a3b8' : s > 0 ? '#ef4444' : '#22c55e'
+
+  return (
+    <div style={{ display:'grid', gridTemplateColumns:'340px 1fr', gap:18, height:'100%' }}>
+
+      {/* Lista programmi */}
+      <Card style={{ overflow:'auto', maxHeight:600 }}>
+        <div style={{ padding:'14px 16px', borderBottom:'1px solid var(--border)' }}>
+          <SectionTitle>Programmi analizzabili ({lista.length})</SectionTitle>
+          <div style={{ fontSize:11, color:'var(--text-dim)' }}>
+            Ordinati per instabilità (CV% decrescente)
+          </div>
+        </div>
+        <div style={{ display:'flex', flexDirection:'column' }}>
+          {lista.map((p, i) => (
+            <div key={p.filename} onClick={() => setSel(p.filename)}
+              style={{ padding:'10px 16px', cursor:'pointer', borderBottom:'1px solid var(--border)',
+                background: sel === p.filename ? 'rgba(59,130,246,0.08)' : 'transparent',
+                borderLeft: sel === p.filename ? '3px solid #3b82f6' : '3px solid transparent',
+                transition:'all 0.15s' }}>
+              <div style={{ fontSize:12, fontFamily:'monospace', fontWeight:700,
+                color: sel===p.filename?'#3b82f6':'var(--text-primary)', marginBottom:4 }}>
+                {p.filename.replace('.MPF','')}
+              </div>
+              <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                <span style={{ fontSize:11, color:cvColor(p.cv_pct), fontWeight:700 }}>
+                  CV {p.cv_pct}%
+                </span>
+                <span style={{ fontSize:11, color:'var(--text-dim)' }}>·</span>
+                <span style={{ fontSize:11, color:'var(--text-dim)' }}>
+                  media {fmt(p.media_sec)}
+                </span>
+                <span style={{ fontSize:11, color:'var(--text-dim)' }}>·</span>
+                <span style={{ fontSize:11, color:slopeColor(p.slope) }}>
+                  {slopeLabel(p.slope)}
+                </span>
+                <span style={{ marginLeft:'auto', fontSize:10, color:'var(--text-dim)' }}>
+                  n={p.n}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {/* Dettaglio programma selezionato */}
+      <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+        {!sel && (
+          <Card style={{ padding:30, display:'flex', alignItems:'center', justifyContent:'center' }}>
+            <div style={{ fontSize:13, color:'var(--text-dim)' }}>← Seleziona un programma per vedere l'analisi</div>
+          </Card>
+        )}
+        {sel && loading && (
+          <Card style={{ padding:30, display:'flex', alignItems:'center', justifyContent:'center' }}>
+            <div style={{ fontSize:13, color:'var(--text-dim)' }}>Caricamento...</div>
+          </Card>
+        )}
+        {sel && det && !loading && (() => {
+          const s = det.stats
+          const campioni = det.run_chart || []
+          const maxC = Math.max(...campioni, 1)
+          const minC = Math.min(...campioni.filter(x=>x>0))
+          const media = s.media || 0
+          const std2  = s.std * 2
+
+          return (<>
+            {/* KPI statistici */}
+            <Card style={{ padding:'16px 20px' }}>
+              <SectionTitle>{det.filename?.replace('.MPF','')} — indici statistici</SectionTitle>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:10 }}>
+                {[
+                  { label:'Media', value:fmt(s.media), color:'#1D5FAD' },
+                  { label:'Dev. std (σ)', value:fmt(s.std), color:'#7C3AED' },
+                  { label:'CV%', value:`${s.cv_pct}%`,
+                    color:cvColor(s.cv_pct),
+                    sub: s.cv_pct<10?'Stabile ✓':s.cv_pct<20?'Attenzione':'Instabile ⚠' },
+                  { label:'P95 (worst case)', value:fmt(s.p95), color:'#f59e0b' },
+                  { label:'Trend', value:slopeLabel(s.slope),
+                    color:slopeColor(s.slope),
+                    sub:`${Math.abs(s.slope).toFixed(1)}s/ciclo` },
+                ].map((k,i) => (
+                  <div key={i} style={{ padding:'10px 12px', background:'var(--bg-hover)',
+                    borderRadius:8, textAlign:'center' }}>
+                    <div style={{ fontSize:10, fontWeight:700, color:'var(--text-dim)',
+                      textTransform:'uppercase', letterSpacing:'0.07em', marginBottom:4 }}>{k.label}</div>
+                    <div style={{ fontSize:18, fontWeight:800, color:k.color, lineHeight:1 }}>{k.value}</div>
+                    {k.sub && <div style={{ fontSize:10, color:k.color, marginTop:3 }}>{k.sub}</div>}
+                  </div>
+                ))}
+              </div>
+            </Card>
+
+            {/* Run chart */}
+            <Card style={{ padding:'16px 20px' }}>
+              <SectionTitle>Run chart — ultimi {campioni.length} cicli</SectionTitle>
+              <div style={{ position:'relative', height:120, marginTop:8 }}>
+                {/* Bande ±2σ */}
+                {std2 > 0 && (() => {
+                  const range = maxC - minC || 1
+                  const topBand  = Math.max(0, 100 - (media + std2 - minC) / range * 100)
+                  const botBand  = Math.min(100, 100 - (media - std2 - minC) / range * 100)
+                  const midLine  = 100 - (media - minC) / range * 100
+                  return (<>
+                    <div style={{ position:'absolute', left:0, right:0,
+                      top:`${topBand}%`, height:`${botBand-topBand}%`,
+                      background:'rgba(59,130,246,0.07)', borderTop:'1px dashed rgba(59,130,246,0.3)',
+                      borderBottom:'1px dashed rgba(59,130,246,0.3)' }}/>
+                    <div style={{ position:'absolute', left:0, right:0, top:`${midLine}%`,
+                      borderTop:'1px solid rgba(59,130,246,0.5)' }}/>
+                  </>)
+                })()}
+                {/* Punti */}
+                <svg width="100%" height="100%" viewBox={`0 0 ${Math.max(campioni.length*1,1)} 100`}
+                  preserveAspectRatio="none" style={{ position:'absolute', top:0, left:0 }}>
+                  {campioni.length > 1 && (
+                    <polyline
+                      points={campioni.map((v,i)=>`${i*(100/(campioni.length-1))},${100-(v-minC)/(maxC-minC||1)*90}`).join(' ')}
+                      fill="none" stroke="#1D5FAD" strokeWidth="2" vectorEffect="non-scaling-stroke"/>
+                  )}
+                  {campioni.map((v, i) => {
+                    const isOut = std2 > 0 && Math.abs(v - media) > std2
+                    const cx = campioni.length > 1 ? i * (100/(campioni.length-1)) : 50
+                    const cy = 100 - (v - minC) / (maxC - minC || 1) * 90
+                    return (
+                      <circle key={i} cx={cx} cy={cy} r="2.5"
+                        fill={isOut ? '#ef4444' : '#1D5FAD'}
+                        vectorEffect="non-scaling-stroke">
+                        <title>{fmt(v)}{isOut ? ' ⚠ fuori ±2σ' : ''}</title>
+                      </circle>
+                    )
+                  })}
+                </svg>
+                {/* Etichette asse Y */}
+                <div style={{ position:'absolute', right:-2, top:2, fontSize:9, color:'var(--text-dim)',
+                  fontFamily:'monospace' }}>{fmt(maxC)}</div>
+                <div style={{ position:'absolute', right:-2, bottom:2, fontSize:9, color:'var(--text-dim)',
+                  fontFamily:'monospace' }}>{fmt(minC)}</div>
+              </div>
+              <div style={{ fontSize:10, color:'var(--text-dim)', marginTop:8, display:'flex', gap:16 }}>
+                <span style={{ display:'flex', alignItems:'center', gap:4 }}>
+                  <span style={{ display:'inline-block', width:20, height:2, background:'rgba(59,130,246,0.5)' }}/>
+                  Media
+                </span>
+                <span style={{ display:'flex', alignItems:'center', gap:4 }}>
+                  <span style={{ display:'inline-block', width:20, height:8,
+                    background:'rgba(59,130,246,0.07)', border:'1px dashed rgba(59,130,246,0.3)' }}/>
+                  ±2σ
+                </span>
+                <span style={{ display:'flex', alignItems:'center', gap:4 }}>
+                  <span style={{ display:'inline-block', width:8, height:8, borderRadius:'50%', background:'#ef4444' }}/>
+                  Outlier (&gt;±2σ)
+                </span>
+              </div>
+            </Card>
+          </>)
+        })()}
+      </div>
+    </div>
+  )
+}
+
+// ── Tab Takt (Teorico vs Reale) ──────────────────────────────────────────────
+function TabTakt({ sessioni }) {
+  const [cicliDb,  setCicliDb]  = useState({})
+  const [progetti, setProgetti] = useState([])
+
+  useEffect(() => {
+    Promise.all([
+      fetch('/api/report/tempi-ciclo').then(r=>r.ok?r.json():null),
+      fetch('/api/progetti/').then(r=>r.ok?r.json():null),
+    ]).then(([tc, pd]) => {
+      if (tc?.cicli) setCicliDb(tc.cicli)
+      if (pd?.projects) setProgetti(pd.projects.filter(p=>!p.archived))
+    }).catch(() => {})
+  }, [])
+
+  // Costruisce tabella: per ogni programma eseguito oggi, incrocia con tempoStimato CAM
+  const righe = (() => {
+    const rows = []
+    for (const s of (sessioni || [])) {
+      for (const pgm of (s.programmi || [])) {
+        if (!pgm.filename || !pgm.durata_sec) continue
+        const fname = pgm.filename.toUpperCase()
+        const ciclo = cicliDb[fname]
+        if (!ciclo || ciclo.n < 2) continue
+
+        // Cerca tempoStimato CAM nel progetto corrispondente
+        let teorico = null
+        for (const proj of progetti) {
+          for (const step of (proj.steps || [])) {
+            for (const task of (step.tasks || [])) {
+              if (task.text?.toLowerCase() !== 'fresatura') continue
+              for (const p of (task.programs || [])) {
+                if ((p.filename||'').toUpperCase() === fname && p.tempoStimato) {
+                  teorico = parseInt(p.tempoStimato) * 60  // tempoStimato è in minuti
+                }
+              }
+            }
+          }
+        }
+
+        const reale  = ciclo.media_sec
+        const delta  = teorico ? Math.round((reale - teorico) / teorico * 100) : null
+        rows.push({ filename: pgm.filename, teorico, reale, delta, n: ciclo.n,
+                    cv: ciclo.std_sec ? Math.round(ciclo.std_sec / reale * 100) : 0,
+                    progetto: s.progetto })
+      }
+    }
+    // De-duplica per filename, mantieni il delta peggiore
+    const map = {}
+    for (const r of rows) {
+      const k = r.filename.toUpperCase()
+      if (!map[k] || (r.delta !== null && (map[k].delta === null || r.delta > map[k].delta)))
+        map[k] = r
+    }
+    return Object.values(map).sort((a,b) => (b.delta||0) - (a.delta||0))
+  })()
+
+  if (!righe.length) return (
+    <div style={{ color:'var(--text-dim)', fontSize:12, textAlign:'center', padding:40 }}>
+      Nessun dato disponibile — servono sia dati di ciclo reale che tempi CAM nei progetti
+    </div>
+  )
+
+  const hasTeorico = righe.some(r => r.teorico)
+
+  return (
+    <Card style={{ overflow:'auto' }}>
+      <div style={{ padding:'16px 20px', borderBottom:'1px solid var(--border)' }}>
+        <SectionTitle>Takt time — teorico CAM vs reale macchina</SectionTitle>
+        {!hasTeorico && (
+          <div style={{ fontSize:11, color:'#f59e0b', marginTop:4 }}>
+            ⚠ Nessun tempoStimato trovato nei progetti — inserire i tempi CAM per il confronto completo
+          </div>
+        )}
+      </div>
+      <table style={{ width:'100%', borderCollapse:'collapse' }}>
+        <thead>
+          <tr style={{ background:'var(--bg-hover)' }}>
+            {['Programma','Commessa','Teorico (CAM)','Reale (media)','Delta %','CV%','Stabilità'].map(h => (
+              <th key={h} style={{ padding:'9px 14px', textAlign:'left', fontSize:11,
+                fontWeight:700, color:'var(--text-dim)', letterSpacing:'0.05em',
+                borderBottom:'1px solid var(--border)' }}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {righe.map((r, i) => {
+            const deltaColor = r.delta === null ? 'var(--text-dim)'
+              : r.delta > 20 ? '#ef4444' : r.delta > 5 ? '#f59e0b' : '#22c55e'
+            const cvColor2 = r.cv < 10 ? '#22c55e' : r.cv < 20 ? '#f59e0b' : '#ef4444'
+            return (
+              <tr key={r.filename} style={{ borderBottom:'1px solid var(--border)',
+                background: i%2===0 ? 'transparent' : 'var(--bg-hover)',
+                ...(r.delta > 20 ? { background:'rgba(239,68,68,0.04)' } : {}) }}>
+                <td style={{ padding:'9px 14px', fontFamily:'monospace', fontSize:12, fontWeight:700 }}>
+                  {r.filename.replace('.MPF','')}
+                </td>
+                <td style={{ padding:'9px 14px', fontSize:11, color:'var(--text-dim)' }}>
+                  {r.progetto || '—'}
+                </td>
+                <td style={{ padding:'9px 14px', fontFamily:'monospace', fontSize:12,
+                  color: r.teorico ? 'var(--text-secondary)' : 'var(--text-dim)' }}>
+                  {r.teorico ? fmt(r.teorico) : '—'}
+                </td>
+                <td style={{ padding:'9px 14px', fontFamily:'monospace', fontSize:12,
+                  fontWeight:700, color:'#1D5FAD' }}>
+                  {fmt(r.reale)}
+                  <span style={{ fontSize:10, color:'var(--text-dim)', fontWeight:400,
+                    marginLeft:5 }}>n={r.n}</span>
+                </td>
+                <td style={{ padding:'9px 14px' }}>
+                  {r.delta !== null ? (
+                    <span style={{ fontSize:13, fontWeight:800, color:deltaColor }}>
+                      {r.delta > 0 ? '+' : ''}{r.delta}%
+                    </span>
+                  ) : <span style={{ color:'var(--text-dim)', fontSize:12 }}>—</span>}
+                </td>
+                <td style={{ padding:'9px 14px' }}>
+                  <span style={{ fontSize:12, fontWeight:700, color:cvColor2 }}>{r.cv}%</span>
+                </td>
+                <td style={{ padding:'9px 14px', fontSize:12, color: r.cv<10?'#22c55e':r.cv<20?'#f59e0b':'#ef4444' }}>
+                  {r.cv < 10 ? '● Stabile' : r.cv < 20 ? '◐ Variabile' : '○ Instabile'}
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </Card>
+  )
+}
+
+
 
 export default function Report() {
   const today = new Date().toISOString().slice(0,10)
@@ -429,6 +879,9 @@ export default function Report() {
 
   const TABS = [
     { id:'overview',  label:'📊 Overview' },
+    { id:'perdite',   label:'🎯 Perdite TPM' },
+    { id:'cicli',     label:'📉 Cicli SPC' },
+    { id:'takt',      label:'⏱ Takt' },
     { id:'programmi', label:'⚙ Programmi' },
     { id:'fermi',     label:'⏸ Fermi' },
     { id:'utensili',  label:'🔧 Utensili' },
@@ -589,6 +1042,15 @@ export default function Report() {
             </Card>
           </div>
         )}
+
+        {/* PERDITE TPM */}
+        {tab === 'perdite' && <TabPerdite rpt={rpt} />}
+
+        {/* CICLI SPC */}
+        {tab === 'cicli' && <TabCicli />}
+
+        {/* TAKT */}
+        {tab === 'takt' && <TabTakt sessioni={rpt?.sessioni} />}
 
         {/* PROGRAMMI */}
         {tab === 'programmi' && (

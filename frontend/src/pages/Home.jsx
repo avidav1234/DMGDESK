@@ -335,11 +335,11 @@ export default function Home(){
                   )}
                 </div>
                 <div style={{background:'#fff',borderRadius:9,padding:'8px 12px',
-                  border: sessMatch&&sessLive?.anomalia_ciclo ? '1.5px solid #ef4444' : '1px solid #e2e8f0',
+                  border: sessMatch&&sessLive?.anomalia_ciclo ? '1.5px solid #ef4444' : sessMatch&&sessLive?.in_pausa ? '1.5px solid #f59e0b' : '1px solid #e2e8f0',
                   textAlign:'center',
-                  background: sessMatch&&sessLive?.anomalia_ciclo ? '#fef2f2' : '#fff' }}>
+                  background: sessMatch&&sessLive?.anomalia_ciclo ? '#fef2f2' : sessMatch&&sessLive?.in_pausa ? '#fffbeb' : '#fff' }}>
                   <div style={{fontSize:10,fontWeight:700,
-                    color: sessMatch&&sessLive?.anomalia_ciclo ? '#dc2626' : '#64748b',
+                    color: sessMatch&&sessLive?.anomalia_ciclo ? '#dc2626' : sessMatch&&sessLive?.in_pausa ? '#92400e' : '#64748b',
                     letterSpacing:'0.07em',textTransform:'uppercase',marginBottom:5,
                     display:'flex',alignItems:'center',justifyContent:'center',gap:5}}>
                     {sessMatch&&sessLive?.anomalia_ciclo&&(
@@ -347,10 +347,15 @@ export default function Home(){
                         background:'#fef2f2',padding:'1px 5px',borderRadius:3,
                         border:'1px solid #fca5a5'}}>LUNGO</span>
                     )}
+                    {sessMatch&&sessLive?.in_pausa&&!sessLive?.anomalia_ciclo&&(
+                      <span style={{fontSize:9,fontWeight:800,color:'#92400e',
+                        background:'#fef3c7',padding:'1px 5px',borderRadius:3,
+                        border:'1px solid #fcd34d'}}>PAUSA</span>
+                    )}
                     Programma corrente
                   </div>
                   <div style={{fontSize:26,fontWeight:900,fontFamily:'monospace',lineHeight:1,
-                    color: sessMatch&&sessLive?.anomalia_ciclo ? '#dc2626' : '#475569'}}>
+                    color: sessMatch&&sessLive?.anomalia_ciclo ? '#dc2626' : sessMatch&&sessLive?.in_pausa ? '#92400e' : '#475569'}}>
                     {sessMatch&&durataProgrammaLive!=null?fmtTimer(durataProgrammaLive):'—:——:——'}
                   </div>
                   {sessMatch&&sessLive?.programma_corrente&&(

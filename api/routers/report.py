@@ -194,25 +194,44 @@ def aggiorna_da_log(
                 dirty = True
 
         # ── Macchina FERMA ────────────────────────────────────────────────────────
+        # GRACE PERIOD: se la macchina si ferma (M0, E-Stop, pausa operatore)
+        # non chiudiamo immediatamente la sessione. Aspettiamo fino a 15 minuti.
+        # Se il MEDESIMO programma riprende entro quel tempo → continuazione, non nuovo ciclo.
+        # Se passa più tempo o cambia programma → chiudi normalmente.
+        GRACE_SEC = 900  # 15 minuti
         if stato_pgm in (0, 5):
             if sc.get("in_esecuzione"):
-                # Registra tipo di fermo prima di chiudere la sessione
+                # Registra tipo di fermo e timestamp pausa
                 sess_corrente2 = _find_sess(data, sc.get("sessione_id", ""))
                 if sess_corrente2 and stop_type:
                     sess_corrente2.setdefault("fermi", [])
                     sess_corrente2["fermi"].append({
                         "ts":   now,
-                        "tipo": stop_type,  # "reset" = anomalo, "stop" = pianificato
+                        "tipo": stop_type,
                     })
-                    # Contatori separati per OEE
                     if stop_type == "reset":
                         sess_corrente2["n_fermi_anomali"] = sess_corrente2.get("n_fermi_anomali", 0) + 1
                     elif stop_type == "stop":
                         sess_corrente2["n_fermi_pianificati"] = sess_corrente2.get("n_fermi_pianificati", 0) + 1
-                # Chiudi sessione corrente
-                _chiudi_sessione(data, sc, now)
-                sc.clear()
+
+                # Entra in grace period invece di chiudere subito
+                sc["in_pausa"]    = True
+                sc["pausa_inizio"] = now
+                sc["in_esecuzione"] = False
                 dirty = True
+            elif sc.get("in_pausa"):
+                # Già in pausa — controlla se il grace period è scaduto
+                try:
+                    pausa_sec = int((datetime.fromisoformat(now) -
+                                     datetime.fromisoformat(sc["pausa_inizio"])).total_seconds())
+                except Exception:
+                    pausa_sec = GRACE_SEC + 1
+
+                if pausa_sec > GRACE_SEC:
+                    # Grace scaduto → chiudi definitivamente
+                    _chiudi_sessione(data, sc, sc.get("pausa_inizio") or now)
+                    sc.clear()
+                    dirty = True
 
         # ── Macchina IN ESECUZIONE ────────────────────────────────────────────────
         if stato_pgm in (1, 3) and programma_attivo:
@@ -226,6 +245,36 @@ def aggiorna_da_log(
 
         if stato_pgm in (1, 3) and programma_attivo:
             prev_prog = sc.get("programma_corrente")
+
+            # ── Ripresa dopo grace period (stesso programma) ──────────────────────
+            # Se eravamo in pausa e il MEDESIMO programma riprende entro 15min:
+            # non è un nuovo ciclo, è una continuazione. Non azzerare il timer.
+            if sc.get("in_pausa") and prev_prog == programma_attivo:
+                try:
+                    pausa_sec = int((datetime.fromisoformat(now) -
+                                     datetime.fromisoformat(sc["pausa_inizio"])).total_seconds())
+                except Exception:
+                    pausa_sec = 0
+                if pausa_sec <= GRACE_SEC:
+                    # Continuazione — ripristina esecuzione senza azzerare inizio
+                    sc["in_pausa"]      = False
+                    sc["pausa_inizio"]  = None
+                    sc["in_esecuzione"] = True
+                    sc["ultimo_tick"]   = now
+                    dirty = True
+                    # Salta il resto (non è un nuovo programma)
+                    if dirty:
+                        pass  # continua al blocco accumulo tick sotto
+                else:
+                    # Grace scaduto prima della ripresa — chiudi e tratta come nuovo
+                    _chiudi_sessione(data, sc, sc.get("pausa_inizio") or now)
+                    sc.clear()
+                    prev_prog = None
+            elif sc.get("in_pausa"):
+                # Programma diverso dopo pausa → chiudi la sessione precedente
+                _chiudi_sessione(data, sc, sc.get("pausa_inizio") or now)
+                sc.clear()
+                prev_prog = None
 
             # ── Cambio data (mezzanotte): chiudi sessione del giorno precedente ──
             sess_corrente = _find_sess(data, sc["sessione_id"]) if sc.get("sessione_id") else None
@@ -342,8 +391,47 @@ def _chiudi_programma(data: dict, sc: dict, now: str):
         durata = None
 
     info = _parse_nome(sc["programma_corrente"])
+    fname = sc["programma_corrente"]
+
+    # ── Fix 2: merge con record precedente se stesso filename e gap breve ────
+    # Se il programma era stato interrotto (M0, pausa) e il record precedente
+    # ha lo stesso filename con un gap < 15min, fonde i due record in uno solo.
+    # Questo evita che una pausa generi 2+ record nel log e distorca le statistiche.
+    MERGE_GAP_SEC = 900  # 15 minuti
+    pgm_prec = sess["programmi"][-1] if sess["programmi"] else None
+    if (pgm_prec
+            and (pgm_prec.get("filename") or "").upper() == fname.upper()
+            and pgm_prec.get("fine")
+            and durata is not None):
+        try:
+            gap = int((datetime.fromisoformat(inizio) -
+                       datetime.fromisoformat(pgm_prec["fine"])).total_seconds())
+        except Exception:
+            gap = MERGE_GAP_SEC + 1
+
+        if 0 <= gap <= MERGE_GAP_SEC:
+            # Merge: somma durate, usa inizio del primo e fine attuale
+            dur_prec = pgm_prec.get("durata_sec") or 0
+            nuova_durata = dur_prec + durata  # esclude il gap di pausa
+            pgm_prec["fine"]       = now
+            pgm_prec["durata_sec"] = nuova_durata
+            pgm_prec["_merged"]    = pgm_prec.get("_merged", 0) + 1  # traccia quante fusioni
+            # Aggiorna indice cicli con la durata corretta (non i frammenti)
+            if nuova_durata and 10 <= nuova_durata <= 28800:
+                idx = data.setdefault("cicli_utensile", {})
+                key_f  = fname.upper()
+                idx.setdefault(key_f, {"campioni": [], "n": 0, "media": 0, "std": 0})
+                # Rimuovi il campione precedente (era un frammento) e aggiungi quello corretto
+                if idx[key_f]["campioni"] and idx[key_f]["campioni"][-1] == dur_prec:
+                    idx[key_f]["campioni"][-1] = nuova_durata
+                else:
+                    _aggiorna_media_incrementale(idx[key_f], nuova_durata)
+                idx[key_f]["n"] = len(idx[key_f]["campioni"])
+                idx[key_f]["media"] = round(sum(idx[key_f]["campioni"]) / max(1, idx[key_f]["n"]))
+            return  # merge completato — non aggiungere nuovo record
+
     sess["programmi"].append({
-        "filename":  sc["programma_corrente"],
+        "filename":  fname,
         **info,
         "inizio":    inizio,
         "fine":      now,
@@ -375,11 +463,23 @@ def _aggiorna_media_incrementale(entry: dict, nuovo_valore: float):
     """
     Mantiene media e deviazione standard incrementale (algoritmo Welford).
     Mantiene gli ultimi 50 campioni per evitare crescita illimitata del file.
+
+    Fix 3: scarta campioni che sono probabilmente frammenti da pausa/interruzione.
+    Un campione è sospetto se è < 30% della media storica esistente (con almeno 3 campioni).
+    Questo discrimina ripetizioni reali da continuazioni di un ciclo interrotto.
     """
     campioni = entry.get("campioni", [])
+
+    # Scarta frammenti: se abbiamo già ≥3 campioni e la media è affidabile,
+    # un valore < 30% della media è quasi certamente un frammento da interruzione
+    if len(campioni) >= 3 and entry.get("media", 0) > 0:
+        soglia_minima = entry["media"] * 0.30
+        if nuovo_valore < soglia_minima:
+            return  # scarta — non aggiornare l'indice
+
     campioni.append(nuovo_valore)
     if len(campioni) > CICLI_FINESTRA:
-        campioni = campioni[-CICLI_FINESTRA:]  # finestra scorrevole: ultimi 50 cicli
+        campioni = campioni[-CICLI_FINESTRA:]
     entry["campioni"] = campioni
     entry["n"]        = len(campioni)
     entry["media"]    = round(sum(campioni) / len(campioni))
@@ -715,7 +815,13 @@ async def get_sessione_live():
     sc      = data.get("stato_corrente", {})
     now_iso = datetime.now().isoformat(timespec="seconds")
 
-    if not sc.get("in_esecuzione") or not sc.get("sessione_id"):
+    # Durante grace period (in_pausa): la sessione esiste ancora ma non sta girando.
+    # Ritorna attiva=True ma con in_pausa=True così il frontend può mostrare
+    # il timer congelato invece di azzerarlo.
+    in_pausa = sc.get("in_pausa", False)
+    if not sc.get("in_esecuzione") and not in_pausa:
+        return {"attiva": False}
+    if not sc.get("sessione_id"):
         return {"attiva": False}
 
     sess = _find_sess(data, sc["sessione_id"])
@@ -761,6 +867,7 @@ async def get_sessione_live():
 
     return {
         "attiva":                True,
+        "in_pausa":              in_pausa,   # True = grace period, timer congelato
         "inizio_sessione":       inizio_sess,
         "durata_sec":            durata_sess,
         "durata_str":            _durata_str(durata_sess),
@@ -773,11 +880,9 @@ async def get_sessione_live():
         "n_programmi_sessione":  n_pgm,
         "progetto":              sess.get("progetto"),
         "pallet":                sess.get("pallet"),
-        # Anomalia ciclo — True se elapsed > media + 2σ (rilevato ogni 5s)
         "anomalia_ciclo":        sc.get("anomalia_ciclo", False),
         "anomalia_soglia_sec":   sc.get("anomalia_soglia_sec"),
         "anomalia_elapsed_sec":  sc.get("anomalia_elapsed_sec"),
-        # Statistiche ciclo storico per questo programma
         "ciclo_stats":           ciclo_stats,
     }
 

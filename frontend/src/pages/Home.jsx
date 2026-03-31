@@ -139,7 +139,7 @@ export default function Home(){
     // Fallback globale: media del programma corrente (se disponibile)
     const fallback = ciclo?.n >= 2 ? ciclo.media_sec : null
 
-    // Se non abbiamo né ciclo né tempoStimato del corrente → non mostrare ETA
+    // Tempo del programma corrente: ciclo reale > tempoStimato CAM > media globale cicli
     const tempoCorrente = ciclo?.n >= 2
       ? ciclo.media_sec
       : (() => {
@@ -150,7 +150,16 @@ export default function Home(){
                 .flatMap(t=>(t.programs||[])))
               .find(p=>(p.filename||'').toUpperCase()===fname)
             : null
-          return pgmCorrente?.tempoStimato ? parseInt(pgmCorrente.tempoStimato)*60 : null
+          if (pgmCorrente?.tempoStimato) return parseInt(pgmCorrente.tempoStimato)*60
+          // Fallback: media di tutti i cicli noti (almeno mostra qualcosa)
+          const tuttiCicli = Object.values(tempiCiclo).filter(c=>c.n>=2)
+          if (tuttiCicli.length > 0) {
+            const mediaGlobale = Math.round(
+              tuttiCicli.reduce((a,c)=>a+c.media_sec,0) / tuttiCicli.length
+            )
+            return mediaGlobale
+          }
+          return null
         })()
     if (!tempoCorrente) return null
 
@@ -179,8 +188,10 @@ export default function Home(){
 
     const totSec = rimPgm + secSuccessivi
 
-    // Fonte usata (per tooltip informativi)
-    const fontePgm = ciclo?.n >= 2 ? `${ciclo.n} cicli reali` : 'stima CAM'
+    // Fonte usata (per label informativa)
+    const fontePgm = ciclo?.n >= 2 ? `${ciclo.n} cicli reali`
+                   : progettoLav ? 'stima CAM'
+                   : 'media globale'
 
     const fmtEta = (sec) => {
       if (sec < 60)   return `<1 min`

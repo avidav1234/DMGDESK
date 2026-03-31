@@ -389,10 +389,12 @@ export default function Home(){
                 </span>
               </div>
 
-              {/* Timers */}
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:10}}>
-                <div style={{background:'#fff',borderRadius:9,padding:'12px 16px',
-                  border:'1px solid #bfdbfe',textAlign:'center',padding:'6px 10px'}}>
+              {/* Timers — 3 colonne: sessione | programma | ore pallet */}
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:10}}>
+
+                {/* Timer 1: Sessione pallet (da quando è partito oggi) */}
+                <div style={{background:'#fff',borderRadius:9,padding:'6px 10px',
+                  border:'1px solid #bfdbfe',textAlign:'center'}}>
                   <div style={{fontSize:10,fontWeight:700,color:'#1D5FAD',letterSpacing:'0.07em',
                     textTransform:'uppercase',marginBottom:5}}>Sessione pallet</div>
                   <div style={{fontSize:26,fontWeight:900,color:'#0d2d5e',fontFamily:'monospace',lineHeight:1}}>
@@ -404,7 +406,9 @@ export default function Home(){
                     </div>
                   )}
                 </div>
-                <div style={{background:'#fff',borderRadius:9,padding:'8px 12px',
+
+                {/* Timer 2: Programma corrente */}
+                <div style={{background:'#fff',borderRadius:9,padding:'8px 10px',
                   border: sessMatch&&sessLive?.anomalia_ciclo ? '1.5px solid #ef4444' : sessMatch&&sessLive?.in_pausa ? '1.5px solid #f59e0b' : '1px solid #e2e8f0',
                   textAlign:'center',
                   background: sessMatch&&sessLive?.anomalia_ciclo ? '#fef2f2' : sessMatch&&sessLive?.in_pausa ? '#fffbeb' : '#fff' }}>
@@ -440,6 +444,34 @@ export default function Home(){
                     </div>
                   )}
                 </div>
+
+                {/* Timer 3: Ore pallet (storico completati + sessione in corso) */}
+                {(()=>{
+                  // Ore già lavorate sul progetto attivo oggi (da sessioni chiuse)
+                  // + sessione corrente live
+                  const progNome = lavInfo?.proj?.name
+                  const secStorico = sessLive?.durata_sec || 0  // sessione live include storico odierno
+                  const totSec = secStorico
+                  const hh = Math.floor(totSec/3600)
+                  const mm = Math.floor((totSec%3600)/60)
+                  const ss = totSec % 60
+                  const timerStr = `${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}`
+                  return (
+                    <div style={{background:'#fff',borderRadius:9,padding:'6px 10px',
+                      border:'1px solid #bbf7d0',textAlign:'center'}}>
+                      <div style={{fontSize:10,fontWeight:700,color:'#15803d',letterSpacing:'0.07em',
+                        textTransform:'uppercase',marginBottom:5}}>Ore pallet</div>
+                      <div style={{fontSize:26,fontWeight:900,color:'#166534',fontFamily:'monospace',lineHeight:1}}>
+                        {sessMatch && totSec > 0 ? timerStr : '—:——:——'}
+                      </div>
+                      <div style={{fontSize:10,color:'#64748b',marginTop:4}}>
+                        {sessMatch && totSec > 0
+                          ? `${lavInfo.done}/${lavInfo.tot} pgm completati`
+                          : 'sessione non attiva'}
+                      </div>
+                    </div>
+                  )
+                })()}
               </div>
 
               {/* Barra */}
@@ -471,68 +503,29 @@ export default function Home(){
                 )}
               </div>
 
-              {/* ETA da cicli reali */}
+              {/* ETA — riga semplice */}
               {etaCalc&&(
-                <div style={{marginTop:6,padding:'8px 10px',borderRadius:8,
+                <div style={{display:'flex',alignItems:'center',gap:8,
+                  marginTop:6,padding:'7px 10px',borderRadius:8,flexWrap:'wrap',
                   background: etaCalc.anomalia ? '#fef2f2' : '#f0f7ff',
                   border: `1px solid ${etaCalc.anomalia ? '#fca5a5' : '#bfdbfe'}`}}>
-
-                  {/* Riga 1: pgm corrente + fine pallet */}
-                  <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',marginBottom:6}}>
-                    {etaCalc.anomalia&&(
-                      <span style={{fontSize:10,fontWeight:800,color:'#dc2626',
-                        background:'#fff',padding:'2px 7px',borderRadius:4,
-                        border:'1px solid #fca5a5',flexShrink:0}}>
-                        CICLO LUNGO
-                      </span>
-                    )}
-                    <span style={{fontSize:11,color: etaCalc.anomalia?'#dc2626':'#1D5FAD'}}>
-                      pgm corrente: <b>{etaCalc.etaFmtPgm}</b>
-                    </span>
-                    <span style={{fontSize:11,color:'#64748b'}}>·</span>
-                    <span style={{fontSize:11,color:'#0d2d5e'}}>
-                      fine pallet: <b>{etaCalc.etaFmtPallet}</b>
-                    </span>
-                    <span style={{marginLeft:'auto',fontSize:10,color:'#94a3b8',fontStyle:'italic',flexShrink:0}}>
-                      {etaCalc.nCampioni >= 2
-                        ? `da ${etaCalc.nCampioni} cicli reali`
-                        : etaCalc.fontePgm === 'media globale' ? 'media globale'
-                        : 'da tempi CAM'}
-                    </span>
-                  </div>
-
-                  {/* Riga 2: totale pallet con barra avanzamento temporale */}
-                  {etaCalc.secTotalePallet > 0 && (()=>{
-                    const secTrascorsi = etaCalc.secTotalePallet - etaCalc.totSec
-                    const pctTempo = Math.min(100, Math.max(0,
-                      Math.round(secTrascorsi / etaCalc.secTotalePallet * 100)
-                    ))
-                    return (
-                      <div>
-                        <div style={{display:'flex',justifyContent:'space-between',
-                          alignItems:'baseline',marginBottom:3}}>
-                          <span style={{fontSize:10,color:'#64748b'}}>
-                            Totale pallet: <b style={{color:'#0d2d5e'}}>{etaCalc.etaFmtTotale}</b>
-                            <span style={{color:'#94a3b8',marginLeft:6}}>
-                              ({etaCalc.nCompletati}/{etaCalc.nTotali} pgm)
-                            </span>
-                          </span>
-                          <span style={{fontSize:10,color:'#1D5FAD',fontWeight:700}}>
-                            {pctTempo}%
-                          </span>
-                        </div>
-                        <div style={{height:5,background:'#dbeafe',borderRadius:3,overflow:'hidden'}}>
-                          <div style={{
-                            height:'100%',
-                            width:`${pctTempo}%`,
-                            background: pctTempo > 80 ? '#22c55e' : '#1D5FAD',
-                            borderRadius:3,
-                            transition:'width 0.4s'
-                          }}/>
-                        </div>
-                      </div>
-                    )
-                  })()}
+                  {etaCalc.anomalia&&(
+                    <span style={{fontSize:10,fontWeight:800,color:'#dc2626',
+                      background:'#fff',padding:'2px 7px',borderRadius:4,
+                      border:'1px solid #fca5a5',flexShrink:0}}>CICLO LUNGO</span>
+                  )}
+                  <span style={{fontSize:11,color: etaCalc.anomalia?'#dc2626':'#1D5FAD'}}>
+                    pgm corrente: <b>{etaCalc.etaFmtPgm}</b>
+                  </span>
+                  <span style={{fontSize:11,color:'#64748b'}}>·</span>
+                  <span style={{fontSize:11,color:'#0d2d5e'}}>
+                    fine pallet: <b>{etaCalc.etaFmtPallet}</b>
+                  </span>
+                  <span style={{marginLeft:'auto',fontSize:10,color:'#94a3b8',fontStyle:'italic',flexShrink:0}}>
+                    {etaCalc.nCampioni >= 2 ? `da ${etaCalc.nCampioni} cicli reali`
+                     : etaCalc.fontePgm === 'media globale' ? 'media globale'
+                     : 'da tempi CAM'}
+                  </span>
                 </div>
               )}
             </div>

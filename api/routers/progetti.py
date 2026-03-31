@@ -338,27 +338,29 @@ async def batch_save_progetti(body: BatchUpdate):
 async def delete_progetto(project_id: str):
     """Elimina un progetto."""
     config = carica_configurazione()
-    data = _load_progetti(config)
-    data["projects"] = [p for p in data.get("projects", []) if p.get("id") != project_id]
-    _save_progetti(config, data)
+    async with _write_lock:
+        data = _load_progetti(config)
+        data["projects"] = [p for p in data.get("projects", []) if p.get("id") != project_id]
+        _save_progetti(config, data)
     return {"ok": True}
 
 @router.put("/{project_id}/pallet")
 async def set_pallet_progetto(project_id: str, body: PalletAssoc):
     """Associa/rimuove un pallet a un progetto."""
     config = carica_configurazione()
-    data = _load_progetti(config)
-    projects = data.get("projects", [])
-    found = False
-    for p in projects:
-        if p.get("id") == project_id:
-            p["pallet_assegnato"] = body.pallet
-            found = True
-            break
-    if not found:
-        raise HTTPException(404, f"Progetto {project_id} non trovato")
-    data["projects"] = projects
-    _save_progetti(config, data)
+    async with _write_lock:
+        data = _load_progetti(config)
+        projects = data.get("projects", [])
+        found = False
+        for p in projects:
+            if p.get("id") == project_id:
+                p["pallet_assegnato"] = body.pallet
+                found = True
+                break
+        if not found:
+            raise HTTPException(404, f"Progetto {project_id} non trovato")
+        data["projects"] = projects
+        _save_progetti(config, data)
     return {"ok": True, "pallet": body.pallet}
 
 @router.get("/{project_id}/mpf")

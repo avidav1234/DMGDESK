@@ -18,6 +18,14 @@ from datetime import datetime
 from pathlib import Path
 from fastapi import APIRouter
 from database.db_handler import carica_configurazione
+from api.constants import WATCHDOG_SOGLIA_SEC, ORE_TURNO_SEC
+# Import a livello modulo — nessun ciclo reale, spostate da lazy import nelle funzioni
+from api.routers.progetti import (
+    _load_progetti, _save_progetti, _invalidate_analisi_cache,
+    _write_lock as _proj_lock,
+)
+from api.routers.pallet import _load as _load_pallet, _save as _save_pallet
+from api.routers.report import aggiorna_da_log
 
 router = APIRouter()
 
@@ -367,7 +375,6 @@ async def get_live_context():
     }
     """
     from pathlib import Path as _Path
-    from api.routers.progetti import _load_progetti
 
     config   = carica_configurazione()
     log_path = _trova_log_path(config)
@@ -521,8 +528,6 @@ async def aggiorna_stati_da_log():
     3. Programma precedente → completato (cambio programma)
     4. Pallet → grezzo/finito quando macchina si ferma
     """
-    from api.routers.progetti import _load_progetti, _save_progetti, _invalidate_analisi_cache
-    from api.routers.pallet import _load as _load_pallet, _save as _save_pallet
     from datetime import datetime as _dt
 
     config   = carica_configurazione()
@@ -834,7 +839,6 @@ async def aggiorna_stati_da_log():
                     updates["completato"] += 1
 
     if proj_dirty:
-        from api.routers.progetti import _write_lock as _proj_lock
         # Lock serializza con update_progetto dalla UI (stesso asyncio.Lock)
         async with _proj_lock:
             _save_progetti(config, proj_data)
@@ -844,7 +848,6 @@ async def aggiorna_stati_da_log():
 
     # ── Registrazione tempi lavorazione ──────────────────────────────────────
     try:
-        from api.routers.report import aggiorna_da_log
         aggiorna_da_log(
             programma_attivo   = mpf_filename,
             stato_pgm          = stato_pgm,

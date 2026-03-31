@@ -587,8 +587,8 @@ async def get_report_giornaliero(data: str = Query(default=None)):
     }
 
 @router.get("/storico")
-async def get_storico(giorni: int = Query(default=7)):
-    """Ultimi N giorni — per grafici trend."""
+async def get_storico(giorni: int = Query(default=7, ge=1, le=365)):
+    """Ultimi N giorni — per grafici trend. Max 365."""
     config = carica_configurazione()
     log    = _load_log(config)
     now_iso = datetime.now().isoformat(timespec="seconds")

@@ -30,33 +30,36 @@ export default function Home(){
   const [loading,    setLoading]    = useState(true)
 
   useEffect(()=>{
+    const ac = new AbortController()
+    const sig = ac.signal
     Promise.all([
-      fetch('/api/progetti/').then(r=>r.ok?r.json():{projects:[]}),
-      fetch('/api/progetti/deliveries').then(r=>r.ok?r.json():[]),
-      fetch('/api/pallet/').then(r=>r.ok?r.json():{pallet:[]}),
-      fetch('/api/progetti/analisi-setup/non-utilizzati').then(r=>r.ok?r.json():{}).catch(()=>({})),
+      fetch('/api/progetti/', {signal:sig}).then(r=>r.ok?r.json():{projects:[]}),
+      fetch('/api/progetti/deliveries', {signal:sig}).then(r=>r.ok?r.json():[]),
+      fetch('/api/pallet/', {signal:sig}).then(r=>r.ok?r.json():{pallet:[]}),
+      fetch('/api/progetti/analisi-setup/non-utilizzati', {signal:sig}).then(r=>r.ok?r.json():{}).catch(()=>({})),
     ]).then(([pd,del,pal,s])=>{
+      if(sig.aborted) return
       setProjects((pd.projects||[]).filter(p=>!p.archived))
       setDeliveries(Array.isArray(del)?del:[])
       setPallet(pal.pallet||[])
       setSetup(s||{})
       setLoading(false)
-    }).catch(()=>setLoading(false))
+    }).catch(e=>{ if(e.name!=='AbortError') setLoading(false) })
     const t=setInterval(()=>
-      fetch('/api/pallet/').then(r=>r.ok?r.json():{pallet:[]}).then(d=>setPallet(d.pallet||[]))
+      fetch('/api/pallet/').then(r=>r.ok?r.json():{pallet:[]}).then(d=>{ if(!sig.aborted) setPallet(d.pallet||[]) })
     ,15000)
     const fetchSessLive=()=>
-      fetch('/api/report/sessione-live').then(r=>r.ok?r.json():null).then(d=>setSessLive(d)).catch(()=>{})
+      fetch('/api/report/sessione-live').then(r=>r.ok?r.json():null)
+        .then(d=>{ if(!sig.aborted) setSessLive(d) }).catch(()=>{})
     fetchSessLive()
     const t2=setInterval(fetchSessLive,10000)
     const t3=setInterval(()=>setTickSec(s=>s+1),1000)
-    // Tempi ciclo reali — aggiorna ogni 5 minuti (dati storici, non cambiano spesso)
     const fetchTempiCiclo=()=>
       fetch('/api/report/tempi-ciclo').then(r=>r.ok?r.json():null)
-        .then(d=>{ if(d?.cicli) setTempiCiclo(d.cicli) }).catch(()=>{})
+        .then(d=>{ if(!sig.aborted && d?.cicli) setTempiCiclo(d.cicli) }).catch(()=>{})
     fetchTempiCiclo()
     const t4=setInterval(fetchTempiCiclo,300000)
-    return()=>{clearInterval(t);clearInterval(t2);clearInterval(t3);clearInterval(t4)}
+    return()=>{ ac.abort(); clearInterval(t);clearInterval(t2);clearInterval(t3);clearInterval(t4) }
   },[])
 
   const now    = new Date()

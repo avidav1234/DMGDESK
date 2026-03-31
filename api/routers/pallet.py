@@ -15,6 +15,10 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from database.db_handler import carica_configurazione
+from api.routers.progetti import (
+    _load_progetti, _save_progetti, _progetti_path,
+    _invalidate_analisi_cache, _write_lock as _proj_write_lock,
+)
 
 router = APIRouter()
 
@@ -111,7 +115,6 @@ def _sincronizza_pallet_progetto(config: dict, stato_pallet: str, progetto_id: s
     guasto  → nessuna azione (problema hardware)
     finito  → segna tutti i programmi in_macchina come completati nel progetto
     """
-    from api.routers.progetti import _load_progetti, _progetti_path
     from pathlib import Path as _Path
     import json as _json
 
@@ -379,7 +382,6 @@ async def assegna_progetto(numero: int, body: AssegnaProgettoBody):
 @router.get("/{numero}/progetto-info")
 async def get_progetto_info(numero: int):
     """Ritorna info progetto + avanzamento per un pallet."""
-    from api.routers.progetti import _load_progetti
     config = carica_configurazione()
     state  = _load(config)
     pallet = next((p for p in state["pallet"] if p["numero"] == numero), None)
@@ -428,7 +430,6 @@ async def get_programmi_in_macchina(numero: int):
     Restituisce i programmi in stato 'in_macchina' per il progetto assegnato al pallet.
     Ordinati numericamente. Usato dal pannello stato programmi.
     """
-    from api.routers.progetti import _load_progetti, _save_progetti
     config  = carica_configurazione()
     state   = _load(config)
     pallet  = next((p for p in state["pallet"] if p["numero"] == numero), None)
@@ -473,7 +474,6 @@ async def completa_programmi(numero: int, body: dict):
     Segna una lista di programmi come 'completato'.
     Body: { "ids": ["abc123", "def456"] }
     """
-    from api.routers.progetti import _load_progetti, _save_progetti
     from datetime import datetime as _dt
     config  = carica_configurazione()
     state   = _load(config)
@@ -500,7 +500,6 @@ async def completa_programmi(numero: int, body: dict):
 
     _save_progetti(config, data)
     try:
-        from api.routers.progetti import _invalidate_analisi_cache
         _invalidate_analisi_cache()
     except Exception: pass
     return {"ok": True, "completati": count}
@@ -513,7 +512,6 @@ async def sync_pallet_progetti():
     Percorre tutti i pallet con progetto_id e verifica che il progetto
     abbia pallet_assegnato corretto. E viceversa.
     """
-    from api.routers.progetti import _load_progetti, _progetti_path
     import json as _json
 
     config   = carica_configurazione()
@@ -580,7 +578,6 @@ async def avvia_pallet(numero: int):
       - tutti completati → FINITO
     Solo un pallet IN LAVORAZIONE alla volta.
     """
-    from api.routers.progetti import _load_progetti
     from datetime import datetime as _dt
     config = carica_configurazione()
     state  = _load(config)
@@ -616,7 +613,6 @@ async def avvia_pallet(numero: int):
 
     _save(config, state)
     try:
-        from api.routers.progetti import _invalidate_analisi_cache
         _invalidate_analisi_cache()
     except Exception: pass
     return {"ok": True, "pallet": numero, "stato": "in_lavorazione"}
@@ -661,7 +657,6 @@ async def sincronizza_coda():
     - segna-in-macchina (quando si genera il MAIN)
     - frontend al mount della pagina CodaLavorazione
     """
-    from api.routers.progetti import _load_progetti
     config = carica_configurazione()
     state  = _load(config)
     data   = _load_progetti(config)

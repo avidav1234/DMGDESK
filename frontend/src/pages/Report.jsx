@@ -371,22 +371,35 @@ export default function Report() {
   const [loading, setLoading] = useState(false)
   const [tab,     setTab]     = useState('overview')
 
+  const abortRef = useRef(null)
+
   const carica = useCallback(async () => {
+    // Cancella fetch precedente se ancora in volo
+    if (abortRef.current) abortRef.current.abort()
+    abortRef.current = new AbortController()
+    const sig = abortRef.current.signal
     setLoading(true)
     try {
       const [r1, r2] = await Promise.all([
-        fetch(API(`/giornaliero?data=${data}`)).then(r => r.json()),
-        fetch(API(`/storico?giorni=14`)).then(r => r.json()),
+        fetch(API(`/giornaliero?data=${data}`), {signal:sig}).then(r => r.json()),
+        fetch(API(`/storico?giorni=14`), {signal:sig}).then(r => r.json()),
       ])
+      if (sig.aborted) return
       setRpt(r1)
       setStorico(r2)
-    } catch(e) { console.error(e) }
-    finally { setLoading(false) }
+    } catch(e) {
+      if (e.name !== 'AbortError') console.warn('[Report] carica error:', e.message)
+    }
+    finally { if (!sig.aborted) setLoading(false) }
   }, [data])
 
   useEffect(() => { carica() }, [carica])
   useEffect(() => {
-    const onUpdate = () => carica()
+    // Ricarica solo se ci sono completamenti — non ad ogni tick del poller
+    const onUpdate = (e) => {
+      const d = e.detail || {}
+      if (d.completato > 0 || d.pallet > 0) carica()
+    }
     window.addEventListener('dmgdesk:stati-aggiornati', onUpdate)
     return () => window.removeEventListener('dmgdesk:stati-aggiornati', onUpdate)
   }, [carica])

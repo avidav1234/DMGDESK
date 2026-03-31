@@ -382,6 +382,178 @@ function ConfrontoSettimane({ storico }) {
   )
 }
 
+// ── Tab Utensili Potenziata ──────────────────────────────────────────────────
+function TabUtensiliPro({ utensili }) {
+  const [cicliUt,  setCicliUt]  = useState(null)
+  const [sel,      setSel]      = useState(null)
+
+  useEffect(() => {
+    fetch('/api/report/cicli-utensile')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setCicliUt(d) })
+      .catch(() => {})
+  }, [])
+
+  const totSec  = Object.values(utensili || {}).reduce((a,v) => a + v.sec, 0) || 1
+  const entries = Object.entries(utensili || {}).sort((a,b) => b[1].sec - a[1].sec)
+
+  const siFor = (alias) => cicliUt?.per_utensile?.[alias.toUpperCase()] || null
+
+  const slopeColor = (s) => s==null?'#94a3b8':Math.abs(s)<1?'#22c55e':s>0?'#ef4444':'#059669'
+  const slopeLabel = (s) => s==null?'—':Math.abs(s)<1?'→ stabile':s>0?`↗ +${Math.abs(s).toFixed(1)}s/ciclo`:`↘ ${Math.abs(s).toFixed(1)}s/ciclo`
+
+  const selData = sel ? siFor(sel) : null
+
+  return (
+    <div style={{ display:'flex', flexDirection:'column', gap:18 }}>
+      <div style={{ display:'grid', gridTemplateColumns:'260px 1fr', gap:18 }}>
+        <Card style={{ padding:'20px 24px' }}>
+          <SectionTitle>Distribuzione ore</SectionTitle>
+          <UtensiliDonut utensili={utensili} />
+        </Card>
+
+        <Card style={{ overflow:'auto' }}>
+          <div style={{ padding:'12px 16px', borderBottom:'1px solid var(--border)',
+            display:'flex', alignItems:'center', gap:10 }}>
+            <div style={{ fontSize:11, fontWeight:700, letterSpacing:'0.08em', color:'var(--text-dim)',
+              textTransform:'uppercase' }}>Ore · cicli · degradazione</div>
+            {cicliUt && <span style={{ fontSize:11, color:'var(--text-dim)', marginLeft:'auto' }}>
+              {cicliUt.n_utensili} utensili tracciati</span>}
+          </div>
+          <table style={{ width:'100%', borderCollapse:'collapse' }}>
+            <thead>
+              <tr style={{ background:'var(--bg-hover)' }}>
+                {['#','Alias','Ore','%','Cicli','Slope degradaz.','Allarme'].map(h => (
+                  <th key={h} style={{ padding:'8px 12px', textAlign:'left', fontSize:11,
+                    fontWeight:700, color:'var(--text-dim)', letterSpacing:'0.04em',
+                    borderBottom:'1px solid var(--border)' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {entries.map(([alias, info], i) => {
+                const pct   = (info.sec / totSec * 100).toFixed(1)
+                const si    = siFor(alias)
+                const slope = si?.slope_medio ?? null
+                const alarm = si?.degrado || false
+                return (
+                  <tr key={alias} onClick={() => setSel(sel===alias?null:alias)}
+                    style={{ borderBottom:'1px solid var(--border)', cursor:'pointer',
+                      background: sel===alias?'rgba(59,130,246,0.06)':alarm?'rgba(239,68,68,0.03)':'transparent',
+                      transition:'background 0.15s' }}>
+                    <td style={{ padding:'9px 12px', color:'var(--text-dim)', fontSize:12 }}>{i+1}</td>
+                    <td style={{ padding:'9px 12px', fontFamily:'monospace', fontSize:12, fontWeight:700,
+                      color:alarm?'#ef4444':'var(--text-primary)' }}>{alias}</td>
+                    <td style={{ padding:'9px 12px', fontFamily:'monospace', fontSize:12,
+                      color:'#f59e0b', fontWeight:700 }}>{info.ore}</td>
+                    <td style={{ padding:'9px 12px' }}>
+                      <div style={{ display:'flex', alignItems:'center', gap:5 }}>
+                        <div style={{ width:60, height:5, background:'var(--border)', borderRadius:3, overflow:'hidden' }}>
+                          <div style={{ width:`${pct}%`, height:'100%', background:'#3b82f6', borderRadius:3 }}/>
+                        </div>
+                        <span style={{ fontSize:11, color:'#3b82f6', fontWeight:700 }}>{pct}%</span>
+                      </div>
+                    </td>
+                    <td style={{ padding:'9px 12px', fontSize:12, color:'var(--text-dim)', fontFamily:'monospace' }}>
+                      {si?.n_cicli || '—'}
+                    </td>
+                    <td style={{ padding:'9px 12px' }}>
+                      <span style={{ fontSize:12, fontWeight:700, color:slopeColor(slope) }}>
+                        {slopeLabel(slope)}
+                      </span>
+                    </td>
+                    <td style={{ padding:'9px 12px' }}>
+                      {alarm ? (
+                        <span style={{ fontSize:11, fontWeight:800, color:'#dc2626',
+                          background:'rgba(239,68,68,0.1)', padding:'2px 8px', borderRadius:4 }}>⚠ DEGRADO</span>
+                      ) : slope!==null ? (
+                        <span style={{ fontSize:11, color:'#22c55e' }}>✓ ok</span>
+                      ) : null}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </Card>
+      </div>
+
+      {/* Dettaglio utensile selezionato */}
+      {sel && selData && (
+        <Card style={{ padding:'20px 24px' }}>
+          <SectionTitle>{sel} — rendimento per programma</SectionTitle>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:10, marginBottom:16 }}>
+            {[
+              { label:'Cicli tracciati', value:selData.n_cicli, color:'#1D5FAD' },
+              { label:'Programmi', value:selData.n_programmi, color:'#7C3AED' },
+              { label:'Trend complessivo', value:slopeLabel(selData.slope_medio),
+                color:slopeColor(selData.slope_medio) },
+            ].map((k,i) => (
+              <div key={i} style={{ padding:'10px 14px', background:'var(--bg-hover)',
+                borderRadius:8, borderLeft:`3px solid ${k.color}` }}>
+                <div style={{ fontSize:10, color:'var(--text-dim)', fontWeight:700,
+                  textTransform:'uppercase', letterSpacing:'0.07em', marginBottom:3 }}>{k.label}</div>
+                <div style={{ fontSize:20, fontWeight:800, color:k.color }}>{k.value}</div>
+              </div>
+            ))}
+          </div>
+          <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
+            <thead>
+              <tr style={{ background:'var(--bg-hover)' }}>
+                {['Programma','Media ciclo','± Dev.std','N','Slope','Stato'].map(h => (
+                  <th key={h} style={{ padding:'8px 12px', textAlign:'left', fontSize:11,
+                    fontWeight:700, color:'var(--text-dim)', borderBottom:'1px solid var(--border)' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {(selData.programmi||[]).sort((a,b)=>(b.slope||0)-(a.slope||0)).map(pgm => {
+                const cv = pgm.media_sec>0 ? Math.round(pgm.std_sec/pgm.media_sec*100) : 0
+                const sc = slopeColor(pgm.slope)
+                return (
+                  <tr key={pgm.filename}
+                    style={{ borderBottom:'1px solid var(--border)',
+                      background:pgm.slope>2?'rgba(239,68,68,0.03)':'transparent' }}>
+                    <td style={{ padding:'8px 12px', fontFamily:'monospace', fontSize:12, fontWeight:600 }}>
+                      {pgm.filename.replace('.MPF','')}
+                    </td>
+                    <td style={{ padding:'8px 12px', fontFamily:'monospace', fontSize:12, color:'#1D5FAD', fontWeight:700 }}>
+                      {fmt(pgm.media_sec)}
+                    </td>
+                    <td style={{ padding:'8px 12px', fontSize:12, color:'var(--text-dim)', fontFamily:'monospace' }}>
+                      ±{fmt(pgm.std_sec)}
+                      {cv>0&&<span style={{ marginLeft:6, fontSize:10, fontWeight:700,
+                        color:cv<10?'#22c55e':cv<20?'#f59e0b':'#ef4444' }}>CV{cv}%</span>}
+                    </td>
+                    <td style={{ padding:'8px 12px', fontSize:12, color:'var(--text-dim)', fontFamily:'monospace' }}>{pgm.n}</td>
+                    <td style={{ padding:'8px 12px', fontSize:12, fontWeight:700, color:sc }}>
+                      {slopeLabel(pgm.slope)}
+                    </td>
+                    <td style={{ padding:'8px 12px' }}>
+                      {pgm.slope>2
+                        ? <span style={{ fontSize:11, fontWeight:700, color:'#dc2626' }}>⚠ monitorare</span>
+                        : pgm.n>=3
+                          ? <span style={{ fontSize:11, color:'#22c55e' }}>✓</span>
+                          : <span style={{ fontSize:11, color:'var(--text-dim)' }}>n insuff.</span>}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </Card>
+      )}
+      {sel && !selData && (
+        <Card style={{ padding:20 }}>
+          <div style={{ fontSize:12, color:'var(--text-dim)' }}>
+            Nessun dato ciclo per <b>{sel}</b> — servono ≥3 esecuzioni tracciate.
+          </div>
+        </Card>
+      )}
+    </div>
+  )
+}
+
 // ── Tab Perdite TPM ──────────────────────────────────────────────────────────
 function TabPerdite({ rpt }) {
   const p = rpt?.perdite_tpm
@@ -1076,46 +1248,7 @@ export default function Report() {
 
         {/* UTENSILI */}
         {tab === 'utensili' && (
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:18 }}>
-            <Card style={{ padding:'20px 24px' }}>
-              <SectionTitle>Distribuzione utilizzo</SectionTitle>
-              <UtensiliDonut utensili={rpt.utensili} />
-            </Card>
-            <Card style={{ padding:'20px 24px', overflow:'auto' }}>
-              <SectionTitle>Tabella completa</SectionTitle>
-              <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
-                <thead>
-                  <tr>
-                    {['#','Alias','Ore','%'].map(h => (
-                      <th key={h} style={{ padding:'9px 12px', textAlign:'left', fontSize:11, color:'var(--text-dim)',
-                                           fontWeight:700, borderBottom:'1px solid var(--border)' }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {Object.entries(rpt.utensili).map(([alias, info], i) => {
-                    const totSec = Object.values(rpt.utensili).reduce((a,v)=>a+v.sec,0) || 1
-                    const pct = (info.sec / totSec * 100).toFixed(1)
-                    return (
-                      <tr key={alias} style={{ borderBottom:'1px solid var(--border)' }}>
-                        <td style={{ padding:'9px 12px', color:'var(--text-dim)', fontSize:12 }}>{i+1}</td>
-                        <td style={{ padding:'9px 12px', fontFamily:'monospace', fontWeight:700 }}>{alias}</td>
-                        <td style={{ padding:'9px 12px', fontFamily:'monospace', color:'#f59e0b', fontWeight:700 }}>{info.ore}</td>
-                        <td style={{ padding:'9px 12px' }}>
-                          <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                            <div style={{ width:80, height:6, background:'var(--border)', borderRadius:3, overflow:'hidden' }}>
-                              <div style={{ width:`${pct}%`, height:'100%', background:'#3b82f6', borderRadius:3 }} />
-                            </div>
-                            <span style={{ fontSize:11, color:'#3b82f6', fontWeight:700 }}>{pct}%</span>
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </Card>
-          </div>
+          <TabUtensiliPro utensili={rpt.utensili} />
         )}
 
         {/* CONFRONTO SETTIMANE */}

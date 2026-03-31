@@ -1108,21 +1108,38 @@ async def get_cicli_utensile(utensile: str = None):
     per_file   = {k: v for k, v in idx.items() if "|" not in k}
     per_ut_pgm = {k: v for k, v in idx.items() if "|" in k}
 
-    # Estrai utensili unici con statistiche aggregate
+    # Estrai utensili unici con statistiche aggregate + slope degradazione
     utensili_stats = {}
     for chiave, entry in per_ut_pgm.items():
         alias = chiave.split("|")[0]
         if alias not in utensili_stats:
-            utensili_stats[alias] = {"n_programmi": 0, "n_cicli": 0, "programmi": []}
+            utensili_stats[alias] = {"n_programmi": 0, "n_cicli": 0, "programmi": [], "_slope_sum": 0.0, "_slope_n": 0}
         us = utensili_stats[alias]
         us["n_programmi"] += 1
         us["n_cicli"]     += entry.get("n", 0)
+        campioni = entry.get("campioni", [])
+        slope = 0.0
+        if len(campioni) >= 3:
+            n = len(campioni)
+            media_c = sum(campioni) / n
+            x_mean = (n - 1) / 2
+            num = sum((i - x_mean) * (campioni[i] - media_c) for i in range(n))
+            den = sum((x - x_mean)**2 for x in range(n))
+            slope = round(num / den, 2) if den > 0 else 0.0
+        us["_slope_sum"] += slope * entry.get("n", 1)
+        us["_slope_n"]   += entry.get("n", 1)
         us["programmi"].append({
             "filename":  chiave.split("|", 1)[1] if "|" in chiave else chiave,
             "media_sec": entry.get("media", 0),
             "std_sec":   entry.get("std", 0),
             "n":         entry.get("n", 0),
+            "slope":     round(slope, 2),
         })
+
+    for alias, us in utensili_stats.items():
+        us["slope_medio"] = round(us["_slope_sum"] / max(1, us["_slope_n"]), 2)
+        us["degrado"]     = us["slope_medio"] > 2.0
+        del us["_slope_sum"], us["_slope_n"]
 
     return {
         "per_file":       per_file,

@@ -51,6 +51,9 @@ export default function CodaLavorazione() {
   const [modalAssegna, setModalAssegna]     = useState(null);
   // Override feed/mandrino — aggiornato dal GlobalPoller
   const [overrideStato, setOverrideStato] = useState(null);
+  // Guard: evita setState su componente smontato
+  const mountedRef = useRef(true);
+  useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false } }, []);
   // { feed: 85, mandrino: 100, ridotto: true, feed_stato: 'ridotto' }
   // ── Coda esecuzione ────────────────────────────────────────────
   const [codaOrdine, setCodaOrdine] = useState([]);   // [3,4,5]
@@ -130,6 +133,8 @@ export default function CodaLavorazione() {
 
       const palletData  = rPallets.ok  ? await rPallets.json()  : null;
       const macchinaData = rMacchina.ok ? await rMacchina.json() : null;
+
+      if (!mountedRef.current) return;  // componente smontato — ignora
 
       setMacchina(macchinaData);
 

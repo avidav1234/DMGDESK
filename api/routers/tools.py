@@ -183,8 +183,15 @@ def _save_tools_db(tools: dict, sync_time: str, positions=None, format_used: str
         }
     }
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(db_path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
+    tmp_path = db_path.with_suffix(".tmp")
+    try:
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+        tmp_path.replace(db_path)
+    except Exception:
+        try: tmp_path.unlink(missing_ok=True)
+        except Exception: pass
+        raise
 
 
 _tools_db_cache: dict = {"data": None, "sync_time": None, "format": "", "mtime": 0}

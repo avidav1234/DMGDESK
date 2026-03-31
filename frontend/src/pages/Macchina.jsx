@@ -402,19 +402,22 @@ export default function Macchina() {
   const [cicliUtensile, setCicliUtensile] = useState({})  // { "ALIAS": {n_cicli, programmi:[]} }
   const fileInputRef = useRef()
 
+  const mountedRef = useRef(true)
+  useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false } }, [])
   useEffect(() => { loadSync() }, [])
 
   async function loadSync() {
     setLoading(true)
     try {
       const [t, s] = await Promise.all([api.getTools(), api.getToolsSyncStatus()])
+      if (!mountedRef.current) return
       setTools(t); setSyncStatus(s)
-    } catch (e) { setErrorSync(e.message) }
-    finally { setLoading(false) }
+    } catch (e) { if (mountedRef.current) setErrorSync(e.message) }
+    finally { if (mountedRef.current) setLoading(false) }
     // Carica cicli utensile in background (dati storici)
     fetch('/api/report/cicli-utensile')
       .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d?.per_utensile) setCicliUtensile(d.per_utensile) })
+      .then(d => { if (mountedRef.current && d?.per_utensile) setCicliUtensile(d.per_utensile) })
       .catch(() => {})
   }
 

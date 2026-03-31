@@ -472,9 +472,16 @@ export default function Home(){
                   // Ore storiche: solo sessioni CHIUSE (fine != null) e non-zero
                   // Il backend esclude sessioni aperte e durata=0 per evitare doppio conteggio
                   const secStorico = oreProgetto?.ore_sec || 0
-                  // Sessione corrente APERTA: aggiunta qui live (cresce ogni secondo via tickSec)
-                  // sessMatch garantisce che la sessione live appartenga a questo pallet/progetto
-                  const secSessioneAperta = sessMatch ? (durataSessioneLive || 0) : 0
+                  // Sessione corrente APERTA: usa sessLive.durata_sec calcolato dal backend
+                  // come somma dei programmi eseguiti in questa sessione.
+                  // NON usare durataSessioneLive (= now - inizio_sessione) che gonfia il valore
+                  // se la sessione è rimasta aperta nel log mentre la macchina era ferma.
+                  // Aggiunge tickSec secondi dall'ultimo refresh per far scorrere live.
+                  const secSessioneBase = sessMatch ? (sessLive?.durata_sec || 0) : 0
+                  // tickSec si azzera ad ogni fetch sessione-live (ogni 10s) — no drift
+                  const secSessioneAperta = secSessioneBase > 0 && sessLive?.attiva && !sessLive?.in_pausa
+                    ? secSessioneBase + (tickSec % 10)
+                    : secSessioneBase
                   const secTot = secStorico + secSessioneAperta
                   const hh = Math.floor(secTot/3600)
                   const mm = Math.floor((secTot%3600)/60)

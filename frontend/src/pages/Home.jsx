@@ -342,62 +342,6 @@ export default function Home(){
         {/* ══ COL MAIN ══════════════════════════════════════════════════ */}
         <div style={{display:'flex',flexDirection:'column',gap:10,overflowY:'auto',minHeight:0}}>
 
-          {/* ── PALLET GRID ─────────────────────────────────────────── */}
-          <div style={{background:'#fff',border:'1px solid #e2e8f0',borderRadius:12,padding:'12px 16px',flexShrink:0}}>
-            <div style={{fontSize:10,fontWeight:800,letterSpacing:'0.1em',color:'#64748b',
-              textTransform:'uppercase',marginBottom:8}}>Pallet macchina</div>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(6,1fr)',gap:8}}>
-              {[1,2,3,4,5,6].map(n=>{
-                const info=palletInfo(n)
-                const c=palletColors(n)
-                const isLav=c.label==='LIVE'
-                const isVuoto=c.label==='VUOTO'
-                return(
-                  <div key={n}
-                    onClick={info?()=>nav('/progetti',{state:{openId:info.proj.id}}):undefined}
-                    style={{background:c.bg,border:`1.5px solid ${c.border}`,borderRadius:10,
-                      padding:'14px 14px',cursor:info?'pointer':'default',
-                      minHeight:130,display:'flex',flexDirection:'column',gap:6,
-                      transition:'transform 0.12s, box-shadow 0.12s',position:'relative'}}
-                    onMouseEnter={e=>{if(info){e.currentTarget.style.transform='translateY(-2px)';e.currentTarget.style.boxShadow='0 4px 14px rgba(0,0,0,.08)'}}}
-                    onMouseLeave={e=>{e.currentTarget.style.transform='none';e.currentTarget.style.boxShadow='none'}}>
-
-                    {/* Numero + badge stato */}
-                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
-                      <span style={{fontSize:30,fontWeight:900,color:c.fg,lineHeight:1}}>P{n}</span>
-                      {!isVuoto&&(
-                        <span style={{fontSize:9,fontWeight:800,color:c.accent||c.fg,
-                          background:'#fff',padding:'2px 6px',borderRadius:4,
-                          border:`1px solid ${c.border}`,letterSpacing:'0.05em',lineHeight:1.4}}>
-                          {c.label}
-                        </span>
-                      )}
-                    </div>
-
-                    {info?(
-                      <>
-                        <div style={{fontSize:12,fontWeight:800,color:c.fg,
-                          overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
-                          {info.proj.name}
-                        </div>
-                        <div style={{height:4,background:'rgba(0,0,0,0.1)',borderRadius:2,overflow:'hidden'}}>
-                          <div style={{height:'100%',width:`${info.pct}%`,
-                            background:c.accent||info.proj.color||'#1D5FAD',borderRadius:2}}/>
-                        </div>
-                        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                          <span style={{fontSize:11,color:c.fg,opacity:0.7}}>{info.done}/{info.tot} pgm</span>
-                          <span style={{fontSize:13,fontWeight:800,color:c.fg}}>{info.pct}%</span>
-                        </div>
-                      </>
-                    ):(
-                      <div style={{fontSize:11,fontWeight:600,color:'#cbd5e1',marginTop:'auto'}}>Vuoto</div>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-
           {/* ── CARD PROGETTO ATTIVO ────────────────────────────────── */}
           {lavInfo?(
             <div style={{background:'#f0f7ff',border:'1.5px solid #1D5FAD',borderRadius:12,padding:'12px 16px',flexShrink:0}}>
@@ -574,6 +518,64 @@ export default function Home(){
             </div>
           )}
 
+          {/* ── PALLET GRID ─────────────────────────────────────────── */}
+          <div style={{background:'#fff',border:'1px solid #e2e8f0',borderRadius:12,padding:'12px 16px',flexShrink:0}}>
+            <div style={{fontSize:10,fontWeight:800,letterSpacing:'0.1em',color:'#64748b',
+              textTransform:'uppercase',marginBottom:8}}>Pallet macchina</div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(6,1fr)',gap:8}}>
+              {[1,2,3,4,5,6].map(n=>{
+                const info=palletInfo(n)
+                const c=palletColors(n)
+                const isLav=c.label==='LIVE'
+                const isVuoto=c.label==='VUOTO'
+                return(
+                  <div key={n}
+                    onClick={info?()=>nav('/progetti',{state:{openId:info.proj.id}}):undefined}
+                    style={{background:c.bg,border:`1.5px solid ${c.border}`,borderRadius:10,
+                      padding:'14px 14px',cursor:info?'pointer':'default',
+                      minHeight:130,display:'flex',flexDirection:'column',gap:6,
+                      transition:'transform 0.12s, box-shadow 0.12s',position:'relative'}}
+                    onMouseEnter={e=>{if(info){e.currentTarget.style.transform='translateY(-2px)';e.currentTarget.style.boxShadow='0 4px 14px rgba(0,0,0,.08)'}}}
+                    onMouseLeave={e=>{e.currentTarget.style.transform='none';e.currentTarget.style.boxShadow='none'}}>
+
+                    {/* Numero + badge stato */}
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+                      <span style={{fontSize:30,fontWeight:900,color:c.fg,lineHeight:1}}>P{n}</span>
+                      {!isVuoto&&(
+                        <span style={{fontSize:9,fontWeight:800,color:c.accent||c.fg,
+                          background:'#fff',padding:'2px 6px',borderRadius:4,
+                          border:`1px solid ${c.border}`,letterSpacing:'0.05em',lineHeight:1.4}}>
+                          {c.label}
+                        </span>
+                      )}
+                    </div>
+
+                    {info?(
+                      <>
+                        <div style={{fontSize:12,fontWeight:800,color:c.fg,
+                          overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                          {info.proj.name}
+                        </div>
+                        <div style={{height:4,background:'rgba(0,0,0,0.1)',borderRadius:2,overflow:'hidden'}}>
+                          <div style={{height:'100%',width:`${info.pct}%`,
+                            background:c.accent||info.proj.color||'#1D5FAD',borderRadius:2}}/>
+                        </div>
+                        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                          <span style={{fontSize:11,color:c.fg,opacity:0.7}}>{info.done}/{info.tot} pgm</span>
+                          <span style={{fontSize:13,fontWeight:800,color:c.fg}}>{info.pct}%</span>
+                        </div>
+                      </>
+                    ):(
+                      <div style={{fontSize:11,fontWeight:600,color:'#cbd5e1',marginTop:'auto'}}>Vuoto</div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* ── PROGRAMMI + UTENSILI affiancati ───────────────── */}
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
           {/* ── PROGRAMMI ATTIVI DEL PROGETTO IN LAVORAZIONE ─────────── */}
           <div style={{background:'#fff',border:'1px solid #e2e8f0',borderRadius:12,padding:'10px 16px'}}>
             <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
@@ -688,6 +690,7 @@ export default function Home(){
             )}
           </div>
 
+          </div>
         </div>{/* fine col-main */}
 
         {/* ══ COL SIDE ═══════════════════════════════════════════════ */}

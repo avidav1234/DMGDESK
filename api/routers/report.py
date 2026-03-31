@@ -1465,3 +1465,156 @@ async def get_cicli_dettaglio(filename: str = None):
         # Ordina per CV% decrescente (i più instabili prima)
         programmi.sort(key=lambda p: -p["cv_pct"])
         return {"programmi": programmi, "n_totale": len(programmi)}
+
+
+@router.get("/ore-progetto")
+async def get_ore_progetto(progetto: str = None):
+    """
+    Ritorna le ore totali accumulate per progetto su TUTTO lo storico.
+    Scorre tutte le sessioni nel log (incluse quelle archiviate per anno).
+
+    ?progetto=4297_0006 → dettaglio per quel progetto specifico
+    Senza parametro → dizionario {nome_progetto: {ore_sec, n_sessioni, prima_data, ultima_data}}
+    """
+    config = carica_configurazione()
+    data   = _load_log(config)
+
+    # Aggrega da tutte le sessioni (log corrente)
+    agg: dict = {}
+
+    def _aggiungi(sessione: dict):
+        prog = (sessione.get("progetto") or "").strip()
+        if not prog or prog == "—":
+            return
+        dur = sessione.get("durata_sec")
+        if dur is None:
+            # Sessione mai chiusa (live) — calcola live
+            inizio = sessione.get("inizio")
+            if inizio:
+                try:
+                    dur = int((datetime.now() -
+                               datetime.fromisoformat(inizio)).total_seconds())
+                except Exception:
+                    dur = 0
+            else:
+                dur = 0
+        if prog not in agg:
+            agg[prog] = {
+                "ore_sec":      0,
+                "n_sessioni":   0,
+                "prima_data":   sessione.get("data") or "",
+                "ultima_data":  sessione.get("data") or "",
+            }
+        a = agg[prog]
+        a["ore_sec"]    += max(0, dur)
+        a["n_sessioni"] += 1
+        if sessione.get("data"):
+            if not a["prima_data"] or sessione["data"] < a["prima_data"]:
+                a["prima_data"] = sessione["data"]
+            if sessione["data"] > a["ultima_data"]:
+                a["ultima_data"] = sessione["data"]
+
+    for s in data.get("sessioni", []):
+        _aggiungi(s)
+
+    # Carica anche archivi annuali se presenti
+    base = (config.get("tools_toa_folder") or
+            config.get("percorso_nc_base") or ".")
+    for arch_path in sorted(Path(base).glob("lavorazioni_*.json")):
+        try:
+            arch = json.loads(arch_path.read_text(encoding="utf-8"))
+            for s in arch.get("sessioni", []):
+                _aggiungi(s)
+        except Exception:
+            pass
+
+    # Aggiunge stringa ore formattata
+    for prog, a in agg.items():
+        a["ore_str"] = _durata_str(a["ore_sec"])
+
+    if progetto:
+        entry = agg.get(progetto.strip())
+        if not entry:
+            return {"progetto": progetto, "ore_sec": 0, "ore_str": "00:00:00",
+                    "n_sessioni": 0, "prima_data": None, "ultima_data": None}
+        return {"progetto": progetto, **entry}
+
+    # Ordina per ore decrescenti
+    return {
+        "progetti": dict(sorted(agg.items(), key=lambda x: -x[1]["ore_sec"])),
+        "n_progetti": len(agg),
+    }
+
+
+@router.get("/ore-progetto")
+async def get_ore_progetto(progetto: str = None):
+    """
+    Ritorna le ore totali accumulate per progetto su TUTTO lo storico.
+    Scorre tutte le sessioni nel log (incluse quelle archiviate per anno).
+
+    ?progetto=4297_0006 → dettaglio per quel progetto specifico
+    Senza parametro → dizionario {nome_progetto: {ore_sec, n_sessioni, prima_data, ultima_data}}
+    """
+    config = carica_configurazione()
+    data   = _load_log(config)
+    agg: dict = {}
+
+    def _aggiungi(sessione: dict):
+        prog = (sessione.get("progetto") or "").strip()
+        if not prog or prog == "—":
+            return
+        dur = sessione.get("durata_sec")
+        if dur is None:
+            inizio = sessione.get("inizio")
+            if inizio:
+                try:
+                    dur = int((datetime.now() -
+                               datetime.fromisoformat(inizio)).total_seconds())
+                except Exception:
+                    dur = 0
+            else:
+                dur = 0
+        if prog not in agg:
+            agg[prog] = {
+                "ore_sec":    0,
+                "n_sessioni": 0,
+                "prima_data": sessione.get("data") or "",
+                "ultima_data":sessione.get("data") or "",
+            }
+        a = agg[prog]
+        a["ore_sec"]    += max(0, dur)
+        a["n_sessioni"] += 1
+        if sessione.get("data"):
+            if not a["prima_data"] or sessione["data"] < a["prima_data"]:
+                a["prima_data"] = sessione["data"]
+            if sessione["data"] > a["ultima_data"]:
+                a["ultima_data"] = sessione["data"]
+
+    for s in data.get("sessioni", []):
+        _aggiungi(s)
+
+    # Carica anche archivi annuali se presenti
+    base = (config.get("tools_toa_folder") or
+            config.get("percorso_nc_base") or ".")
+    for arch_path in sorted(Path(base).glob("lavorazioni_*.json")):
+        try:
+            arch = json.loads(arch_path.read_text(encoding="utf-8"))
+            for s in arch.get("sessioni", []):
+                _aggiungi(s)
+        except Exception:
+            pass
+
+    for prog, a in agg.items():
+        a["ore_str"] = _durata_str(a["ore_sec"])
+
+    if progetto:
+        entry = agg.get(progetto.strip())
+        if not entry:
+            return {"progetto": progetto, "ore_sec": 0, "ore_str": "00:00:00",
+                    "n_sessioni": 0, "prima_data": None, "ultima_data": None}
+        return {"progetto": progetto, **entry}
+
+    return {
+        "progetti": dict(sorted(agg.items(), key=lambda x: -x[1]["ore_sec"])),
+        "n_progetti": len(agg),
+    }

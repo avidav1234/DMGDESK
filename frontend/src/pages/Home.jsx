@@ -1,5 +1,6 @@
 // Home.jsx — Cruscotto turno (redesign V2)
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import React from 'react'
 import { useNavigate } from 'react-router-dom'
 
 function daysUntil(dateStr){
@@ -25,9 +26,10 @@ export default function Home(){
   const [pallet,     setPallet]     = useState([])
   const [setup,      setSetup]      = useState({})
   const [sessLive,   setSessLive]   = useState(null)
-  const [tempiCiclo, setTempiCiclo] = useState({})  // { "4297_005_01_18.MPF": {media_sec,std_sec,n} }
+  const [tempiCiclo, setTempiCiclo] = useState({})
   const [tickSec,    setTickSec]    = useState(0)
   const [loading,    setLoading]    = useState(true)
+  const [oreProgetto, setOreProgetto] = useState(null)  // ore storiche progetto corrente
 
   useEffect(()=>{
     const ac = new AbortController()
@@ -61,6 +63,21 @@ export default function Home(){
     const t4=setInterval(fetchTempiCiclo,300000)
     return()=>{ ac.abort(); clearInterval(t);clearInterval(t2);clearInterval(t3);clearInterval(t4) }
   },[])
+
+  // Fetch ore storiche progetto ogni volta che cambia il progetto in lavorazione
+  const progettoCorrenteRef = useRef(null)
+  useEffect(()=>{
+    const palletLavNow = pallet.find(p=>(p.stato||'').toLowerCase().replace('_',' ')==='in lavorazione')
+    const progNow = palletLavNow ? projects.find(p=>p.id===palletLavNow.progetto_id) : null
+    const nomeProgetto = progNow?.name
+    if(!nomeProgetto) { setOreProgetto(null); return }
+    if(nomeProgetto === progettoCorrenteRef.current) return  // già caricato
+    progettoCorrenteRef.current = nomeProgetto
+    fetch(`/api/report/ore-progetto?progetto=${encodeURIComponent(nomeProgetto)}`)
+      .then(r=>r.ok?r.json():null)
+      .then(d=>{ if(d) setOreProgetto(d) })
+      .catch(()=>{})
+  },[pallet, projects])
 
   const now    = new Date()
   const DAYS   = ['Domenica','Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato']
@@ -445,30 +462,34 @@ export default function Home(){
                   )}
                 </div>
 
-                {/* Timer 3: Ore pallet (storico completati + sessione in corso) */}
+                {/* Timer 3: Ore totali progetto (storico + sessione live) */}
                 {(()=>{
-                  // Ore già lavorate sul progetto attivo oggi (da sessioni chiuse)
-                  // + sessione corrente live
-                  const progNome = lavInfo?.proj?.name
-                  const secStorico = sessLive?.durata_sec || 0  // sessione live include storico odierno
-                  const totSec = secStorico
-                  const hh = Math.floor(totSec/3600)
-                  const mm = Math.floor((totSec%3600)/60)
-                  const ss = totSec % 60
+                  // Ore storiche: tutte le sessioni CHIUSE di questo progetto nel log
+                  const secStorico = oreProgetto?.ore_sec || 0
+                  // Sessione corrente APERTA (non ancora nel log chiuso): aggiunta live
+                  // durataSessioneLive cresce ogni secondo grazie a tickSec
+                  const secSessioneAperta = sessMatch ? (durataSessioneLive || 0) : 0
+                  const secTot = secStorico + secSessioneAperta
+                  const hh = Math.floor(secTot/3600)
+                  const mm = Math.floor((secTot%3600)/60)
+                  const ss = secTot % 60
                   const timerStr = `${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}`
+                  const nSessioni = oreProgetto?.n_sessioni || 0
+                  const primaData = oreProgetto?.prima_data
                   return (
                     <div style={{background:'#fff',borderRadius:9,padding:'6px 10px',
                       border:'1px solid #bbf7d0',textAlign:'center'}}>
                       <div style={{fontSize:10,fontWeight:700,color:'#15803d',letterSpacing:'0.07em',
-                        textTransform:'uppercase',marginBottom:5}}>Ore pallet</div>
+                        textTransform:'uppercase',marginBottom:4}}>Ore progetto</div>
                       <div style={{fontSize:26,fontWeight:900,color:'#166534',fontFamily:'monospace',lineHeight:1}}>
-                        {sessMatch && totSec > 0 ? timerStr : '—:——:——'}
+                        {secTot > 0 ? timerStr : '—:——:——'}
                       </div>
-                      <div style={{fontSize:10,color:'#64748b',marginTop:4}}>
-                        {sessMatch && totSec > 0
-                          ? `${lavInfo.done}/${lavInfo.tot} pgm completati`
-                          : 'sessione non attiva'}
-                      </div>
+                      {secTot > 0 && (
+                        <div style={{fontSize:9,color:'#64748b',marginTop:3}}>
+                          {nSessioni > 0 ? `${nSessioni} sess.` : ''}
+                          {primaData && nSessioni > 1 ? ` · dal ${primaData}` : ''}
+                        </div>
+                      )}
                     </div>
                   )
                 })()}

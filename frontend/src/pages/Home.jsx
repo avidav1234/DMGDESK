@@ -487,6 +487,7 @@ export default function Home(){
                     ? secSessioneBase + (tickSec % 10)
                     : secSessioneBase
                   const secTot = secStorico + secSessioneAperta
+                  const _dbg = `storico=${Math.round(secStorico/3600)}h sess=${Math.round(secSessioneAperta/3600)}h`
                   const hh = Math.floor(secTot/3600)
                   const mm = Math.floor((secTot%3600)/60)
                   const ss = secTot % 60
@@ -506,6 +507,7 @@ export default function Home(){
                           {nSessioni > 0 ? `${nSessioni} sess.` : ''}
                           {primaData && nSessioni > 1 ? ` · dal ${primaData}` : ''}
                         </div>
+                        <div style={{fontSize:8,color:'#ef4444',marginTop:2}}>{_dbg}</div>
                       )}
                     </div>
                   )

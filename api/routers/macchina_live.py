@@ -25,7 +25,7 @@ from api.routers.progetti import (
     _write_lock as _proj_lock,
 )
 from api.routers.pallet import _load as _load_pallet, _save as _save_pallet
-from api.routers.report import aggiorna_da_log
+from api.routers.report import aggiorna_da_log, _load_log, _log_path
 
 router = APIRouter()
 
@@ -749,14 +749,35 @@ async def aggiorna_stati_da_log():
                     pallet_dirty = True
                     updates["pallet"] += 1
 
+    elif stato_pgm == 2:
+        # stato 2 = ricerca blocco / JOG — non toccare i pallet:
+        # la macchina si sta solo posizionando, non è un vero fermo produttivo.
+        pass
+
     elif stato_pgm in (0, 5):
-        # Macchina FERMA → tutti i pallet in_lavorazione → grezzo/finito
-        for pal in pallets:
-            if (pal.get("stato") or "").lower().replace(" ","_") == "in_lavorazione":
-                _a_grezzo_o_finito(pal, projects)
-                pal["aggiornato"] = now_str
-                pallet_dirty = True
-                updates["pallet"] += 1
+        # Macchina FERMA — ma rispetta il grace period di report.py:
+        # se sc["in_pausa"] è True significa che siamo dentro i 15 min di grace
+        # (stesso programma potrebbe riprendere). In quel caso NON resettare il pallet,
+        # altrimenti la Coda mostrerebbe "GREZZO" mentre la sessione è ancora viva.
+        # Resettiamo solo su stato 0 (reset anomalo, immediato) o se grace scaduto.
+        try:
+            _lav_log  = _load_log(config)
+            _sc       = _lav_log.get("stato_corrente", {})
+            in_pausa  = _sc.get("in_pausa", False)
+            is_reset  = (stato_pgm == 0)   # reset anomalo → sempre immediato
+        except Exception:
+            in_pausa = False
+            is_reset = (stato_pgm == 0)
+
+        if is_reset or not in_pausa:
+            # Reset anomalo, o grace scaduto/non attivo → resetta pallet
+            for pal in pallets:
+                if (pal.get("stato") or "").lower().replace(" ","_") == "in_lavorazione":
+                    _a_grezzo_o_finito(pal, projects)
+                    pal["aggiornato"] = now_str
+                    pallet_dirty = True
+                    updates["pallet"] += 1
+        # else: in grace period → pallet rimane in_lavorazione, coerente con report.py
 
 
     # ── Automazione 2 e 3: stati programmi ───────────────────────────────

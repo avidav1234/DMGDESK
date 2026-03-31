@@ -93,9 +93,11 @@ export default function Sidebar() {
         .then(r => r.ok ? r.json() : null)
         .then(d => {
           if (!d) return
-          const attiva = [1, 3].includes(d.stato_programma) && !d.log_stale
+          const attiva  = [1, 3].includes(d.stato_programma) && !d.log_stale
+          const isJog   = d.stato_programma === 2 && !d.log_stale
           setStatoMacchina({
             attiva,
+            isJog,
             programma:  d.programma_attivo,
             utensile:   d.utensile_attivo,
             pallet:     d.pallet_attivo   || null,
@@ -136,8 +138,10 @@ export default function Sidebar() {
       }
       if (d.stato_macchina !== undefined) {
         const attiva = [1, 3].includes(d.stato_macchina)
+        const isJog  = d.stato_macchina === 2
         setStatoMacchina(prev => ({
           attiva,
+          isJog,
           programma: d.programma_attivo  || prev?.programma  || null,
           utensile:  prev?.utensile || null,
           pallet:    d.pallet_rilevato   ?? prev?.pallet   ?? null,
@@ -183,24 +187,43 @@ export default function Sidebar() {
       <NavLink to="/coda" style={{ textDecoration: 'none' }}>
         <div style={{
           width: 58, marginBottom: 6, borderRadius: 8, padding: '5px 6px',
-          background: statoMacchina?.logStale ? 'rgba(239,68,68,0.15)' : statoMacchina?.attiva ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.05)',
-          border: `1px solid ${statoMacchina?.logStale ? 'rgba(239,68,68,0.4)' : statoMacchina?.attiva ? 'rgba(34,197,94,0.3)' : 'rgba(255,255,255,0.08)'}`,
+          background: statoMacchina?.logStale  ? 'rgba(239,68,68,0.15)'
+                    : statoMacchina?.attiva    ? 'rgba(34,197,94,0.15)'
+                    : statoMacchina?.isJog     ? 'rgba(59,130,246,0.15)'
+                    : 'rgba(255,255,255,0.05)',
+          border: `1px solid ${
+            statoMacchina?.logStale  ? 'rgba(239,68,68,0.4)'
+          : statoMacchina?.attiva    ? 'rgba(34,197,94,0.3)'
+          : statoMacchina?.isJog     ? 'rgba(59,130,246,0.3)'
+          : 'rgba(255,255,255,0.08)'}`,
           display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
           transition: 'all 0.3s', cursor: 'pointer',
         }}>
-          {/* Dot + LIVE/FERMO */}
+          {/* Dot + LIVE/JOG/FERMO */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <div style={{
               width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
-              background: statoMacchina?.logStale ? '#ef4444' : statoMacchina?.attiva ? '#22c55e' : '#64748b',
-              animation: statoMacchina?.logStale ? 'pulse-red 1s ease-in-out infinite' : statoMacchina?.attiva ? 'pulse-green 2s ease-in-out infinite' : 'none',
+              background: statoMacchina?.logStale ? '#ef4444'
+                        : statoMacchina?.attiva   ? '#22c55e'
+                        : statoMacchina?.isJog    ? '#3b82f6'
+                        : '#64748b',
+              animation: statoMacchina?.logStale  ? 'pulse-red 1s ease-in-out infinite'
+                       : statoMacchina?.attiva    ? 'pulse-green 2s ease-in-out infinite'
+                       : statoMacchina?.isJog     ? 'pulse-blue 1.5s ease-in-out infinite'
+                       : 'none',
             }}/>
             <span style={{
               fontSize: 8, fontWeight: 800, letterSpacing: '0.06em',
               fontFamily: 'var(--font-mono)',
-              color: statoMacchina?.logStale ? '#fca5a5' : statoMacchina?.attiva ? '#86efac' : '#64748b',
+              color: statoMacchina?.logStale ? '#fca5a5'
+                   : statoMacchina?.attiva   ? '#86efac'
+                   : statoMacchina?.isJog    ? '#93c5fd'
+                   : '#64748b',
             }}>
-              {statoMacchina?.logStale ? 'STALE' : statoMacchina?.attiva ? 'LIVE' : 'FERMO'}
+              {statoMacchina?.logStale ? 'STALE'
+             : statoMacchina?.attiva   ? 'LIVE'
+             : statoMacchina?.isJog    ? 'JOG'
+             : 'FERMO'}
             </span>
           </div>
           {/* Pallet attivo */}
@@ -289,6 +312,10 @@ export default function Sidebar() {
         @keyframes pulse-green {
           0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(34,197,94,0.4); }
           50%       { opacity: .7; box-shadow: 0 0 0 4px rgba(34,197,94,0); }
+        }
+        @keyframes pulse-blue {
+          0%, 100% { opacity: 1; }
+          50%       { opacity: .5; }
         }
       `}</style>
     </nav>

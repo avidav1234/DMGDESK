@@ -12,6 +12,7 @@ import AnalisiNC     from './pages/AnalisiNC'
 import InvioMacchina from './pages/InvioMacchina'
 import Progetti      from './pages/Progetti'
 import Report        from './pages/Report'
+import RendicontoProgetto from './pages/RendicontoProgetto'
 
 // ── Error Boundary globale ──────────────────────────────────────────────────
 // Previene schermo bianco su eccezioni non gestite nei componenti React.
@@ -107,6 +108,7 @@ function MainContent() {
         <Route path="/report"         element={<Wrap><Report /></Wrap>} />
         <Route path="/magazzino"      element={<Wrap><Smontati /></Wrap>} />
         <Route path="/progetti"       element={<Wrap><Progetti /></Wrap>} />
+        <Route path="/rendiconto/:projectId" element={<Wrap><RendicontoProgetto /></Wrap>} />
       </Routes>
     </main>
   )

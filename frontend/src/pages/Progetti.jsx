@@ -1504,6 +1504,12 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
 
           {/* ── DESTRA: secondari piccoli ── */}
           <div style={{marginLeft:'auto',display:'flex',gap:5,flexShrink:0}}>
+            <button onClick={()=>navPD(`/rendiconto/${project.id}`)}
+              style={{background:'none',border:`1px solid ${T.border}`,borderRadius:6,
+                color:'#1D5FAD',fontSize:11,padding:'4px 9px',cursor:'pointer',fontWeight:600}}
+              title="Rendiconto commessa">
+              📊 Rendiconto
+            </button>
             <button onClick={()=>setShowSaveTemplate(true)}
               style={{background:'none',border:`1px solid ${T.border}`,borderRadius:6,color:T.textMuted,fontSize:11,padding:'4px 9px',cursor:'pointer'}} title="Salva come Template">
               💾 Template

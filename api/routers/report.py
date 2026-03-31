@@ -1737,3 +1737,202 @@ async def debug_ore_progetto(progetto: str, project_id: str = None):
         "n_incluse":   sum(1 for r in righe if r["motivo"].startswith("ADD")),
         "sessioni":    righe,
     }
+
+
+@router.get("/rendiconto-progetto")
+async def get_rendiconto_progetto(project_id: str):
+    """
+    Rendiconto completo di progetto: timeline, ore macchina, utensili, programmi.
+    """
+    from api.routers.progetti import _load_progetti, _load_deliveries
+    config   = carica_configurazione()
+    log_data = _load_log(config)
+
+    # ── Carica progetto ──────────────────────────────────────────────────────
+    proj_data = _load_progetti(config)
+    progetto  = next((p for p in proj_data.get("projects", [])
+                      if p.get("id") == project_id), None)
+    if not progetto:
+        raise HTTPException(status_code=404, detail="Progetto non trovato")
+
+    nome    = progetto.get("name", "")
+    creato  = progetto.get("createdAt", "")
+    colore  = progetto.get("color", "#1D5FAD")
+
+    # ── Delivery (scadenza / consegna) ───────────────────────────────────────
+    deliveries = _load_deliveries(config)
+    delivery   = next((d for d in deliveries if d.get("projectId") == project_id), None)
+    scadenza       = delivery.get("dueDate")      if delivery else None
+    consegnato     = delivery.get("delivered")    if delivery else False
+    consegnato_at  = delivery.get("deliveredAt")  if delivery else None
+
+    # ── Sessioni di lavorazione ──────────────────────────────────────────────
+    FILTRI = ("_N_CMA", "_N_CST", "_N_SYF", "_N_MPF", "BPOSAXIS",
+              "/_N_WKS", "_SPF", "0_MAIN_", "PALLET5")
+
+    sessioni_proj = []
+    for s in log_data.get("sessioni", []):
+        pid = (s.get("progetto_id") or "").strip()
+        pnm = (s.get("progetto")    or "").strip()
+        if pid and pid != project_id:
+            continue
+        if not pid and pnm.lower() != nome.lower():
+            continue
+        sessioni_proj.append(s)
+
+    # ── Aggregazione programmi ───────────────────────────────────────────────
+    pgm_agg: dict = {}
+    for s in sessioni_proj:
+        for p in s.get("programmi", []):
+            fn  = (p.get("filename") or "").strip()
+            if not fn or any(f in fn.upper() for f in FILTRI):
+                continue
+            dur = p.get("durata_sec") or 0
+            fn_key = fn.upper().replace(".MPF", "").split("/")[-1]
+            if fn_key not in pgm_agg:
+                pgm_agg[fn_key] = {"filename": fn_key, "durata_sec": 0, "n_esecuzioni": 0}
+            pgm_agg[fn_key]["durata_sec"]   += dur
+            pgm_agg[fn_key]["n_esecuzioni"] += 1
+
+    # tempoStimato CAM per confronto
+    for s in progetto.get("steps", []):
+        for t in s.get("tasks", []):
+            if t.get("text", "").strip().lower() != "fresatura":
+                continue
+            for pg in t.get("programs", []):
+                fn_key = (pg.get("filename") or "").upper().replace(".MPF", "").split("/")[-1]
+                if fn_key in pgm_agg:
+                    stima = pg.get("tempoStimato")
+                    if stima:
+                        try:
+                            pgm_agg[fn_key]["stima_sec"] = int(stima) * 60
+                        except Exception:
+                            pass
+
+    programmi_list = sorted(pgm_agg.values(), key=lambda x: -x["durata_sec"])
+
+    # ── Aggregazione utensili ────────────────────────────────────────────────
+    ut_agg: dict = {}
+    for s in sessioni_proj:
+        u = s.get("utensili") or {}
+        if not isinstance(u, dict):
+            continue
+        for alias, info in u.items():
+            if not isinstance(info, dict):
+                continue
+            if alias not in ut_agg:
+                ut_agg[alias] = {"alias": alias, "cicli": 0, "durata_sec": 0}
+            ut_agg[alias]["cicli"]      += info.get("cicli", 0) or 0
+            ut_agg[alias]["durata_sec"] += info.get("durata_sec", 0) or 0
+
+    utensili_list = sorted(ut_agg.values(), key=lambda x: -x["durata_sec"])
+
+    # ── KPI principali ───────────────────────────────────────────────────────
+    ore_macchina_sec = sum(
+        s.get("durata_sec") or sum(p.get("durata_sec") or 0 for p in s.get("programmi", []))
+        for s in sessioni_proj
+    )
+    n_sessioni  = len(sessioni_proj)
+    n_programmi = len(pgm_agg)
+    n_utensili  = len(ut_agg)
+
+    # Fasi di lavorazione (steps con almeno una sessione)
+    fasi = [s.get("title", "") for s in progetto.get("steps", [])]
+
+    # Conteggio programmi dal progetto
+    pgm_progetto = [
+        pg for s in progetto.get("steps", [])
+        for t in s.get("tasks", [])
+        if t.get("text", "").strip().lower() == "fresatura"
+        for pg in t.get("programs", [])
+        if pg.get("tipoGruppo") != "ipm"
+    ]
+    n_pgm_totali    = len(pgm_progetto)
+    n_pgm_completati = sum(1 for pg in pgm_progetto if pg.get("stato") == "completato")
+    stima_tot_sec   = sum(int(pg.get("tempoStimato") or 0) * 60 for pg in pgm_progetto)
+
+    # ── Timeline ─────────────────────────────────────────────────────────────
+    prima_sess = sessioni_proj[0].get("inizio", "")[:10]  if sessioni_proj else None
+    ultima_fine = None
+    for s in reversed(sessioni_proj):
+        f = s.get("fine")
+        if f and f != "aperta":
+            ultima_fine = f[:10]
+            break
+
+    # Giorni calendario progetto
+    try:
+        da = datetime.fromisoformat(creato)
+        a  = datetime.fromisoformat(consegnato_at.replace("/","").replace(" ","T")[:10])              if consegnato_at else datetime.now()
+        giorni_totali = (a - da).days
+    except Exception:
+        giorni_totali = None
+
+    try:
+        giorni_macchina = (
+            datetime.fromisoformat(ultima_fine) -
+            datetime.fromisoformat(prima_sess)
+        ).days + 1 if prima_sess and ultima_fine else None
+    except Exception:
+        giorni_macchina = None
+
+    # ── Sessioni per il dettaglio timeline ───────────────────────────────────
+    sessioni_out = []
+    for s in sessioni_proj:
+        dur = s.get("durata_sec") or sum(p.get("durata_sec") or 0 for p in s.get("programmi",[]))
+        if dur == 0:
+            continue
+        pgms_validi = [
+            p for p in s.get("programmi", [])
+            if not any(f in (p.get("filename") or "").upper() for f in FILTRI)
+            and (p.get("durata_sec") or 0) >= 30
+        ]
+        sessioni_out.append({
+            "data":        s.get("data", ""),
+            "inizio":      s.get("inizio", "")[:19],
+            "fine":        (s.get("fine") or "")[:19],
+            "durata_sec":  dur,
+            "durata_str":  _durata_str(dur),
+            "n_programmi": len(pgms_validi),
+        })
+
+    return {
+        "progetto": {
+            "id":    project_id,
+            "nome":  nome,
+            "colore": colore,
+            "creato": creato,
+        },
+        "delivery": {
+            "scadenza":      scadenza,
+            "consegnato":    consegnato,
+            "consegnato_at": consegnato_at,
+        },
+        "timeline": {
+            "apertura_progetto": creato,
+            "inizio_macchina":   prima_sess,
+            "fine_macchina":     ultima_fine,
+            "consegna":          consegnato_at,
+            "scadenza":          scadenza,
+            "giorni_totali":     giorni_totali,
+            "giorni_macchina":   giorni_macchina,
+        },
+        "kpi": {
+            "ore_macchina_sec":  ore_macchina_sec,
+            "ore_macchina_str":  _durata_str(ore_macchina_sec),
+            "n_sessioni":        n_sessioni,
+            "n_programmi_eseguiti": n_programmi,
+            "n_programmi_totali":   n_pgm_totali,
+            "n_programmi_completati": n_pgm_completati,
+            "n_utensili":        n_utensili,
+            "n_fasi":            len(fasi),
+            "fasi":              fasi,
+            "stima_tot_sec":     stima_tot_sec,
+            "stima_tot_str":     _durata_str(stima_tot_sec),
+            "scostamento_pct":   round((ore_macchina_sec - stima_tot_sec) / stima_tot_sec * 100, 1)
+                                 if stima_tot_sec > 0 else None,
+        },
+        "programmi":  programmi_list,
+        "utensili":   utensili_list,
+        "sessioni":   sessioni_out,
+    }

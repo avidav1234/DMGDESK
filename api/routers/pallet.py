@@ -77,12 +77,17 @@ def _load(config: dict) -> dict:
 
 
 def _save(config: dict, state: dict):
+    """Scrittura atomica: scrive su .tmp poi rinomina — sicuro su crash/spegnimento."""
     path = _pallet_path(config)
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         state["ultimo_aggiornamento"] = datetime.now().isoformat()
-        path.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp.replace(path)
     except Exception as e:
+        try: path.with_suffix(".tmp").unlink(missing_ok=True)
+        except Exception: pass
         raise HTTPException(status_code=500, detail=f"Impossibile salvare pallet_state.json: {e}")
 
 

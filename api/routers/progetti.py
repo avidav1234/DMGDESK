@@ -9,10 +9,17 @@ from typing import Optional, Any
 from pathlib import Path
 from datetime import datetime
 import json
+import asyncio
 
 from database.db_handler import carica_configurazione
 
 router = APIRouter()
+
+# ── Lock globale per scritture concorrenti ────────────────────────────────────
+# FastAPI è async — senza lock due richieste parallele fanno:
+#   req1: load → modifica → (sospeso) → salva dati VECCHI sovrascrivendo req2
+# Il lock serializza tutte le scritture su worktrack_projects.json.
+_write_lock = asyncio.Lock()
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -51,9 +58,18 @@ def _load_progetti(config: dict) -> dict:
     return {"projects": [], "ultimo_aggiornamento": None}
 
 def _save_progetti(config: dict, data: dict):
+    """Scrittura atomica: scrive su .tmp poi rinomina — sicuro su crash/spegnimento."""
     path = _progetti_path(config)
     data["ultimo_aggiornamento"] = datetime.now().isoformat()
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp = path.with_suffix(".tmp")
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp.replace(path)   # atomico sullo stesso filesystem
+    except Exception:
+        try: tmp.unlink(missing_ok=True)
+        except Exception: pass
+        raise
     # Invalida cache — il file è cambiato
     _progetti_cache["mtime"] = 0
     _invalidate_analisi_cache()
@@ -250,20 +266,21 @@ async def put_quick_tasks(body: dict):
 
 @router.put("/{project_id}")
 async def update_progetto(project_id: str, body: ProgettoUpdate):
-    """Salva un progetto (crea o aggiorna)."""
+    """Salva un progetto (crea o aggiorna). Lock serializza con il poller."""
     config = carica_configurazione()
-    data = _load_progetti(config)
-    projects = data.get("projects", [])
-    idx = next((i for i, p in enumerate(projects) if p.get("id") == project_id), None)
-    incoming = body.data if isinstance(body.data, dict) else {}
-    # pallet_assegnato è gestito SOLO da pallet_state — rimuovilo sempre dal JSON progetti
-    incoming.pop("pallet_assegnato", None)
-    if idx is not None:
-        projects[idx] = incoming
-    else:
-        projects.append(incoming)
-    data["projects"] = projects
-    _save_progetti(config, data)
+    async with _write_lock:
+        data = _load_progetti(config)
+        projects = data.get("projects", [])
+        idx = next((i for i, p in enumerate(projects) if p.get("id") == project_id), None)
+        incoming = body.data if isinstance(body.data, dict) else {}
+        # pallet_assegnato è gestito SOLO da pallet_state — rimuovilo sempre dal JSON progetti
+        incoming.pop("pallet_assegnato", None)
+        if idx is not None:
+            projects[idx] = incoming
+        else:
+            projects.append(incoming)
+        data["projects"] = projects
+        _save_progetti(config, data)
     return {"ok": True}
 
 @router.delete("/{project_id}")

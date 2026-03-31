@@ -36,6 +36,11 @@ Struttura lavorazioni_log.json:
 """
 
 import json
+from api.constants import (
+    ORE_TURNO_SEC, OEE_QUALITA_DEFAULT, LOG_RETENTION_DAYS,
+    CICLI_FINESTRA, CICLI_MIN_ANOMALIA, CICLI_ANOMALIA_SIGMA,
+    TEMPI_CICLO_MIN_DURATA, TEMPI_CICLO_MAX_DURATA,
+)
 import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -63,9 +68,57 @@ def _load_log(config: dict) -> dict:
     return {"sessioni": [], "stato_corrente": {}}
 
 def _save_log(config: dict, data: dict):
+    """
+    Scrittura atomica con pruning automatico.
+    Mantiene solo le sessioni degli ultimi 90 giorni nel file principale.
+    Le sessioni più vecchie vengono archiviate in lavorazioni_YYYY.json
+    per preservare lo storico senza appesantire il file operativo.
+    """
+    from datetime import timedelta as _td
     p = _log_path(config)
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    # Pruning: separa sessioni recenti da quelle da archiviare
+    RETENTION_DAYS = LOG_RETENTION_DAYS
+    cutoff = (datetime.now() - _td(days=RETENTION_DAYS)).strftime("%Y-%m-%d")
+    sessioni_all    = data.get("sessioni", [])
+    sessioni_recent = [s for s in sessioni_all if (s.get("data") or "9999") >= cutoff]
+    sessioni_old    = [s for s in sessioni_all if (s.get("data") or "9999") < cutoff]
+
+    # Archivia sessioni vecchie per anno (non blocca se fallisce)
+    if sessioni_old:
+        try:
+            anni = {}
+            for s in sessioni_old:
+                anno = (s.get("data") or "0000")[:4]
+                anni.setdefault(anno, []).append(s)
+            for anno, sess_anno in anni.items():
+                arch_path = p.parent / f"lavorazioni_{anno}.json"
+                try:
+                    arch_existing = json.loads(arch_path.read_text(encoding="utf-8")) if arch_path.exists() else {"sessioni": []}
+                except Exception:
+                    arch_existing = {"sessioni": []}
+                # Merge evitando duplicati per id
+                ids_esistenti = {s.get("id") for s in arch_existing.get("sessioni", [])}
+                nuove = [s for s in sess_anno if s.get("id") not in ids_esistenti]
+                arch_existing["sessioni"].extend(nuove)
+                arch_tmp = arch_path.with_suffix(".tmp")
+                arch_tmp.write_text(json.dumps(arch_existing, ensure_ascii=False, indent=2), encoding="utf-8")
+                arch_tmp.replace(arch_path)
+        except Exception:
+            pass  # archivio non critico — non blocca il salvataggio principale
+
+    data["sessioni"] = sessioni_recent
+
+    # Scrittura atomica del file principale
+    tmp = p.with_suffix(".tmp")
+    try:
+        tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp.replace(p)
+    except Exception:
+        try: tmp.unlink(missing_ok=True)
+        except Exception: pass
+        raise
 
 def _now_iso() -> str:
     return datetime.now().isoformat(timespec="seconds")
@@ -113,143 +166,148 @@ def aggiorna_da_log(
     sc   = data.setdefault("stato_corrente", {})
     now  = _now_iso()
     dirty = False
+    try:
 
-    # ── Sanità: chiudi sessioni orfane da riavvio backend ─────────────────────
-    # Se il backend è stato riavviato mentre la macchina girava, la sessione
-    # corrente è rimasta aperta (fine=None). Se ora la macchina è ferma,
-    # chiudiamo la sessione orfana usando l'ultimo_tick come timestamp di fine.
-    if stato_pgm in (0, 5) and sc.get("sessione_id"):
-        sess_orfana = _find_sess(data, sc["sessione_id"])
-        if sess_orfana and sess_orfana.get("fine") is None:
-            fine_orfana = sc.get("ultimo_tick") or now
-            _chiudi_sessione(data, sc, fine_orfana)
-            sc.clear()
-            dirty = True
+        # ── Sanità: chiudi sessioni orfane da riavvio backend ─────────────────────
+        # Se il backend è stato riavviato mentre la macchina girava, la sessione
+        # corrente è rimasta aperta (fine=None). Se ora la macchina è ferma,
+        # chiudiamo la sessione orfana usando l'ultimo_tick come timestamp di fine.
+        if stato_pgm in (0, 5) and sc.get("sessione_id"):
+            sess_orfana = _find_sess(data, sc["sessione_id"])
+            if sess_orfana and sess_orfana.get("fine") is None:
+                fine_orfana = sc.get("ultimo_tick") or now
+                _chiudi_sessione(data, sc, fine_orfana)
+                sc.clear()
+                dirty = True
 
-    # ── Macchina FERMA ────────────────────────────────────────────────────────
-    if stato_pgm in (0, 5):
-        if sc.get("in_esecuzione"):
-            # Registra tipo di fermo prima di chiudere la sessione
-            sess_corrente2 = _find_sess(data, sc.get("sessione_id", ""))
-            if sess_corrente2 and stop_type:
-                sess_corrente2.setdefault("fermi", [])
-                sess_corrente2["fermi"].append({
-                    "ts":   now,
-                    "tipo": stop_type,  # "reset" = anomalo, "stop" = pianificato
-                })
-                # Contatori separati per OEE
-                if stop_type == "reset":
-                    sess_corrente2["n_fermi_anomali"] = sess_corrente2.get("n_fermi_anomali", 0) + 1
-                elif stop_type == "stop":
-                    sess_corrente2["n_fermi_pianificati"] = sess_corrente2.get("n_fermi_pianificati", 0) + 1
-            # Chiudi sessione corrente
-            _chiudi_sessione(data, sc, now)
-            sc.clear()
-            dirty = True
+        # ── Macchina FERMA ────────────────────────────────────────────────────────
+        if stato_pgm in (0, 5):
+            if sc.get("in_esecuzione"):
+                # Registra tipo di fermo prima di chiudere la sessione
+                sess_corrente2 = _find_sess(data, sc.get("sessione_id", ""))
+                if sess_corrente2 and stop_type:
+                    sess_corrente2.setdefault("fermi", [])
+                    sess_corrente2["fermi"].append({
+                        "ts":   now,
+                        "tipo": stop_type,  # "reset" = anomalo, "stop" = pianificato
+                    })
+                    # Contatori separati per OEE
+                    if stop_type == "reset":
+                        sess_corrente2["n_fermi_anomali"] = sess_corrente2.get("n_fermi_anomali", 0) + 1
+                    elif stop_type == "stop":
+                        sess_corrente2["n_fermi_pianificati"] = sess_corrente2.get("n_fermi_pianificati", 0) + 1
+                # Chiudi sessione corrente
+                _chiudi_sessione(data, sc, now)
+                sc.clear()
+                dirty = True
 
-    # ── Macchina IN ESECUZIONE ────────────────────────────────────────────────
-    if stato_pgm in (1, 3) and programma_attivo:
-        # Filtra programmi di sistema Sinumerik (non sono lavorazioni utente)
-        _FILTRI_SISTEMA = ("_N_CMA_DIR", "_N_CST_DIR", "_N_SYF_DIR",
-                           "_N_MPF_DIR", "_SPF", "BPOSAXIS", "TMPCYC")
-        for f in _FILTRI_SISTEMA:
-            if f in programma_attivo.upper():
-                programma_attivo = None
-                break
+        # ── Macchina IN ESECUZIONE ────────────────────────────────────────────────
+        if stato_pgm in (1, 3) and programma_attivo:
+            # Filtra programmi di sistema Sinumerik (non sono lavorazioni utente)
+            _FILTRI_SISTEMA = ("_N_CMA_DIR", "_N_CST_DIR", "_N_SYF_DIR",
+                               "_N_MPF_DIR", "_SPF", "BPOSAXIS", "TMPCYC")
+            for f in _FILTRI_SISTEMA:
+                if f in programma_attivo.upper():
+                    programma_attivo = None
+                    break
 
-    if stato_pgm in (1, 3) and programma_attivo:
-        prev_prog = sc.get("programma_corrente")
+        if stato_pgm in (1, 3) and programma_attivo:
+            prev_prog = sc.get("programma_corrente")
 
-        # ── Cambio data (mezzanotte): chiudi sessione del giorno precedente ──
-        sess_corrente = _find_sess(data, sc["sessione_id"]) if sc.get("sessione_id") else None
-        if sess_corrente and sess_corrente.get("data") != now[:10]:
-            # Chiudi la sessione di ieri con il timestamp di mezzanotte
-            mezzanotte = now[:10] + "T00:00:00"
-            _chiudi_sessione(data, sc, mezzanotte)
-            sc.clear()
-            prev_prog = None  # Forza apertura nuova sessione sotto
+            # ── Cambio data (mezzanotte): chiudi sessione del giorno precedente ──
+            sess_corrente = _find_sess(data, sc["sessione_id"]) if sc.get("sessione_id") else None
+            if sess_corrente and sess_corrente.get("data") != now[:10]:
+                # Chiudi la sessione di ieri con il timestamp di mezzanotte
+                mezzanotte = now[:10] + "T00:00:00"
+                _chiudi_sessione(data, sc, mezzanotte)
+                sc.clear()
+                prev_prog = None  # Forza apertura nuova sessione sotto
 
-        # Prima volta o cambio programma
-        if prev_prog != programma_attivo:
+            # Prima volta o cambio programma
+            if prev_prog != programma_attivo:
 
-            # Chiudi programma precedente
-            if prev_prog and sc.get("sessione_id"):
-                _chiudi_programma(data, sc, now)
+                # Chiudi programma precedente
+                if prev_prog and sc.get("sessione_id"):
+                    _chiudi_programma(data, sc, now)
 
-            # Avvia nuova sessione se non esiste
-            if not sc.get("sessione_id"):
-                sess_id = str(uuid.uuid4())[:8]
-                sessione = {
-                    "id":        sess_id,
-                    "data":      now[:10],
-                    "progetto":  progetto_nome or "—",
-                    "pallet":    pallet_num,
-                    "inizio":    now,
-                    "fine":      None,
-                    "durata_sec": None,
-                    "programmi": [],
-                    "gap_sec":   0,
-                    "utensili":  {},
-                }
-                data["sessioni"].append(sessione)
-                sc["sessione_id"]  = sess_id
-                sc["inizio_fermo"] = None
+                # Avvia nuova sessione se non esiste
+                if not sc.get("sessione_id"):
+                    sess_id = str(uuid.uuid4())[:8]
+                    sessione = {
+                        "id":        sess_id,
+                        "data":      now[:10],
+                        "progetto":  progetto_nome or "—",
+                        "pallet":    pallet_num,
+                        "inizio":    now,
+                        "fine":      None,
+                        "durata_sec": None,
+                        "programmi": [],
+                        "gap_sec":   0,
+                        "utensili":  {},
+                    }
+                    data["sessioni"].append(sessione)
+                    sc["sessione_id"]  = sess_id
+                    sc["inizio_fermo"] = None
 
-            # Avvia nuovo programma
-            sc["programma_corrente"]  = programma_attivo
-            sc["inizio_programma"]    = now
-            sc["utensile_programma"]  = utensile
-            sc["t_number_programma"]  = t_number
-            sc["in_esecuzione"]       = True
-            sc["ultimo_tick"]         = now
-            dirty = True
+                # Avvia nuovo programma
+                sc["programma_corrente"]  = programma_attivo
+                sc["inizio_programma"]    = now
+                sc["utensile_programma"]  = utensile
+                sc["t_number_programma"]  = t_number
+                sc["in_esecuzione"]       = True
+                sc["ultimo_tick"]         = now
+                dirty = True
 
-        else:
-            # Stesso programma — accumula tick utensile (5s) e override ridotto
-            if sc.get("sessione_id") and utensile:
-                sess = _find_sess(data, sc["sessione_id"])
-                if sess:
-                    sess.setdefault("utensili", {})
-                    sess["utensili"][utensile] = sess["utensili"].get(utensile, 0) + 5
-                    dirty = True
-            # Registra secondi con override ridotto (feed < 90% o mandrino < 90%)
-            if sc.get("sessione_id"):
-                ovr_f = override_feed     if override_feed     is not None else 100
-                ovr_m = override_mandrino if override_mandrino is not None else 100
-                if ovr_f < 90 or ovr_m < 90:
+            else:
+                # Stesso programma — accumula tick utensile (5s) e override ridotto
+                if sc.get("sessione_id") and utensile:
                     sess = _find_sess(data, sc["sessione_id"])
                     if sess:
-                        sess["sec_override_ridotto"] = sess.get("sec_override_ridotto", 0) + 5
-                        # Registra il valore minimo visto per diagnostica
-                        min_ovr = min(ovr_f, ovr_m)
-                        if "min_override" not in sess or min_ovr < sess["min_override"]:
-                            sess["min_override"] = min_ovr
+                        sess.setdefault("utensili", {})
+                        sess["utensili"][utensile] = sess["utensili"].get(utensile, 0) + 5
                         dirty = True
-            sc["ultimo_tick"] = now
+                # Registra secondi con override ridotto (feed < 90% o mandrino < 90%)
+                if sc.get("sessione_id"):
+                    ovr_f = override_feed     if override_feed     is not None else 100
+                    ovr_m = override_mandrino if override_mandrino is not None else 100
+                    if ovr_f < 90 or ovr_m < 90:
+                        sess = _find_sess(data, sc["sessione_id"])
+                        if sess:
+                            sess["sec_override_ridotto"] = sess.get("sec_override_ridotto", 0) + 5
+                            # Registra il valore minimo visto per diagnostica
+                            min_ovr = min(ovr_f, ovr_m)
+                            if "min_override" not in sess or min_ovr < sess["min_override"]:
+                                sess["min_override"] = min_ovr
+                            dirty = True
+                sc["ultimo_tick"] = now
 
-        # ── Rilevamento anomalia ciclo in tempo reale ─────────────────────────
-        # Ogni tick confronta elapsed con la media storica del programma.
-        # Se elapsed > media + 2σ (e n >= 3 campioni) → flag anomalia_ciclo.
-        # Questo viene propagato al frontend nella prossima chiamata sessione-live.
-        if sc.get("inizio_programma") and sc.get("programma_corrente"):
-            try:
-                elapsed = int((datetime.fromisoformat(now) -
-                               datetime.fromisoformat(sc["inizio_programma"])).total_seconds())
-                fname = sc["programma_corrente"].upper()
-                idx   = data.get("cicli_utensile", {})
-                entry = idx.get(fname)
-                if entry and entry.get("n", 0) >= 3:
-                    soglia = entry["media"] + 2 * entry["std"]
-                    sc["anomalia_ciclo"] = elapsed > soglia
-                    sc["anomalia_soglia_sec"] = int(soglia)
-                    sc["anomalia_elapsed_sec"] = elapsed
-                else:
+            # ── Rilevamento anomalia ciclo in tempo reale ─────────────────────────
+            # Ogni tick confronta elapsed con la media storica del programma.
+            # Se elapsed > media + 2σ (e n >= 3 campioni) → flag anomalia_ciclo.
+            # Questo viene propagato al frontend nella prossima chiamata sessione-live.
+            if sc.get("inizio_programma") and sc.get("programma_corrente"):
+                try:
+                    elapsed = int((datetime.fromisoformat(now) -
+                                   datetime.fromisoformat(sc["inizio_programma"])).total_seconds())
+                    fname = sc["programma_corrente"].upper()
+                    idx   = data.get("cicli_utensile", {})
+                    entry = idx.get(fname)
+                    if entry and entry.get("n", 0) >= CICLI_MIN_ANOMALIA:
+                        soglia = entry["media"] + CICLI_ANOMALIA_SIGMA * entry["std"]
+                        sc["anomalia_ciclo"] = elapsed > soglia
+                        sc["anomalia_soglia_sec"] = int(soglia)
+                        sc["anomalia_elapsed_sec"] = elapsed
+                    else:
+                        sc["anomalia_ciclo"] = False
+                except Exception:
                     sc["anomalia_ciclo"] = False
-            except Exception:
-                sc["anomalia_ciclo"] = False
 
-    if dirty:
-        _save_log(config, data)
+    except Exception as _e:
+        import logging as _log
+        _log.getLogger("dmgdesk.report").warning(f"aggiorna_da_log errore parziale: {_e}")
+    finally:
+        if dirty:
+            _save_log(config, data)
 
 def _find_sess(data: dict, sess_id: str) -> Optional[dict]:
     for s in data.get("sessioni", []):
@@ -307,8 +365,8 @@ def _aggiorna_media_incrementale(entry: dict, nuovo_valore: float):
     """
     campioni = entry.get("campioni", [])
     campioni.append(nuovo_valore)
-    if len(campioni) > 50:
-        campioni = campioni[-50:]  # finestra scorrevole: ultimi 50 cicli
+    if len(campioni) > CICLI_FINESTRA:
+        campioni = campioni[-CICLI_FINESTRA:]  # finestra scorrevole: ultimi 50 cicli
     entry["campioni"] = campioni
     entry["n"]        = len(campioni)
     entry["media"]    = round(sum(campioni) / len(campioni))
@@ -421,8 +479,8 @@ async def get_report_giornaliero(data: str = Query(default=None)):
 
     # ── OEE — Overall Equipment Effectiveness ─────────────────────────────────
     # Turno standard 8h = 28800s. Se le ore lavorate superano 8h usiamo quelle.
-    ORE_TURNO_SEC = 28800
-    tempo_turno = max(ore_totali + gap_totale, ORE_TURNO_SEC)
+    OEE_TURNO_SEC = ORE_TURNO_SEC
+    tempo_turno = max(ore_totali + gap_totale, OOE_TURNO_SEC if "OOE_TURNO_SEC" in dir() else ORE_TURNO_SEC)
 
     # Disponibilità: tempo macchina in produzione / tempo turno
     disponibilita = ore_totali / tempo_turno if tempo_turno > 0 else 0
@@ -448,7 +506,7 @@ async def get_report_giornaliero(data: str = Query(default=None)):
     performance = min(1.0, sec_teorici / sec_reali) if sec_reali > 0 and sec_teorici > 0 else disponibilita
 
     # Qualità: proxy per CNC stampi (rarissimi scarti) = 98%
-    qualita = 0.98
+    qualita = OEE_QUALITA_DEFAULT
 
     oee = round(disponibilita * performance * qualita * 100, 1)
 
@@ -924,7 +982,7 @@ async def get_tempi_ciclo():
             if not fname or dur is None or dur <= 0:
                 continue
             # Filtra durate anomale (> 8h = quasi certamente un bug di timing)
-            if dur > 28800:
+            if dur > TEMPI_CICLO_MAX_DURATA:
                 continue
             dati[fname].append(dur)
             if fine and (fname not in ultimi or fine > ultimi[fname]):

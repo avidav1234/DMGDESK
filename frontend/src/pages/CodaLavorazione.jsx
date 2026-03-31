@@ -70,7 +70,7 @@ export default function CodaLavorazione() {
     } catch {}
   }
 
-  const navigate = typeof useNavigate === 'function' ? useNavigate() : null;
+  const navigate = useNavigate();
 
   async function assegnaProgetto(palletNum, progettoId, progettoNome, progettoColore) {
     // Rimuovi dal pallet precedente se ce n'era uno diverso
@@ -877,7 +877,7 @@ export default function CodaLavorazione() {
                     <div onClick={()=>{
                         sessionStorage.setItem('dmgdesk_apri_progetto_id', progettiPallet[palletMenu.id]?.id||'')
                         setPalletMenu(null)
-                        window.location.href='/progetti'
+                        navigate('/progetti')
                       }}
                       style={{padding:'9px 14px',cursor:'pointer',fontSize:12,fontWeight:700,
                         color:'#1D5FAD',display:'flex',alignItems:'center',gap:8,

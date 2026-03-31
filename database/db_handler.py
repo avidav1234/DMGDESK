@@ -46,21 +46,37 @@ IMPIEGHI_FRESE = {
 # --- CONFIGURAZIONE E UTILITY GLOBALI ---
 CONFIG_FILE = 'config.json'
 
+# Cache in-memory con TTL 30s.
+# carica_configurazione() viene chiamata ~53 volte per request (ogni endpoint).
+# Il file config cambia rarissimamente — la cache elimina letture disk ridondanti.
+_config_cache: dict = {"data": None, "ts": 0.0}
+_CONFIG_TTL = 30  # secondi
+
 def carica_configurazione():
-    """Carica il percorso del database dal file di configurazione."""
+    """Carica il percorso del database dal file di configurazione. Cache 30s."""
+    import time as _time
+    now = _time.monotonic()
+    if _config_cache["data"] is not None and (now - _config_cache["ts"]) < _CONFIG_TTL:
+        return _config_cache["data"]
     if os.path.exists(CONFIG_FILE):
         try:
             with open(CONFIG_FILE, 'r') as f:
-                return json.load(f)
+                data = json.load(f)
+            _config_cache["data"] = data
+            _config_cache["ts"]   = now
+            return data
         except Exception:
             return {"database_path": None}
     return {"database_path": None}
 
 def salva_configurazione(config):
-    """Salva la configurazione aggiornata."""
+    """Salva la configurazione aggiornata e invalida la cache."""
     try:
         with open(CONFIG_FILE, 'w') as f:
             json.dump(config, f, indent=4)
+        # Invalida la cache — il file è cambiato
+        _config_cache["data"] = None
+        _config_cache["ts"]   = 0.0
         return True
     except Exception:
         return False
@@ -1323,8 +1339,8 @@ def smonta_utensile(alias_completo):
     - Tutti i tipi di holder [A-M]
     
     LOGICA:
-    1. Holder è sempre alla fine: [A-M]\d+$
-    2. Bussola (se presente) è prima dell'holder: D\d+[A-M]\d+$
+    1. Holder è sempre alla fine: [A-M]\\d+$
+    2. Bussola (se presente) è prima dell'holder: D\\d+[A-M]\\d+$
     3. Utensile base:
        - SENZA bussola: tutto MENO holder (la X rimane)
        - CON bussola: tutto MENO bussola ma CON holder

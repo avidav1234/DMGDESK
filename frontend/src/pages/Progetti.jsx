@@ -1286,6 +1286,7 @@ function LancioNCModal({project, toolsDB, initialSelectedIds, onLancia, onClose}
 }
 
 function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onSaveAsTemplate,onLanciaNC,palletDisponibili=[],palletStato=[]}){
+  const navPD = useNavigate()
   // Carica tools_machine una volta sola per questo progetto
   const [toolsDB, setToolsDB] = useState(null)
   const [selectedIds, setSelectedIds] = useState(new Set())
@@ -1397,7 +1398,7 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
                   {[1,2,3,4,5,6].map(n=>{const disp=palletDisponibili.find(p=>p.numero===n);const isAss=project.pallet_assegnato===n;if(!disp&&!isAss)return null;return <option key={n} value={n}>P{n}{isAss?' ✓':''}</option>})}
                 </select>
                 {project.pallet_assegnato&&(
-                  <span onClick={()=>window.location.href='/coda'}
+                  <span onClick={()=>navPD('/coda')}
                     style={{fontSize:10,fontWeight:700,cursor:'pointer',
                       color: isLav?'#1D5FAD':'#0d2d5e',opacity: isLav?1:0.6}}>
                     {isLav ? 'LIVE →' : '→'}
@@ -2684,7 +2685,7 @@ export default function Progetti(){
           ):page==='home'?(
             <HomePage projects={projects} deliveries={deliveries} palletState={palletState} setupData={setupData}
               onNavigateProject={id=>{setSelectedId(id);setPage('projects')}}
-              onNavigateCoda={()=>{ window.location.href='/'; }}/>
+              onNavigateCoda={()=>{ navigate('/coda'); }}/>
           ):page==='templates'?(
             <TemplatesPage templates={templates} onEdit={tmpl=>{setEditingTemplate(tmpl);setPage('templateEditor')}} onCreate={()=>{setEditingTemplate({id:`new_${uid()}`,name:'Nuovo Template',description:'',icon:'🚀',color:'#0d2d5e',steps:[]});setPage('templateEditor')}} onDelete={deleteTemplate} onDuplicate={duplicateTemplate} onUseTemplate={useTemplate} lastSaved={lastSavedTmpl}/>
           ):page==='consegne'?(

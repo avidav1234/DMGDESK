@@ -304,7 +304,7 @@ async def get_stato_macchina():
         mtime = os.path.getmtime(log_path)
         ts    = datetime.fromtimestamp(mtime).strftime("%d/%m/%Y %H:%M:%S")
         log_age_sec = int((datetime.now() - datetime.fromtimestamp(mtime)).total_seconds())
-        if log_age_sec > 120:
+        if log_age_sec > WATCHDOG_SOGLIA_SEC:
             log_stale = True
     except Exception:
         ts = None
@@ -534,7 +534,7 @@ async def aggiorna_stati_da_log():
     # Se MchnSrv smette di copiare il log dalla PCU50, il file rimane congelato.
     # DMGDesk continuerebbe a leggere dati vecchi e applicare transizioni di stato
     # sbagliate. Soglia: 120s senza aggiornamento = log non affidabile.
-    LOG_STALE_SOGLIA_SEC = 120
+    LOG_STALE_SOGLIA_SEC = WATCHDOG_SOGLIA_SEC
     try:
         mtime = os.path.getmtime(log_path)
         log_age_sec = (_dt.now() - _dt.fromtimestamp(mtime)).total_seconds()
@@ -834,8 +834,11 @@ async def aggiorna_stati_da_log():
                     updates["completato"] += 1
 
     if proj_dirty:
-        _save_progetti(config, proj_data)
-        _invalidate_analisi_cache()
+        from api.routers.progetti import _write_lock as _proj_lock
+        # Lock serializza con update_progetto dalla UI (stesso asyncio.Lock)
+        async with _proj_lock:
+            _save_progetti(config, proj_data)
+            _invalidate_analisi_cache()
     if pallet_dirty:
         _save_pallet(config, pallet_data)
 

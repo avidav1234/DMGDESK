@@ -117,57 +117,88 @@ export default function Home(){
   const lavInfo     = progettoLav?palletInfo(palletLav.numero):null
   const sessMatch   = sessLive?.attiva&&sessLive?.pallet===palletLav?.numero
 
-  // ── ETA programma corrente da cicli reali ────────────────────────────────
-  // Se abbiamo dati storici sul ciclo del programma corrente, calcoliamo:
-  // - tempo rimanente nel programma corrente (media - elapsed)
-  // - ETA fine pallet (programmi_rimanenti * media_ciclo)
+  // ── ETA programma corrente + fine pallet ─────────────────────────────────
+  // Gerarchia per ogni programma:
+  //   1. Ciclo reale storico (tempiCiclo, ≥2 campioni) — più accurato
+  //   2. tempoStimato CAM (minuti, già nel progetto)   — preciso a priori
+  //   3. Media del programma corrente                  — fallback grezzo
   const etaCalc = (()=>{
     if(!sessMatch||!sessLive?.programma_corrente||!lavInfo) return null
     const fname = sessLive.programma_corrente.toUpperCase()
     const ciclo = tempiCiclo[fname]
-    if(!ciclo||ciclo.n<2) return null  // serve almeno 2 campioni
+
+    // Stima durata per un programma: ciclo reale > tempoStimato > fallback
+    const stimaPgm = (pgm, fallbackSec) => {
+      const fn = (pgm.filename||'').toUpperCase()
+      const tc = tempiCiclo[fn]
+      if (tc?.n >= 2) return tc.media_sec                       // 1. reale
+      if (pgm.tempoStimato) return parseInt(pgm.tempoStimato)*60 // 2. CAM (minuti)
+      return fallbackSec || 0                                    // 3. fallback
+    }
+
+    // Fallback globale: media del programma corrente (se disponibile)
+    const fallback = ciclo?.n >= 2 ? ciclo.media_sec : null
+
+    // Se non abbiamo né ciclo né tempoStimato del corrente → non mostrare ETA
+    const tempoCorrente = ciclo?.n >= 2
+      ? ciclo.media_sec
+      : (() => {
+          // Cerca tempoStimato del programma corrente nel progetto
+          const pgmCorrente = progettoLav
+            ? (progettoLav.steps||[]).flatMap(s=>(s.tasks||[])
+                .filter(t=>t.text?.trim().toLowerCase()==='fresatura')
+                .flatMap(t=>(t.programs||[])))
+              .find(p=>(p.filename||'').toUpperCase()===fname)
+            : null
+          return pgmCorrente?.tempoStimato ? parseInt(pgmCorrente.tempoStimato)*60 : null
+        })()
+    if (!tempoCorrente) return null
 
     // Tempo rimanente nel programma corrente
-    const elapsed   = durataProgrammaLive || 0
-    const rimPgm    = Math.max(0, ciclo.media_sec - elapsed)
+    const elapsed = durataProgrammaLive || 0
+    const rimPgm  = Math.max(0, tempoCorrente - elapsed)
 
-    // Programmi da fare dopo quello corrente (nell'ordine)
+    // Tutti i programmi del pallet (solo fresatura, esclusi IPM)
     const allPgmLav = progettoLav
       ? (progettoLav.steps||[]).flatMap(s=>(s.tasks||[])
           .filter(t=>t.text?.trim().toLowerCase()==='fresatura')
           .flatMap(t=>(t.programs||[]).filter(pg=>pg.tipoGruppo!=='ipm')))
       : []
+
+    // Programmi successivi a quello corrente non ancora completati
     const idxCorrente = allPgmLav.findIndex(p=>
       (p.filename||'').toUpperCase() === fname)
-    const pgmSuccessivi = idxCorrente>=0
-      ? allPgmLav.slice(idxCorrente+1).filter(p=>p.stato!=='completato')
-      : allPgmLav.filter(p=>p.stato!=='completato')
+    const pgmSuccessivi = (idxCorrente >= 0
+      ? allPgmLav.slice(idxCorrente+1)
+      : allPgmLav
+    ).filter(p => p.stato !== 'completato')
 
-    // ETA totale: rimanente corrente + (successivi × media ciclo per quel file)
-    const secSuccessivi = pgmSuccessivi.reduce((acc,p)=>{
-      const fn = (p.filename||'').toUpperCase()
-      const tc = tempiCiclo[fn]
-      return acc + (tc?.n>=2 ? tc.media_sec : ciclo.media_sec)
-    }, 0)
+    // Somma ETA successivi con gerarchia
+    const secSuccessivi = pgmSuccessivi.reduce((acc, p) =>
+      acc + stimaPgm(p, fallback || tempoCorrente), 0)
+
     const totSec = rimPgm + secSuccessivi
 
-    // Formato
-    const fmtEta = (sec)=>{
-      if(sec<60) return `<1 min`
-      if(sec<3600) return `~${Math.round(sec/60)} min`
-      const h=Math.floor(sec/3600), m=Math.round((sec%3600)/60)
-      return m>0 ? `~${h}h ${m}m` : `~${h}h`
+    // Fonte usata (per tooltip informativi)
+    const fontePgm = ciclo?.n >= 2 ? `${ciclo.n} cicli reali` : 'stima CAM'
+
+    const fmtEta = (sec) => {
+      if (sec < 60)   return `<1 min`
+      if (sec < 3600) return `~${Math.round(sec/60)} min`
+      const h = Math.floor(sec/3600), m = Math.round((sec%3600)/60)
+      return m > 0 ? `~${h}h ${m}m` : `~${h}h`
     }
 
     return {
       rimPgm,
       totSec,
-      etaFmtPgm:   fmtEta(rimPgm),
+      etaFmtPgm:    fmtEta(rimPgm),
       etaFmtPallet: fmtEta(totSec),
-      nCampioni:   ciclo.n,
-      deviazione:  ciclo.std_sec,
-      anomalia:    durataProgrammaLive!=null && ciclo.std_sec>0
-                   && durataProgrammaLive > (ciclo.media_sec + 2*ciclo.std_sec),
+      nCampioni:    ciclo?.n || 0,
+      fontePgm,
+      deviazione:   ciclo?.std_sec || 0,
+      anomalia:     durataProgrammaLive != null && (ciclo?.std_sec||0) > 0
+                    && durataProgrammaLive > (tempoCorrente + 2*(ciclo?.std_sec||0)),
     }
   })()
 
@@ -429,7 +460,9 @@ export default function Home(){
                     fine pallet: <b>{etaCalc.etaFmtPallet}</b>
                   </span>
                   <span style={{marginLeft:'auto',fontSize:10,color:'#94a3b8',fontStyle:'italic'}}>
-                    da {etaCalc.nCampioni} cicli reali
+                    {etaCalc.nCampioni >= 2
+                      ? `da ${etaCalc.nCampioni} cicli reali`
+                      : 'da tempi CAM'}
                   </span>
                 </div>
               )}

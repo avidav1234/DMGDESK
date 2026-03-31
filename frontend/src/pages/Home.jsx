@@ -607,40 +607,48 @@ export default function Home(){
               )
 
               return (
-                <div style={{display:'flex',flexDirection:'column',gap:4}}>
+                <div style={{display:'flex',flexDirection:'column',gap:3}}>
                   {attivi.map((pg,i)=>{
                     const fn = (pg.filename||'').toUpperCase().replace('.MPF','')
-                    const isCorr = corrente && fn.includes(corrente.replace('.MPF',''))
+                    const isCorr  = corrente && fn === corrente.replace('.MPF','')
                     const isInLav = pg.stato==='in_lavorazione'
-                    const isInMain = pg.stato==='in_main' || pg.stato==='in_macchina'
-                    const stima = pg.tempoStimato ? `${pg.tempoStimato}min` : null
+                    // Estrai numero programma dal filename (es. 4297_005_01_53 → 53)
+                    const numMatch = (pg.filename||'').match(/[_-](\d+)\.MPF$/i)
+                    const numPgm = numMatch ? numMatch[1] : ''
                     return (
                       <div key={pg.filename||i} style={{
                         display:'flex',alignItems:'center',gap:8,
-                        background: isCorr ? '#eff6ff' : isInLav ? '#f0fdf4' : '#fafafa',
-                        border: `1px solid ${isCorr ? '#bfdbfe' : isInLav ? '#bbf7d0' : '#e2e8f0'}`,
-                        borderRadius:8,padding:'5px 10px',
+                        padding:'4px 8px',borderRadius:6,userSelect:'none',
+                        background: isCorr ? '#eff6ff' : isInLav ? '#f0fdf4' : 'transparent',
+                        border: `1px solid ${isCorr ? '#1D5FAD' : isInLav ? '#bbf7d0' : '#e2e8f0'}`,
                       }}>
-                        {/* Badge stato */}
+                        {/* Badge ⚙/📋 come nella Coda */}
                         <span style={{
-                          fontSize:9,fontWeight:800,padding:'2px 6px',borderRadius:4,
-                          flexShrink:0,
-                          background: isCorr ? '#1D5FAD' : isInLav ? '#16a34a' : '#64748b',
-                          color:'#fff',letterSpacing:'0.04em'
-                        }}>
-                          {isCorr ? 'IN ESEC.' : isInLav ? 'IN LAV.' : 'IN MAIN'}
+                          fontSize:9,fontWeight:800,padding:'1px 4px',borderRadius:3,flexShrink:0,
+                          background: isCorr ? '#1D5FAD' : isInLav ? '#1D5FAD' : '#fef3c7',
+                          color: isCorr||isInLav ? '#fff' : '#92400e'
+                        }}>{isCorr||isInLav ? '⚙' : '📋'}</span>
+                        {/* Numero programma */}
+                        {numPgm&&(
+                          <span style={{fontSize:11,fontWeight:700,color:'#0d2d5e',
+                            fontFamily:'monospace',minWidth:24,flexShrink:0}}>{numPgm}</span>
+                        )}
+                        {/* Utensile */}
+                        <span style={{fontSize:11,fontFamily:'monospace',color:'#1e293b',
+                          flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                          {pg.utensile||pg.firstTool||'—'}
                         </span>
-                        {/* Nome file */}
-                        <span style={{
-                          fontSize:11,fontWeight:700,color:'#0d2d5e',
-                          fontFamily:'monospace',flex:1,
-                          overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'
-                        }}>
+                        {/* Filename */}
+                        <span style={{fontSize:10,color:'#94a3b8',fontFamily:'monospace',
+                          flexShrink:0,maxWidth:120,overflow:'hidden',
+                          textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
                           {(pg.filename||'').replace('.MPF','').replace('.mpf','')}
                         </span>
                         {/* Tempo stimato */}
-                        {stima&&(
-                          <span style={{fontSize:10,color:'#94a3b8',flexShrink:0}}>{stima}</span>
+                        {pg.tempoStimato&&(
+                          <span style={{fontSize:10,color:'#475569',flexShrink:0}}>
+                            ⏱{pg.tempoStimato}m
+                          </span>
                         )}
                       </div>
                     )

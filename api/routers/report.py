@@ -1634,3 +1634,105 @@ async def debug_sessioni_progetto(progetto: str, giorni: int = 365):
         "totale_sec":    totale_sec,
         "sessioni":      sessioni_trovate,
     }
+
+
+@router.get("/debug-ore-progetto")
+async def debug_ore_progetto(progetto: str, project_id: str = None):
+    """
+    Debug: mostra esattamente quali sessioni vengono incluse/escluse
+    nel calcolo ore-progetto, con motivazione.
+    """
+    config = carica_configurazione()
+    data   = _load_log(config)
+    sessioni = data.get("sessioni", [])
+
+    righe = []
+    tot = 0
+
+    for s in sessioni:
+        prog  = (s.get("progetto") or "").strip()
+        fine  = s.get("fine") or ""
+        dur   = s.get("durata_sec") or 0
+        pid   = (s.get("progetto_id") or "").strip()
+        inizio = (s.get("inizio") or "")[:16]
+        fine16 = fine[:16] if fine and fine != "aperta" else "APERTA"
+
+        # Determina motivo inclusione/esclusione
+        if not prog or prog == "—":
+            motivo = "SKIP: prog vuoto"
+        elif not fine or fine == "aperta":
+            motivo = "SKIP: sessione aperta"
+        elif dur == 0:
+            motivo = "SKIP: durata zero"
+        elif project_id and pid and pid != project_id:
+            motivo = f"SKIP: project_id mismatch ({pid})"
+        elif progetto:
+            nome_n = prog.lower()
+            cerca  = progetto.strip().lower()
+            if nome_n == cerca or cerca in nome_n or nome_n in cerca:
+                tot += dur
+                motivo = f"ADD: {dur//3600}h{(dur%3600)//60:02d}m"
+            else:
+                motivo = f"SKIP: nome '{prog}' != '{progetto}'"
+        else:
+            motivo = "SKIP: nessun filtro"
+
+        righe.append({
+            "inizio": inizio,
+            "fine":   fine16,
+            "prog":   prog,
+            "dur":    f"{dur//3600}h{(dur%3600)//60:02d}m",
+            "motivo": motivo,
+        })
+
+    return {
+        "progetto":    progetto,
+        "totale_str":  _durata_str(tot),
+        "totale_sec":  tot,
+        "n_sessioni_incluse": sum(1 for r in righe if r["motivo"].startswith("ADD")),
+        "sessioni":    righe,
+    }
+
+
+@router.get("/debug-ore-progetto")
+async def debug_ore_progetto(progetto: str, project_id: str = None):
+    """Debug: mostra ogni sessione inclusa/esclusa nel calcolo ore-progetto."""
+    config = carica_configurazione()
+    data   = _load_log(config)
+    righe  = []
+    tot    = 0
+
+    for s in data.get("sessioni", []):
+        prog  = (s.get("progetto") or "").strip()
+        fine  = s.get("fine") or ""
+        dur   = s.get("durata_sec") or 0
+        pid   = (s.get("progetto_id") or "").strip()
+        inizio = (s.get("inizio") or "")[:16]
+        fine16 = fine[:16] if fine and fine != "aperta" else "APERTA"
+
+        if not prog or prog == "—":
+            motivo = "SKIP-vuoto"
+        elif not fine or fine == "aperta":
+            motivo = "SKIP-aperta"
+        elif dur == 0:
+            motivo = "SKIP-zero"
+        elif project_id and pid and pid != project_id:
+            motivo = f"SKIP-id({pid})"
+        else:
+            nome_n = prog.lower()
+            cerca  = progetto.strip().lower()
+            if nome_n == cerca or cerca in nome_n or nome_n in cerca:
+                tot += dur
+                motivo = f"ADD {dur//3600}h{(dur%3600)//60:02d}m"
+            else:
+                motivo = f"SKIP-nome({prog})"
+
+        righe.append({"inizio":inizio,"fine":fine16,"prog":prog,"motivo":motivo})
+
+    return {
+        "progetto":    progetto,
+        "totale_str":  _durata_str(tot),
+        "totale_sec":  tot,
+        "n_incluse":   sum(1 for r in righe if r["motivo"].startswith("ADD")),
+        "sessioni":    righe,
+    }

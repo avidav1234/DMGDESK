@@ -678,30 +678,29 @@ async def get_report_giornaliero(data: str = Query(default=None)):
     gap_sessioni = sum(s.get("gap_sec") or 0 for s in sessioni_giorno)
     n_programmi = sum(len(_programmi_effettivi(s)) for s in sessioni_giorno)
 
-    # Fermo accumulato nello stato_corrente (macchina ferma senza sessione aperta,
-    # o durante grace period prima che la sessione venga chiusa).
-    # Viene sommato al gap delle sessioni SOLO se non c'è sovrapposizione:
-    # se c'è una sessione aperta il grace period scrive già in sess.gap_sec,
-    # altrimenti fermo_sec_giornaliero è l'unica fonte.
+    # Fermo accumulato nello stato_corrente (macchina ferma senza sessione aperta).
+    # fermo_sc = tutto il fermo del giorno tracciato tick-per-tick.
+    # gap_sessioni = fermi *dentro* le sessioni (gap tra programmi).
+    # Il fermo *tra* sessioni (setup, pausa pranzo...) è catturato da fermo_sc
+    # ma NON da gap_sessioni. La misura corretta del fermo totale è:
+    #   fermo_totale = gap_sessioni + fermo_pre/post_sessione
+    # Stima fermo_pre/post: max(0, fermo_sc - gap_sessioni)
+    # (fermo_sc include tutto; gap_sessioni è la parte dentro le sessioni)
     sc_oggi = log.get("stato_corrente", {})
     fermo_sc = 0
     if sc_oggi.get("fermo_data") == target:
         fermo_sc = sc_oggi.get("fermo_sec_giornaliero", 0)
 
-    # Se non ci sono sessioni oggi, il fermo è tutto in fermo_sc
-    # Se ci sono sessioni, gap_sessioni già include i fermi inter-programma;
-    # fermo_sc aggiunge il fermo "prima della prima sessione" o "dopo l'ultima"
+    fermo_extra = max(0, fermo_sc - gap_sessioni)  # fermo fuori sessioni
     if not sessioni_giorno:
         gap_totale = fermo_sc
     else:
-        # Evita doppio conteggio: fermo_sc è resettato ogni giorno, include
-        # tutto il fermo del giorno. Prendiamo il massimo tra le due misure.
-        gap_totale = max(gap_sessioni, fermo_sc)
+        gap_totale = gap_sessioni + fermo_extra
 
     # ── OEE — Overall Equipment Effectiveness ─────────────────────────────────
-    # Turno standard 8h = 28800s. Se le ore lavorate superano 8h usiamo quelle.
+    # Turno standard 8h = 28800s.
     OEE_TURNO_SEC = ORE_TURNO_SEC
-    tempo_turno = max(ore_totali + gap_totale, OOE_TURNO_SEC if "OOE_TURNO_SEC" in dir() else ORE_TURNO_SEC)
+    tempo_turno = max(ore_totali + gap_totale, OEE_TURNO_SEC)
 
     # Disponibilità: tempo macchina in produzione / tempo turno
     disponibilita = ore_totali / tempo_turno if tempo_turno > 0 else 0
@@ -765,8 +764,10 @@ async def get_report_giornaliero(data: str = Query(default=None)):
             except Exception:
                 pass
 
-    # Microfermi: gap tra programmi dentro ogni sessione (già in gap_sec)
-    sec_microfermi = gap_totale  # gap_sec accumula già i gap inter-programma
+    # Microfermi: gap tra programmi *dentro* ogni sessione.
+    # NON usa gap_totale perché ora include fermo_extra (fermo fuori sessioni)
+    # che appartiene alla categoria "setup/libero", non ai microfermi.
+    sec_microfermi = gap_sessioni
 
     # Stima durata media fermo anomalo (se disponibile)
     sec_fermi_anomali = 0
@@ -779,7 +780,7 @@ async def get_report_giornaliero(data: str = Query(default=None)):
         elif n_anom > 0:
             sec_fermi_anomali += n_anom * 300
 
-    sec_libero = max(0, tempo_turno - ore_totali - sec_setup - sec_fermi_anomali)
+    sec_libero = max(0, tempo_turno - ore_totali - sec_setup - sec_fermi_anomali - fermo_extra)
     sec_produzione_netta = max(0, ore_totali - sec_ovr_ridotto)
 
     perdite_tpm = {
@@ -788,6 +789,7 @@ async def get_report_giornaliero(data: str = Query(default=None)):
         "microfermi_sec":        sec_microfermi,
         "setup_sec":             sec_setup,
         "guasti_sec":            sec_fermi_anomali,
+        "fermo_extra_sec":       fermo_extra,   # fermo pre/post sessione (attesa, pranzo...)
         "libero_sec":            sec_libero,
         "n_setup":               max(0, len(sessioni_sorted) - 1),
         "n_guasti":              n_fermi_anomali,
@@ -885,7 +887,9 @@ async def get_storico(giorni: int = Query(default=7, ge=1, le=365)):
         fermo_sc = 0
         if d == today and sc_oggi.get("fermo_data") == today:
             fermo_sc = sc_oggi.get("fermo_sec_giornaliero", 0)
-        gap = max(gap_sess, fermo_sc) if not sess else max(gap_sess, fermo_sc)
+        # Somma corretta: gap dentro sessioni + fermo fuori sessioni
+        fermo_extra = max(0, fermo_sc - gap_sess)
+        gap = gap_sess + fermo_extra if sess else fermo_sc
 
         ORE_TURNO = 28800
         tempo_turno   = max(ore + gap, ORE_TURNO)

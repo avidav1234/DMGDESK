@@ -676,15 +676,17 @@ function TabPerdite({ rpt }) {
     microfermi:       '#ef4444',
     setup:            '#8b5cf6',
     guasti:           '#dc2626',
+    fermo_extra:      '#0891b2',
     libero:           '#94a3b8',
   }
   const voci = [
-    { k: 'produzione_netta', label: 'Produzione netta', sec: p.produzione_netta_sec },
-    { k: 'velocita_ridotta', label: 'Velocità ridotta (override <90%)', sec: p.velocita_ridotta_sec },
-    { k: 'microfermi',       label: 'Microfermi inter-programma', sec: p.microfermi_sec },
-    { k: 'setup',            label: 'Setup / cambio pallet', sec: p.setup_sec },
-    { k: 'guasti',           label: 'Fermi anomali (reset)', sec: p.guasti_sec },
-    { k: 'libero',           label: 'Tempo non programmato', sec: p.libero_sec },
+    { k: 'produzione_netta', label: 'Produzione netta',              sec: p.produzione_netta_sec },
+    { k: 'velocita_ridotta', label: 'Velocità ridotta (override<90%)', sec: p.velocita_ridotta_sec },
+    { k: 'microfermi',       label: 'Microfermi inter-programma',    sec: p.microfermi_sec },
+    { k: 'setup',            label: 'Setup / cambio pallet',         sec: p.setup_sec },
+    { k: 'guasti',           label: 'Fermi anomali (reset)',         sec: p.guasti_sec },
+    { k: 'fermo_extra',      label: 'Fermo fuori produzione',        sec: p.fermo_extra_sec },
+    { k: 'libero',           label: 'Tempo non programmato',         sec: p.libero_sec },
   ].filter(v => v.sec > 0)
   const totale = voci.reduce((a, v) => a + v.sec, 0) || 1
 

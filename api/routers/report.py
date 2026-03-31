@@ -276,16 +276,39 @@ def aggiorna_da_log(
 
         # ── Macchina IN ESECUZIONE ────────────────────────────────────────────────
         if stato_pgm in (1, 3) and programma_attivo:
-            # Filtra programmi di sistema Sinumerik (non sono lavorazioni utente)
-            _FILTRI_SISTEMA = ("_N_CMA_DIR", "_N_CST_DIR", "_N_SYF_DIR",
-                               "_N_MPF_DIR", "_SPF", "BPOSAXIS", "TMPCYC")
+            # Filtra programmi di sistema Sinumerik e MAIN generati da AnalisiNC
+            _FILTRI_SISTEMA = (
+                "_N_CMA_DIR", "_N_CST_DIR", "_N_SYF_DIR",
+                "_N_MPF_DIR", "_SPF", "BPOSAXIS", "TMPCYC",
+                "0_MAIN_",     # MAIN generato da AnalisiNC — non è un programma di lavorazione
+                "PALLET5",     # File pallet Siemens
+            )
             for f in _FILTRI_SISTEMA:
                 if f in programma_attivo.upper():
                     programma_attivo = None
                     break
 
         if stato_pgm in (1, 3) and programma_attivo:
+            # ── Normalizzazione suffix numerico ────────────────────────────────
+            # Il Siemens può registrare lo stesso programma con suffix diverso:
+            # 4297_0006_001 durante EXTCALL dal MAIN
+            # 4297_0006_801 se il MAIN usava numerazione N800+ nei blocchi
+            # o se esiste una copia rinominata sulla share.
+            # Normalizziamo: se il programma corrente in sessione ha lo stesso
+            # prefisso (tutto tranne l'ultimo token) consideriamoli identici.
             prev_prog = sc.get("programma_corrente")
+            if prev_prog and prev_prog.upper() != programma_attivo.upper():
+                def _prefix(fname):
+                    """Ritorna il prefisso senza suffix numerico Siemens (≥3 cifre)."""
+                    base = (fname or "").upper().replace(".MPF", "")
+                    parts = base.split("_")
+                    if parts and parts[-1].isdigit() and len(parts[-1]) >= 3:
+                        return "_".join(parts[:-1])
+                    return base
+
+                if _prefix(prev_prog) == _prefix(programma_attivo) and _prefix(prev_prog):
+                    # Stesso programma con suffix diverso → tratta come continuazione
+                    programma_attivo = prev_prog  # usa il nome già registrato
 
             # Quando la macchina riparte, azzera il tracker del fermo
             sc.pop("ultimo_tick_fermo", None)
@@ -437,16 +460,37 @@ def _chiudi_programma(data: dict, sc: dict, now: str):
     info = _parse_nome(sc["programma_corrente"])
     fname = sc["programma_corrente"]
 
-    # ── Fix 2: merge con record precedente se stesso filename e gap breve ────
-    # Se il programma era stato interrotto (M0, pausa) e il record precedente
-    # ha lo stesso filename con un gap < 15min, fonde i due record in uno solo.
-    # Questo evita che una pausa generi 2+ record nel log e distorca le statistiche.
+    # ── Fix 2: merge con record precedente se stesso filename (o stesso prefisso) e gap breve
+    # Copre due scenari:
+    # a) stesso filename esatto (es. pausa/ripresa dello stesso programma)
+    # b) stesso prefisso numerico (es. 4297_0006_001 e 4297_0006_801 → stesso lavoro,
+    #    diverso suffix perché il Siemens assegna numerazione interna diversa)
     MERGE_GAP_SEC = 900  # 15 minuti
     pgm_prec = sess["programmi"][-1] if sess["programmi"] else None
-    if (pgm_prec
-            and (pgm_prec.get("filename") or "").upper() == fname.upper()
-            and pgm_prec.get("fine")
-            and durata is not None):
+
+    def _prefix_norm(fn):
+        """Rimuove il suffix numerico Siemens (≥3 cifre): 4297_0006_001 → 4297_0006
+        NON tocca numeri brevi (1-2 cifre) che sono parte del nome, es. SPIRALE_9."""
+        base = (fn or "").upper().replace(".MPF", "")
+        parts = base.split("_")
+        # Solo se l'ultimo token è numerico con almeno 3 cifre (stile suffix Siemens)
+        if parts and parts[-1].isdigit() and len(parts[-1]) >= 3:
+            return "_".join(parts[:-1])
+        return base
+
+    stesso_pgm = (
+        pgm_prec is not None
+        and pgm_prec.get("fine") is not None
+        and durata is not None
+        and (
+            (pgm_prec.get("filename") or "").upper() == fname.upper()
+            or (
+                _prefix_norm(pgm_prec.get("filename")) == _prefix_norm(fname)
+                and _prefix_norm(fname) != ""
+            )
+        )
+    )
+    if stesso_pgm:
         try:
             gap = int((datetime.fromisoformat(inizio) -
                        datetime.fromisoformat(pgm_prec["fine"])).total_seconds())

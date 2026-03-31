@@ -24,20 +24,20 @@ function diffGiorni(a,b) {
 }
 
 function TimelineCommessa({ tl, scadenza, colore }) {
-  const fasi = [
-    { key:'apertura_progetto', label:'Apertura',    above:true  },
-    { key:'inizio_macchina',   label:'Inizio mac.', above:false },
-    { key:'fine_macchina',     label:'Fine mac.',   above:true  },
-    { key:'consegna',          label:'Consegna',    above:false },
-  ].filter(f => tl[f.key])
-
+  const FASI_DEF = [
+    { key:'apertura_progetto', label:'Apertura',    col:'#1D5FAD' },
+    { key:'inizio_macchina',   label:'Inizio mac.', col:colore||'#1D5FAD' },
+    { key:'fine_macchina',     label:'Fine mac.',   col:colore||'#1D5FAD' },
+    { key:'consegna',          label:'Consegna',    col:'#15803d' },
+  ]
+  const fasi = FASI_DEF.filter(f => tl[f.key])
   if (fasi.length < 2) return null
 
   const tsAll = fasi.map(f => new Date(tl[f.key]).getTime())
   if (scadenza) tsAll.push(new Date(scadenza).getTime())
   const tMin = Math.min(...tsAll), tMax = Math.max(...tsAll)
   const span = tMax - tMin || 1
-  const pos = iso => Math.max(0, Math.min(100, (new Date(iso)-tMin)/span*100))
+  const pos = iso => Math.max(2, Math.min(98, (new Date(iso)-tMin)/span*96+2))
 
   const scadenzaMancata = tl.consegna
     ? new Date(tl.consegna) > new Date(scadenza)
@@ -45,57 +45,61 @@ function TimelineCommessa({ tl, scadenza, colore }) {
 
   return (
     <div>
-      <div style={{position:'relative',height:100,margin:'0 20px'}}>
-        {/* Linea sfondo */}
+      {/* Label SOPRA (fasi pari: 0, 2) */}
+      <div style={{position:'relative',height:28,marginBottom:0}}>
+        {fasi.map((f,i) => i%2===0 ? (
+          <div key={f.key} style={{position:'absolute',left:`${pos(tl[f.key])}%`,
+            transform:'translateX(-50%)',textAlign:'center',minWidth:60}}>
+            <div style={{fontSize:9,fontWeight:700,color:'#64748b',whiteSpace:'nowrap'}}>{f.label}</div>
+            <div style={{fontSize:10,fontWeight:800,color:'#0d2d5e'}}>{fmtDataBreve(tl[f.key])}</div>
+          </div>
+        ) : null)}
+      </div>
+      {/* Retta con dot */}
+      <div style={{position:'relative',height:20,margin:'0 0 0 0'}}>
         <div style={{position:'absolute',top:'50%',left:0,right:0,height:3,
           background:'#e2e8f0',borderRadius:2,transform:'translateY(-50%)'}}/>
-        {/* Segmento macchina */}
         {tl.inizio_macchina && tl.fine_macchina && (
-          <div style={{position:'absolute',top:'calc(50% - 5px)',height:10,borderRadius:5,
-            background:colore||'#1D5FAD',opacity:0.2,
+          <div style={{position:'absolute',top:'calc(50% - 4px)',height:8,borderRadius:4,
+            background:colore||'#1D5FAD',opacity:0.25,
             left:`${pos(tl.inizio_macchina)}%`,
-            width:`${Math.max(pos(tl.fine_macchina)-pos(tl.inizio_macchina),0.5)}%`}}/>
+            width:`${Math.max(pos(tl.fine_macchina)-pos(tl.inizio_macchina),1)}%`}}/>
         )}
-        {/* Punti */}
-        {fasi.map((f,i) => {
-          const x = pos(tl[f.key])
-          const col = f.key==='apertura_progetto'?'#1D5FAD':f.key==='consegna'?'#15803d':(colore||'#1D5FAD')
-          return (
-            <div key={f.key} style={{position:'absolute',left:`${x}%`,
-              transform:'translateX(-50%)',top:0,bottom:0,
-              display:'flex',flexDirection:'column',alignItems:'center',width:80}}>
-              <div style={{flex:1,display:'flex',flexDirection:'column',
-                justifyContent:'flex-end',paddingBottom:5,textAlign:'center',
-                visibility:f.above?'visible':'hidden'}}>
-                <div style={{fontSize:9,fontWeight:700,color:'#64748b',whiteSpace:'nowrap'}}>{f.label}</div>
-                <div style={{fontSize:10,fontWeight:800,color:'#0d2d5e'}}>{fmtDataBreve(tl[f.key])}</div>
-              </div>
-              <div style={{width:13,height:13,borderRadius:'50%',flexShrink:0,
-                background:col,border:'3px solid #fff',boxShadow:`0 0 0 2px ${col}`}}/>
-              <div style={{flex:1,display:'flex',flexDirection:'column',
-                justifyContent:'flex-start',paddingTop:5,textAlign:'center',
-                visibility:f.above?'hidden':'visible'}}>
-                <div style={{fontSize:9,fontWeight:700,color:'#64748b',whiteSpace:'nowrap'}}>{f.label}</div>
-                <div style={{fontSize:10,fontWeight:800,color:'#0d2d5e'}}>{fmtDataBreve(tl[f.key])}</div>
-              </div>
-            </div>
-          )
-        })}
-        {/* Scadenza */}
+        {fasi.map((f,i) => (
+          <div key={f.key} style={{position:'absolute',
+            left:`${pos(tl[f.key])}%`,top:'50%',
+            transform:'translate(-50%,-50%)',
+            width:13,height:13,borderRadius:'50%',
+            background:f.col,border:'3px solid #fff',
+            boxShadow:`0 0 0 2px ${f.col}`,zIndex:2}}/>
+        ))}
         {scadenza && (
-          <div style={{position:'absolute',left:`${pos(scadenza)}%`,
-            transform:'translateX(-50%)',top:10,bottom:10,
-            display:'flex',flexDirection:'column',alignItems:'center'}}>
+          <div style={{position:'absolute',left:`${pos(scadenza)}%`,top:0,bottom:0,
+            transform:'translateX(-50%)',
+            display:'flex',flexDirection:'column',alignItems:'center',zIndex:3}}>
             <div style={{flex:1,width:2,background:scadenzaMancata?'#dc2626':'#b45309'}}/>
-            <div style={{fontSize:8,fontWeight:800,whiteSpace:'nowrap',marginTop:2,
-              color:scadenzaMancata?'#dc2626':'#b45309'}}>
-              ⚑ {fmtDataBreve(scadenza)}
-            </div>
           </div>
         )}
       </div>
-      {/* Durate tra fasi */}
-      <div style={{display:'flex',gap:20,flexWrap:'wrap',marginTop:10,paddingLeft:4}}>
+      {/* Label SOTTO (fasi dispari: 1, 3) + scadenza */}
+      <div style={{position:'relative',height:28,marginTop:0}}>
+        {fasi.map((f,i) => i%2!==0 ? (
+          <div key={f.key} style={{position:'absolute',left:`${pos(tl[f.key])}%`,
+            transform:'translateX(-50%)',textAlign:'center',minWidth:60}}>
+            <div style={{fontSize:9,fontWeight:700,color:'#64748b',whiteSpace:'nowrap'}}>{f.label}</div>
+            <div style={{fontSize:10,fontWeight:800,color:'#0d2d5e'}}>{fmtDataBreve(tl[f.key])}</div>
+          </div>
+        ) : null)}
+        {scadenza && (
+          <div style={{position:'absolute',left:`${pos(scadenza)}%`,
+            transform:'translateX(-50%)',textAlign:'center'}}>
+            <div style={{fontSize:8,fontWeight:800,whiteSpace:'nowrap',
+              color:scadenzaMancata?'#dc2626':'#b45309'}}>⚑ {fmtDataBreve(scadenza)}</div>
+          </div>
+        )}
+      </div>
+      {/* Legenda giorni */}
+      <div style={{display:'flex',gap:20,flexWrap:'wrap',marginTop:14,paddingLeft:4}}>
         {fasi.map((f,i) => {
           if(i===0) return null
           const gg = diffGiorni(tl[fasi[i-1].key], tl[f.key])
@@ -105,7 +109,7 @@ function TimelineCommessa({ tl, scadenza, colore }) {
               display:'flex',alignItems:'center',gap:5}}>
               <span style={{display:'inline-block',width:16,height:2,
                 background:i===1?'#94a3b8':(colore||'#1D5FAD'),borderRadius:1}}/>
-              <b style={{color:'#0d2d5e'}}>{gg}</b> gg &mdash; {fasi[i-1].label} → {f.label}
+              <b style={{color:'#0d2d5e'}}>{gg}</b> gg — {fasi[i-1].label} → {f.label}
             </span>
           )
         })}
@@ -268,10 +272,10 @@ export default function RendicontoProgetto() {
       </div>
 
       {/* 2. KPI */}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12,marginBottom:20}}>
+      <div className="kpi-grid" style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12,marginBottom:20}}>
         <KpiCard label="Ore macchina" value={kpi.ore_macchina_str}
           sub={`${kpi.n_sessioni} sessioni`} accent={colore} icon="⚙"/>
-        <KpiCard label="Programmi NC" value={`${kpi.n_pgm_completati}/${kpi.n_pgm_totali}`}
+        <KpiCard label="Programmi NC" value={`${kpi.n_programmi_completati??0}/${kpi.n_programmi_totali??0}`}
           sub={`${kpi.n_programmi_eseguiti} distinti eseguiti`} accent="#1D5FAD" icon="📋"/>
         <KpiCard label="Utensili usati" value={kpi.n_utensili}
           sub={`${kpi.n_fasi} fas${kpi.n_fasi===1?'e':'i'} di lavorazione`} accent="#0f766e" icon="🔧"/>
@@ -431,8 +435,12 @@ export default function RendicontoProgetto() {
       <style>{`
         @media print {
           body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          button { display: none !important; }
-          @page { margin: 20mm; }
+          button, nav, aside, [class*="sidebar"], [class*="Sidebar"],
+          [class*="nav"], [class*="Nav"] { display: none !important; }
+          main, #root > div, body > div { padding-left: 0 !important; margin-left: 0 !important; }
+          .kpi-grid { grid-template-columns: repeat(2,1fr) !important; }
+          @page { margin: 15mm; size: A4; }
+          * { overflow: visible !important; }
         }
       `}</style>
     </div>

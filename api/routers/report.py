@@ -1618,3 +1618,64 @@ async def get_ore_progetto(progetto: str = None):
         "progetti": dict(sorted(agg.items(), key=lambda x: -x[1]["ore_sec"])),
         "n_progetti": len(agg),
     }
+
+
+@router.get("/debug-sessioni")
+async def debug_sessioni_progetto(progetto: str, giorni: int = 365):
+    """
+    Debug: lista dettagliata di tutte le sessioni per un progetto.
+    ?progetto=4297_0006&giorni=365
+    Ritorna ogni sessione con inizio, fine, durata, programmi.
+    """
+    config  = carica_configurazione()
+    data    = _load_log(config)
+    cutoff  = (datetime.now() - timedelta(days=giorni)).strftime("%Y-%m-%d")
+    nome    = progetto.strip()
+
+    sessioni_trovate = []
+    for s in data.get("sessioni", []):
+        if (s.get("progetto") or "").strip() != nome:
+            continue
+        data_s = s.get("data") or ""
+        if data_s < cutoff:
+            continue
+        dur = s.get("durata_sec")
+        if dur is None:
+            inizio = s.get("inizio")
+            if inizio:
+                try:
+                    dur = int((datetime.now() -
+                               datetime.fromisoformat(inizio)).total_seconds())
+                except Exception:
+                    dur = 0
+        pgms = s.get("programmi", [])
+        sessioni_trovate.append({
+            "data":       data_s,
+            "inizio":     s.get("inizio", "")[:19],
+            "fine":       (s.get("fine") or "aperta")[:19],
+            "durata_str": _durata_str(dur or 0),
+            "durata_sec": dur or 0,
+            "pallet":     s.get("pallet"),
+            "n_programmi": len(pgms),
+            "programmi":  [
+                {
+                    "filename":    p.get("filename", ""),
+                    "inizio":      (p.get("inizio") or "")[:19],
+                    "fine":        (p.get("fine") or "")[:19],
+                    "durata_str":  _durata_str(p.get("durata_sec") or 0),
+                    "durata_sec":  p.get("durata_sec") or 0,
+                }
+                for p in pgms
+            ],
+        })
+
+    sessioni_trovate.sort(key=lambda s: s["data"])
+    totale_sec = sum(s["durata_sec"] for s in sessioni_trovate)
+
+    return {
+        "progetto":      nome,
+        "n_sessioni":    len(sessioni_trovate),
+        "totale_str":    _durata_str(totale_sec),
+        "totale_sec":    totale_sec,
+        "sessioni":      sessioni_trovate,
+    }

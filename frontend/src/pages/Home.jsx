@@ -188,6 +188,22 @@ export default function Home(){
 
     const totSec = rimPgm + secSuccessivi
 
+    // Totale progetto/pallet — tutti i programmi (completati + in corso + da fare)
+    // Serve per mostrare "X/Y" e la durata totale del pallet
+    const secTotalePallet = allPgmLav.reduce((acc, p) => {
+      // Per i completati usa la durata reale se disponibile
+      if (p.stato === 'completato') {
+        const fn = (p.filename||'').toUpperCase()
+        const tc = tempiCiclo[fn]
+        return acc + (tc?.n >= 2 ? tc.media_sec : stimaPgm(p, fallback || tempoCorrente))
+      }
+      return acc + stimaPgm(p, fallback || tempoCorrente)
+    }, 0)
+
+    const nTotali     = allPgmLav.length
+    const nCompletati = allPgmLav.filter(p=>p.stato==='completato').length
+    const nRimanenti  = pgmSuccessivi.length + 1  // +1 per il corrente
+
     // Fonte usata (per label informativa)
     const fontePgm = ciclo?.n >= 2 ? `${ciclo.n} cicli reali`
                    : progettoLav ? 'stima CAM'
@@ -203,8 +219,13 @@ export default function Home(){
     return {
       rimPgm,
       totSec,
+      secTotalePallet,
+      nTotali,
+      nCompletati,
+      nRimanenti,
       etaFmtPgm:    fmtEta(rimPgm),
       etaFmtPallet: fmtEta(totSec),
+      etaFmtTotale: fmtEta(secTotalePallet),
       nCampioni:    ciclo?.n || 0,
       fontePgm,
       deviazione:   ciclo?.std_sec || 0,
@@ -452,29 +473,66 @@ export default function Home(){
 
               {/* ETA da cicli reali */}
               {etaCalc&&(
-                <div style={{display:'flex',alignItems:'center',gap:8,
-                  marginTop:6,padding:'7px 10px',borderRadius:8,flexWrap:'wrap',
+                <div style={{marginTop:6,padding:'8px 10px',borderRadius:8,
                   background: etaCalc.anomalia ? '#fef2f2' : '#f0f7ff',
                   border: `1px solid ${etaCalc.anomalia ? '#fca5a5' : '#bfdbfe'}`}}>
-                  {etaCalc.anomalia&&(
-                    <span style={{fontSize:10,fontWeight:800,color:'#dc2626',
-                      background:'#fff',padding:'2px 7px',borderRadius:4,
-                      border:'1px solid #fca5a5',flexShrink:0}}>
-                      CICLO LUNGO
+
+                  {/* Riga 1: pgm corrente + fine pallet */}
+                  <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',marginBottom:6}}>
+                    {etaCalc.anomalia&&(
+                      <span style={{fontSize:10,fontWeight:800,color:'#dc2626',
+                        background:'#fff',padding:'2px 7px',borderRadius:4,
+                        border:'1px solid #fca5a5',flexShrink:0}}>
+                        CICLO LUNGO
+                      </span>
+                    )}
+                    <span style={{fontSize:11,color: etaCalc.anomalia?'#dc2626':'#1D5FAD'}}>
+                      pgm corrente: <b>{etaCalc.etaFmtPgm}</b>
                     </span>
-                  )}
-                  <span style={{fontSize:11,color: etaCalc.anomalia?'#dc2626':'#1D5FAD'}}>
-                    pgm corrente: <b>{etaCalc.etaFmtPgm}</b>
-                  </span>
-                  <span style={{fontSize:11,color:'#64748b'}}>·</span>
-                  <span style={{fontSize:11,color:'#0d2d5e'}}>
-                    fine pallet: <b>{etaCalc.etaFmtPallet}</b>
-                  </span>
-                  <span style={{marginLeft:'auto',fontSize:10,color:'#94a3b8',fontStyle:'italic'}}>
-                    {etaCalc.nCampioni >= 2
-                      ? `da ${etaCalc.nCampioni} cicli reali`
-                      : 'da tempi CAM'}
-                  </span>
+                    <span style={{fontSize:11,color:'#64748b'}}>·</span>
+                    <span style={{fontSize:11,color:'#0d2d5e'}}>
+                      fine pallet: <b>{etaCalc.etaFmtPallet}</b>
+                    </span>
+                    <span style={{marginLeft:'auto',fontSize:10,color:'#94a3b8',fontStyle:'italic',flexShrink:0}}>
+                      {etaCalc.nCampioni >= 2
+                        ? `da ${etaCalc.nCampioni} cicli reali`
+                        : etaCalc.fontePgm === 'media globale' ? 'media globale'
+                        : 'da tempi CAM'}
+                    </span>
+                  </div>
+
+                  {/* Riga 2: totale pallet con barra avanzamento temporale */}
+                  {etaCalc.secTotalePallet > 0 && (()=>{
+                    const secTrascorsi = etaCalc.secTotalePallet - etaCalc.totSec
+                    const pctTempo = Math.min(100, Math.max(0,
+                      Math.round(secTrascorsi / etaCalc.secTotalePallet * 100)
+                    ))
+                    return (
+                      <div>
+                        <div style={{display:'flex',justifyContent:'space-between',
+                          alignItems:'baseline',marginBottom:3}}>
+                          <span style={{fontSize:10,color:'#64748b'}}>
+                            Totale pallet: <b style={{color:'#0d2d5e'}}>{etaCalc.etaFmtTotale}</b>
+                            <span style={{color:'#94a3b8',marginLeft:6}}>
+                              ({etaCalc.nCompletati}/{etaCalc.nTotali} pgm)
+                            </span>
+                          </span>
+                          <span style={{fontSize:10,color:'#1D5FAD',fontWeight:700}}>
+                            {pctTempo}%
+                          </span>
+                        </div>
+                        <div style={{height:5,background:'#dbeafe',borderRadius:3,overflow:'hidden'}}>
+                          <div style={{
+                            height:'100%',
+                            width:`${pctTempo}%`,
+                            background: pctTempo > 80 ? '#22c55e' : '#1D5FAD',
+                            borderRadius:3,
+                            transition:'width 0.4s'
+                          }}/>
+                        </div>
+                      </div>
+                    )
+                  })()}
                 </div>
               )}
             </div>

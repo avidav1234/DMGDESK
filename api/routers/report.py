@@ -1812,20 +1812,23 @@ async def get_rendiconto_progetto(project_id: str):
     programmi_list = sorted(pgm_agg.values(), key=lambda x: -x["durata_sec"])
 
     # ── Aggregazione utensili ────────────────────────────────────────────────
+    # Struttura log: {"alias": durata_sec_int} — dict piatto
     ut_agg: dict = {}
     for s in sessioni_proj:
         u = s.get("utensili") or {}
         if not isinstance(u, dict):
             continue
-        for alias, info in u.items():
-            if not isinstance(info, dict):
-                continue
+        for alias, val in u.items():
             if alias not in ut_agg:
-                ut_agg[alias] = {"alias": alias, "cicli": 0, "durata_sec": 0}
-            ut_agg[alias]["cicli"]      += info.get("cicli", 0) or 0
-            ut_agg[alias]["durata_sec"] += info.get("durata_sec", 0) or 0
+                ut_agg[alias] = {"alias": alias, "durata_sec": 0}
+            if isinstance(val, (int, float)):
+                ut_agg[alias]["durata_sec"] += int(val)
+            elif isinstance(val, dict):
+                ut_agg[alias]["durata_sec"] += val.get("durata_sec", 0) or 0
 
     utensili_list = sorted(ut_agg.values(), key=lambda x: -x["durata_sec"])
+    for u in utensili_list:
+        u["ore_str"] = _durata_str(u["durata_sec"])
 
     # ── KPI principali ───────────────────────────────────────────────────────
     ore_macchina_sec = sum(
@@ -1849,7 +1852,11 @@ async def get_rendiconto_progetto(project_id: str):
     ]
     n_pgm_totali    = len(pgm_progetto)
     n_pgm_completati = sum(1 for pg in pgm_progetto if pg.get("stato") == "completato")
-    stima_tot_sec   = sum(int(pg.get("tempoStimato") or 0) * 60 for pg in pgm_progetto)
+    stima_tot_sec = sum(
+        int(pg.get("tempoStimato") or 0) * 60
+        for pg in pgm_progetto
+        if pg.get("tempoStimato") and str(pg.get("tempoStimato")).strip() not in ("", "0")
+    )
 
     # ── Timeline ─────────────────────────────────────────────────────────────
     prima_sess = sessioni_proj[0].get("inizio", "")[:10]  if sessioni_proj else None

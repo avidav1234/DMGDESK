@@ -50,10 +50,10 @@ function KpiCard({ label, value, sub, color = NAVY, icon }) {
 // ── Timeline visiva ───────────────────────────────────────────────────────────
 function Timeline({ tl, scadenza, colore }) {
   const steps = [
-    { key:'apertura_progetto', label:'Apertura\ncommessa', color:BLUE },
-    { key:'inizio_macchina',   label:'Inizio\nlavorazione', color:GREEN },
-    { key:'fine_macchina',     label:'Fine\nlavorazione', color:GREEN },
-    { key:'consegna',          label:'Consegna', color: tl.consegna ? GREEN : GRAY },
+    { key:'apertura_progetto', label:'Apertura',   color:BLUE,  above:true  },
+    { key:'inizio_macchina',   label:'Inizio mac.',color:GREEN, above:false },
+    { key:'fine_macchina',     label:'Fine mac.',  color:GREEN, above:true  },
+    { key:'consegna',          label:'Consegna',   color: tl.consegna ? GREEN : GRAY, above:false },
   ].filter(s => tl[s.key])
 
   if (steps.length < 2) return null
@@ -72,14 +72,14 @@ function Timeline({ tl, scadenza, colore }) {
   const scadenzaMancata = consegnaTs && scadenzaTs && consegnaTs > scadenzaTs
 
   return (
-    <div style={{ position:'relative', padding:'32px 0 48px' }}>
+    <div style={{ position:'relative', padding:'44px 0 44px', minHeight:130 }}>
       {/* Barra di sfondo */}
-      <div style={{ position:'absolute', top:32, left:'4%', right:'4%', height:4,
+      <div style={{ position:'absolute', top:'50%', left:'4%', right:'4%', height:4, transform:'translateY(-50%)',
         background:BORDER, borderRadius:2 }}/>
 
       {/* Segmento lavorazione macchina */}
       {tl.inizio_macchina && tl.fine_macchina && (
-        <div style={{ position:'absolute', top:30, height:8, borderRadius:4,
+        <div style={{ position:'absolute', top:'calc(50% - 4px)', height:8, borderRadius:4,
           background: colore || GREEN, opacity:0.3,
           left: `calc(4% + ${pos(tl.inizio_macchina) * 0.92}%)`,
           width: `${(pos(tl.fine_macchina) - pos(tl.inizio_macchina)) * 0.92}%`,
@@ -87,23 +87,25 @@ function Timeline({ tl, scadenza, colore }) {
       )}
 
       {/* Punti + label */}
-      {steps.map((s, i) => {
+      {steps.map((s) => {
         const x = pos(tl[s.key])
         return (
-          <div key={s.key} style={{ position:'absolute', top:20,
-            left: `calc(4% + ${x * 0.92}%)`, transform:'translateX(-50%)' }}>
-            <div style={{ width:16, height:16, borderRadius:'50%',
-              background: s.color, border:'3px solid #fff',
-              boxShadow:`0 0 0 2px ${s.color}`,
-              margin:'0 auto' }}/>
-            <div style={{ fontSize:9, color:GRAY, textAlign:'center',
-              marginTop:8, whiteSpace:'pre-line', fontWeight:600,
-              lineHeight:1.3 }}>
-              {s.label}
+          <div key={s.key} style={{ position:'absolute',
+            left: `calc(4% + ${x * 0.92}%)`, transform:'translateX(-50%)',
+            top:0, bottom:0, display:'flex', flexDirection:'column',
+            alignItems:'center', justifyContent:'space-between', width:72 }}>
+            <div style={{ textAlign:'center', visibility: s.above ? 'visible' : 'hidden',
+              lineHeight:1.2 }}>
+              <div style={{ fontSize:9, color:GRAY, fontWeight:600 }}>{s.label}</div>
+              <div style={{ fontSize:9, color:NAVY, fontWeight:700 }}>{fmtData(tl[s.key])}</div>
             </div>
-            <div style={{ fontSize:10, color:NAVY, textAlign:'center',
-              fontWeight:700, marginTop:2 }}>
-              {fmtData(tl[s.key])}
+            <div style={{ width:13, height:13, borderRadius:'50%', flexShrink:0,
+              background:s.color, border:'3px solid #fff',
+              boxShadow:`0 0 0 2px ${s.color}` }}/>
+            <div style={{ textAlign:'center', visibility: s.above ? 'hidden' : 'visible',
+              lineHeight:1.2 }}>
+              <div style={{ fontSize:9, color:GRAY, fontWeight:600 }}>{s.label}</div>
+              <div style={{ fontSize:9, color:NAVY, fontWeight:700 }}>{fmtData(tl[s.key])}</div>
             </div>
           </div>
         )
@@ -295,7 +297,7 @@ export default function RendicontoProgetto() {
       </div>
 
       {/* ── Scostamento CAM ── */}
-      {kpi.scostamento_pct != null && (
+      {kpi.scostamento_pct != null && kpi.stima_tot_sec > 0 && (
         <div style={{ background: kpi.scostamento_pct > 10 ? '#fef2f2' : '#f0fdf4',
           border:`1px solid ${kpi.scostamento_pct > 10 ? '#fca5a5' : '#86efac'}`,
           borderRadius:10, padding:'10px 16px', marginBottom:20,
@@ -365,9 +367,7 @@ export default function RendicontoProgetto() {
                     <th style={{ textAlign:'left', color:GRAY, fontWeight:600,
                       padding:'0 0 6px' }}>Alias</th>
                     <th style={{ textAlign:'right', color:GRAY, fontWeight:600,
-                      padding:'0 0 6px' }}>Cicli</th>
-                    <th style={{ textAlign:'right', color:GRAY, fontWeight:600,
-                      padding:'0 0 6px' }}>Ore</th>
+                      padding:'0 0 6px' }}>Ore macchina</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -376,10 +376,9 @@ export default function RendicontoProgetto() {
                       style={{ borderBottom:`1px solid #f1f5f9` }}>
                       <td style={{ padding:'5px 0', fontFamily:'monospace',
                         color:NAVY, fontSize:10 }}>{u.alias}</td>
-                      <td style={{ textAlign:'right', color:GRAY }}>{u.cicli}</td>
                       <td style={{ textAlign:'right', fontWeight:700,
                         color:NAVY, fontFamily:'monospace' }}>
-                        {fmt(u.durata_sec)}
+                        {u.ore_str || fmt(u.durata_sec)}
                       </td>
                     </tr>
                   ))}

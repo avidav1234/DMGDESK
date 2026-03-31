@@ -960,25 +960,25 @@ async def get_sessione_live():
     if not sess:
         return {"attiva": False, "fermo_sec_giornaliero": fermo_oggi}
 
-    # Durata totale sessione (da inizio pallet)
-    inizio_sess = sess.get("inizio")
-    durata_sess = 0
-    if inizio_sess:
-        try:
-            durata_sess = int((datetime.fromisoformat(now_iso) -
-                               datetime.fromisoformat(inizio_sess)).total_seconds())
-        except Exception:
-            pass
+    # Durata sessione = somma programmi chiusi + programma in corso live
+    # NON usare (now - inizio_sessione): se la sessione rimane aperta nel log
+    # mentre la macchina è ferma, il wall-clock conta ore di inattività.
+    pgms = sess.get("programmi", [])
+    durata_pgm_chiusi = sum(p.get("durata_sec") or 0 for p in pgms if p.get("fine"))
+    inizio_sess = sess.get("inizio")  # tenuto per compatibilità frontend
 
-    # Durata programma corrente
+    # Programma corrente in esecuzione — aggiunge elapsed live
     inizio_pgm = sc.get("inizio_programma")
     durata_pgm = 0
-    if inizio_pgm:
+    if inizio_pgm and sc.get("in_esecuzione"):
         try:
             durata_pgm = int((datetime.fromisoformat(now_iso) -
                               datetime.fromisoformat(inizio_pgm)).total_seconds())
+            durata_pgm = max(0, durata_pgm)
         except Exception:
             pass
+
+    durata_sess = durata_pgm_chiusi + durata_pgm
 
     n_pgm = len(sess.get("programmi", []))  # già chiusi + quello corrente
     if sc.get("programma_corrente"):

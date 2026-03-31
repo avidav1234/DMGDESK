@@ -155,7 +155,7 @@ async def get_progetti():
             proj["pallet_assegnato"] = pallet_map.get(pid, None)
     except Exception as e:
         import traceback
-        print(f"[WARN] get_progetti: errore incrocio pallet_state: {e}\n{traceback.format_exc()}")
+        from utils.logger import get_logger as _gl; _gl("routers.progetti").warning(f"get_progetti: errore incrocio pallet_state: {e}", exc_info=True)
 
     return {
         "projects":  projects,

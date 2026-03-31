@@ -601,13 +601,18 @@ async def salva_main(body: SalvaMainRequest):
 
     percorso_file = dest_dir / nome_file
     try:
-        percorso_file.write_text(contenuto, encoding="utf-8")
+        # Scrittura atomica: .tmp → rename — protegge da crash durante scrittura
+        tmp_file = percorso_file.with_suffix(".tmp")
+        tmp_file.write_text(contenuto, encoding="utf-8")
+        tmp_file.replace(percorso_file)
     except PermissionError:
         raise HTTPException(
             status_code=403,
             detail=f"Permesso negato: impossibile scrivere in {dest_dir}"
         )
     except Exception as e:
+        try: percorso_file.with_suffix(".tmp").unlink(missing_ok=True)
+        except Exception: pass
         raise HTTPException(status_code=500, detail=f"Errore scrittura file: {e}")
 
     _save_recente(str(dest_dir))
@@ -638,10 +643,10 @@ def _save_recente(percorso: str):
         if percorso in items:
             items.remove(percorso)
         items.insert(0, percorso)
-        _RECENTI_FILE.write_text(
-            _json.dumps(items[:_MAX_RECENTI], ensure_ascii=False, indent=2),
-            encoding="utf-8"
-        )
+        to_save = items[:_MAX_RECENTI]
+        tmp = _RECENTI_FILE.with_suffix(".tmp")
+        tmp.write_text(_json.dumps(to_save, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp.replace(_RECENTI_FILE)
     except Exception:
         pass
 

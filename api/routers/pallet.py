@@ -161,12 +161,9 @@ def _sincronizza_pallet_progetto(config: dict, stato_pallet: str, progetto_id: s
                         changed = True
 
     if changed:
+        from api.routers.progetti import _atomic_write as _aw
         path = _progetti_path(config)
-        path.write_text(
-            _json.dumps({"projects": projects, "ultimo_aggiornamento": now},
-                        ensure_ascii=False, indent=2),
-            encoding="utf-8"
-        )
+        _aw(path, {"projects": projects, "ultimo_aggiornamento": now})
 
 
 class SetStatoBody(BaseModel):
@@ -545,11 +542,9 @@ async def sync_pallet_progetti():
     if changed:
         now = datetime.now().isoformat()
         _save(config, state)
+        from api.routers.progetti import _atomic_write as _aw
         path = _progetti_path(config)
-        path.write_text(_json.dumps({"projects": projects,
-                                     "ultimo_aggiornamento": now},
-                                    ensure_ascii=False, indent=2),
-                        encoding="utf-8")
+        _aw(path, {"projects": projects, "ultimo_aggiornamento": now})
 
     return {"ok": True, "allineamenti": changed}
 

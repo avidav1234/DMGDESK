@@ -54,6 +54,37 @@ app.include_router(report.router,         prefix="/api/report",           tags=[
 @app.on_event("startup")
 async def startup():
     log.info("DMG Desk API v16.0 avviata — http://0.0.0.0:8000")
+    # Pulizia file .tmp orfani da atomic write interrotti (crash/spegnimento)
+    from pathlib import Path as _P
+    from database.db_handler import carica_configurazione as _cfg
+    try:
+        config = _cfg()
+        base = (config.get("tools_toa_folder") or ".").strip()
+        cleaned = 0
+        for tmp in _P(base).glob("*.tmp"):
+            try: tmp.unlink(); cleaned += 1
+            except Exception: pass
+        if cleaned:
+            log.info(f"Rimossi {cleaned} file .tmp orfani da {base}")
+    except Exception:
+        pass  # non bloccare lo startup se la config non è disponibile
+
+
+# ── Exception handler globale ─────────────────────────────────────────────────
+from fastapi import Request as _Request
+from fastapi.responses import JSONResponse as _JSONResponse
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: _Request, exc: Exception):
+    """Logga le eccezioni non gestite in errors.log invece di lasciarle silenziose."""
+    log.error(
+        f"Eccezione non gestita: {request.method} {request.url.path} — {type(exc).__name__}: {exc}",
+        exc_info=True,
+    )
+    return _JSONResponse(
+        status_code=500,
+        content={"detail": f"Errore interno: {type(exc).__name__}", "path": str(request.url.path)},
+    )
 
 
 # ── Serve frontend React ──────────────────────────────────────────────────

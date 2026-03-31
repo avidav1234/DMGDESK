@@ -1597,13 +1597,9 @@ async def debug_sessioni_progetto(progetto: str, giorni: int = 365):
             continue
         dur = s.get("durata_sec")
         if dur is None:
-            inizio = s.get("inizio")
-            if inizio:
-                try:
-                    dur = int((datetime.now() -
-                               datetime.fromisoformat(inizio)).total_seconds())
-                except Exception:
-                    dur = 0
+            # Sessione aperta: usa somma programmi (non wall-clock che include fermi)
+            pgms_chiusi = [p for p in s.get("programmi", []) if p.get("fine")]
+            dur = sum(p.get("durata_sec") or 0 for p in pgms_chiusi)
         pgms = s.get("programmi", [])
         sessioni_trovate.append({
             "data":       data_s,

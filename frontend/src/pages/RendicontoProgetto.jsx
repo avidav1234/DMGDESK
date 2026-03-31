@@ -25,10 +25,10 @@ function diffGiorni(a,b) {
 
 function TimelineCommessa({ tl, scadenza, colore }) {
   const FASI_DEF = [
-    { key:'apertura_progetto', label:'Apertura',    col:'#1D5FAD' },
-    { key:'inizio_macchina',   label:'Inizio mac.', col:colore||'#1D5FAD' },
-    { key:'fine_macchina',     label:'Fine mac.',   col:colore||'#1D5FAD' },
-    { key:'consegna',          label:'Consegna',    col:'#15803d' },
+    { key:'apertura_progetto', label:'Apertura',    col:'#1D5FAD', above:true  },
+    { key:'inizio_macchina',   label:'Inizio mac.', col:colore||'#1D5FAD', above:false },
+    { key:'fine_macchina',     label:'Fine mac.',   col:colore||'#1D5FAD', above:true  },
+    { key:'consegna',          label:'Consegna',    col:'#15803d', above:false },
   ]
   const fasi = FASI_DEF.filter(f => tl[f.key])
   if (fasi.length < 2) return null
@@ -37,7 +37,12 @@ function TimelineCommessa({ tl, scadenza, colore }) {
   if (scadenza) tsAll.push(new Date(scadenza).getTime())
   const tMin = Math.min(...tsAll), tMax = Math.max(...tsAll)
   const span = tMax - tMin || 1
-  const pos = iso => Math.max(2, Math.min(98, (new Date(iso)-tMin)/span*96+2))
+  // Aggiunge 10% di padding a sinistra e destra per evitare label ai bordi
+  const pos = iso => Math.max(5, Math.min(95, (new Date(iso)-tMin)/span*90+5))
+  // Se inizio e fine macchina sono troppo vicini, forziamo separazione minima
+  const posInizio = tl.inizio_macchina ? pos(tl.inizio_macchina) : null
+  const posFine   = tl.fine_macchina   ? pos(tl.fine_macchina)   : null
+  const troppoVicini = posInizio && posFine && Math.abs(posFine - posInizio) < 8
 
   const scadenzaMancata = tl.consegna
     ? new Date(tl.consegna) > new Date(scadenza)
@@ -47,7 +52,7 @@ function TimelineCommessa({ tl, scadenza, colore }) {
     <div>
       {/* Label SOPRA (fasi pari: 0, 2) */}
       <div style={{position:'relative',height:28,marginBottom:0}}>
-        {fasi.map((f,i) => i%2===0 ? (
+        {fasi.map((f,i) => f.above ? (
           <div key={f.key} style={{position:'absolute',left:`${pos(tl[f.key])}%`,
             transform:'translateX(-50%)',textAlign:'center',minWidth:60}}>
             <div style={{fontSize:9,fontWeight:700,color:'#64748b',whiteSpace:'nowrap'}}>{f.label}</div>
@@ -83,7 +88,7 @@ function TimelineCommessa({ tl, scadenza, colore }) {
       </div>
       {/* Label SOTTO (fasi dispari: 1, 3) + scadenza */}
       <div style={{position:'relative',height:28,marginTop:0}}>
-        {fasi.map((f,i) => i%2!==0 ? (
+        {fasi.map((f,i) => !f.above ? (
           <div key={f.key} style={{position:'absolute',left:`${pos(tl[f.key])}%`,
             transform:'translateX(-50%)',textAlign:'center',minWidth:60}}>
             <div style={{fontSize:9,fontWeight:700,color:'#64748b',whiteSpace:'nowrap'}}>{f.label}</div>
@@ -297,14 +302,14 @@ export default function RendicontoProgetto() {
               </div>
             ))}
           </div>
-          {programmi.slice(0,14).map(p=>(
+          {programmi.slice(0,20).map(p=>(
             <BarraPgm key={p.filename} nome={p.filename}
               reale={p.durata_sec} stima={p.stima_sec}
               maxSec={maxDur} colore={colore}/>
           ))}
-          {programmi.length>14&&(
+          {programmi.length>20&&(
             <div style={{fontSize:10,color:'#94a3b8',marginTop:8,textAlign:'center'}}>
-              + {programmi.length-14} altri programmi
+              + {programmi.length-20} altri programmi
             </div>
           )}
         </div>
@@ -427,7 +432,7 @@ export default function RendicontoProgetto() {
         ) : (
           <div style={{fontSize:12,color:note?'#334155':'#cbd5e1',lineHeight:1.7,
             minHeight:48,fontStyle:note?'normal':'italic'}}>
-            {note||'Nessuna nota inserita. Clicca "Modifica" per aggiungere osservazioni prima di stampare.'}
+            <span className={note ? undefined : "note-placeholder"}>{note||'Nessuna nota inserita. Clicca "Modifica" per aggiungere osservazioni prima di stampare.'}</span>
           </div>
         )}
       </div>
@@ -439,6 +444,8 @@ export default function RendicontoProgetto() {
           [class*="nav"], [class*="Nav"] { display: none !important; }
           main, #root > div, body > div { padding-left: 0 !important; margin-left: 0 !important; }
           .kpi-grid { grid-template-columns: repeat(2,1fr) !important; }
+          .note-placeholder { display: none !important; }
+          .detail-grid { grid-template-columns: 1fr 1fr !important; }
           @page { margin: 15mm; size: A4; }
           * { overflow: visible !important; }
         }

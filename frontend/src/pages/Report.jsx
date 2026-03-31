@@ -53,24 +53,51 @@ const KpiCard = ({ label, value, sub, color = 'var(--text-primary)', trend }) =>
 
 function StoricoBars({ storico, selectedData, onSelect }) {
   if (!storico.length) return null
-  const maxSec = Math.max(...storico.map(g => g.ore_lavorate_sec || 0), 1)
+  // Scala su (ore+fermo) per mostrare la composizione del turno
+  const maxSec = Math.max(...storico.map(g => (g.ore_lavorate_sec||0) + (g.tempo_fermo_sec||0)), 1)
   return (
     <div>
       <div style={{ display:'flex', alignItems:'flex-end', gap:3, height:100 }}>
         {storico.map((g) => {
-          const hPct = Math.max(5, (g.ore_lavorate_sec / maxSec) * 90)
+          const lav   = g.ore_lavorate_sec || 0
+          const fermo = g.tempo_fermo_sec  || 0
+          const totale = lav + fermo
+          const lavH   = Math.max(lav   > 0 ? 4 : 0, Math.round((lav   / maxSec) * 88))
+          const fermoH = Math.max(fermo > 0 ? 3 : 0, Math.round((fermo / maxSec) * 88))
           const isSelected = g.data === selectedData
           const effColor = g.efficienza_pct > 70 ? '#22c55e' : g.efficienza_pct > 40 ? '#f59e0b' : '#ef4444'
+          const tooltipLines = [
+            fmtDay(g.data),
+            `Lavorazione: ${fmtH(lav)}`,
+            `Fermo: ${fmtH(fermo)}`,
+            `Efficienza: ${g.efficienza_pct}%`,
+            g.n_fermi_anomali > 0 ? `Reset anomali: ${g.n_fermi_anomali}` : null,
+          ].filter(Boolean).join('\n')
           return (
             <div key={g.data} style={{ flex:1, display:'flex', flexDirection:'column',
                                        alignItems:'center', cursor:'pointer', gap:2 }}
-                 onClick={() => onSelect(g.data)}
-                 title={`${fmtDay(g.data)}: ${fmtH(g.ore_lavorate_sec)}, ${g.efficienza_pct}% eff.`}>
+                 onClick={() => onSelect(g.data)} title={tooltipLines}>
+              {/* Indicatore efficienza */}
               <div style={{ width:'60%', height:4, borderRadius:2,
                             background: isSelected ? effColor : effColor+'88' }} />
-              <div style={{ width:'100%', height:hPct, borderRadius:'4px 4px 0 0',
-                            background: isSelected ? '#3b82f6' : (g.ore_lavorate_sec > 0 ? '#1D5FAD88' : 'var(--border)'),
-                            border: isSelected ? '1px solid #60a5fa' : 'none', transition:'all 0.15s' }} />
+              {/* Colonna impilata: fermo (arancio) sopra, lav (blu) sotto */}
+              <div style={{ width:'100%', display:'flex', flexDirection:'column',
+                            justifyContent:'flex-end', borderRadius:'4px 4px 0 0', overflow:'hidden',
+                            border: isSelected ? '1px solid #60a5fa' : 'none',
+                            height: Math.max(lavH + fermoH, totale > 0 ? 8 : 2),
+                            transition:'all 0.15s' }}>
+                {fermoH > 0 && (
+                  <div style={{ width:'100%', height:fermoH,
+                    background: isSelected ? '#f59e0b' : '#f59e0b66' }} />
+                )}
+                {lavH > 0 && (
+                  <div style={{ width:'100%', height:lavH,
+                    background: isSelected ? '#1D5FAD' : '#1D5FAD88' }} />
+                )}
+                {totale === 0 && (
+                  <div style={{ width:'100%', height:2, background:'var(--border)' }} />
+                )}
+              </div>
               <div style={{ fontSize:9, color: isSelected ? '#3b82f6' : 'var(--text-dim)',
                             fontWeight: isSelected ? 700 : 400 }}>
                 {g.data.slice(8)}
@@ -82,7 +109,11 @@ function StoricoBars({ storico, selectedData, onSelect }) {
       <div style={{ display:'flex', gap:16, marginTop:10, fontSize:11, color:'var(--text-dim)' }}>
         <span style={{ display:'flex', alignItems:'center', gap:4 }}>
           <span style={{ display:'inline-block', width:12, height:12, borderRadius:2, background:'#1D5FAD' }}/>
-          Ore lavorate
+          Lavorazione
+        </span>
+        <span style={{ display:'flex', alignItems:'center', gap:4 }}>
+          <span style={{ display:'inline-block', width:12, height:12, borderRadius:2, background:'#f59e0b' }}/>
+          Fermo
         </span>
         <span style={{ display:'flex', alignItems:'center', gap:4 }}>
           <span style={{ display:'inline-block', width:28, height:4, borderRadius:2, background:'#22c55e' }}/>
@@ -351,22 +382,29 @@ function ConfrontoSettimane({ storico }) {
   if (!storico || storico.length < 14) return null
   const curr = storico.slice(-7)
   const prev = storico.slice(-14, -7)
-  const totCurr = curr.reduce((a,g) => a + (g.ore_lavorate_sec||0), 0)
-  const totPrev = prev.reduce((a,g) => a + (g.ore_lavorate_sec||0), 0)
-  const effCurr = curr.reduce((a,g) => a + (g.efficienza_pct||0), 0) / 7
-  const effPrev = prev.reduce((a,g) => a + (g.efficienza_pct||0), 0) / 7
-  const pgmCurr = curr.reduce((a,g) => a + (g.n_programmi||0), 0)
-  const pgmPrev = prev.reduce((a,g) => a + (g.n_programmi||0), 0)
+  const totCurr  = curr.reduce((a,g) => a + (g.ore_lavorate_sec||0), 0)
+  const totPrev  = prev.reduce((a,g) => a + (g.ore_lavorate_sec||0), 0)
+  const effCurr  = curr.reduce((a,g) => a + (g.efficienza_pct||0), 0) / 7
+  const effPrev  = prev.reduce((a,g) => a + (g.efficienza_pct||0), 0) / 7
+  const pgmCurr  = curr.reduce((a,g) => a + (g.n_programmi||0), 0)
+  const pgmPrev  = prev.reduce((a,g) => a + (g.n_programmi||0), 0)
+  const fermoCurr = curr.reduce((a,g) => a + (g.tempo_fermo_sec||0), 0)
+  const fermoPrev = prev.reduce((a,g) => a + (g.tempo_fermo_sec||0), 0)
   // OEE medio — solo giorni con dati
   const oeeCurrGiorni = curr.filter(g => g.oee?.valore)
   const oeePrevGiorni = prev.filter(g => g.oee?.valore)
   const oeeCurr = oeeCurrGiorni.length ? oeeCurrGiorni.reduce((a,g)=>a+(g.oee.valore||0),0)/oeeCurrGiorni.length : null
   const oeePrev = oeePrevGiorni.length ? oeePrevGiorni.reduce((a,g)=>a+(g.oee.valore||0),0)/oeePrevGiorni.length : null
   const delta = (a, b) => b === 0 ? 0 : ((a - b) / b * 100)
+  // Per il fermo il trend è invertito: meno fermo = migliore (trend verde se scende)
+  const deltaFermo = (a, b) => b === 0 ? 0 : -((a - b) / b * 100)
   return (
-    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', gap:14 }}>
+    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr 1fr', gap:14 }}>
       <KpiCard label="Ore questa settimana" value={fmtH(totCurr)} sub={`Sett. prec.: ${fmtH(totPrev)}`}
                color="#3b82f6" trend={delta(totCurr, totPrev)} />
+      <KpiCard label="Fermo questa sett." value={fmtH(fermoCurr)} sub={`Sett. prec.: ${fmtH(fermoPrev)}`}
+               color={fermoCurr < fermoPrev ? '#22c55e' : '#f59e0b'}
+               trend={deltaFermo(fermoCurr, fermoPrev)} />
       <KpiCard label="Efficienza media" value={`${effCurr.toFixed(1)}%`} sub={`Sett. prec.: ${effPrev.toFixed(1)}%`}
                color={effCurr > 70 ? '#22c55e' : '#f59e0b'} trend={delta(effCurr, effPrev)} />
       <KpiCard label="Programmi eseguiti" value={pgmCurr} sub={`Sett. prec.: ${pgmPrev}`}
@@ -1256,34 +1294,73 @@ export default function Report() {
           <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
             <ConfrontoSettimane storico={storico} />
             <Card style={{ padding:'20px 24px' }}>
-              <SectionTitle>Efficienza e ore — ultimi 14 giorni</SectionTitle>
+              <SectionTitle>Lavorazione · Fermo — ultimi 14 giorni</SectionTitle>
               <div style={{ display:'flex', flexDirection:'column', gap:4, marginTop:4 }}>
                 {storico.map(g => {
-                  const eff = g.efficienza_pct || 0
-                  const effColor = eff > 70 ? '#22c55e' : eff > 40 ? '#f59e0b' : eff > 0 ? '#ef4444' : 'var(--border)'
+                  const eff   = g.efficienza_pct || 0
+                  const fermo = g.tempo_fermo_sec || 0
+                  const lav   = g.ore_lavorate_sec || 0
+                  const totale = lav + fermo
+                  const effColor   = eff > 70 ? '#22c55e' : eff > 40 ? '#f59e0b' : eff > 0 ? '#ef4444' : 'var(--border)'
+                  const fermoColor = fermo > 3600 ? '#ef4444' : fermo > 1800 ? '#f59e0b' : '#94a3b8'
+                  const lavPct   = totale > 0 ? (lav   / totale * 100) : 0
+                  const fermoPct = totale > 0 ? (fermo / totale * 100) : 0
                   return (
-                    <div key={g.data} style={{ display:'flex', alignItems:'center', gap:10, cursor:'pointer', padding:'2px 0' }}
+                    <div key={g.data} style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer', padding:'3px 0' }}
                          onClick={() => setData(g.data)}>
                       <div style={{ width:90, fontSize:12, flexShrink:0,
                                     color: g.data===data ? '#3b82f6' : 'var(--text-dim)',
                                     fontWeight: g.data===data ? 700 : 400 }}>
                         {fmtDay(g.data)}
                       </div>
-                      <div style={{ flex:1, height:18, background:'var(--bg-hover)', borderRadius:4, overflow:'hidden' }}>
-                        {eff > 0 && (
-                          <div style={{ width:`${eff}%`, height:'100%', background:effColor, borderRadius:4,
-                                        display:'flex', alignItems:'center', paddingLeft:6, transition:'width 0.3s' }}>
-                            {eff > 15 && <span style={{ fontSize:10, fontWeight:700, color:'#fff' }}>{eff.toFixed(0)}%</span>}
+                      {/* Barra impilata lav (blu) + fermo (arancio/rosso) */}
+                      <div style={{ flex:1, height:18, background:'var(--bg-hover)', borderRadius:4,
+                                    overflow:'hidden', display:'flex' }}>
+                        {lavPct > 0 && (
+                          <div style={{ width:`${lavPct}%`, height:'100%', background:'#1D5FAD',
+                                        display:'flex', alignItems:'center', paddingLeft:4, transition:'width 0.3s' }}>
+                            {lavPct > 20 && <span style={{ fontSize:10, fontWeight:700, color:'#fff' }}>
+                              {fmtH(lav)}
+                            </span>}
+                          </div>
+                        )}
+                        {fermoPct > 0 && (
+                          <div style={{ width:`${fermoPct}%`, height:'100%', background:fermoColor,
+                                        display:'flex', alignItems:'center', paddingLeft:4, transition:'width 0.3s',
+                                        opacity:0.85 }}>
+                            {fermoPct > 15 && <span style={{ fontSize:10, fontWeight:700, color:'#fff' }}>
+                              {fmtH(fermo)}
+                            </span>}
                           </div>
                         )}
                       </div>
-                      <div style={{ width:52, fontSize:12, fontFamily:'monospace', color:'var(--text-dim)',
-                                    textAlign:'right', flexShrink:0 }}>
-                        {fmtH(g.ore_lavorate_sec)}
+                      {/* Efficienza badge */}
+                      <div style={{ width:44, fontSize:11, fontFamily:'monospace', fontWeight:700,
+                                    color: effColor, textAlign:'right', flexShrink:0 }}>
+                        {eff > 0 ? `${eff.toFixed(0)}%` : '—'}
                       </div>
+                      {/* Fermo assoluto */}
+                      {fermo > 0 && (
+                        <div style={{ width:44, fontSize:11, fontFamily:'monospace',
+                                      color: fermoColor, textAlign:'right', flexShrink:0 }}
+                             title={`Fermo: ${fmt(fermo)}`}>
+                          {fmtH(fermo)}
+                        </div>
+                      )}
                     </div>
                   )
                 })}
+              </div>
+              <div style={{ display:'flex', gap:14, marginTop:10, fontSize:11, color:'var(--text-dim)' }}>
+                <span style={{ display:'flex', alignItems:'center', gap:4 }}>
+                  <span style={{ display:'inline-block', width:10, height:10, borderRadius:2, background:'#1D5FAD' }}/>
+                  Lavorazione
+                </span>
+                <span style={{ display:'flex', alignItems:'center', gap:4 }}>
+                  <span style={{ display:'inline-block', width:10, height:10, borderRadius:2, background:'#f59e0b' }}/>
+                  Fermo
+                </span>
+                <span style={{ marginLeft:'auto' }}>% = efficienza giornaliera</span>
               </div>
             </Card>
           </div>

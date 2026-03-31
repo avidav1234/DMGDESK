@@ -812,15 +812,15 @@ async def get_report_giornaliero(data: str = Query(default=None)):
 @router.get("/storico")
 async def get_storico(giorni: int = Query(default=7, ge=1, le=365)):
     """Ultimi N giorni — per grafici trend. Max 365."""
-    config = carica_configurazione()
-    log    = _load_log(config)
+    config  = carica_configurazione()
+    log     = _load_log(config)
+    sc_oggi = log.get("stato_corrente", {})
     now_iso = datetime.now().isoformat(timespec="seconds")
     today   = datetime.now().strftime("%Y-%m-%d")
-    result = []
+    result  = []
     for i in range(giorni - 1, -1, -1):
         d    = (datetime.now() - timedelta(days=i)).strftime("%Y-%m-%d")
         sess = [s for s in log.get("sessioni", []) if s.get("data") == d]
-        # Per il giorno corrente usa durata live se sessione ancora aperta
         def _dur(s):
             if s.get("durata_sec") is not None:
                 return s["durata_sec"]
@@ -833,23 +833,39 @@ async def get_storico(giorni: int = Query(default=7, ge=1, le=365)):
                     except Exception:
                         pass
             return 0
-        ore  = sum(_dur(s) for s in sess)
-        gap  = sum(s.get("gap_sec") or 0 for s in sess)
-        # OEE semplificato per lo storico (disponibilità * 0.98 qualità)
+        ore = sum(_dur(s) for s in sess)
+        gap_sess = sum(s.get("gap_sec") or 0 for s in sess)
+
+        # Per oggi: usa fermo_sc se più grande del gap delle sessioni
+        # (copre il caso macchina ferma senza sessione aperta)
+        fermo_sc = 0
+        if d == today and sc_oggi.get("fermo_data") == today:
+            fermo_sc = sc_oggi.get("fermo_sec_giornaliero", 0)
+        gap = max(gap_sess, fermo_sc) if not sess else max(gap_sess, fermo_sc)
+
         ORE_TURNO = 28800
-        tempo_turno = max(ore + gap, ORE_TURNO)
+        tempo_turno   = max(ore + gap, ORE_TURNO)
         disponibilita = ore / tempo_turno if tempo_turno > 0 else 0
-        oee_valore = round(disponibilita * 1.0 * 0.98 * 100, 1)  # performance=1.0 senza cicli teorici
-        sec_ovr = sum(s.get("sec_override_ridotto") or 0 for s in sess)
+        oee_valore    = round(disponibilita * 1.0 * 0.98 * 100, 1)
+        sec_ovr       = sum(s.get("sec_override_ridotto") or 0 for s in sess)
+        n_fermi_anom  = sum(s.get("n_fermi_anomali", 0) for s in sess)
+        n_fermi_pian  = sum(s.get("n_fermi_pianificati", 0) for s in sess)
+
         result.append({
-            "data": d,
-            "ore_lavorate_sec": ore,
-            "ore_lavorate": _durata_str(ore),
-            "tempo_fermo_sec": gap,
-            "n_programmi": sum(len(s.get("programmi", [])) for s in sess),
-            "efficienza_pct": round(ore / (ore + gap) * 100, 1) if (ore + gap) > 0 else 0,
-            "oee": {"valore": oee_valore, "disponibilita": round(disponibilita*100,1)} if ore > 0 else None,
+            "data":               d,
+            "ore_lavorate_sec":   ore,
+            "ore_lavorate":       _durata_str(ore),
+            "tempo_fermo_sec":    gap,
+            "tempo_fermo":        _durata_str(gap),
+            "n_programmi":        sum(len(s.get("programmi", [])) for s in sess),
+            "n_sessioni":         len(sess),
+            "efficienza_pct":     round(ore / (ore + gap) * 100, 1) if (ore + gap) > 0 else 0,
+            "oee":                {"valore": oee_valore, "disponibilita": round(disponibilita*100,1)} if ore > 0 else None,
             "sec_override_ridotto": sec_ovr,
+            "n_fermi_anomali":    n_fermi_anom,
+            "n_fermi_pianificati": n_fermi_pian,
+            # flag: fermo_sc usato per oggi (utile per tooltip nel frontend)
+            "fermo_da_sc":        fermo_sc > gap_sess if d == today else False,
         })
     return result
 

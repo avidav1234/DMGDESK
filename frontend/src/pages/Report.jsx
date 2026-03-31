@@ -1,5 +1,5 @@
 // pages/Report.jsx — Analytics lavorazioni CNC
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, Fragment } from 'react'
 
 const API = (path) => `/api/report${path}`
 
@@ -278,7 +278,7 @@ function HeatmapFermi({ sessioni }) {
           </div>
         ))}
         {GIORNI.map(g => (
-          <React.Fragment key={g}>
+          <Fragment key={g}>
             <div style={{ fontSize:11, color:'var(--text-dim)', fontWeight:600, display:'flex', alignItems:'center' }}>{g}</div>
             {ORE.map(h => {
               const val = matrix[g][h]
@@ -290,7 +290,7 @@ function HeatmapFermi({ sessioni }) {
                      title={val > 0 ? `${g} ${h}:00 — ${fmt(val)}` : `${g} ${h}:00`}/>
               )
             })}
-          </React.Fragment>
+          </Fragment>
         ))}
       </div>
       <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:10, fontSize:11, color:'var(--text-dim)' }}>

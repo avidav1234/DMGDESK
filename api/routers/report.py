@@ -1486,28 +1486,39 @@ async def get_ore_progetto(progetto: str = None, project_id: str = None):
         prog = (sessione.get("progetto") or "").strip()
         if not prog or prog == "—":
             return
-        # Filtra per progetto: prima per ID (affidabile), poi per nome (fallback storico)
+        # Salta sessioni aperte (fine=None o "aperta"):
+        # il frontend le aggiunge live tramite durataSessioneLive.
+        # Se le includiamo qui si conterebbero due volte.
+        fine = sessione.get("fine") or ""
+        if not fine or fine == "aperta":
+            return
+        # Salta sessioni durata zero — record spazzatura
+        dur_check = sessione.get("durata_sec") or 0
+        if dur_check == 0:
+            return
+        # Filtra: include la sessione SOLO se appartiene al progetto cercato
         if project_id or progetto:
-            pid_sess  = sessione.get("progetto_id") or ""
+            pid_sess  = (sessione.get("progetto_id") or "").strip()
             nome_sess = prog.lower()
-            if project_id and pid_sess:
+            nome_cerca = (progetto or "").strip().lower()
+
+            if pid_sess and project_id:
+                # Sessione con ID: match esatto per ID
                 if pid_sess != project_id:
-                    return  # ID diverso — sicuramente altro progetto
-            elif progetto:
-                if nome_sess != progetto.strip().lower():
-                    return  # nome diverso (case-insensitive)
-        dur = sessione.get("durata_sec")
-        if dur is None:
-            # Sessione mai chiusa (live) — calcola live
-            inizio = sessione.get("inizio")
-            if inizio:
-                try:
-                    dur = int((datetime.now() -
-                               datetime.fromisoformat(inizio)).total_seconds())
-                except Exception:
-                    dur = 0
+                    return  # altro progetto
+            elif nome_cerca:
+                # Sessione senza ID (storico): confronta nome
+                # Prova match esatto, poi parziale (nome tecnico dentro nome UI)
+                if nome_sess == nome_cerca:
+                    pass  # match esatto OK
+                elif nome_cerca in nome_sess or nome_sess in nome_cerca:
+                    pass  # un nome contiene l'altro OK
+                else:
+                    return  # nessun match
             else:
-                dur = 0
+                # project_id presente ma pid_sess vuoto e progetto vuoto: escludi
+                return
+        dur = sessione.get("durata_sec") or 0
         if prog not in agg:
             agg[prog] = {
                 "ore_sec":      0,

@@ -467,12 +467,13 @@ export default function Home(){
                   )}
                 </div>
 
-                {/* Timer 3: Ore totali progetto (storico + sessione live) */}
+                {/* Timer 3: Ore totali progetto (storico chiuso + sessione live) */}
                 {(()=>{
-                  // Ore storiche: tutte le sessioni CHIUSE di questo progetto nel log
+                  // Ore storiche: solo sessioni CHIUSE (fine != null) e non-zero
+                  // Il backend esclude sessioni aperte e durata=0 per evitare doppio conteggio
                   const secStorico = oreProgetto?.ore_sec || 0
-                  // Sessione corrente APERTA (non ancora nel log chiuso): aggiunta live
-                  // durataSessioneLive cresce ogni secondo grazie a tickSec
+                  // Sessione corrente APERTA: aggiunta qui live (cresce ogni secondo via tickSec)
+                  // sessMatch garantisce che la sessione live appartenga a questo pallet/progetto
                   const secSessioneAperta = sessMatch ? (durataSessioneLive || 0) : 0
                   const secTot = secStorico + secSessioneAperta
                   const hh = Math.floor(secTot/3600)

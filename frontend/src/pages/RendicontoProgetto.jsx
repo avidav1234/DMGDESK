@@ -241,7 +241,12 @@ export default function RendicontoProgetto() {
             <div>
               <h1 style={{margin:0,fontSize:30,fontWeight:900,letterSpacing:'-0.03em',
                 fontFamily:'monospace',color:'#0d2d5e'}}>{progetto.nome}</h1>
-              <div style={{fontSize:12,color:'#94a3b8',marginTop:3}}>
+              {progetto.descrizione&&(
+                <div style={{fontSize:15,fontWeight:600,color:'#334155',marginTop:2}}>
+                  {progetto.descrizione}
+                </div>
+              )}
+              <div style={{fontSize:12,color:'#94a3b8',marginTop:progetto.descrizione?2:3}}>
                 Rendiconto commessa &nbsp;·&nbsp; generato il {new Date().toLocaleDateString('it-IT',{day:'2-digit',month:'long',year:'numeric'})}
               </div>
             </div>
@@ -352,46 +357,65 @@ export default function RendicontoProgetto() {
             )}
           </div>
 
-          {/* Sessioni */}
+          {/* Sessioni — aggregate per giorno */}
           <div style={{background:'#fff',border:'1px solid #e2e8f0',borderRadius:16,padding:'22px 24px'}}>
             <div style={{fontSize:10,fontWeight:800,color:'#94a3b8',letterSpacing:'0.1em',
-              textTransform:'uppercase',marginBottom:14}}>Sessioni di lavorazione</div>
-            <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
-              <thead>
-                <tr style={{borderBottom:'1px solid #f1f5f9'}}>
-                  {['Data','Orario','Durata','Pgm'].map(h=>(
-                    <th key={h} style={{textAlign:h==='Data'||h==='Orario'?'left':'right',
-                      color:'#94a3b8',fontWeight:700,fontSize:10,padding:'0 0 8px',
-                      textTransform:'uppercase',letterSpacing:'0.05em'}}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {sessioni.map((s,i)=>(
-                  <tr key={i} style={{borderBottom:'1px solid #f8fafc'}}>
-                    <td style={{padding:'5px 0',fontWeight:700,color:'#0d2d5e',fontSize:11}}>
-                      {new Date(s.data).toLocaleDateString('it-IT',{day:'2-digit',month:'short'})}
-                    </td>
-                    <td style={{color:'#64748b',fontFamily:'monospace',fontSize:10}}>
-                      {s.inizio?.slice(11,16)}{s.fine?`→${s.fine.slice(11,16)}`:'→…'}
-                    </td>
-                    <td style={{textAlign:'right',fontWeight:700,color:'#0d2d5e',
-                      fontFamily:'monospace',fontSize:11}}>{s.durata_str}</td>
-                    <td style={{textAlign:'right',color:'#64748b',fontSize:11}}>{s.n_programmi}</td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr style={{borderTop:'2px solid #e2e8f0'}}>
-                  <td colSpan={2} style={{padding:'8px 0',fontWeight:800,fontSize:12,color:'#0d2d5e'}}>
-                    Totale
-                  </td>
-                  <td style={{textAlign:'right',fontWeight:900,color:'#0d2d5e',
-                    fontFamily:'monospace',fontSize:14}}>{kpi.ore_macchina_str}</td>
-                  <td/>
-                </tr>
-              </tfoot>
-            </table>
+              textTransform:'uppercase',marginBottom:14}}>Ore per giornata</div>
+            {(()=>{
+              const perGiorno = {}
+              sessioni.forEach(s => {
+                const d = s.data
+                if(!perGiorno[d]) perGiorno[d] = {data:d,durata_sec:0,n_programmi:0}
+                perGiorno[d].durata_sec  += s.durata_sec || 0
+                perGiorno[d].n_programmi += s.n_programmi || 0
+              })
+              const giorni = Object.values(perGiorno).sort((a,b)=>a.data.localeCompare(b.data))
+              const fmtH = sec => {
+                const h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60)
+                return `${String(h).padStart(2,'0')}h ${String(m).padStart(2,'0')}m`
+              }
+              return (
+                <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
+                  <thead>
+                    <tr style={{borderBottom:'2px solid #e2e8f0'}}>
+                      <th style={{textAlign:'left',color:'#94a3b8',fontWeight:700,
+                        fontSize:10,padding:'0 0 8px',textTransform:'uppercase',
+                        letterSpacing:'0.05em'}}>Giorno</th>
+                      <th style={{textAlign:'right',color:'#94a3b8',fontWeight:700,
+                        fontSize:10,padding:'0 0 8px',textTransform:'uppercase',
+                        letterSpacing:'0.05em'}}>Ore lavorate</th>
+                      <th style={{textAlign:'right',color:'#94a3b8',fontWeight:700,
+                        fontSize:10,padding:'0 0 8px',textTransform:'uppercase',
+                        letterSpacing:'0.05em'}}>Pgm</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {giorni.map(g=>(
+                      <tr key={g.data} style={{borderBottom:'1px solid #f1f5f9'}}>
+                        <td style={{padding:'8px 0',fontWeight:700,color:'#0d2d5e',fontSize:13}}>
+                          {new Date(g.data).toLocaleDateString('it-IT',
+                            {weekday:'long',day:'2-digit',month:'long',year:'numeric'})}
+                        </td>
+                        <td style={{textAlign:'right',fontWeight:900,color:'#0d2d5e',
+                          fontFamily:'monospace',fontSize:16}}>{fmtH(g.durata_sec)}</td>
+                        <td style={{textAlign:'right',color:'#64748b',fontSize:12,
+                          paddingLeft:8}}>{g.n_programmi}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr style={{borderTop:'2px solid #0d2d5e'}}>
+                      <td style={{padding:'10px 0',fontWeight:800,fontSize:13,color:'#0d2d5e'}}>
+                        Totale
+                      </td>
+                      <td style={{textAlign:'right',fontWeight:900,color:'#0d2d5e',
+                        fontFamily:'monospace',fontSize:18}}>{kpi.ore_macchina_str}</td>
+                      <td/>
+                    </tr>
+                  </tfoot>
+                </table>
+              )
+            })()}
           </div>
         </div>
       </div>

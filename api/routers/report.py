@@ -1902,9 +1902,10 @@ async def get_rendiconto_progetto(project_id: str):
     return {
         "progetto": {
             "id":    project_id,
-            "nome":  nome,
-            "colore": colore,
-            "creato": creato,
+            "nome":       nome,
+            "descrizione": progetto.get("description") or "",
+            "colore":     colore,
+            "creato":     creato,
         },
         "delivery": {
             "scadenza":      scadenza,

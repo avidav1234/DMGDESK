@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
-import { useEffect } from 'react'
+import { useEffect, Component } from 'react'
 import Sidebar       from './components/Sidebar'
 import Home          from './pages/Home'
 import CodaLavorazione from './pages/CodaLavorazione'
@@ -12,6 +12,54 @@ import AnalisiNC     from './pages/AnalisiNC'
 import InvioMacchina from './pages/InvioMacchina'
 import Progetti      from './pages/Progetti'
 import Report        from './pages/Report'
+
+// ── Error Boundary globale ──────────────────────────────────────────────────
+// Previene schermo bianco su eccezioni non gestite nei componenti React.
+// Mostra un messaggio di errore con pulsante per ricaricare la pagina.
+class ErrorBoundary extends Component {
+  constructor(props) {
+    super(props)
+    this.state = { hasError: false, error: null }
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error }
+  }
+  componentDidCatch(error, info) {
+    console.error('[DMGDesk] Errore non gestito:', error, info.componentStack)
+  }
+  render() {
+    if (!this.state.hasError) return this.props.children
+    return (
+      <div style={{
+        display: 'flex', flexDirection: 'column', alignItems: 'center',
+        justifyContent: 'center', height: '100vh', gap: 16,
+        background: '#fef2f2', fontFamily: 'system-ui, sans-serif',
+      }}>
+        <div style={{ fontSize: 32 }}>⚠</div>
+        <div style={{ fontSize: 18, fontWeight: 700, color: '#dc2626' }}>
+          Errore imprevisto
+        </div>
+        <div style={{
+          fontSize: 12, fontFamily: 'monospace', color: '#7f1d1d',
+          background: '#fee2e2', padding: '8px 16px', borderRadius: 6,
+          maxWidth: 500, textAlign: 'center',
+        }}>
+          {this.state.error?.message || 'Errore sconosciuto'}
+        </div>
+        <button
+          onClick={() => window.location.reload()}
+          style={{
+            background: '#dc2626', color: '#fff', border: 'none',
+            borderRadius: 8, padding: '10px 24px', fontSize: 14,
+            fontWeight: 700, cursor: 'pointer',
+          }}
+        >
+          Ricarica pagina
+        </button>
+      </div>
+    )
+  }
+}
 
 // Polling globale — gira sempre, indipendentemente dalla pagina aperta
 function GlobalPoller() {
@@ -41,23 +89,24 @@ const FULL_PAGES = ['/home', '/coda', '/analisi-nc', '/macchina', '/progetti', '
 function MainContent() {
   const loc = useLocation()
   const isFull = FULL_PAGES.some(p => loc.pathname.startsWith(p))
+  const Wrap = ({ children }) => <ErrorBoundary>{children}</ErrorBoundary>
   return (
     <main style={{ flex:1, overflow:'auto', background:'var(--bg-base)',
       padding: isFull ? 0 : '20px 24px', display:'flex', flexDirection:'column' }}>
       <Routes>
         <Route path="/"               element={<Navigate to="/home" replace />} />
-        <Route path="/home"           element={<Home />} />
-        <Route path="/coda"           element={<CodaLavorazione />} />
-        <Route path="/macchina"       element={<Macchina />} />
-        <Route path="/scaffale"       element={<Scaffale />} />
-        <Route path="/smontati"       element={<Smontati />} />
-        <Route path="/holder-bussole" element={<HolderBussole />} />
-        <Route path="/generatore"     element={<Generatore />} />
-        <Route path="/analisi-nc"     element={<AnalisiNC />} />
-        <Route path="/invia"          element={<InvioMacchina />} />
-        <Route path="/report"         element={<Report />} />
-        <Route path="/magazzino"      element={<Smontati />} />
-        <Route path="/progetti"       element={<Progetti />} />
+        <Route path="/home"           element={<Wrap><Home /></Wrap>} />
+        <Route path="/coda"           element={<Wrap><CodaLavorazione /></Wrap>} />
+        <Route path="/macchina"       element={<Wrap><Macchina /></Wrap>} />
+        <Route path="/scaffale"       element={<Wrap><Scaffale /></Wrap>} />
+        <Route path="/smontati"       element={<Wrap><Smontati /></Wrap>} />
+        <Route path="/holder-bussole" element={<Wrap><HolderBussole /></Wrap>} />
+        <Route path="/generatore"     element={<Wrap><Generatore /></Wrap>} />
+        <Route path="/analisi-nc"     element={<Wrap><AnalisiNC /></Wrap>} />
+        <Route path="/invia"          element={<Wrap><InvioMacchina /></Wrap>} />
+        <Route path="/report"         element={<Wrap><Report /></Wrap>} />
+        <Route path="/magazzino"      element={<Wrap><Smontati /></Wrap>} />
+        <Route path="/progetti"       element={<Wrap><Progetti /></Wrap>} />
       </Routes>
     </main>
   )
@@ -65,12 +114,14 @@ function MainContent() {
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <GlobalPoller />
-      <div style={{ display:'flex', height:'100vh', overflow:'hidden', background:'var(--bg-base)' }}>
-        <Sidebar />
-        <MainContent />
-      </div>
-    </BrowserRouter>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <GlobalPoller />
+        <div style={{ display:'flex', height:'100vh', overflow:'hidden', background:'var(--bg-base)' }}>
+          <Sidebar />
+          <MainContent />
+        </div>
+      </BrowserRouter>
+    </ErrorBoundary>
   )
 }

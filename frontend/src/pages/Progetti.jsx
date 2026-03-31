@@ -2379,6 +2379,7 @@ export default function Progetti(){
   const[sidebarCollapsed,setSidebarCollapsed]=useState(false)
   const[lastSavedProj,setLastSavedProj]=useState(null)
   const[lastSavedTmpl,setLastSavedTmpl]=useState(null)
+  const[saveError,setSaveError]=useState(null)        // errore salvataggio batch
   const[importMsg,setImportMsg]=useState(null)
   const importRef=useRef(null)
   const saveTimer=useRef(null)
@@ -2501,12 +2502,20 @@ export default function Progetti(){
     clearTimeout(saveTimer.current)
     saveTimer.current=setTimeout(async()=>{
       try{
-        // Salva tutti i progetti modificati in batch
-        for(const p of projs){
-          await fetch(`${API}/${p.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({data:p})})
-        }
+        // Salva tutti i progetti in una sola richiesta (batch endpoint)
+        const r=await fetch(`${API}/batch/save`,{
+          method:'PUT',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({projects:projs})
+        })
+        if(!r.ok) throw new Error(`Server ${r.status}`)
         setLastSavedProj(nowStr())
-      }catch{}finally{
+        setSaveError(null)
+      }catch(e){
+        setSaveError('Salvataggio fallito — riprova')
+        setTimeout(()=>setSaveError(null), 6000)
+        console.warn('[Progetti] batch save error:', e.message)
+      }finally{
         // Grace period: mantieni il lock 3s dopo il salvataggio per evitare
         // che il silentRefresh immediatamente successivo sovrascriva
         writeLockTimer.current=setTimeout(()=>{ isSaving.current=false },3000)
@@ -2686,6 +2695,15 @@ export default function Progetti(){
       )}
 
       {/* CONTENT + SIDEBAR */}
+      <div style={{flex:1,overflow:'hidden',display:'flex',flexDirection:'column'}}>
+        {/* Banner errore salvataggio — visibile in tutte le pagine */}
+        {saveError&&(
+          <div style={{padding:'8px 20px',background:'#fef2f2',borderBottom:'1px solid #fca5a5',
+            fontSize:12,fontWeight:700,color:'#dc2626',display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
+            <span>⚠</span>
+            <span>{saveError}</span>
+          </div>
+        )}
       <div style={{flex:1,overflow:'hidden',display:'flex',flexDirection:'row'}}>
         <div style={{flex:1,overflow:'hidden',display:'flex',flexDirection:'column'}}>
           {isOnEditor?(
@@ -2795,6 +2813,7 @@ export default function Progetti(){
           )}
         </div>
         <QuickTasksSidebar collapsed={sidebarCollapsed} onToggleCollapse={()=>setSidebarCollapsed(v=>!v)}/>
+      </div>
       </div>
 
       {showNewProject&&(

@@ -295,6 +295,32 @@ async def update_progetto(project_id: str, body: ProgettoUpdate):
         _save_progetti(config, data)
     return {"ok": True}
 
+
+class BatchUpdate(BaseModel):
+    projects: list  # lista completa dei progetti da salvare
+
+
+@router.put("/batch/save")
+async def batch_save_progetti(body: BatchUpdate):
+    """
+    Salva tutti i progetti in una singola scrittura atomica.
+    Usato da persistProjects nel frontend — sostituisce N PUT sequenziali con 1.
+    Riduce il carico sulla share Windows e la finestra di race condition.
+    """
+    config = carica_configurazione()
+    async with _write_lock:
+        data = _load_progetti(config)
+        # Rimuove pallet_assegnato da tutti i progetti (gestito da pallet_state)
+        cleaned = []
+        for p in body.projects:
+            if isinstance(p, dict):
+                pc = dict(p)
+                pc.pop("pallet_assegnato", None)
+                cleaned.append(pc)
+        data["projects"] = cleaned
+        _save_progetti(config, data)
+    return {"ok": True, "n_salvati": len(cleaned)}
+
 @router.delete("/{project_id}")
 async def delete_progetto(project_id: str):
     """Elimina un progetto."""

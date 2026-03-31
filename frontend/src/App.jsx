@@ -16,7 +16,10 @@ import Report        from './pages/Report'
 // Polling globale — gira sempre, indipendentemente dalla pagina aperta
 function GlobalPoller() {
   useEffect(() => {
+    let isRunning = false  // protezione: evita tick sovrapposti se backend lento
     const tick = async () => {
+      if (isRunning) return  // tick precedente ancora in corso — salta
+      isRunning = true
       try {
         const r = await fetch('/api/macchina-live/aggiorna-stati-da-log', { method: 'POST' })
         if (!r.ok) return
@@ -24,6 +27,7 @@ function GlobalPoller() {
         // Notifica le pagine interessate
         window.dispatchEvent(new CustomEvent('dmgdesk:stati-aggiornati', { detail: d }))
       } catch {}
+      finally { isRunning = false }
     }
     tick()
     const t = setInterval(tick, 5000)

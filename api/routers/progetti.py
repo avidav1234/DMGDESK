@@ -86,6 +86,19 @@ def _save_progetti(config: dict, data: dict):
     _progetti_cache["mtime"] = 0
     _invalidate_analisi_cache()
 
+
+def _atomic_write(path: Path, data) -> None:
+    """Scrittura atomica generica: serializza data in JSON su path in modo sicuro."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    try:
+        tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp.replace(path)
+    except Exception:
+        try: tmp.unlink(missing_ok=True)
+        except Exception: pass
+        raise
+
 def _load_templates(config: dict) -> list:
     path = _templates_path(config)
     if path.exists():
@@ -272,7 +285,7 @@ async def get_quick_tasks():
 async def put_quick_tasks(body: dict):
     config = carica_configurazione()
     p = _quick_tasks_path(config)
-    p.write_text(json.dumps(body, ensure_ascii=False, indent=2), encoding="utf-8")
+    _atomic_write(p, body)
     return {"ok": True}
 
 
@@ -379,7 +392,7 @@ async def save_templates(body: TemplateUpdate):
     """Salva i template su file."""
     config = carica_configurazione()
     path = _templates_path(config)
-    path.write_text(json.dumps(body.templates, ensure_ascii=False, indent=2), encoding="utf-8")
+    _atomic_write(path, body.templates)
     return {"ok": True}
 
 
@@ -402,7 +415,7 @@ async def import_backup(body: ImportBody):
         data = {"projects": body.projects}
         _save_progetti(config, data)
         path = _templates_path(config)
-        path.write_text(json.dumps(body.templates, ensure_ascii=False, indent=2), encoding="utf-8")
+        _atomic_write(path, body.templates)
     else:
         # Merge: aggiorna esistenti, aggiunge nuovi
         data = _load_progetti(config)
@@ -417,7 +430,7 @@ async def import_backup(body: ImportBody):
         for t in body.templates:
             existing_t[t["id"]] = t
         path = _templates_path(config)
-        path.write_text(json.dumps(list(existing_t.values()), ensure_ascii=False, indent=2), encoding="utf-8")
+        _atomic_write(path, list(existing_t.values()))
 
     return {
         "ok": True,
@@ -988,7 +1001,7 @@ async def segna_in_macchina(project_id: str, body: dict):
         else:
             path = Path("worktrack_projects.json")
         data_to_save = {"projects": projects, "ultimo_aggiornamento": now}
-        path.write_text(json.dumps(data_to_save, ensure_ascii=False, indent=2), encoding="utf-8")
+        _atomic_write(path, data_to_save)
 
         # Sincronizza la coda automaticamente:
         # se questo progetto ha un pallet assegnato, entra in coda
@@ -1044,8 +1057,7 @@ async def patch_project(project_id: str, body: dict = Body(...)):
 
     now  = datetime.now().isoformat()
     path = _progetti_path(config)
-    path.write_text(json.dumps({"projects": projects, "ultimo_aggiornamento": now},
-                               ensure_ascii=False, indent=2), encoding="utf-8")
+    _atomic_write(path, {"projects": projects, "ultimo_aggiornamento": now})
     return {"ok": True, "project_id": project_id}
 
 
@@ -1073,7 +1085,7 @@ def _load_deliveries(config: dict) -> list:
 def _save_deliveries(config: dict, deliveries: list):
     path = _deliveries_path(config)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(deliveries, ensure_ascii=False, indent=2), encoding="utf-8")
+    _atomic_write(path, deliveries)
 
 
 @router.post("/{project_id}/riparsing-utensili")
@@ -1146,8 +1158,7 @@ async def riparsing_utensili(project_id: str):
         now = datetime.now().isoformat()
         tools_folder2 = (config.get("tools_toa_folder") or "").strip()
         path = Path(tools_folder2) / "worktrack_projects.json" if tools_folder2 else Path("worktrack_projects.json")
-        path.write_text(json.dumps({"projects": projects, "ultimo_aggiornamento": now},
-                                   ensure_ascii=False, indent=2), encoding="utf-8")
+        _atomic_write(path, {"projects": projects, "ultimo_aggiornamento": now})
 
     return {"aggiornati": aggiornati, "project_id": project_id}
 

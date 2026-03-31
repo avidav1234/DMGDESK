@@ -502,13 +502,13 @@ export default function Home(){
                       <div style={{fontSize:26,fontWeight:900,color:'#166534',fontFamily:'monospace',lineHeight:1}}>
                         {secTot > 0 ? timerStr : '—:——:——'}
                       </div>
-                      {secTot > 0 && (
+                      {secTot > 0 && (<>
                         <div style={{fontSize:9,color:'#64748b',marginTop:3}}>
                           {nSessioni > 0 ? `${nSessioni} sess.` : ''}
                           {primaData && nSessioni > 1 ? ` · dal ${primaData}` : ''}
                         </div>
                         <div style={{fontSize:8,color:'#ef4444',marginTop:2}}>{_dbg}</div>
-                      )}
+                      </>)}
                     </div>
                   )
                 })()}

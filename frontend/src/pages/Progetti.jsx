@@ -952,35 +952,50 @@ function SaveAsTemplateModal({project,templates,onSave,onClose}){
 
 // ── LancioNCModal ─────────────────────────────────────────────────────────────
 function LancioNCModal({project, toolsDB, initialSelectedIds, onLancia, onClose}){
-  // Costruisce mappa fase → programmi, conservando l'info di fase su ogni pgm
+  // Costruisce mappa fase → programmi, IPM INCLUSI (sezione separata)
   const fasi = (project.steps||[]).map(step=>{
     const fres = (step.tasks||[]).find(t=>t.text?.trim().toLowerCase()==='fresatura')
-    const pgms = fres ? (fres.programs||[]).filter(p=>p.tipoGruppo!=='ipm') : []
-    return { stepId: step.id, stepTitle: step.title, pgms }
-  }).filter(f=>f.pgms.length>0)
+    const pgmsAll = fres ? (fres.programs||[]) : []
+    const pgmsFres = pgmsAll.filter(p=>p.tipoGruppo!=='ipm')
+    const pgmsIpm  = pgmsAll.filter(p=>p.tipoGruppo==='ipm')
+    return { stepId: step.id, stepTitle: step.title, pgms: pgmsFres, pgmsIpm }
+  }).filter(f=>f.pgms.length>0||f.pgmsIpm.length>0)
 
+  // allPgm: solo fresatura per logica fasi/selezione default
   const allPgm = fasi.flatMap(f=>f.pgms.map(p=>({...p, _stepId:f.stepId, _stepTitle:f.stepTitle})))
+  // allIpm: programmi tastatura di tutte le fasi
+  const allIpm = fasi.flatMap(f=>f.pgmsIpm.map(p=>({...p, _stepId:f.stepId, _stepTitle:f.stepTitle})))
+
   const da_fare    = allPgm.filter(p=>p.stato==='da_fare')
   const in_macchina= allPgm.filter(p=>['in_macchina','in_main','in_lavorazione'].includes(p.stato))
   const completati = allPgm.filter(p=>p.stato==='completato')
 
   const [selected, setSelected] = useState(()=>{
     if(initialSelectedIds && initialSelectedIds.size > 0){
-      // Filtra solo gli ID che esistono in allPgm (sicurezza)
       const valid = new Set([...initialSelectedIds].filter(id=>allPgm.some(p=>p.id===id)))
       if(valid.size > 0) return valid
     }
     return new Set(da_fare.map(p=>p.id))
   })
+  // Selezione IPM separata — di default tutti i da_fare
+  const [selectedIpm, setSelectedIpm] = useState(()=>
+    new Set(allIpm.filter(p=>p.stato==='da_fare').map(p=>p.id))
+  )
   const [showCompletati, setShowCompletati] = useState(false)
+  const [showIpm, setShowIpm] = useState(allIpm.length > 0)
   const [faseMistaConfirmata, setFaseMistaConfirmata] = useState(false)
 
   function toggle(id){ setSelected(s=>{ const n=new Set(s); n.has(id)?n.delete(id):n.add(id); return n }) }
+  function toggleIpm(id){ setSelectedIpm(s=>{ const n=new Set(s); n.has(id)?n.delete(id):n.add(id); return n }) }
   function selezionaTutti(fase){ setSelected(s=>{ const n=new Set(s); fase.pgms.forEach(p=>n.add(p.id)); return n }) }
   function deselezionaFase(fase){ setSelected(s=>{ const n=new Set(s); fase.pgms.forEach(p=>n.delete(p.id)); return n }) }
   function deselezionaTutti(){ setSelected(new Set()) }
 
-  const pgmSelezionati = allPgm.filter(p=>selected.has(p.id))
+  // pgmSelezionati include sia fresatura che IPM selezionati
+  const pgmSelezionati = [
+    ...allPgm.filter(p=>selected.has(p.id)),
+    ...allIpm.filter(p=>selectedIpm.has(p.id)),
+  ]
 
   // Rilevamento fasi miste
   const fasiSelezionate = [...new Set(pgmSelezionati.map(p=>p._stepTitle))]
@@ -1229,6 +1244,66 @@ function LancioNCModal({project, toolsDB, initialSelectedIds, onLancia, onClose}
               })}
             </div>
           )}
+
+          {/* Sezione IPM / Tastatura — sempre visibile se presenti */}
+          {allIpm.length>0&&(
+            <div>
+              <div onClick={()=>setShowIpm(v=>!v)}
+                style={{padding:'8px 14px',fontSize:10,fontWeight:700,color:'#8B2FC9',
+                  letterSpacing:'0.07em',background:'#F9F0FF',
+                  borderBottom:'1px solid #DDD6FE',borderTop:'1px solid #DDD6FE',
+                  cursor:'pointer',display:'flex',alignItems:'center',gap:6}}>
+                📏 {showIpm?'▼':'▶'} TASTATURA (IPM) — {allIpm.length} programmi
+                <span style={{marginLeft:'auto',fontSize:11,color:'#8B2FC9',fontWeight:400}}>
+                  {selectedIpm.size} selezionati
+                </span>
+                <button onClick={e=>{e.stopPropagation();
+                  setSelectedIpm(allIpm.length===selectedIpm.size
+                    ? new Set()
+                    : new Set(allIpm.map(p=>p.id)))}}
+                  style={{background:'none',border:'1px solid #8B2FC944',borderRadius:5,
+                    color:'#8B2FC9',fontSize:10,fontWeight:700,padding:'2px 7px',cursor:'pointer'}}>
+                  {allIpm.length===selectedIpm.size?'Desel. tutti':'Sel. tutti'}
+                </button>
+              </div>
+              {showIpm&&allIpm.map(pgm=>{
+                const sel=selectedIpm.has(pgm.id)
+                const cfg={da_fare:{label:'Da fare',color:'#94a3b8',bg:'#f8fafc'},
+                  in_macchina:{label:'In macchina',color:'#0d2d5e',bg:'#DBEAFE'},
+                  completato:{label:'Fatto',color:'#166534',bg:'#DCFCE7'}}[pgm.stato]||{label:pgm.stato,color:'#94a3b8',bg:'#f8fafc'}
+                return(
+                  <div key={pgm.id} onClick={()=>toggleIpm(pgm.id)}
+                    style={{display:'flex',alignItems:'center',gap:10,padding:'7px 14px',
+                      cursor:'pointer',background:sel?'#F3E8FF':'#FAFAFA',
+                      borderLeft:`3px solid ${sel?'#8B2FC9':'transparent'}`,
+                      borderBottom:'1px solid #F0EEE8',transition:'background 0.1s'}}>
+                    <div style={{width:16,height:16,borderRadius:4,flexShrink:0,
+                      border:sel?'none':'2px solid #B0ADA4',
+                      background:sel?'#8B2FC9':'transparent',
+                      display:'flex',alignItems:'center',justifyContent:'center'}}>
+                      {sel&&<span style={{color:'#fff',fontSize:11,fontWeight:800}}>✓</span>}
+                    </div>
+                    <span style={{fontSize:10,fontWeight:700,color:cfg.color,background:cfg.bg,
+                      padding:'2px 6px',borderRadius:10,flexShrink:0,whiteSpace:'nowrap'}}>
+                      {cfg.label}
+                    </span>
+                    <span style={{fontSize:12,fontFamily:'monospace',fontWeight:700,color:'#8B2FC9',
+                      minWidth:140,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                      {pgm.filename?.replace(/\.MPF$/i,'')||`#${pgm.numPgm}`}
+                    </span>
+                    <span style={{fontSize:11,fontFamily:'monospace',color:'#0f172a',
+                      minWidth:100,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                      {pgm.utensile||'RENISHAW'}
+                    </span>
+                    <span style={{fontSize:11,color:'#94a3b8',flex:1,
+                      overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                      {(pgm.tipoOp||'').replace(/[-–]\s*NESSUN TESTO\s*/gi,'').trim()||''}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
 
         {/* Footer */}
@@ -1250,11 +1325,16 @@ function LancioNCModal({project, toolsDB, initialSelectedIds, onLancia, onClose}
 
           <div style={{display:'flex',alignItems:'center',gap:12}}>
             <div style={{flex:1,fontSize:13,color:'#475569'}}>
-              {selected.size===0
+              {selected.size===0&&selectedIpm.size===0
                 ? <span style={{color:'#94a3b8'}}>Nessun programma selezionato</span>
-                : <><span style={{fontWeight:700,color:'#0f172a'}}>{selected.size} selezionat{selected.size===1?'o':'i'}</span>
-                    {!faseMista&&problemi.length===0&&<span style={{color:'#166634',marginLeft:6}}>· tutti ok ✓</span>}
-                    {faseMista&&<span style={{color:'#c2410c',marginLeft:6}}>· {fasiSelezionate.length} fasi diverse</span>}
+                : <><span style={{fontWeight:700,color:'#0f172a'}}>
+                    {selected.size+selectedIpm.size} selezionat{(selected.size+selectedIpm.size)===1?'o':'i'}
+                  </span>
+                  {selectedIpm.size>0&&<span style={{color:'#8B2FC9',marginLeft:6,fontSize:12}}>
+                    · {selectedIpm.size} IPM
+                  </span>}
+                  {!faseMista&&problemi.length===0&&<span style={{color:'#166634',marginLeft:6}}>· ok ✓</span>}
+                  {faseMista&&<span style={{color:'#c2410c',marginLeft:6}}>· {fasiSelezionate.length} fasi diverse</span>}
                   </>
               }
             </div>
@@ -1264,19 +1344,19 @@ function LancioNCModal({project, toolsDB, initialSelectedIds, onLancia, onClose}
               Annulla
             </button>
             <button
-              disabled={selected.size===0||(faseMista&&!faseMistaConfirmata)}
+              disabled={(selected.size+selectedIpm.size)===0||(faseMista&&!faseMistaConfirmata)}
               onClick={()=>onLancia(pgmSelezionati)}
               style={{
-                background: selected.size===0?'#e2e8f0'
+                background: (selected.size+selectedIpm.size)===0?'#e2e8f0'
                   : faseMista&&!faseMistaConfirmata?'#fed7aa'
                   : faseMista?'#ea580c'
                   : '#0d2d5e',
                 border:'none',borderRadius:8,color:'#fff',fontWeight:700,fontSize:14,
-                padding:'9px 22px',cursor:selected.size===0||(faseMista&&!faseMistaConfirmata)?'default':'pointer',
+                padding:'9px 22px',cursor:(selected.size+selectedIpm.size)===0||(faseMista&&!faseMistaConfirmata)?'default':'pointer',
                 transition:'all 0.15s',
                 opacity:faseMista&&!faseMistaConfirmata?0.6:1
               }}>
-              {faseMista?'⚠ ':'📄 '}Lancia {selected.size>0?selected.size:''} in NC →
+              {faseMista?'⚠ ':'📄 '}Lancia {(selected.size+selectedIpm.size)>0?(selected.size+selectedIpm.size):''} in NC →
             </button>
           </div>
         </div>
@@ -2600,13 +2680,15 @@ export default function Progetti(){
 
   // ── Lancia NC ───────────────────────────────────────────────────────────────
   function lanciaNC(project, pgmSelezionati){
+    // pgmSelezionati può contenere sia fresatura che IPM (dalla modale)
+    // Fallback senza selezione: solo fresatura da_fare (comportamento precedente)
     const mpf = pgmSelezionati || (project.steps||[])
       .flatMap(s=>s.tasks||[])
       .filter(t=>t.text?.trim().toLowerCase()==='fresatura')
       .flatMap(t=>(t.programs||[]).filter(p=>p.tipoGruppo!=='ipm'&&p.stato==='da_fare'))
     if(!mpf.length) return
 
-    // ── Aggiorna stato programmi → in_macchina ──────────────────────────────
+    // Aggiorna stato → in_macchina per TUTTI i selezionati (fresatura + IPM)
     const mpfIds = new Set(mpf.map(p=>p.id))
     const now = nowStr()
     const updatedProject = {
@@ -2628,7 +2710,8 @@ export default function Progetti(){
     updateProject(updatedProject)
 
     const nomeFromProject = project.name.replace(/\s+/g,'_').replace(/[^a-zA-Z0-9_]/g,'').toUpperCase()
-    const firstFile = mpf[0]?.filename || ''
+    const firstFres = mpf.find(p=>p.tipoGruppo!=='ipm') || mpf[0]
+    const firstFile = firstFres?.filename || ''
     const baseTokens = firstFile.replace(/\.MPF$/i,'').split('_')
     const nomeFromFile = /^\d+$/.test(baseTokens[0]) && baseTokens.length >= 2
       ? `${baseTokens[0]}_${baseTokens[1]}`
@@ -2639,7 +2722,7 @@ export default function Progetti(){
       projectId:   project.id,
       projectName: project.name,
       nomeCartella,
-      mpfFiles:    mpf.map(p=>p.filename)
+      mpfFiles:    mpf.map(p=>p.filename)   // include sia fresatura che IPM
     }))
     navigate('/analisi-nc')
   }

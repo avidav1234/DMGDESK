@@ -145,13 +145,14 @@ class CimatronCOMAdapter:
                 return False
 
             import clr  # pythonnet
-            clr.AddReference("Interop.CimAppAPI")
-            import CimAppAPI
+            # La DLL di aggancio applicazione in Cimatron 2025 è CimatronE
+            clr.AddReference("interop.CimatronE")
+            import CimatronE
 
-            self.app = CimAppAPI.CimApplication()
+            self.app = CimatronE.Application()
             _ = self.app.ActiveDocument
             self._available = True
-            log.info("[Cimatron COM] Connesso via API nativa")
+            log.info("[Cimatron COM] Connesso via interop.CimatronE")
             return True
         except ImportError:
             log.info("[Cimatron COM] pythonnet non disponibile — userò fallback finestra")
@@ -180,42 +181,60 @@ def parse_project_from_path(full_path: str) -> dict | None:
     Estrae commessa e operazione dal path del file CAM.
 
     Strutture supportate:
-      C:\\Lavoro\\4348\\P0221\\file.elt       → commessa=4348, op=P0221
-      H:\\...\\Backup Archivi\\4349\\0301\\x  → commessa=4349, op=0301
-      Qualsiasi path con almeno 2 livelli di cartelle sopra il file.
+      C:\\Lavoro\\4348\\P0221\\file.elt   → commessa=4348, op=0221, id=4348_0221
+      H:\\...\\4349\\0301\\file.elt       → commessa=4349, op=0301, id=4349_0301
+
+    La P iniziale nelle cartelle operazione (P0221, P7221) viene rimossa
+    per allinearsi ai nomi progetto in DMGDesk (es. 4348_0221).
     """
     p = Path(full_path)
-    parts = p.parts  # es. ('C:\\', 'Lavoro', '4348', 'P0221', 'file.elt')
+    parts = p.parts
 
-    # Servono almeno: drive + 2 cartelle + file
     if len(parts) < 4:
         return None
 
-    # Il file è parts[-1], la cartella padre è parts[-2] (operazione),
-    # la cartella nonno è parts[-3] (commessa)
-    operazione = parts[-2]
-    commessa   = parts[-3]
+    operazione_raw = parts[-2]   # es. P0221
+    commessa       = parts[-3]   # es. 4348
 
-    # Commessa deve essere numerica (4348, 4349, ...) o alfanumerica corta
-    # Esclude cartelle generiche come "Lavoro", "Backup Archivi", "Program Files"
+    # Esclude cartelle generiche troppo lunghe o con spazi
     if len(commessa) > 10 or ' ' in commessa:
         return None
 
+    # Normalizza: P0221 → 0221, P7221 → 7221, 0301 → 0301
+    op_norm = re.sub(r'^[Pp](\d)', r'\1', operazione_raw)
+
+    project_id = f"{commessa}_{op_norm}".upper()
+
     return {
         "commessa":   commessa.upper(),
-        "operazione": operazione.upper(),
-        "project_id": f"{commessa}_{operazione}".upper(),
+        "operazione": op_norm.upper(),
+        "project_id": project_id,
         "full_path":  full_path,
     }
 
 
 def parse_project_from_title(title_name: str) -> dict:
     """
-    Fallback: dal nome nel titolo finestra estrae commessa e operazione
-    se il formato è COMMESSA_OPERAZIONE (es. E541540221_0221_A#1_V3).
-    Altrimenti usa il nome intero come project_id.
+    Fallback: dal nome nel titolo finestra (es. E541540221_0221_A#1_V3)
+    tenta di estrarre commessa e operazione.
+
+    Se il nome inizia con 4 cifre (commessa numerica tipo 4348),
+    splitta su _ per ottenere commessa_operazione → allineato a DMGDesk.
+    Altrimenti usa il nome intero.
     """
-    # Prova a splittare sul primo underscore: COMMESSA_resto
+    # Caso: 4348_0221_xxx → commessa=4348, op=0221, id=4348_0221
+    m = re.match(r'^(\d{4})_(\d{4})', title_name)
+    if m:
+        commessa   = m.group(1)
+        operazione = m.group(2)
+        return {
+            "commessa":   commessa,
+            "operazione": operazione,
+            "project_id": f"{commessa}_{operazione}",
+            "full_path":  None,
+        }
+
+    # Caso generico: XXXX_YYYY → split primo underscore
     parts = title_name.split("_", 1)
     if len(parts) == 2:
         return {

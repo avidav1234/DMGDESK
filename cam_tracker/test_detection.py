@@ -37,9 +37,9 @@ def test_com(program_dir: str):
                 print(f"  [COM] Path usato: {path}")
                 break
         import clr
-        clr.AddReference("Interop.CimAppAPI")
-        import CimAppAPI
-        app = CimAppAPI.CimApplication()
+        clr.AddReference("interop.CimatronE")
+        import CimatronE
+        app = CimatronE.Application()
         doc = app.ActiveDocument
         if doc:
             full = str(doc.FullName)
@@ -136,17 +136,45 @@ def test_api(base_url: str):
 
 if __name__ == "__main__":
     import configparser
+    import sys
+    sys.path.insert(0, str(Path(__file__).parent))
+    from cam_tracker import parse_project_from_path, parse_project_from_title
 
     cfg = configparser.ConfigParser()
     cfg.read(Path(__file__).parent / "cam_tracker_config.ini", encoding="utf-8")
 
     program_dir = cfg.get("cimatron", "program_dir",
-                          fallback=r"C:\Program Files\Cimatron\Cimatron\2024.0\Program")
+                          fallback=r"C:\Program Files\Cimatron\Cimatron\2025.0\Program")
     dmgdesk_url = cfg.get("dmgdesk", "url", fallback="http://localhost:8000")
 
     print("=" * 60)
     print("  CAMTracker — Test rilevamento Cimatron")
     print("=" * 60)
+
+    # ── Test parser path ────────────────────────────────────────
+    print("\n── Test parser path → commessa/operazione ──────────────────")
+    test_paths = [
+        r"C:\Lavoro\4348\P0221\file.elt",
+        r"C:\Lavoro\4349\0301\PEZZO.elt",
+        r"H:\0CellaMikron\0Cella_DMG-Test\Backup Archivi\4349\0221\x.elt",
+        r"C:\Lavoro\4360\P7221\operazione.elt",
+    ]
+    for tp in test_paths:
+        result = parse_project_from_path(tp)
+        if result:
+            print(f"  {tp.split(chr(92))[-3]}\\{tp.split(chr(92))[-2]} → id={result['project_id']}")
+        else:
+            print(f"  FAIL: {tp}")
+
+    print("\n── Test parser titolo finestra ─────────────────────────────")
+    test_titles = [
+        "E541540221_0221_A#1_V3",
+        "1D24103D.20201A1#1-v4-off0",
+        "4348_0221_OP1",
+    ]
+    for tt in test_titles:
+        r = parse_project_from_title(tt)
+        print(f"  {tt!r:35s} → commessa={r['commessa']} op={r['operazione']} id={r['project_id']}")
 
     proj_com = test_com(program_dir)
     proj_win = test_window()
@@ -155,8 +183,12 @@ if __name__ == "__main__":
     print("\n── Risultato ───────────────────────────────────────────────")
     final = proj_com or proj_win
     if final:
-        print(f"  Progetto attivo rilevato: {final}")
-        print(f"  Metodo: {'COM API' if proj_com else 'Window Title'}")
+        print(f"  Progetto attivo: {final['project_id']}")
+        print(f"  Commessa:        {final['commessa']}")
+        print(f"  Operazione:      {final['operazione']}")
+        print(f"  Metodo:          {'COM API (path)' if proj_com else 'Window Title'}")
+        if final.get('full_path'):
+            print(f"  Path:            {final['full_path']}")
     else:
         print("  Nessun progetto rilevato.")
         print("  Verificare che Cimatron sia aperto con un file .elt attivo.")

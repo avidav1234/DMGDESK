@@ -1,6 +1,5 @@
 """
-cimatron_query.py — Legge ActiveDocument.FullName da Cimatron in esecuzione.
-Compilare con: pyinstaller cimatron_query.py -F --manifest=cimatron_query.manifest --distpath .
+cimatron_query.py — Debug versione
 """
 
 import sys
@@ -8,34 +7,41 @@ import sys
 CIMATRON_PROGRAM = r"C:\Program Files\Cimatron\Cimatron\2025.0\Program"
 
 def main():
+    sys.stderr.write("cimatron_query avviato\n")
+    sys.stderr.flush()
     try:
         sys.path.insert(0, CIMATRON_PROGRAM)
         import clr
+        sys.stderr.write("clr importato\n")
+        sys.stderr.flush()
+
         clr.AddReference("interop.CimAppAccess")
         clr.AddReference("interop.CimatronE")
         import interop.CimAppAccess as CimAppAccess
         import interop.CimatronE as CimatronE
+        sys.stderr.write("DLL caricate\n")
+        sys.stderr.flush()
 
         acc = CimAppAccess.AppAccess()
+        sys.stderr.write(f"AppAccess creato: {acc}\n")
+        sys.stderr.flush()
+
         raw_app = acc.GetApplication()
+        sys.stderr.write(f"GetApplication: {raw_app}\n")
+        sys.stderr.flush()
 
         if raw_app is None:
+            sys.stderr.write("Cimatron non in esecuzione\n")
             print("")
             return
 
-        # Ispeziona i metodi disponibili
         members = [x for x in dir(raw_app) if not x.startswith('_')]
-        print(f"DEBUG members: {members}", file=sys.stderr)
-
-        # Cerca metodo per documento attivo
-        for name in ['ActiveDocument', 'GetActiveDocument', 'Documents',
-                     'ActiveDoc', 'OpenDocuments', 'GetDocument']:
-            if hasattr(raw_app, name):
-                val = getattr(raw_app, name)
-                print(f"DEBUG {name} = {val}", file=sys.stderr)
+        sys.stderr.write(f"Metodi: {members}\n")
+        sys.stderr.flush()
 
     except Exception as e:
-        print(f"ERROR: {e}", file=sys.stderr)
+        sys.stderr.write(f"ECCEZIONE: {type(e).__name__}: {e}\n")
+        sys.stderr.flush()
         sys.exit(1)
 
 if __name__ == "__main__":

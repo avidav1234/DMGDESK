@@ -6,9 +6,9 @@ Legge il path del documento attivo in Cimatron e lo stampa su stdout.
 Il cam_tracker.py lo lancia come subprocess e legge l'output.
 
 Output (una riga):
-  - path completo se documento aperto: C:\Lavoro\4348\P0221\file.elt
+  - path completo se documento aperto
   - stringa vuota se nessun documento
-  - "ERROR: <messaggio>" in caso di errore
+  - "ERROR: <messaggio>" su stderr in caso di errore
 """
 
 import sys

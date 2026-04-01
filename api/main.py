@@ -13,6 +13,7 @@ from api.routers import (
     macchina_live, pallet, macchina_invio, report,
     cam_tracker_router,
 )
+from api.routers import telegram_router
 from utils.logger import get_logger
 
 log = get_logger(__name__)
@@ -56,6 +57,9 @@ app.include_router(allegati.router)
 # ── CAM Tracker ───────────────────────────────────────────────────────────────
 app.include_router(cam_tracker_router.router, prefix="/api/cam-tracker", tags=["CAM Tracker"])
 
+# ── Telegram Monitor ───────────────────────────────────────────────────────────
+app.include_router(telegram_router.router, prefix="/api/telegram", tags=["Telegram"])
+
 
 @app.on_event("startup")
 async def startup():
@@ -74,6 +78,30 @@ async def startup():
             log.info(f"Rimossi {cleaned} file .tmp orfani da {base}")
     except Exception:
         pass  # non bloccare lo startup se la config non è disponibile
+
+    # ── Telegram Monitor ──────────────────────────────────────────────────
+    import asyncio as _asyncio
+    from telegram_monitor.config import load_telegram_config
+    from telegram_monitor.notifier import TelegramNotifier
+    from telegram_monitor.monitor import MachineMonitor
+    from api.routers.macchina_live import get_stato_macchina as _get_stato
+
+    tg_cfg = load_telegram_config()
+    if tg_cfg:
+        _notifier = TelegramNotifier(token=tg_cfg["token"], chat_id=tg_cfg["chat_id"])
+        _monitor  = MachineMonitor(
+            notifier        = _notifier,
+            get_stato_fn    = _get_stato,
+            interval_sec    = tg_cfg["interval_sec"],
+            stale_alert_sec = tg_cfg["stale_alert_sec"],
+        )
+        _asyncio.create_task(_monitor.run())
+        log.info(f"Telegram Monitor avviato — check ogni {tg_cfg['interval_sec']}s")
+    else:
+        log.warning(
+            "Telegram Monitor disabilitato — "
+            "aggiungi TELEGRAM_BOT_TOKEN e TELEGRAM_CHAT_ID nel file .env"
+        )
 
 
 # ── Exception handler globale ─────────────────────────────────────────────────

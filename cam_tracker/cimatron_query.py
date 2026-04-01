@@ -13,7 +13,6 @@ def main():
         clr.AddReference("interop.CimAppAccess")
         import interop.CimAppAccess as CimAppAccess
         from System.Runtime.InteropServices import Marshal
-        import win32com.client
         import pythoncom
 
         acc = CimAppAccess.AppAccess()
@@ -24,37 +23,30 @@ def main():
             return
 
         punk = Marshal.GetIUnknownForObject(app_com)
-        ptr_int = int(str(punk))
+        idisp = pythoncom.ObjectFromAddress(int(str(punk)), pythoncom.IID_IDispatch)
 
-        # Ottieni IDispatch
-        idisp = pythoncom.ObjectFromAddress(ptr_int, pythoncom.IID_IDispatch)
+        # DISPID=2 → GetActiveDoc
+        doc_com = idisp.Invoke(2, 0x0409, pythoncom.DISPATCH_METHOD, 1)
+        sys.stderr.write(f"GetActiveDoc: {doc_com}\n")
 
-        # Prova a ottenere i nomi dei metodi disponibili via IDispatch
+        if doc_com is None:
+            print("")
+            return
+
+        # Ora ottieni i metodi del documento
         try:
-            ti = idisp.GetTypeInfo()
+            ti = doc_com.GetTypeInfo()
             ta = ti.GetTypeAttr()
-            sys.stderr.write(f"TypeAttr funcs: {ta[6]}\n")  # numero di funzioni
-            for i in range(min(ta[6], 30)):
+            sys.stderr.write(f"Doc funcs: {ta[6]}\n")
+            for i in range(min(ta[6], 20)):
                 try:
                     fd = ti.GetFuncDesc(i)
                     name = ti.GetNames(fd[0])[0]
-                    sys.stderr.write(f"  func[{i}] id={fd[0]} name={name}\n")
+                    sys.stderr.write(f"  doc func[{i}] id={fd[0]} name={name}\n")
                 except:
                     pass
         except Exception as et:
-            sys.stderr.write(f"TypeInfo fallito: {et}\n")
-
-        # Prova accesso diretto per DISPID noti
-        try:
-            # DISPID_VALUE = 0, proviamo dispid comuni
-            for dispid in [1, 2, 3, 4, 5, 100, 101]:
-                try:
-                    val = idisp.Invoke(dispid, 0x0409, pythoncom.DISPATCH_PROPERTYGET, 1)
-                    sys.stderr.write(f"  DISPID {dispid} = {val}\n")
-                except:
-                    pass
-        except Exception as ed:
-            sys.stderr.write(f"Invoke test fallito: {ed}\n")
+            sys.stderr.write(f"Doc TypeInfo: {et}\n")
 
         print("")
 

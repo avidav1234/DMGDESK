@@ -15,6 +15,7 @@ def main():
         import interop.CimAppAccess as CimAppAccess
         import interop.CimatronE as CimatronE
         from System.Runtime.InteropServices import Marshal
+        from System import Type
 
         acc = CimAppAccess.AppAccess()
         raw_app = acc.GetApplication()
@@ -23,25 +24,30 @@ def main():
             print("")
             return
 
-        # Cast esplicito da ComObject a IApplication
-        app = Marshal.GetTypedObjectForIUnknown(
-            Marshal.GetIUnknownForObject(raw_app),
-            CimatronE.IApplication
-        )
+        # Prova 1: QueryInterface diretto tramite pythonnet
+        try:
+            app = raw_app.__cast__(CimatronE.IApplication)
+            doc = app.ActiveDocument
+            print(str(doc.FullName) if doc else "")
+            return
+        except Exception as e1:
+            sys.stderr.write(f"cast1 fallito: {e1}\n")
 
-        sys.stderr.write(f"IApplication ottenuto: {app}\n")
-        sys.stderr.write(f"Metodi: {[x for x in dir(app) if not x.startswith('_')]}\n")
-        sys.stderr.flush()
+        # Prova 2: accesso diretto con InvokeMember via reflection
+        try:
+            t = Type.GetTypeFromProgID("CimatronE.Application")
+            sys.stderr.write(f"ProgID type: {t}\n")
+        except Exception as e2:
+            sys.stderr.write(f"ProgID fallito: {e2}\n")
 
-        doc = app.ActiveDocument
-        if doc:
-            print(str(doc.FullName))
-        else:
-            print("")
+        # Prova 3: usa IAppAccess.GetActiveDocument direttamente
+        try:
+            sys.stderr.write(f"Metodi AppAccess: {[x for x in dir(acc) if not x.startswith('_')]}\n")
+        except Exception as e3:
+            sys.stderr.write(f"dir acc fallito: {e3}\n")
 
     except Exception as e:
         sys.stderr.write(f"ERRORE: {type(e).__name__}: {e}\n")
-        sys.stderr.flush()
         sys.exit(1)
 
 if __name__ == "__main__":

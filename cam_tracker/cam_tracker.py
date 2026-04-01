@@ -127,7 +127,7 @@ class CimatronCOMAdapter:
                 # Cerca tutte le versioni installate, prende la più recente
                 versioni = sorted(
                     [str(d / "Program") for d in base.iterdir()
-                     if d.is_dir() and (d / "Program" / "Interop.CimAppAPI.dll").exists()],
+                     if d.is_dir() and (d / "Program").exists()],
                     reverse=True
                 )
                 candidates = versioni + candidates

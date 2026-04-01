@@ -1,5 +1,5 @@
 """
-cimatron_query.py — Legge ActiveDocument.FullName da Cimatron in esecuzione.
+cimatron_query.py — Legge FullName da Cimatron in esecuzione.
 """
 
 import sys
@@ -17,7 +17,6 @@ def main():
 
         acc = CimAppAccess.AppAccess()
         app_com = acc.GetActiveApplication()
-
         if app_com is None:
             print("")
             return
@@ -25,28 +24,27 @@ def main():
         punk = Marshal.GetIUnknownForObject(app_com)
         idisp = pythoncom.ObjectFromAddress(int(str(punk)), pythoncom.IID_IDispatch)
 
-        # DISPID=2 → GetActiveDoc
-        doc_com = idisp.Invoke(2, 0x0409, pythoncom.DISPATCH_METHOD, 1)
-        sys.stderr.write(f"GetActiveDoc: {doc_com}\n")
-
-        if doc_com is None:
+        # DISPID=2 → GetActiveDoc → ritorna IUnknown
+        doc_unk = idisp.Invoke(2, 0x0409, pythoncom.DISPATCH_METHOD, 1)
+        if doc_unk is None:
             print("")
             return
 
-        # Ora ottieni i metodi del documento
-        try:
-            ti = doc_com.GetTypeInfo()
-            ta = ti.GetTypeAttr()
-            sys.stderr.write(f"Doc funcs: {ta[6]}\n")
-            for i in range(min(ta[6], 20)):
-                try:
-                    fd = ti.GetFuncDesc(i)
-                    name = ti.GetNames(fd[0])[0]
-                    sys.stderr.write(f"  doc func[{i}] id={fd[0]} name={name}\n")
-                except:
-                    pass
-        except Exception as et:
-            sys.stderr.write(f"Doc TypeInfo: {et}\n")
+        # QueryInterface IUnknown → IDispatch
+        doc_disp = doc_unk.QueryInterface(pythoncom.IID_IDispatch)
+        sys.stderr.write(f"doc IDispatch: {doc_disp}\n")
+
+        # Ispeziona metodi documento
+        ti = doc_disp.GetTypeInfo()
+        ta = ti.GetTypeAttr()
+        sys.stderr.write(f"Doc funcs: {ta[6]}\n")
+        for i in range(min(ta[6], 30)):
+            try:
+                fd = ti.GetFuncDesc(i)
+                name = ti.GetNames(fd[0])[0]
+                sys.stderr.write(f"  [{i}] id={fd[0]} {name}\n")
+            except:
+                pass
 
         print("")
 

@@ -19,6 +19,7 @@ Configurazione via cam_tracker_config.ini (creato automaticamente se assente).
 
 import sys
 import os
+import re
 import time
 import json
 import configparser

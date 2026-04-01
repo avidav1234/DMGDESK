@@ -3,6 +3,7 @@
 
 import { useState, useEffect, useCallback, useRef, createContext, useContext } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
+import TabDocumenti from './TabDocumenti'
 
 const API = '/api/progetti'
 
@@ -1546,7 +1547,7 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
             </div>
           </div>
         )}
-        <div><Tab id='tasks' label='Task'/><Tab id='log' label={`Log aggiornamenti (${(project.log||[]).length})`}/></div>
+        <div><Tab id='tasks' label='Task'/><Tab id='documenti' label='Documenti'/><Tab id='log' label={`Log aggiornamenti (${(project.log||[]).length})`}/></div>
       </div>
       {/* Body */}
       <div style={{flex:1,overflow:'auto',padding:'20px 28px'}}>
@@ -1574,6 +1575,9 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
               <button onClick={()=>setAddingStep(true)} style={{background:'none',border:`2px dashed ${T.border}`,borderRadius:10,color:T.textMuted,fontSize:14,padding:'12px',cursor:'pointer',width:'100%',fontWeight:500,marginTop:4}}>+ Aggiungi fase</button>
             )}
           </div>
+        )}
+        {activeTab==='documenti'&&(
+          <TabDocumenti project={project}/>
         )}
         {activeTab==='log'&&(
           <div style={{display:'flex',flexDirection:'column',height:'100%'}}>

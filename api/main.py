@@ -49,6 +49,8 @@ app.include_router(macchina_invio.router,  prefix="/api/macchina-invio",  tags=[
 from api.routers import progetti
 app.include_router(progetti.router,       prefix="/api/progetti",         tags=["Progetti WorkTrack"])
 app.include_router(report.router,         prefix="/api/report",           tags=["Report & Statistiche"])
+from api.routers import allegati
+app.include_router(allegati.router)
 
 
 @app.on_event("startup")

@@ -90,8 +90,17 @@ async def upload_allegato(
         except: pass
     idx = _idx(d)
     idx.append(entry)
+    # Estrai immagini embedded e aggiungile come allegati separati
+    n_imgs = 0
+    if tipo == "setup_cam":
+        try:
+            imgs = _estrai_immagini_excel(dest, d, fase.strip(), uid)
+            idx.extend(imgs)
+            n_imgs = len(imgs)
+        except: pass
     _save_idx(d, idx)
-    return {"ok": True, "allegato": {**entry, "size_kb": round(len(data)/1024,1)}}
+    return {"ok": True, "allegato": {**entry, "size_kb": round(len(data)/1024,1)},
+            "immagini_estratte": n_imgs}
 
 
 @router.get("/{project_id}/file/{allegato_id}")
@@ -167,6 +176,40 @@ async def get_setup_cam(project_id: str, allegato_id: str):
         return {"ok": True, "allegato": entry, "data": _parse_setup_cam(p)}
     except Exception as e:
         raise HTTPException(500, f"Errore parsing: {e}")
+
+
+def _estrai_immagini_excel(xlsx_path: Path, dest_dir: Path, fase: str, parent_uid: str) -> list:
+    """Estrae le immagini embedded da un Excel e le salva come allegati separati."""
+    from openpyxl import load_workbook
+    wb = load_workbook(str(xlsx_path))
+    estratte = []
+    n = 0
+    for ws in wb.worksheets:
+        for img in getattr(ws, "_images", []):
+            try:
+                raw = img._data()
+                if not raw:
+                    continue
+                ext = "jpg" if raw[:2] == b"\xff\xd8" else "png"
+                n += 1
+                uid = uuid.uuid4().hex[:8]
+                fname = f"{xlsx_path.stem}_img{n}.{ext}"
+                dest_fn = f"{uid}_{fname}"
+                (dest_dir / dest_fn).write_bytes(raw)
+                estratte.append({
+                    "id":          uid,
+                    "filename":    fname,
+                    "path":        dest_fn,
+                    "tipo":        "immagine",
+                    "fase":        fase,
+                    "note":        f"Estratta da {xlsx_path.name}",
+                    "data_upload": datetime.now().strftime("%d/%m/%Y %H:%M"),
+                    "size_bytes":  len(raw),
+                    "da_excel":    parent_uid,
+                })
+            except Exception:
+                continue
+    return estratte
 
 
 def _parse_setup_cam(path: Path) -> dict:

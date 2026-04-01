@@ -52,12 +52,13 @@ DEFAULT_CONFIG = {
         "timeout_sec": "5",
     },
     "cimatron": {
-        "program_dir": r"C:\Program Files\Cimatron\Cimatron\2024.0\Program",
+        "program_dir": r"C:\Program Files\Cimatron\Cimatron\2025.0\Program",
+        "query_exe": r"C:\Program Files\Cimatron\Cimatron\2025.0\Program\cimatron_query.exe",
         "poll_interval_sec": "10",
     },
     "tracker": {
         "workstation": socket.gethostname(),
-        "min_session_sec": "30",   # sessioni < 30s vengono scartate
+        "min_session_sec": "30",
     },
 }
 
@@ -188,12 +189,18 @@ class CimatronCOMAdapter:
         try:
             result = subprocess.run(
                 [str(self._query_exe)],
-                capture_output=True, text=True, timeout=5
+                capture_output=True, text=True, timeout=8
             )
             full_path = result.stdout.strip()
             if not full_path or full_path.startswith("ERROR"):
                 return None
-            return parse_project_from_path(full_path)
+            proj = parse_project_from_path(full_path)
+            if proj:
+                log.debug(f"[Cimatron EXE] path={full_path} → {proj['project_id']}")
+            return proj
+        except subprocess.TimeoutExpired:
+            log.warning("[Cimatron EXE] timeout")
+            return None
         except Exception as e:
             log.debug(f"[Cimatron EXE] {e}")
             return None

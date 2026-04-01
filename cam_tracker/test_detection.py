@@ -62,9 +62,9 @@ def test_com(program_dir: str):
 def test_window():
     print("\n── Test Window Title Fallback ──────────────────────────────")
     PATTERNS = [
-        r"\[([^\]:]+?)\s*:\s*(?:NC-Standard|NC Simulator|CimExtSimul\w+)[^\]]*\]",
+        r"\[([^\]:]+?)\s*:\s*NC-Standard\s*\]",
+        r"\[(?!CimExtSimul)([^\]:]+?)\s*:\s*[^\]]+\]",
         r"Cimatron\s+\S+\s*[-–—]\s*(.+?)(?:\.elt|\.icd)?$",
-        r"[-–—]\s*.*[/\\](.+?)(?:\.elt|\.icd)?$",
     ]
     try:
         import win32gui
@@ -78,28 +78,35 @@ def test_window():
 
         win32gui.EnumWindows(cb, None)
 
-        cim_titles = [t for t in titles if "cimatron" in t.lower()]
-        if not cim_titles:
+        cim_titles = [t for t in titles if "Cimatron" in t and "NC-Standard" in t and "CimExtSimul" not in t]
+        cim_all    = [t for t in titles if "Cimatron" in t]
+        if not cim_all:
             print("  [WIN] Nessuna finestra Cimatron trovata")
-            print(f"  [WIN] Finestre visibili totali: {len(titles)}")
             return None
 
-        print(f"  [WIN] Finestre Cimatron trovate: {len(cim_titles)}")
-        for t in cim_titles:
-            print(f"        '{t}'")
+        print(f"  [WIN] Finestre Cimatron totali: {len(cim_all)}")
+        print(f"  [WIN] Finestre NC-Standard (escluso simulatore): {len(cim_titles)}")
+        for t in cim_all:
+            marker = " ✓" if t in cim_titles else " (simulatore/altro)"
+            print(f"        '{t}'{marker}")
+
+        if not cim_titles:
+            print("  [WIN] Nessun file NC-Standard aperto")
+            return None
 
         for title in cim_titles:
             for pat in PATTERNS:
                 m = re.search(pat, title, re.IGNORECASE)
                 if m:
                     proj = m.group(1).strip().upper()
+                    proj = re.sub(r'\s+', '_', proj)
                     print(f"  [WIN] Progetto rilevato: {proj}")
                     return proj
 
         print("  [WIN] Titolo trovato ma nessun pattern applicabile")
         return None
 
-    except ImportError:
+
         print("  [WIN] pywin32 non installato (pip install pywin32)")
         return None
     except Exception as e:

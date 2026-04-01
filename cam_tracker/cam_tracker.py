@@ -181,12 +181,13 @@ class CimatronCOMAdapter:
 import re
 
 CIMATRON_PATTERNS = [
-    # "Cimatron 2025.0 SP4P1 - [NOME_FILE : NC-Standard]"
-    r"\[([^\]:]+?)\s*:\s*(?:NC-Standard|NC Simulator|CimExtSimul\w+)[^\]]*\]",
-    # "Cimatron 2024 — FLANGIA_BASE.elt"
+    # Prima cerca NC-Standard (file reali), esclude il simulatore
+    # "Cimatron 2025.0 SP4P1 - [E541540221_0221_A#1_V3 : NC-Standard]"
+    r"\[([^\]:]+?)\s*:\s*NC-Standard\s*\]",
+    # Fallback: qualsiasi parentesi quadra tranne il simulatore
+    r"\[(?!CimExtSimul)([^\]:]+?)\s*:\s*[^\]]+\]",
+    # Formato vecchio "Cimatron 2024 — FLANGIA_BASE.elt"
     r"Cimatron\s+\S+\s*[-–—]\s*(.+?)(?:\.elt|\.icd)?$",
-    # Titoli generici con percorso file
-    r"[-–—]\s*.*[/\\](.+?)(?:\.elt|\.icd)?$",
 ]
 
 
@@ -207,21 +208,33 @@ class WindowTitleAdapter:
             return None
         try:
             import win32gui
-            # Cerca la finestra Cimatron, non solo quella in primo piano
-            results = []
+
+            # Prima tenta la finestra in primo piano
+            fg_hwnd = win32gui.GetForegroundWindow()
+            fg_title = win32gui.GetWindowText(fg_hwnd)
+
+            # Raccoglie TUTTE le finestre Cimatron NC-Standard
+            nc_windows = []
 
             def enum_cb(hwnd, _):
                 if win32gui.IsWindowVisible(hwnd):
                     t = win32gui.GetWindowText(hwnd)
-                    if "Cimatron" in t or "cimatron" in t.lower():
-                        results.append(t)
+                    if "Cimatron" in t and "NC-Standard" in t and "CimExtSimul" not in t:
+                        nc_windows.append((hwnd, t))
 
             win32gui.EnumWindows(enum_cb, None)
-            for title in results:
+
+            # Ordina: finestra in primo piano per prima
+            nc_windows.sort(key=lambda x: 0 if x[0] == fg_hwnd else 1)
+
+            for _, title in nc_windows:
                 for pat in CIMATRON_PATTERNS:
                     m = re.search(pat, title, re.IGNORECASE)
                     if m:
-                        return m.group(1).strip().upper()
+                        name = m.group(1).strip().upper()
+                        # Pulizia: rimuove spazi e caratteri di controllo
+                        name = re.sub(r'\s+', '_', name)
+                        return name
         except Exception as e:
             log.debug(f"[WindowTitle] {e}")
         return None

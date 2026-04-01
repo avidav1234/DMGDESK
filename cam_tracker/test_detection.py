@@ -183,12 +183,17 @@ if __name__ == "__main__":
     print("\n── Risultato ───────────────────────────────────────────────")
     final = proj_com or proj_win
     if final:
-        print(f"  Progetto attivo: {final['project_id']}")
-        print(f"  Commessa:        {final['commessa']}")
-        print(f"  Operazione:      {final['operazione']}")
-        print(f"  Metodo:          {'COM API (path)' if proj_com else 'Window Title'}")
-        if final.get('full_path'):
-            print(f"  Path:            {final['full_path']}")
+        # Compatibilità: gestisce sia dict (nuovo) che stringa (vecchio)
+        if isinstance(final, dict):
+            print(f"  Progetto attivo: {final['project_id']}")
+            print(f"  Commessa:        {final['commessa']}")
+            print(f"  Operazione:      {final['operazione']}")
+            print(f"  Metodo:          {'COM API (path)' if proj_com else 'Window Title'}")
+            if final.get('full_path'):
+                print(f"  Path:            {final['full_path']}")
+        else:
+            print(f"  Progetto attivo: {final}")
+            print(f"  Metodo:          {'COM API' if proj_com else 'Window Title'}")
     else:
         print("  Nessun progetto rilevato.")
         print("  Verificare che Cimatron sia aperto con un file .elt attivo.")

@@ -4,7 +4,7 @@ Struttura disco: {tools_toa_folder}/allegati/{project_id}/{uid}_{filename}
 Metadati:        {tools_toa_folder}/allegati/{project_id}/index.json
 """
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from database.db_handler import carica_configurazione
 from pathlib import Path
 from datetime import datetime
@@ -105,7 +105,18 @@ async def scarica_allegato(project_id: str, allegato_id: str):
     p = d / entry["path"]
     if not p.exists():
         raise HTTPException(404, f"File fisico non trovato: {p}")
-    return FileResponse(str(p), filename=entry["filename"], media_type="application/octet-stream")
+    # FileResponse non gestisce path UNC Windows (\\server\share)
+    # Usiamo StreamingResponse con open() diretto
+    fname = entry["filename"]
+    def iterfile():
+        with open(str(p), "rb") as f:
+            while chunk := f.read(65536):
+                yield chunk
+    return StreamingResponse(
+        iterfile(),
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'}
+    )
 
 
 @router.get("/{project_id}/preview/{allegato_id}")
@@ -122,7 +133,12 @@ async def preview_allegato(project_id: str, allegato_id: str):
     mt = {".jpg":"image/jpeg",".jpeg":"image/jpeg",".png":"image/png",
           ".bmp":"image/bmp",".pdf":"application/pdf",
           ".xlsx":"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}
-    return FileResponse(str(p), media_type=mt.get(ext,"application/octet-stream"))
+    media_type = mt.get(ext, "application/octet-stream")
+    def iterfile():
+        with open(str(p), "rb") as f:
+            while chunk := f.read(65536):
+                yield chunk
+    return StreamingResponse(iterfile(), media_type=media_type)
 
 
 @router.delete("/{project_id}/file/{allegato_id}")

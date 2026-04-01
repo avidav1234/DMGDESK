@@ -44,7 +44,10 @@ def _save(data: list[dict]):
 
 # ── Modelli ────────────────────────────────────────────────────────────────────
 class CamSessionItem(BaseModel):
-    project: str = Field(..., description="Nome progetto Cimatron (es. FLANGIA_OP10)")
+    project: str = Field(..., description="project_id (commessa_operazione)")
+    commessa: str = Field(default="")
+    operazione: str = Field(default="")
+    full_path: Optional[str] = Field(default=None)
     seconds: int = Field(..., ge=0)
     hours: float = Field(..., ge=0)
 
@@ -85,20 +88,25 @@ def receive_sessions(batch: CamSessionBatch):
             None
         )
         if existing:
-            # Accumula — il tracker invia delta, non totale cumulativo
             existing["seconds"] += s.seconds
             existing["hours"] = round(existing["seconds"] / 3600, 3)
             existing["last_updated"] = datetime.now().isoformat()
+            # Aggiorna path se ora disponibile (COM vs title)
+            if s.full_path:
+                existing["full_path"] = s.full_path
             updated += 1
         else:
             data.append({
-                "id": f"{project_key}_{batch.date}_{batch.workstation}",
-                "project": project_key,
-                "date": batch.date,
-                "seconds": s.seconds,
-                "hours": s.hours,
+                "id":         f"{s.project}_{batch.date}_{batch.workstation}",
+                "project":    s.project,
+                "commessa":   s.commessa or s.project.split("_")[0],
+                "operazione": s.operazione,
+                "full_path":  s.full_path,
+                "date":       batch.date,
+                "seconds":    s.seconds,
+                "hours":      s.hours,
                 "workstation": batch.workstation,
-                "source": batch.source,
+                "source":     batch.source,
                 "last_updated": datetime.now().isoformat(),
             })
             created += 1
@@ -184,7 +192,43 @@ def get_today():
 
 
 # ── DELETE /sessions/{project} — reset per progetto ──────────────────────────
-@router.delete("/sessions/{project}", summary="Cancella sessioni per progetto")
+@router.get("/commesse", summary="Ore totali per commessa (aggregato su operazioni)")
+def get_commesse(
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+):
+    data = _load()
+    if date_from:
+        data = [d for d in data if d["date"] >= date_from]
+    if date_to:
+        data = [d for d in data if d["date"] <= date_to]
+
+    commesse: dict[str, dict] = {}
+    for r in data:
+        c = r.get("commessa") or r["project"].split("_")[0]
+        if c not in commesse:
+            commesse[c] = {"commessa": c, "total_seconds": 0, "operazioni": {}}
+        commesse[c]["total_seconds"] += r["seconds"]
+        op = r.get("operazione", "")
+        if op:
+            commesse[c]["operazioni"][op] = (
+                commesse[c]["operazioni"].get(op, 0) + r["seconds"]
+            )
+
+    return [
+        {
+            "commessa": c,
+            "total_hours": round(d["total_seconds"] / 3600, 2),
+            "operazioni": [
+                {"operazione": op, "hours": round(s / 3600, 2)}
+                for op, s in sorted(d["operazioni"].items(), key=lambda x: -x[1])
+            ],
+        }
+        for c, d in sorted(commesse.items(), key=lambda x: -x[1]["total_seconds"])
+    ]
+
+
+
 def delete_project_sessions(project: str):
     data = _load()
     before = len(data)

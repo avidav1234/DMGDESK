@@ -160,7 +160,8 @@ class CimatronCOMAdapter:
             log.debug(f"[Cimatron COM] {e}")
             return False
 
-    def get_active_project(self) -> str | None:
+    def get_active_project(self) -> dict | None:
+        """Legge path completo del documento attivo e lo parsa."""
         if not self._available or self.app is None:
             return None
         try:
@@ -168,17 +169,70 @@ class CimatronCOMAdapter:
             if doc is None:
                 return None
             full_path = str(doc.FullName)
-            p = Path(full_path)
-            # Usa il nome del file senza estensione come ID progetto
-            # Cimatron tipicamente: C:\Progetti\CODICE_COMMESSA\operazione.elt
-            # → "operazione" oppure, se vuoi la cartella padre: p.parent.name
-            return p.stem.upper()
+            return parse_project_from_path(full_path)
         except Exception:
             return None
 
 
-# ── Win32 window title fallback ────────────────────────────────────────────────
-import re
+# ── Parser path → commessa/operazione ─────────────────────────────────────────
+def parse_project_from_path(full_path: str) -> dict | None:
+    """
+    Estrae commessa e operazione dal path del file CAM.
+
+    Strutture supportate:
+      C:\\Lavoro\\4348\\P0221\\file.elt       → commessa=4348, op=P0221
+      H:\\...\\Backup Archivi\\4349\\0301\\x  → commessa=4349, op=0301
+      Qualsiasi path con almeno 2 livelli di cartelle sopra il file.
+    """
+    p = Path(full_path)
+    parts = p.parts  # es. ('C:\\', 'Lavoro', '4348', 'P0221', 'file.elt')
+
+    # Servono almeno: drive + 2 cartelle + file
+    if len(parts) < 4:
+        return None
+
+    # Il file è parts[-1], la cartella padre è parts[-2] (operazione),
+    # la cartella nonno è parts[-3] (commessa)
+    operazione = parts[-2]
+    commessa   = parts[-3]
+
+    # Commessa deve essere numerica (4348, 4349, ...) o alfanumerica corta
+    # Esclude cartelle generiche come "Lavoro", "Backup Archivi", "Program Files"
+    if len(commessa) > 10 or ' ' in commessa:
+        return None
+
+    return {
+        "commessa":   commessa.upper(),
+        "operazione": operazione.upper(),
+        "project_id": f"{commessa}_{operazione}".upper(),
+        "full_path":  full_path,
+    }
+
+
+def parse_project_from_title(title_name: str) -> dict:
+    """
+    Fallback: dal nome nel titolo finestra estrae commessa e operazione
+    se il formato è COMMESSA_OPERAZIONE (es. E541540221_0221_A#1_V3).
+    Altrimenti usa il nome intero come project_id.
+    """
+    # Prova a splittare sul primo underscore: COMMESSA_resto
+    parts = title_name.split("_", 1)
+    if len(parts) == 2:
+        return {
+            "commessa":   parts[0],
+            "operazione": parts[1],
+            "project_id": title_name,
+            "full_path":  None,
+        }
+    return {
+        "commessa":   title_name,
+        "operazione": "",
+        "project_id": title_name,
+        "full_path":  None,
+    }
+
+
+
 
 CIMATRON_PATTERNS = [
     # Prima cerca NC-Standard (file reali), esclude il simulatore
@@ -203,17 +257,13 @@ class WindowTitleAdapter:
         except ImportError:
             log.warning("[WindowTitle] pywin32 non installato — rilevamento limitato")
 
-    def get_active_project(self) -> str | None:
+    def get_active_project(self) -> dict | None:
         if not self._win32_ok:
             return None
         try:
             import win32gui
 
-            # Prima tenta la finestra in primo piano
             fg_hwnd = win32gui.GetForegroundWindow()
-            fg_title = win32gui.GetWindowText(fg_hwnd)
-
-            # Raccoglie TUTTE le finestre Cimatron NC-Standard
             nc_windows = []
 
             def enum_cb(hwnd, _):
@@ -223,18 +273,15 @@ class WindowTitleAdapter:
                         nc_windows.append((hwnd, t))
 
             win32gui.EnumWindows(enum_cb, None)
-
-            # Ordina: finestra in primo piano per prima
             nc_windows.sort(key=lambda x: 0 if x[0] == fg_hwnd else 1)
 
             for _, title in nc_windows:
                 for pat in CIMATRON_PATTERNS:
                     m = re.search(pat, title, re.IGNORECASE)
                     if m:
-                        name = m.group(1).strip().upper()
-                        # Pulizia: rimuove spazi e caratteri di controllo
-                        name = re.sub(r'\s+', '_', name)
-                        return name
+                        name = m.group(1).strip()
+                        name = re.sub(r'\s+', '_', name).upper()
+                        return parse_project_from_title(name)
         except Exception as e:
             log.debug(f"[WindowTitle] {e}")
         return None
@@ -250,11 +297,13 @@ class CAMTracker:
         self.poll_interval = int(cfg["cimatron"]["poll_interval_sec"])
 
         # Stato corrente
-        self.current_project: str | None = None
+        self.current_project: dict | None = None
         self.session_start: float | None = None
 
-        # Accumulatore: {progetto: secondi_totali_oggi}
+        # Accumulatore: {project_id: secondi_totali_oggi}
         self.accumulated: dict[str, float] = {}
+        # Metadati per ogni project_id
+        self.project_meta: dict[str, dict] = {}
 
         # Backend
         self.client = DMGDeskClient(
@@ -269,8 +318,8 @@ class CAMTracker:
         self._com_tried = False
         self._stop = threading.Event()
 
-    def _get_project(self) -> str | None:
-        """Tenta COM prima, poi window title."""
+    def _get_project(self) -> dict | None:
+        """Tenta COM prima (path completo), poi window title."""
         if not self._com_tried:
             self.com.try_connect()
             self._com_tried = True
@@ -280,45 +329,52 @@ class CAMTracker:
             return p
         return self.window.get_active_project()
 
+    def _project_id(self, proj: dict | None) -> str | None:
+        return proj["project_id"] if proj else None
+
     def tick(self):
-        project = self._get_project()
+        proj = self._get_project()
+        proj_id = self._project_id(proj)
         now = time.time()
 
-        if project != self.current_project:
+        if proj_id != self._project_id(self.current_project):
             # Chiudi sessione precedente
             if self.current_project and self.session_start:
                 elapsed = now - self.session_start
+                pid = self._project_id(self.current_project)
                 if elapsed >= self.min_session_sec:
-                    self.accumulated[self.current_project] = (
-                        self.accumulated.get(self.current_project, 0) + elapsed
-                    )
+                    self.accumulated[pid] = self.accumulated.get(pid, 0) + elapsed
+                    self.project_meta[pid] = self.current_project
                     log.info(
-                        f"[Tracker] {self.current_project}: "
+                        f"[Tracker] {pid}: "
                         f"+{elapsed/60:.1f} min "
-                        f"(tot oggi: {self.accumulated[self.current_project]/3600:.2f}h)"
+                        f"(tot oggi: {self.accumulated[pid]/3600:.2f}h)"
                     )
                 else:
-                    log.debug(f"[Tracker] Sessione troppo breve scartata: {self.current_project} ({elapsed:.0f}s)")
+                    log.debug(f"[Tracker] Sessione troppo breve scartata: {pid} ({elapsed:.0f}s)")
 
-            self.current_project = project
-            self.session_start = now if project else None
+            self.current_project = proj
+            self.session_start = now if proj else None
 
-            if project:
-                log.info(f"[Tracker] Progetto attivo → {project}")
+            if proj:
+                log.info(
+                    f"[Tracker] Progetto attivo → "
+                    f"commessa={proj['commessa']} op={proj['operazione']} "
+                    f"({'path' if proj.get('full_path') else 'title'})"
+                )
             else:
                 log.debug("[Tracker] Nessun progetto Cimatron rilevato")
 
     def flush(self):
         """Chiude la sessione corrente e invia a DMGDesk."""
         now = time.time()
-        # Chiudi sessione in corso prima del flush
         if self.current_project and self.session_start:
             elapsed = now - self.session_start
+            pid = self._project_id(self.current_project)
             if elapsed >= self.min_session_sec:
-                self.accumulated[self.current_project] = (
-                    self.accumulated.get(self.current_project, 0) + elapsed
-                )
-            self.session_start = now  # resetta il timer (sessione continua)
+                self.accumulated[pid] = self.accumulated.get(pid, 0) + elapsed
+                self.project_meta[pid] = self.current_project
+            self.session_start = now
 
         if not self.accumulated:
             return
@@ -330,11 +386,14 @@ class CAMTracker:
             "flushed_at": datetime.now().isoformat(),
             "sessions": [
                 {
-                    "project": proj,
-                    "seconds": int(secs),
-                    "hours": round(secs / 3600, 3),
+                    "project":    pid,
+                    "commessa":   self.project_meta.get(pid, {}).get("commessa", pid),
+                    "operazione": self.project_meta.get(pid, {}).get("operazione", ""),
+                    "full_path":  self.project_meta.get(pid, {}).get("full_path"),
+                    "seconds":    int(secs),
+                    "hours":      round(secs / 3600, 3),
                 }
-                for proj, secs in self.accumulated.items()
+                for pid, secs in self.accumulated.items()
             ],
         }
 

@@ -11,39 +11,35 @@ def main():
         sys.path.insert(0, CIMATRON_PROGRAM)
         import clr
         clr.AddReference("interop.CimAppAccess")
-        clr.AddReference("interop.CimatronE")
         import interop.CimAppAccess as CimAppAccess
+        from System.Runtime.InteropServices import Marshal
 
         acc = CimAppAccess.AppAccess()
-
-        # GetActiveApplication = aggancia istanza già in esecuzione
         app = acc.GetActiveApplication()
-        sys.stderr.write(f"GetActiveApplication: {app}\n")
-        sys.stderr.write(f"type: {type(app)}\n")
 
         if app is None:
-            sys.stderr.write("Cimatron non in esecuzione\n")
             print("")
             return
 
-        members = [x for x in dir(app) if not x.startswith('_')]
-        sys.stderr.write(f"Metodi app: {members}\n")
-        sys.stderr.flush()
+        # Ottieni il puntatore IUnknown e convertilo in IDispatch via win32com
+        punk = Marshal.GetIUnknownForObject(app)
+        sys.stderr.write(f"IUnknown ptr: {punk}\n")
 
-        # Prova accesso documento
-        for name in ['ActiveDocument', 'GetActiveDocument', 'Documents',
-                     'ActiveDoc', 'OpenDocuments', 'GetDocument', 'ActivePart']:
-            if hasattr(app, name):
-                try:
-                    val = getattr(app, name)
-                    sys.stderr.write(f"  {name} = {val}\n")
-                    if val and hasattr(val, 'FullName'):
-                        print(str(val.FullName))
-                        return
-                except Exception as ex:
-                    sys.stderr.write(f"  {name} errore: {ex}\n")
+        import win32com.client
+        import pythoncom
 
-        print("")
+        # Converti IUnknown pointer in oggetto win32com Dispatch
+        ptr_int = int(str(punk))
+        disp = win32com.client.Dispatch(
+            pythoncom.ObjectFromAddress(ptr_int, pythoncom.IID_IDispatch)
+        )
+        sys.stderr.write(f"win32com disp: {disp}\n")
+
+        doc = disp.ActiveDocument
+        if doc:
+            print(str(doc.FullName))
+        else:
+            print("")
 
     except Exception as e:
         sys.stderr.write(f"ERRORE: {type(e).__name__}: {e}\n")

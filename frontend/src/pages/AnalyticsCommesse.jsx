@@ -168,7 +168,8 @@ function RigaProgetto({ p, onClick }) {
               {fmtDate(p.data_fine_stimata)}
             </div>
             <div style={{fontSize:10, color:'#94a3b8'}}>
-              {p.giorni_rimanenti}gg rimanenti
+              {p.giorni_rimanenti}gg
+              {p.k_applicato ? ` · K=${p.k_applicato}` : ' · grezzo'}
             </div>
           </div>
         ) : (
@@ -221,7 +222,10 @@ export default function AnalyticsCommesse() {
     </div>
   )
 
-  const { oee, progetti, n_alert } = data
+  const { oee, progetti, n_alert, calibrazione } = data
+
+  const confidenzaColor = calibrazione?.confidenza === 'alta' ? '#16a34a'
+    : calibrazione?.confidenza === 'media' ? '#d97706' : '#dc2626'
 
   return (
     <div style={{display:'flex', flexDirection:'column', height:'100%',
@@ -246,6 +250,49 @@ export default function AnalyticsCommesse() {
       </div>
 
       <div style={{padding:'16px 24px', flex:1}}>
+
+        {/* Calibrazione K */}
+        <div style={{background:'#fff', border:'1px solid #e2e8f0',
+          borderRadius:12, padding:'20px 24px', marginBottom:16}}>
+          <div style={{display:'flex', alignItems:'center', gap:16, flexWrap:'wrap'}}>
+            <div>
+              <div style={{fontSize:11, color:'#94a3b8', marginBottom:4,
+                textTransform:'uppercase', letterSpacing:'0.06em', fontWeight:700}}>
+                Fattore calibrazione K
+              </div>
+              <div style={{display:'flex', alignItems:'baseline', gap:8}}>
+                <span style={{fontSize:28, fontWeight:700, fontFamily:'var(--font-mono)',
+                  color: calibrazione?.k_medio ? '#0d2d5e' : '#94a3b8'}}>
+                  {calibrazione?.k_medio ? `× ${calibrazione.k_medio.toFixed(2)}` : '—'}
+                </span>
+                {calibrazione?.confidenza && (
+                  <span style={{fontSize:11, fontWeight:700, padding:'2px 8px',
+                    borderRadius:4, background: confidenzaColor+'20',
+                    color: confidenzaColor}}>
+                    {calibrazione.confidenza}
+                  </span>
+                )}
+              </div>
+            </div>
+            <div style={{flex:1, minWidth:200}}>
+              <div style={{fontSize:12, color:'#475569', lineHeight:1.5}}>
+                {calibrazione?.nota || 'Nessun dato di calibrazione disponibile.'}
+              </div>
+              {calibrazione?.n_campioni > 0 && (
+                <div style={{marginTop:8, fontSize:11, color:'#94a3b8'}}>
+                  {calibrazione.n_campioni} commesse complete usate per il calcolo
+                  {calibrazione.k_std ? ` · deviazione ±${calibrazione.k_std.toFixed(2)}` : ''}
+                </div>
+              )}
+            </div>
+            {!calibrazione?.k_medio && (
+              <div style={{fontSize:11, color:'#94a3b8', fontStyle:'italic', maxWidth:260}}>
+                Le stime di fine lavori usano i tempi CAM grezzi senza correzione.
+                Completa la prima commessa per attivare la calibrazione automatica.
+              </div>
+            )}
+          </div>
+        </div>
 
         {/* OEE Card */}
         <div style={{background:'#fff', border:'1px solid #e2e8f0',

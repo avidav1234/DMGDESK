@@ -2065,6 +2065,38 @@ async def get_analytics_commesse():
         sum(g["oee_pct"] for g in oee_giorni) / len(oee_giorni), 1
     ) if oee_giorni else None
 
+    # ── Fattore di calibrazione K globale ────────────────────────────────────
+    # K = ore_macchina_reali / ore_cam_stimate, calcolato su commesse COMPLETE
+    # con dati sia CAM che macchina disponibili.
+    # Questo fattore include automaticamente il gap sistematico di calibrazione
+    # (es. 20% di sottostima CAM attuale) — si corregge da solo man mano che
+    # i tempi CAM vengono calibrati meglio.
+    k_campioni = []
+    for p in progetti:
+        nome_p = p.get("name", "")
+        delivery_p = delivery_map.get(p.get("id", ""), {})
+        # Solo commesse consegnate (complete) con dati sia CAM che macchina
+        if not delivery_p.get("delivered"):
+            continue
+        mac_s = ore_mac.get(nome_p, 0)
+        cam_s = ore_cam.get(nome_p.upper(), 0)
+        if mac_s > 0 and cam_s > 0:
+            k_campioni.append(mac_s / cam_s)
+
+    k_medio   = round(sum(k_campioni) / len(k_campioni), 2) if k_campioni else None
+    k_std     = round((sum((k - k_medio)**2 for k in k_campioni) / len(k_campioni))**0.5, 2) if len(k_campioni) > 1 else None
+    n_campioni_k = len(k_campioni)
+
+    # Confidenza: bassa <3, media 3-7, alta ≥8 commesse complete con dati CAM
+    if n_campioni_k >= 8:
+        k_confidenza = "alta"
+    elif n_campioni_k >= 3:
+        k_confidenza = "media"
+    elif n_campioni_k >= 1:
+        k_confidenza = "bassa"
+    else:
+        k_confidenza = None
+
     # ── Ratio CAM/Macchina e stima fine lavori ───────────────────────────────
     analytics_progetti = []
     delivery_map = {d.get("projectId"): d for d in deliveries}
@@ -2077,7 +2109,7 @@ async def get_analytics_commesse():
         ore_mac_sec = ore_mac.get(nome, 0)
         ore_cam_sec = ore_cam.get(nome.upper(), 0)
 
-        # Ratio CAM/Macchina
+        # Ratio CAM/Macchina (grezzo, senza correzione)
         ratio = round(ore_mac_sec / ore_cam_sec, 2) if ore_cam_sec > 0 else None
 
         # Stima fine lavori
@@ -2094,6 +2126,14 @@ async def get_analytics_commesse():
             for pg in pgm_rimanenti
             if pg.get("tempoStimato")
         )
+
+        # Applica fattore K alla stima CAM se disponibile
+        # Senza K: stima grezza (include bias sistematico)
+        # Con K: stima corretta basata su storico reale
+        if stima_rimanente_sec > 0 and k_medio:
+            stima_rimanente_corretta_sec = round(stima_rimanente_sec * k_medio)
+        else:
+            stima_rimanente_corretta_sec = stima_rimanente_sec
         # Usa ore/giorno reali degli ultimi 7gg per questo progetto
         ultimi7 = [
             s for s in sessioni_all
@@ -2105,8 +2145,8 @@ async def get_analytics_commesse():
         ) if ultimi7 else (ORE_TURNO_SEC * 0.6)  # default 60% utilizzo
 
         giorni_rimanenti = (
-            round(stima_rimanente_sec / ore_giorno_reali)
-            if ore_giorno_reali > 0 and stima_rimanente_sec > 0
+            round(stima_rimanente_corretta_sec / ore_giorno_reali)
+            if ore_giorno_reali > 0 and stima_rimanente_corretta_sec > 0
             else None
         )
         data_fine_stimata = (
@@ -2145,6 +2185,9 @@ async def get_analytics_commesse():
                 "ratio_cam_macchina":  ratio,
                 "stima_rimanente_sec": stima_rimanente_sec,
                 "stima_rimanente_str": _durata_str(stima_rimanente_sec),
+                "stima_corretta_sec":  stima_rimanente_corretta_sec,
+                "stima_corretta_str":  _durata_str(stima_rimanente_corretta_sec),
+                "k_applicato":         k_medio,
                 "giorni_rimanenti":    giorni_rimanenti,
                 "data_fine_stimata":   data_fine_stimata,
                 "scadenza":            scadenza,
@@ -2162,12 +2205,24 @@ async def get_analytics_commesse():
     return {
         "oee": {
             "medio_pct":  oee_medio,
-            "giorni":     oee_giorni[-14:],  # ultimi 14gg con dati
+            "giorni":     oee_giorni[-14:],
             "n_giorni":   len(oee_giorni),
         },
-        "progetti":       analytics_progetti,
-        "n_con_cam":      sum(1 for p in analytics_progetti if p["ore_cam_sec"] > 0),
-        "n_alert":        sum(1 for p in analytics_progetti if p.get("alert")),
+        "calibrazione": {
+            "k_medio":    k_medio,
+            "k_std":      k_std,
+            "n_campioni": n_campioni_k,
+            "confidenza": k_confidenza,
+            "nota": (
+                f"K = {k_medio:.2f} — per ogni ora CAM stimi {k_medio:.1f}h macchina in media "
+                f"({n_campioni_k} commesse complete, confidenza {k_confidenza})"
+                if k_medio else
+                "Nessun campione — serve almeno 1 commessa completata con dati CAM e macchina"
+            ),
+        },
+        "progetti":   analytics_progetti,
+        "n_con_cam":  sum(1 for p in analytics_progetti if p["ore_cam_sec"] > 0),
+        "n_alert":    sum(1 for p in analytics_progetti if p.get("alert")),
     }
 
 

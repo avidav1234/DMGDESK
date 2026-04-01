@@ -13,6 +13,7 @@ import InvioMacchina from './pages/InvioMacchina'
 import Progetti      from './pages/Progetti'
 import Report        from './pages/Report'
 import RendicontoProgetto from './pages/RendicontoProgetto'
+import CamTracker    from './pages/CamTracker'
 
 // ── Error Boundary globale ──────────────────────────────────────────────────
 // Previene schermo bianco su eccezioni non gestite nei componenti React.
@@ -85,7 +86,7 @@ function GlobalPoller() {
   return null
 }
 
-const FULL_PAGES = ['/home', '/coda', '/analisi-nc', '/macchina', '/progetti', '/report']
+const FULL_PAGES = ['/home', '/coda', '/analisi-nc', '/macchina', '/progetti', '/report', '/cam-tracker']
 
 function MainContent() {
   const loc = useLocation()
@@ -109,6 +110,7 @@ function MainContent() {
         <Route path="/magazzino"      element={<Wrap><Smontati /></Wrap>} />
         <Route path="/progetti"       element={<Wrap><Progetti /></Wrap>} />
         <Route path="/rendiconto/:projectId" element={<Wrap><RendicontoProgetto /></Wrap>} />
+        <Route path="/cam-tracker"  element={<Wrap><CamTracker /></Wrap>} />
       </Routes>
     </main>
   )

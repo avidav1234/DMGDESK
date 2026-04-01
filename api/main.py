@@ -11,6 +11,7 @@ from api.routers import (
     macchina, scaffale, smontati, holder_bussole,
     generatore, analisi_nc, config_router, tools,
     macchina_live, pallet, macchina_invio, report,
+    cam_tracker_router,
 )
 from utils.logger import get_logger
 
@@ -51,6 +52,9 @@ app.include_router(progetti.router,       prefix="/api/progetti",         tags=[
 app.include_router(report.router,         prefix="/api/report",           tags=["Report & Statistiche"])
 from api.routers import allegati
 app.include_router(allegati.router)
+
+# ── CAM Tracker ───────────────────────────────────────────────────────────────
+app.include_router(cam_tracker_router.router, prefix="/api/cam-tracker", tags=["CAM Tracker"])
 
 
 @app.on_event("startup")

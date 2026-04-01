@@ -2169,3 +2169,288 @@ async def get_analytics_commesse():
         "n_con_cam":      sum(1 for p in analytics_progetti if p["ore_cam_sec"] > 0),
         "n_alert":        sum(1 for p in analytics_progetti if p.get("alert")),
     }
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ALERT UTENSILI PREDITTIVI
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@router.get("/alert-utensili")
+async def get_alert_utensili():
+    """
+    Analisi predittiva utensili — rileva degrado in corso.
+    Criteri di alert:
+    - slope > 2.0 sec/ciclo per almeno 3 cicli consecutivi
+    - CV% > 20% (processo instabile)
+    - durata ultimo ciclo > media + 2.5σ
+    """
+    config = carica_configurazione()
+    data   = _load_log(config)
+    idx    = data.get("cicli_utensile", {})
+
+    alerts = []
+    warnings = []
+
+    for chiave, entry in idx.items():
+        if "|" not in chiave:
+            continue  # skip per-filename, solo coppie utensile|filename
+        utensile, filename = chiave.split("|", 1)
+        campioni = entry.get("campioni", [])
+        n = len(campioni)
+        if n < 3:
+            continue
+
+        media  = entry.get("media", 0)
+        std    = entry.get("std", 0)
+        slope  = entry.get("slope", 0) if hasattr(entry, "get") else 0
+
+        # Ricalcola slope se non presente
+        if "slope" not in entry and n >= 3:
+            xs = list(range(n))
+            x_mean = (n-1)/2
+            slope_num = sum((xs[i]-x_mean)*(campioni[i]-media) for i in range(n))
+            slope_den = sum((x-x_mean)**2 for x in xs)
+            slope = round(slope_num/slope_den, 2) if slope_den else 0
+
+        ultimo = campioni[-1] if campioni else 0
+        cv_pct = round(std/media*100, 1) if media > 0 else 0
+        delta_ultimo = round(ultimo - media) if media > 0 else 0
+        soglia_alert = media + 2.5*std
+
+        item = {
+            "utensile":    utensile,
+            "programma":   filename,
+            "n_cicli":     n,
+            "media_sec":   media,
+            "std_sec":     std,
+            "cv_pct":      cv_pct,
+            "slope":       slope,
+            "ultimo_sec":  ultimo,
+            "delta_sec":   delta_ultimo,
+            "soglia_sec":  round(soglia_alert),
+        }
+
+        if slope > 2.0 and n >= 5:
+            item["tipo"] = "degrado"
+            item["msg"]  = f"Ciclo in aumento +{slope:.1f}s/ciclo su {n} campioni"
+            item["severita"] = "alta" if slope > 5.0 else "media"
+            alerts.append(item)
+        elif ultimo > soglia_alert and n >= 5:
+            item["tipo"] = "picco"
+            item["msg"]  = f"Ultimo ciclo {delta_ultimo}s oltre la media (soglia +{round(2.5*std)}s)"
+            item["severita"] = "alta"
+            alerts.append(item)
+        elif cv_pct > 20:
+            item["tipo"] = "instabile"
+            item["msg"]  = f"Processo instabile CV={cv_pct}% (soglia 20%)"
+            item["severita"] = "bassa"
+            warnings.append(item)
+
+    # Ordina per severità e slope
+    alerts.sort(key=lambda x: (
+        0 if x["severita"] == "alta" else 1,
+        -abs(x.get("slope", 0))
+    ))
+
+    return {
+        "alert":    alerts,
+        "warning":  warnings,
+        "n_alert":  len(alerts),
+        "n_warning": len(warnings),
+        "totale_utensili_monitorati": sum(1 for k in idx if "|" in k),
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CONFIGURAZIONE NOTIFICHE
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_NOTIF_FILE = Path("notifiche_config.json")
+
+def _load_notif_config() -> dict:
+    if _NOTIF_FILE.exists():
+        try:
+            return json.loads(_NOTIF_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    return {
+        "email": {"attivo": False, "smtp_host": "", "smtp_port": 587,
+                  "mittente": "", "password": "", "destinatari": []},
+        "webhook": {"attivo": False, "url": "", "secret": ""},
+        "soglie": {"slope_alert": 2.0, "cv_warning": 20.0,
+                   "giorni_scadenza_warning": 3, "idle_min": 5},
+    }
+
+@router.get("/notifiche/config")
+async def get_notif_config():
+    cfg = _load_notif_config()
+    # Oscura password
+    if cfg.get("email", {}).get("password"):
+        cfg["email"]["password"] = "••••••••"
+    return cfg
+
+@router.post("/notifiche/config")
+async def save_notif_config(body: dict):
+    cfg = _load_notif_config()
+    # Merge preservando password se oscurata
+    for sezione, valori in body.items():
+        if sezione not in cfg:
+            cfg[sezione] = {}
+        for k, v in valori.items():
+            if k == "password" and v == "••••••••":
+                continue  # non sovrascrivere con il placeholder
+            cfg[sezione][k] = v
+    _NOTIF_FILE.write_text(json.dumps(cfg, indent=2, ensure_ascii=False), encoding="utf-8")
+    return {"ok": True}
+
+@router.post("/notifiche/test")
+async def test_notifica(body: dict):
+    """Invia notifica di test via email o webhook."""
+    cfg = _load_notif_config()
+    tipo = body.get("tipo", "webhook")
+
+    if tipo == "webhook":
+        wcfg = cfg.get("webhook", {})
+        if not wcfg.get("url"):
+            return {"ok": False, "errore": "URL webhook non configurato"}
+        try:
+            import urllib.request, json as _json
+            payload = _json.dumps({
+                "tipo": "test",
+                "msg": "DMGDesk — notifica di test",
+                "ts": datetime.now().isoformat(),
+            }).encode()
+            req = urllib.request.Request(
+                wcfg["url"], data=payload,
+                headers={"Content-Type": "application/json"}, method="POST"
+            )
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                return {"ok": True, "status": resp.status}
+        except Exception as e:
+            return {"ok": False, "errore": str(e)}
+
+    elif tipo == "email":
+        ecfg = cfg.get("email", {})
+        if not ecfg.get("smtp_host") or not ecfg.get("destinatari"):
+            return {"ok": False, "errore": "Email non configurata"}
+        try:
+            import smtplib
+            from email.mime.text import MIMEText
+            msg = MIMEText("DMGDesk — notifica di test")
+            msg["Subject"] = "DMGDesk Test Notifica"
+            msg["From"] = ecfg["mittente"]
+            msg["To"]   = ", ".join(ecfg["destinatari"])
+            with smtplib.SMTP(ecfg["smtp_host"], ecfg.get("smtp_port", 587)) as s:
+                s.starttls()
+                s.login(ecfg["mittente"], ecfg.get("password", ""))
+                s.sendmail(ecfg["mittente"], ecfg["destinatari"], msg.as_string())
+            return {"ok": True}
+        except Exception as e:
+            return {"ok": False, "errore": str(e)}
+
+    return {"ok": False, "errore": "Tipo non supportato"}
+
+
+async def _invia_notifica_alert(alert_list: list, tipo: str):
+    """Chiamato automaticamente quando si rilevano nuovi alert."""
+    if not alert_list:
+        return
+    cfg = _load_notif_config()
+
+    msg_lines = [f"DMGDesk Alert — {tipo}", ""]
+    for a in alert_list[:5]:
+        msg_lines.append(f"• {a.get('utensile','?')} / {a.get('programma','?')}: {a.get('msg','')}")
+    if len(alert_list) > 5:
+        msg_lines.append(f"... e altri {len(alert_list)-5} alert")
+    msg_text = "\n".join(msg_lines)
+
+    # Webhook
+    wcfg = cfg.get("webhook", {})
+    if wcfg.get("attivo") and wcfg.get("url"):
+        try:
+            import urllib.request, json as _json
+            payload = _json.dumps({
+                "tipo": tipo, "n_alert": len(alert_list),
+                "msg": msg_text, "ts": datetime.now().isoformat(),
+                "alert": alert_list[:10],
+            }).encode()
+            req = urllib.request.Request(
+                wcfg["url"], data=payload,
+                headers={"Content-Type": "application/json"}, method="POST"
+            )
+            urllib.request.urlopen(req, timeout=5)
+        except Exception:
+            pass
+
+    # Email
+    ecfg = cfg.get("email", {})
+    if ecfg.get("attivo") and ecfg.get("smtp_host") and ecfg.get("destinatari"):
+        try:
+            import smtplib
+            from email.mime.text import MIMEText
+            msg = MIMEText(msg_text)
+            msg["Subject"] = f"DMGDesk Alert: {tipo} ({len(alert_list)})"
+            msg["From"] = ecfg["mittente"]
+            msg["To"]   = ", ".join(ecfg["destinatari"])
+            with smtplib.SMTP(ecfg["smtp_host"], ecfg.get("smtp_port", 587)) as s:
+                s.starttls()
+                s.login(ecfg["mittente"], ecfg.get("password", ""))
+                s.sendmail(ecfg["mittente"], ecfg["destinatari"], msg.as_string())
+        except Exception:
+            pass
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# EXPORT RENDICONTO JSON (base per PDF frontend)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@router.get("/rendiconto-export/{project_id}")
+async def export_rendiconto(project_id: str):
+    """
+    Rendiconto completo in formato ottimizzato per export PDF.
+    Stessi dati di rendiconto-progetto con aggiunta di:
+    - riepilogo_testo: paragrafi pronti per stampa
+    - statistiche_utensili: aggregato per alias
+    """
+    from api.routers.progetti import _load_progetti, _load_deliveries
+    config   = carica_configurazione()
+    log_data = _load_log(config)
+    proj_data = _load_progetti(config)
+    progetto  = next((p for p in proj_data.get("projects", [])
+                      if p.get("id") == project_id), None)
+    if not progetto:
+        raise HTTPException(status_code=404, detail="Progetto non trovato")
+
+    # Riusa rendiconto-progetto richiamando direttamente la funzione
+    # (evita duplicazione codice — lo richiama via HTTP interno)
+    import httpx
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(
+            f"http://localhost:8000/api/report/rendiconto-progetto?project_id={project_id}"
+        )
+        if resp.status_code != 200:
+            raise HTTPException(status_code=resp.status_code)
+        rend = resp.json()
+
+    kpi  = rend.get("kpi", {})
+    tl   = rend.get("timeline", {})
+    nome = rend["progetto"]["nome"]
+
+    # Riepilogo testuale per PDF
+    righe = [
+        f"Commessa: {nome}",
+        f"Ore lavorazione CNC: {kpi.get('ore_macchina_str','—')}",
+        f"Ore programmazione CAM: {kpi.get('ore_cam_str','0h')}",
+    ]
+    if kpi.get("ore_cam_sec", 0) > 0 and kpi.get("ore_macchina_sec", 0) > 0:
+        ratio = round(kpi["ore_macchina_sec"] / kpi["ore_cam_sec"], 1)
+        righe.append(f"Ratio CAM/Macchina: 1 : {ratio}")
+    if tl.get("giorni_totali"):
+        righe.append(f"Durata commessa: {tl['giorni_totali']} giorni")
+    if kpi.get("scostamento_pct") is not None:
+        sc = kpi["scostamento_pct"]
+        righe.append(f"Scostamento vs stima: {'+' if sc>0 else ''}{sc}%")
+
+    rend["riepilogo_testo"] = righe
+    rend["export_ts"] = datetime.now().isoformat()
+    return rend

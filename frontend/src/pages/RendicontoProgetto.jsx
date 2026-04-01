@@ -285,6 +285,9 @@ export default function RendicontoProgetto() {
       <div className="kpi-grid" style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12,marginBottom:20}}>
         <KpiCard label="Ore macchina" value={kpi.ore_macchina_str}
           sub={`${kpi.n_sessioni} sessioni`} accent={colore} icon="⚙"/>
+        <KpiCard label="Ore CAM" value={kpi.ore_cam_str || '0h'}
+          sub={kpi.ore_cam_per_op?.length > 0 ? `${kpi.ore_cam_per_op.length} operazioni` : 'nessun dato'}
+          accent="#0f766e" icon="🖥"/>
         <KpiCard label="Programmi NC" value={`${kpi.n_programmi_completati??0}/${kpi.n_programmi_totali??0}`}
           sub={`${kpi.n_programmi_eseguiti} distinti eseguiti`} accent="#1D5FAD" icon="📋"/>
         <KpiCard label="Utensili usati" value={kpi.n_utensili}
@@ -292,6 +295,31 @@ export default function RendicontoProgetto() {
         <KpiCard label="Giorni commessa" value={timeline.giorni_totali??'—'}
           sub={`${timeline.giorni_macchina??'—'} giorni in macchina`} accent="#7c3aed" icon="📅"/>
       </div>
+
+      {/* Ore CAM per operazione */}
+      {kpi.ore_cam_sec > 0 && (
+        <div style={{background:'#fff',border:'1px solid #e2e8f0',borderRadius:12,
+          padding:'16px 20px',marginBottom:16}}>
+          <div style={{fontSize:10,fontWeight:800,color:'#94a3b8',letterSpacing:'0.1em',
+            textTransform:'uppercase',marginBottom:12}}>Ore CAM — programmazione Cimatron</div>
+          <div style={{display:'flex',gap:24,flexWrap:'wrap'}}>
+            <div style={{display:'flex',flexDirection:'column',gap:2,minWidth:120}}>
+              <div style={{fontSize:11,color:'#94a3b8'}}>Totale ore CAM</div>
+              <div style={{fontSize:20,fontWeight:700,color:'#0f766e',fontFamily:'monospace'}}>
+                {kpi.ore_cam_str}
+              </div>
+            </div>
+            {kpi.ore_cam_per_op?.map(op => (
+              <div key={op.operazione} style={{display:'flex',flexDirection:'column',gap:2}}>
+                <div style={{fontSize:11,color:'#94a3b8'}}>Op. {op.operazione}</div>
+                <div style={{fontSize:16,fontWeight:600,color:'#0f766e',fontFamily:'monospace'}}>
+                  {op.hours}h
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* 3. DETTAGLIO */}
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16,marginBottom:20}}>

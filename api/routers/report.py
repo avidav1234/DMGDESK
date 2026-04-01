@@ -1899,6 +1899,35 @@ async def get_rendiconto_progetto(project_id: str):
             "n_programmi": len(pgms_validi),
         })
 
+    # ── Ore CAM (da cam_tracker_data.json) ───────────────────────────────────
+    ore_cam_sec = 0
+    ore_cam_per_op: list[dict] = []
+    try:
+        cam_file = Path("cam_tracker_data.json")
+        if cam_file.exists():
+            import json as _json
+            cam_data = _json.loads(cam_file.read_text(encoding="utf-8"))
+            # Cerca per project_id esatto (es. 4350_0221) o per commessa (es. 4350)
+            # Il nome progetto DMGDesk è tipo "4350_0221"
+            commessa_proj = nome.split("_")[0] if "_" in nome else nome
+            cam_entries = [
+                e for e in cam_data
+                if e.get("project", "").upper() == nome.upper()
+                or e.get("commessa", "").upper() == commessa_proj.upper()
+            ]
+            ore_cam_sec = sum(e.get("seconds", 0) for e in cam_entries)
+            # Aggrega per operazione
+            op_agg: dict[str, int] = {}
+            for e in cam_entries:
+                op = e.get("operazione") or e.get("project", "")
+                op_agg[op] = op_agg.get(op, 0) + e.get("seconds", 0)
+            ore_cam_per_op = [
+                {"operazione": op, "seconds": sec, "hours": round(sec / 3600, 2)}
+                for op, sec in sorted(op_agg.items(), key=lambda x: -x[1])
+            ]
+    except Exception as _e:
+        pass  # cam_tracker non ancora configurato — non blocca il rendiconto
+
     return {
         "progetto": {
             "id":    project_id,
@@ -1924,6 +1953,9 @@ async def get_rendiconto_progetto(project_id: str):
         "kpi": {
             "ore_macchina_sec":  ore_macchina_sec,
             "ore_macchina_str":  _durata_str(ore_macchina_sec),
+            "ore_cam_sec":       ore_cam_sec,
+            "ore_cam_str":       _durata_str(ore_cam_sec),
+            "ore_cam_per_op":    ore_cam_per_op,
             "n_sessioni":        n_sessioni,
             "n_programmi_eseguiti": n_programmi,
             "n_programmi_totali":   n_pgm_totali,

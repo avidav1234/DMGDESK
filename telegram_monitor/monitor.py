@@ -234,6 +234,6 @@ class MachineMonitor:
             await self._check()
             await self._check_daily_summary()
             await asyncio.sleep(self._interval)
--e 
+
 # Istanza globale — impostata da api/main.py al startup
 _instance: 'MachineMonitor | None' = None

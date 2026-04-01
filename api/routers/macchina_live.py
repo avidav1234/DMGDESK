@@ -18,7 +18,7 @@ from datetime import datetime
 from pathlib import Path
 from fastapi import APIRouter
 from database.db_handler import carica_configurazione
-from api.constants import WATCHDOG_SOGLIA_SEC, ORE_TURNO_SEC
+from api.constants import WATCHDOG_SOGLIA_SEC, WATCHDOG_ISTERESI_TICK, ORE_TURNO_SEC
 # Import a livello modulo — nessun ciclo reale, spostate da lazy import nelle funzioni
 from api.routers.progetti import (
     _load_progetti, _save_progetti, _invalidate_analisi_cache,
@@ -535,22 +535,36 @@ async def aggiorna_stati_da_log():
     if not log_path:
         return {"aggiornamenti": 0, "nota": "log non trovato"}
 
-    # ── Watchdog MchnSrv: rileva log stale ───────────────────────────────────
+    # ── Watchdog MchnSrv: rileva log stale con isteresi ──────────────────────
     # Se MchnSrv smette di copiare il log dalla PCU50, il file rimane congelato.
-    # DMGDesk continuerebbe a leggere dati vecchi e applicare transizioni di stato
-    # sbagliate. Soglia: 120s senza aggiornamento = log non affidabile.
+    # ISTERESI: segnala stale solo dopo WATCHDOG_ISTERESI_TICK tick consecutivi
+    # sopra soglia — evita falsi positivi da picchi momentanei di rete/I/O.
+
+    # Contatore tick stale persistente in memoria del processo
+    if not hasattr(aggiorna_stati_da_log, "_stale_count"):
+        aggiorna_stati_da_log._stale_count = 0
+
     LOG_STALE_SOGLIA_SEC = WATCHDOG_SOGLIA_SEC
     try:
         mtime = os.path.getmtime(log_path)
         log_age_sec = (_dt.now() - _dt.fromtimestamp(mtime)).total_seconds()
         if log_age_sec > LOG_STALE_SOGLIA_SEC:
-            return {
-                "aggiornamenti": 0,
-                "log_stale": True,
-                "log_age_sec": int(log_age_sec),
-                "nota": f"Log non aggiornato da {int(log_age_sec)}s — MchnSrv potrebbe essere fermo",
-                "stato_macchina": -1,   # -1 = segnale speciale "dati non affidabili"
-            }
+            aggiorna_stati_da_log._stale_count += 1
+            if aggiorna_stati_da_log._stale_count >= WATCHDOG_ISTERESI_TICK:
+                return {
+                    "aggiornamenti": 0,
+                    "log_stale": True,
+                    "log_age_sec": int(log_age_sec),
+                    "stale_ticks": aggiorna_stati_da_log._stale_count,
+                    "nota": f"Log non aggiornato da {int(log_age_sec)}s ({aggiorna_stati_da_log._stale_count} tick consecutivi) — MchnSrv potrebbe essere fermo",
+                    "stato_macchina": -1,
+                }
+            else:
+                # Sotto soglia tick — non segnalare ancora, procedi normalmente
+                pass
+        else:
+            # Log aggiornato — resetta contatore
+            aggiorna_stati_da_log._stale_count = 0
     except OSError:
         pass  # se non riesce a leggere mtime, procede normalmente
 

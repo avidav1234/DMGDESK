@@ -8,7 +8,10 @@ ORE_TURNO_SEC = 28800          # 8 ore in secondi (turno standard)
 INIZIO_TURNO_ORA = 6           # turno inizia alle 06:00
 
 # ── Watchdog MchnSrv ──────────────────────────────────────────────────────────
-WATCHDOG_SOGLIA_SEC = 120      # log stale dopo 120s senza aggiornamenti
+WATCHDOG_SOGLIA_SEC = 300      # log stale dopo 300s senza aggiornamenti
+                               # (era 120s — aumentato per tollerare ritardi rete)
+WATCHDOG_ISTERESI_TICK = 3     # tick consecutivi stale prima di segnalare
+                               # (evita falsi positivi da picchi momentanei)
 
 # ── Database cicli utensile ───────────────────────────────────────────────────
 CICLI_FINESTRA = 50            # campioni massimi per finestra scorrevole

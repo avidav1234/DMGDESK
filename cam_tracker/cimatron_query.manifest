@@ -10,8 +10,8 @@
     <dependentAssembly>
       <assemblyIdentity
         type="win32"
-        name="Cimatron.BootLoader"
-        version="1.0.0.0"
+        name="CimAppAccess"
+        version="12.0.0.0"
         processorArchitecture="amd64"
       />
     </dependentAssembly>

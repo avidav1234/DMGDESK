@@ -1,12 +1,11 @@
 """
 cimatron_query.py
 =================
-Compilato con PyInstaller + manifest Cimatron.
-Legge il path del documento attivo in Cimatron e lo stampa su stdout.
+Compilato con PyInstaller + manifest CimAppAccess embedded.
+Usa IAppAccess.GetActiveApplication() — stesso metodo di PCamCimatronMonitor.
 """
 
 import sys
-from pathlib import Path
 
 CIMATRON_PROGRAM = r"C:\Program Files\Cimatron\Cimatron\2025.0\Program"
 
@@ -14,10 +13,15 @@ def main():
     try:
         sys.path.insert(0, CIMATRON_PROGRAM)
         import clr
-        clr.AddReference("interop.CimatronE")
-        from interop.CimatronE import CimApplicationClass
+        clr.AddReference("interop.CimAppAccess")
+        from interop.CimAppAccess import AppAccessClass
 
-        app = CimApplicationClass()
+        appAccess = AppAccessClass()
+        app = appAccess.GetActiveApplication()
+        if app is None:
+            print("")
+            return
+
         doc = app.ActiveDocument
         if doc:
             print(str(doc.FullName))

@@ -110,22 +110,30 @@ class DMGDeskClient:
 # ── Cimatron COM adapter ───────────────────────────────────────────────────────
 class CimatronCOMAdapter:
     """
-    Si aggancia a Cimatron in esecuzione via COM Interop (pythonnet).
-    Legge il documento attivo per estrarre nome file e path progetto.
+    Legge il documento attivo in Cimatron tramite cimatron_query.exe
+    (subprocess con manifest embedded) oppure via pythonnet diretto.
     """
 
     def __init__(self, program_dir: str):
         self.program_dir = program_dir
         self.app = None
         self._available = False
+        # Path dell'exe query — stessa cartella di questo script
+        self._query_exe = Path(__file__).parent / "cimatron_query.exe"
 
     def try_connect(self) -> bool:
+        # Metodo 1: cimatron_query.exe (manifest embedded, più affidabile)
+        if self._query_exe.exists():
+            log.info(f"[Cimatron] Usando cimatron_query.exe")
+            self._available = True
+            self._mode = "exe"
+            return True
+
+        # Metodo 2: pythonnet diretto (richiede manifest su python.exe)
         try:
-            # Auto-detect versione Cimatron installata
-            base = Path(self.program_dir).parent.parent  # es. C:\Program Files\Cimatron\Cimatron
+            base = Path(self.program_dir).parent.parent
             candidates = [self.program_dir]
             if base.exists():
-                # Cerca tutte le versioni installate, prende la più recente
                 versioni = sorted(
                     [str(d / "Program") for d in base.iterdir()
                      if d.is_dir() and (d / "Program").exists()],
@@ -133,39 +141,55 @@ class CimatronCOMAdapter:
                 )
                 candidates = versioni + candidates
 
-            loaded = False
             for path in candidates:
                 if Path(path).exists():
                     sys.path.insert(0, path)
-                    loaded = True
                     log.info(f"[Cimatron COM] Usando path: {path}")
                     break
 
-            if not loaded:
-                log.info("[Cimatron COM] Nessuna cartella Program trovata")
-                return False
-
-            import clr  # pythonnet
-            # La DLL di aggancio applicazione in Cimatron 2025 è CimatronE
+            import clr
             clr.AddReference("interop.CimatronE")
             import CimatronE
-
             self.app = CimatronE.Application()
             _ = self.app.ActiveDocument
             self._available = True
-            log.info("[Cimatron COM] Connesso via interop.CimatronE")
+            self._mode = "com"
+            log.info("[Cimatron COM] Connesso via pythonnet")
             return True
         except ImportError:
-            log.info("[Cimatron COM] pythonnet non disponibile — userò fallback finestra")
+            log.info("[Cimatron COM] pythonnet non disponibile")
             return False
         except Exception as e:
             log.debug(f"[Cimatron COM] {e}")
             return False
 
     def get_active_project(self) -> dict | None:
-        """Legge path completo del documento attivo e lo parsa."""
-        if not self._available or self.app is None:
+        if not self._available:
             return None
+
+        if getattr(self, '_mode', None) == "exe":
+            return self._query_via_exe()
+        else:
+            return self._query_via_com()
+
+    def _query_via_exe(self) -> dict | None:
+        """Lancia cimatron_query.exe e legge il path dal stdout."""
+        import subprocess
+        try:
+            result = subprocess.run(
+                [str(self._query_exe)],
+                capture_output=True, text=True, timeout=5
+            )
+            full_path = result.stdout.strip()
+            if not full_path or full_path.startswith("ERROR"):
+                return None
+            return parse_project_from_path(full_path)
+        except Exception as e:
+            log.debug(f"[Cimatron EXE] {e}")
+            return None
+
+    def _query_via_com(self) -> dict | None:
+        """Legge path completo del documento attivo via COM."""
         try:
             doc = self.app.ActiveDocument
             if doc is None:

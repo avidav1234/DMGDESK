@@ -1972,3 +1972,200 @@ async def get_rendiconto_progetto(project_id: str):
         "utensili":   utensili_list,
         "sessioni":   sessioni_out,
     }
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ANALYTICS AVANZATE
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@router.get("/analytics-commesse")
+async def get_analytics_commesse():
+    """
+    Analytics avanzate per tutte le commesse:
+    - Ratio CAM/Macchina per commessa
+    - OEE giornaliero (ultimi 30gg)
+    - Stima fine lavori per commesse aperte
+    - Alert scadenze a rischio
+    """
+    from api.routers.progetti import _load_progetti, _load_deliveries
+    from datetime import datetime, date, timedelta
+
+    config   = carica_configurazione()
+    log_data = _load_log(config)
+    proj_data = _load_progetti(config)
+    deliveries = _load_deliveries(config)
+    progetti = proj_data.get("projects", [])
+
+    # ── Ore macchina per commessa (da log sessioni) ──────────────────────────
+    ore_mac: dict[str, float] = {}
+    for s in log_data.get("sessioni", []):
+        nome = (s.get("progetto") or "").strip()
+        if not nome or nome == "—":
+            continue
+        dur = s.get("durata_sec") or sum(
+            p.get("durata_sec", 0) for p in s.get("programmi", [])
+        )
+        ore_mac[nome] = ore_mac.get(nome, 0) + dur
+
+    # ── Ore CAM per commessa (da cam_tracker_data.json) ─────────────────────
+    ore_cam: dict[str, float] = {}
+    cam_per_commessa: dict[str, list] = {}
+    try:
+        cam_file = Path("cam_tracker_data.json")
+        if cam_file.exists():
+            cam_data = json.loads(cam_file.read_text(encoding="utf-8"))
+            for e in cam_data:
+                proj_id = (e.get("project") or "").upper()
+                commessa = (e.get("commessa") or proj_id.split("_")[0]).upper()
+                ore_cam[proj_id] = ore_cam.get(proj_id, 0) + e.get("seconds", 0)
+                cam_per_commessa.setdefault(commessa, []).append(e)
+    except Exception:
+        pass
+
+    # ── OEE ultimi 30 giorni ─────────────────────────────────────────────────
+    # Disponibilità = ore macchina attiva / ore turno (ipotesi 8h/giorno)
+    ORE_TURNO_SEC = 8 * 3600
+    oggi = date.today()
+    oee_giorni = []
+    sessioni_all = log_data.get("sessioni", [])
+    for i in range(29, -1, -1):
+        giorno = (oggi - timedelta(days=i)).isoformat()
+        sess_g = [s for s in sessioni_all if s.get("data") == giorno]
+        ore_att = sum(
+            (s.get("durata_sec") or sum(p.get("durata_sec", 0)
+             for p in s.get("programmi", [])))
+            for s in sess_g
+        )
+        # Prestazione: cicli reali vs teorici (usa media cicli se disponibile)
+        n_pgm = sum(len(s.get("programmi", [])) for s in sess_g)
+        idx = log_data.get("cicli_utensile", {})
+        cicli_teorici = 0
+        cicli_reali = 0
+        for s in sess_g:
+            for p in s.get("programmi", []):
+                fname = (p.get("filename") or "").upper()
+                entry = idx.get(fname)
+                if entry and entry.get("media"):
+                    cicli_teorici += entry["media"]
+                    cicli_reali   += p.get("durata_sec") or entry["media"]
+        prestazione = round(cicli_teorici / cicli_reali, 3) if cicli_reali > 0 else None
+        disponibilita = round(min(ore_att / ORE_TURNO_SEC, 1.0), 3) if ore_att > 0 else 0
+        oee_val = round(disponibilita * (prestazione or 1.0), 3) if ore_att > 0 else 0
+        if ore_att > 0:
+            oee_giorni.append({
+                "data":           giorno,
+                "disponibilita":  round(disponibilita * 100, 1),
+                "prestazione":    round((prestazione or 1.0) * 100, 1),
+                "oee_pct":        round(oee_val * 100, 1),
+                "ore_attive_sec": ore_att,
+                "n_programmi":    n_pgm,
+            })
+
+    oee_medio = round(
+        sum(g["oee_pct"] for g in oee_giorni) / len(oee_giorni), 1
+    ) if oee_giorni else None
+
+    # ── Ratio CAM/Macchina e stima fine lavori ───────────────────────────────
+    analytics_progetti = []
+    delivery_map = {d.get("projectId"): d for d in deliveries}
+
+    for p in progetti:
+        nome = p.get("name", "")
+        pid  = p.get("id", "")
+        commessa = nome.split("_")[0] if "_" in nome else nome
+
+        ore_mac_sec = ore_mac.get(nome, 0)
+        ore_cam_sec = ore_cam.get(nome.upper(), 0)
+
+        # Ratio CAM/Macchina
+        ratio = round(ore_mac_sec / ore_cam_sec, 2) if ore_cam_sec > 0 else None
+
+        # Stima fine lavori
+        # Programmi rimanenti × tempo ciclo medio
+        pgm_rimanenti = [
+            pg for s in p.get("steps", [])
+            for t in s.get("tasks", [])
+            if t.get("text", "").strip().lower() == "fresatura"
+            for pg in t.get("programs", [])
+            if pg.get("tipoGruppo") != "ipm" and pg.get("stato") != "completato"
+        ]
+        stima_rimanente_sec = sum(
+            int(pg.get("tempoStimato") or 0) * 60
+            for pg in pgm_rimanenti
+            if pg.get("tempoStimato")
+        )
+        # Usa ore/giorno reali degli ultimi 7gg per questo progetto
+        ultimi7 = [
+            s for s in sessioni_all
+            if (s.get("progetto") or "") == nome
+            and s.get("data", "") >= (oggi - timedelta(days=7)).isoformat()
+        ]
+        ore_giorno_reali = (
+            sum(s.get("durata_sec") or 0 for s in ultimi7) / min(7, max(1, len(ultimi7)))
+        ) if ultimi7 else (ORE_TURNO_SEC * 0.6)  # default 60% utilizzo
+
+        giorni_rimanenti = (
+            round(stima_rimanente_sec / ore_giorno_reali)
+            if ore_giorno_reali > 0 and stima_rimanente_sec > 0
+            else None
+        )
+        data_fine_stimata = (
+            (oggi + timedelta(days=giorni_rimanenti)).isoformat()
+            if giorni_rimanenti is not None
+            else None
+        )
+
+        # Alert scadenza
+        delivery = delivery_map.get(pid, {})
+        scadenza = delivery.get("dueDate")
+        consegnato = delivery.get("delivered", False)
+        alert = None
+        if not consegnato and scadenza and data_fine_stimata:
+            giorni_scarto = (
+                date.fromisoformat(scadenza) -
+                date.fromisoformat(data_fine_stimata)
+            ).days
+            if giorni_scarto < 0:
+                alert = {"tipo": "ritardo", "giorni": abs(giorni_scarto),
+                         "msg": f"Stima fine lavori {abs(giorni_scarto)}gg oltre scadenza"}
+            elif giorni_scarto <= 3:
+                alert = {"tipo": "warning", "giorni": giorni_scarto,
+                         "msg": f"Solo {giorni_scarto}gg di margine sulla scadenza"}
+
+        if ore_mac_sec > 0 or ore_cam_sec > 0:
+            analytics_progetti.append({
+                "id":                  pid,
+                "nome":                nome,
+                "commessa":            commessa,
+                "colore":              p.get("color", "#1D5FAD"),
+                "ore_macchina_sec":    ore_mac_sec,
+                "ore_macchina_str":    _durata_str(ore_mac_sec),
+                "ore_cam_sec":         ore_cam_sec,
+                "ore_cam_str":         _durata_str(ore_cam_sec),
+                "ratio_cam_macchina":  ratio,
+                "stima_rimanente_sec": stima_rimanente_sec,
+                "stima_rimanente_str": _durata_str(stima_rimanente_sec),
+                "giorni_rimanenti":    giorni_rimanenti,
+                "data_fine_stimata":   data_fine_stimata,
+                "scadenza":            scadenza,
+                "consegnato":          consegnato,
+                "alert":               alert,
+            })
+
+    # Ordina: alert prima, poi per ore macchina decrescenti
+    analytics_progetti.sort(key=lambda x: (
+        0 if x.get("alert", {}) and x["alert"]["tipo"] == "ritardo" else
+        1 if x.get("alert", {}) and x["alert"]["tipo"] == "warning" else 2,
+        -x["ore_macchina_sec"]
+    ))
+
+    return {
+        "oee": {
+            "medio_pct":  oee_medio,
+            "giorni":     oee_giorni[-14:],  # ultimi 14gg con dati
+            "n_giorni":   len(oee_giorni),
+        },
+        "progetti":       analytics_progetti,
+        "n_con_cam":      sum(1 for p in analytics_progetti if p["ore_cam_sec"] > 0),
+        "n_alert":        sum(1 for p in analytics_progetti if p.get("alert")),
+    }

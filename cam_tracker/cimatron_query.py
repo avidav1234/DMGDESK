@@ -1,5 +1,6 @@
 """
-cimatron_query.py — Legge FullName da Cimatron in esecuzione.
+cimatron_query.py — Legge il path del documento attivo in Cimatron.
+Compilare con: pyinstaller cimatron_query.py -F --manifest=cimatron_query.manifest --distpath .
 """
 
 import sys
@@ -24,32 +25,21 @@ def main():
         punk = Marshal.GetIUnknownForObject(app_com)
         idisp = pythoncom.ObjectFromAddress(int(str(punk)), pythoncom.IID_IDispatch)
 
-        # DISPID=2 → GetActiveDoc → ritorna IUnknown
+        # DISPID=2 → GetActiveDoc
         doc_unk = idisp.Invoke(2, 0x0409, pythoncom.DISPATCH_METHOD, 1)
         if doc_unk is None:
             print("")
             return
 
-        # QueryInterface IUnknown → IDispatch
+        # QI IUnknown → IDispatch
         doc_disp = doc_unk.QueryInterface(pythoncom.IID_IDispatch)
-        sys.stderr.write(f"doc IDispatch: {doc_disp}\n")
 
-        # Ispeziona metodi documento
-        ti = doc_disp.GetTypeInfo()
-        ta = ti.GetTypeAttr()
-        sys.stderr.write(f"Doc funcs: {ta[6]}\n")
-        for i in range(min(ta[6], 30)):
-            try:
-                fd = ti.GetFuncDesc(i)
-                name = ti.GetNames(fd[0])[0]
-                sys.stderr.write(f"  [{i}] id={fd[0]} {name}\n")
-            except:
-                pass
-
-        print("")
+        # DISPID=15 → GetPath
+        path = doc_disp.Invoke(15, 0x0409, pythoncom.DISPATCH_METHOD, 1)
+        print(str(path) if path else "")
 
     except Exception as e:
-        sys.stderr.write(f"ERRORE: {type(e).__name__}: {e}\n")
+        sys.stderr.write(f"ERROR: {type(e).__name__}: {e}\n")
         sys.exit(1)
 
 if __name__ == "__main__":

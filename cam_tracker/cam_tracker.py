@@ -122,9 +122,19 @@ class CimatronCOMAdapter:
         self._query_exe = Path(__file__).parent / "cimatron_query.exe"
 
     def try_connect(self) -> bool:
-        # Metodo 1: cimatron_query.exe (manifest embedded, più affidabile)
-        if self._query_exe.exists():
-            log.info(f"[Cimatron] Usando cimatron_query.exe")
+        # Metodo 1: cimatron_query.exe nella cartella Cimatron (più affidabile)
+        cim_exe = Path(self.program_dir) / "cimatron_query.exe"
+        local_exe = Path(__file__).parent / "cimatron_query.exe"
+
+        if cim_exe.exists():
+            log.info(f"[Cimatron] Usando {cim_exe}")
+            self._query_exe = cim_exe
+            self._available = True
+            self._mode = "exe"
+            return True
+        elif local_exe.exists():
+            log.info(f"[Cimatron] Usando {local_exe} (locale — potrebbe dare errore SxS)")
+            self._query_exe = local_exe
             self._available = True
             self._mode = "exe"
             return True

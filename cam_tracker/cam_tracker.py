@@ -120,14 +120,35 @@ class CimatronCOMAdapter:
 
     def try_connect(self) -> bool:
         try:
-            sys.path.insert(0, self.program_dir)
+            # Auto-detect versione Cimatron installata
+            base = Path(self.program_dir).parent.parent  # es. C:\Program Files\Cimatron\Cimatron
+            candidates = [self.program_dir]
+            if base.exists():
+                # Cerca tutte le versioni installate, prende la più recente
+                versioni = sorted(
+                    [str(d / "Program") for d in base.iterdir()
+                     if d.is_dir() and (d / "Program" / "Interop.CimAppAPI.dll").exists()],
+                    reverse=True
+                )
+                candidates = versioni + candidates
+
+            loaded = False
+            for path in candidates:
+                if Path(path).exists():
+                    sys.path.insert(0, path)
+                    loaded = True
+                    log.info(f"[Cimatron COM] Usando path: {path}")
+                    break
+
+            if not loaded:
+                log.info("[Cimatron COM] Nessuna cartella Program trovata")
+                return False
+
             import clr  # pythonnet
             clr.AddReference("Interop.CimAppAPI")
             import CimAppAPI
 
-            # GetRunningApplication si aggancia all'istanza già aperta
             self.app = CimAppAPI.CimApplication()
-            # Test: se non ci sono eccezioni, la connessione è valida
             _ = self.app.ActiveDocument
             self._available = True
             log.info("[Cimatron COM] Connesso via API nativa")
@@ -160,6 +181,8 @@ class CimatronCOMAdapter:
 import re
 
 CIMATRON_PATTERNS = [
+    # "Cimatron 2025.0 SP4P1 - [NOME_FILE : NC-Standard]"
+    r"\[([^\]:]+?)\s*:\s*(?:NC-Standard|NC Simulator|CimExtSimul\w+)[^\]]*\]",
     # "Cimatron 2024 — FLANGIA_BASE.elt"
     r"Cimatron\s+\S+\s*[-–—]\s*(.+?)(?:\.elt|\.icd)?$",
     # Titoli generici con percorso file

@@ -19,8 +19,23 @@ from pathlib import Path
 
 def test_com(program_dir: str):
     print("\n── Test COM API Cimatron ───────────────────────────────────")
+    # Auto-detect versione
+    base = Path(program_dir).parent.parent
+    candidates = [program_dir]
+    if base.exists():
+        versioni = sorted(
+            [str(d / "Program") for d in base.iterdir()
+             if d.is_dir() and (d / "Program").exists()],
+            reverse=True
+        )
+        candidates = versioni + [program_dir]
+    print(f"  [COM] Cartelle candidate: {candidates[:3]}")
     try:
-        sys.path.insert(0, program_dir)
+        for path in candidates:
+            if Path(path).exists():
+                sys.path.insert(0, path)
+                print(f"  [COM] Path usato: {path}")
+                break
         import clr
         clr.AddReference("Interop.CimAppAPI")
         import CimAppAPI
@@ -47,6 +62,7 @@ def test_com(program_dir: str):
 def test_window():
     print("\n── Test Window Title Fallback ──────────────────────────────")
     PATTERNS = [
+        r"\[([^\]:]+?)\s*:\s*(?:NC-Standard|NC Simulator|CimExtSimul\w+)[^\]]*\]",
         r"Cimatron\s+\S+\s*[-–—]\s*(.+?)(?:\.elt|\.icd)?$",
         r"[-–—]\s*.*[/\\](.+?)(?:\.elt|\.icd)?$",
     ]

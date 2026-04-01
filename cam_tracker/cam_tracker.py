@@ -384,7 +384,7 @@ class ActivityMonitor:
         return True, f"attivo (idle={idle_sec:.0f}s)"
 
 
-
+class WindowTitleAdapter:
     """Fallback: legge il titolo della finestra attiva di Windows."""
 
     def __init__(self):

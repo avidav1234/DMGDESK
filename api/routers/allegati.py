@@ -21,9 +21,12 @@ TIPI_CONSENTITI = {
     ".txt":  "documento",
 }
 
-def _dir(config, pid): 
+def _dir(config, pid):
     base = config.get("tools_toa_folder") or config.get("percorso_nc_base") or "."
-    return Path(base) / "allegati" / pid
+    base = base.strip() or "."
+    # Risolve path relativa rispetto alla directory di lavoro del processo
+    p = Path(base).resolve() / "allegati" / pid
+    return p
 
 def _idx(d: Path) -> list:
     f = d / "index.json"
@@ -95,10 +98,13 @@ async def upload_allegato(
 async def scarica_allegato(project_id: str, allegato_id: str):
     config = carica_configurazione()
     d = _dir(config, project_id)
-    entry = next((a for a in _idx(d) if a["id"]==allegato_id), None)
-    if not entry: raise HTTPException(404, "Non trovato")
+    idx_data = _idx(d)
+    entry = next((a for a in idx_data if a["id"]==allegato_id), None)
+    if not entry:
+        raise HTTPException(404, f"Allegato {allegato_id} non trovato in {d}")
     p = d / entry["path"]
-    if not p.exists(): raise HTTPException(404, "File mancante")
+    if not p.exists():
+        raise HTTPException(404, f"File fisico non trovato: {p}")
     return FileResponse(str(p), filename=entry["filename"], media_type="application/octet-stream")
 
 
@@ -107,9 +113,11 @@ async def preview_allegato(project_id: str, allegato_id: str):
     config = carica_configurazione()
     d = _dir(config, project_id)
     entry = next((a for a in _idx(d) if a["id"]==allegato_id), None)
-    if not entry: raise HTTPException(404, "Non trovato")
+    if not entry:
+        raise HTTPException(404, f"Allegato {allegato_id} non trovato in {d}")
     p = d / entry["path"]
-    if not p.exists(): raise HTTPException(404, "File mancante")
+    if not p.exists():
+        raise HTTPException(404, f"File fisico non trovato: {p}")
     ext = Path(entry["filename"]).suffix.lower()
     mt = {".jpg":"image/jpeg",".jpeg":"image/jpeg",".png":"image/png",
           ".bmp":"image/bmp",".pdf":"application/pdf",
@@ -211,3 +219,28 @@ def _parse_setup_cam(path: Path) -> dict:
         elif k == "Total time": stats["total_time"] = str(row[8] or "")
 
     return {"meta": meta, "operazioni": ops, "utensili": uts, "statistiche": stats}
+
+
+@router.get("/{project_id}/debug")
+async def debug_allegati(project_id: str):
+    """Mostra dove l'endpoint cerca i file — utile per diagnostica."""
+    config = carica_configurazione()
+    d = _dir(config, project_id)
+    idx_data = _idx(d)
+    files_check = []
+    for a in idx_data:
+        p = d / a.get("path","")
+        files_check.append({
+            "id": a["id"],
+            "filename": a["filename"],
+            "path_assoluto": str(p),
+            "esiste": p.exists(),
+        })
+    return {
+        "tools_toa_folder": config.get("tools_toa_folder"),
+        "percorso_nc_base": config.get("percorso_nc_base"),
+        "directory_allegati": str(d),
+        "directory_esiste": d.exists(),
+        "n_allegati_index": len(idx_data),
+        "files": files_check,
+    }

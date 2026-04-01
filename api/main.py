@@ -84,19 +84,47 @@ async def startup():
     from telegram_monitor.config import load_telegram_config
     from telegram_monitor.notifier import TelegramNotifier
     from telegram_monitor.monitor import MachineMonitor
+    from telegram_monitor.bot_listener import BotListener
     from api.routers.macchina_live import get_stato_macchina as _get_stato
+    from api.routers.report import _load_log as _load_report_log, _log_path as _report_log_path
+    from database.db_handler import carica_configurazione as _cfg_tg
+
+    async def _get_report():
+        """Ritorna dati report per daily summary / comando /summary."""
+        import json
+        _cfg = _cfg_tg()
+        p = _report_log_path(_cfg)
+        try:
+            raw = json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
+        except Exception:
+            raw = {}
+        return raw
 
     tg_cfg = load_telegram_config()
     if tg_cfg:
         _notifier = TelegramNotifier(token=tg_cfg["token"], chat_id=tg_cfg["chat_id"])
-        _monitor  = MachineMonitor(
+
+        # Istanza monitor globale — esposta per notify_batch da altri router
+        from telegram_monitor import monitor as _tg_monitor_module
+        _monitor = MachineMonitor(
             notifier        = _notifier,
             get_stato_fn    = _get_stato,
+            get_report_fn   = _get_report,
             interval_sec    = tg_cfg["interval_sec"],
             stale_alert_sec = tg_cfg["stale_alert_sec"],
         )
+        _tg_monitor_module._instance = _monitor   # rende accessibile da altri moduli
+
+        _listener = BotListener(
+            token         = tg_cfg["token"],
+            chat_id       = tg_cfg["chat_id"],
+            get_stato_fn  = _get_stato,
+            get_report_fn = _get_report,
+        )
+
         _asyncio.create_task(_monitor.run())
-        log.info(f"Telegram Monitor avviato — check ogni {tg_cfg['interval_sec']}s")
+        _asyncio.create_task(_listener.run())
+        log.info(f"Telegram Monitor + BotListener avviati — check ogni {tg_cfg['interval_sec']}s")
     else:
         log.warning(
             "Telegram Monitor disabilitato — "

@@ -20,7 +20,20 @@ async def telegram_status():
     """Ritorna se Telegram è configurato."""
     cfg = load_telegram_config()
     if not cfg:
-        return {"configurato": False, "motivo": "TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID mancanti nel .env"}
+        # Debug: mostra dove ha cercato il .env
+        from pathlib import Path as _P
+        import os
+        candidates = [
+            _P(__file__).parent.parent.parent / ".env",
+            _P.cwd() / ".env",
+            _P.cwd().parent / ".env",
+        ]
+        return {
+            "configurato": False,
+            "motivo": "TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID mancanti nel .env",
+            "env_cercato_in": [str(p) + (" ✓ esiste" if p.exists() else " ✗ non trovato") for p in candidates],
+            "cwd": str(_P.cwd()),
+        }
     return {
         "configurato":     True,
         "chat_id":         cfg["chat_id"],

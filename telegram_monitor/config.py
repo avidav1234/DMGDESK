@@ -9,10 +9,10 @@ from pathlib import Path
 
 
 def _load_dotenv(env_path: Path):
-    """Carica .env senza dipendenze esterne."""
+    """Carica .env senza dipendenze esterne. Gestisce BOM UTF-8 (Windows PowerShell)."""
     if not env_path.exists():
         return
-    with open(env_path, encoding="utf-8") as f:
+    with open(env_path, encoding="utf-8-sig") as f:  # utf-8-sig rimuove BOM automaticamente
         for line in f:
             line = line.strip()
             if not line or line.startswith("#") or "=" not in line:
@@ -29,9 +29,14 @@ def load_telegram_config() -> dict | None:
     Ritorna {"token": ..., "chat_id": ..., "interval": ..., "stale_alert_sec": ...}
     oppure None se non configurato.
     """
-    # Cerca .env nella root del progetto (due livelli sopra questo file)
-    root = Path(__file__).parent.parent
-    _load_dotenv(root / ".env")
+    # Cerca .env in più posti — root progetto, CWD, cartella padre CWD
+    candidates = [
+        Path(__file__).parent.parent / ".env",   # root repo (nominale)
+        Path.cwd() / ".env",                      # directory di avvio uvicorn
+        Path.cwd().parent / ".env",
+    ]
+    for p in candidates:
+        _load_dotenv(p)
 
     token   = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
     chat_id = os.environ.get("TELEGRAM_CHAT_ID", "").strip()

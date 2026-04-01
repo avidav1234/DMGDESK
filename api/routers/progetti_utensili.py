@@ -103,32 +103,30 @@ def estrai_alias_da_progetti(config: dict) -> dict:
                 for pgm in task.get("programs", []):
                     if pgm.get("tipoGruppo") == "ipm":
                         continue
-                    # Includi da_fare e in_macchina — escludi solo completati
                     if pgm.get("stato") == "completato":
                         continue
                     filename = pgm.get("filename", "")
-                    alias = (pgm.get("utensile") or "").upper().strip()
+                    alias_campo = (pgm.get("utensile") or "").upper().strip()
 
-                    if alias:
-                        alias_map.setdefault(alias, []).append((pname, filename))
-                    else:
-                        # Prova a leggere il file da disco
-                        found = False
-                        if filename:
-                            fpath = cerca_file_mpf(filename, nc_base, extra_dirs)
-                            if fpath:
-                                try:
-                                    testo = open(fpath, encoding="utf-8", errors="replace").read()
-                                    parsed = parse_mpf_testo(testo)
-                                    for a in parsed:
-                                        alias_map.setdefault(a, []).append((pname, filename))
-                                    if parsed:
-                                        found = True
-                                except Exception:
-                                    pass
-                        # Fallback: usa diametro dal nome file o tipoOp
-                        if not found and pgm.get("diametro"):
-                            pass  # non abbastanza info per ricostruire alias
+                    # Legge SEMPRE il file da disco per trovare tutti gli utensili.
+                    # Il campo 'utensile' contiene solo il primo — non è sufficiente.
+                    found_da_disco = False
+                    if filename:
+                        fpath = cerca_file_mpf(filename, nc_base, extra_dirs)
+                        if fpath:
+                            try:
+                                testo = open(fpath, encoding="utf-8", errors="replace").read()
+                                parsed = parse_mpf_testo(testo)
+                                for a in parsed:
+                                    alias_map.setdefault(a, []).append((pname, filename))
+                                if parsed:
+                                    found_da_disco = True
+                            except Exception:
+                                pass
+
+                    # Fallback: usa il campo 'utensile' se il file non era leggibile
+                    if not found_da_disco and alias_campo:
+                        alias_map.setdefault(alias_campo, []).append((pname, filename))
 
     return alias_map
 
@@ -151,18 +149,22 @@ def estrai_alias_da_progetto(project: dict, config: dict) -> dict:
                 if pgm.get("tipoGruppo") == "ipm":
                     continue
                 filename = pgm.get("filename", "")
-                alias = (pgm.get("utensile") or "").upper().strip()
+                alias_campo = (pgm.get("utensile") or "").upper().strip()
 
-                if alias:
-                    alias_refs.setdefault(alias, []).append(filename)
-                elif filename:
+                # Legge sempre il file da disco — il campo utensile è solo il primo
+                found_da_disco = False
+                if filename:
                     fpath = cerca_file_mpf(filename, nc_base, extra_dirs)
                     if fpath:
                         try:
                             testo = open(fpath, encoding="utf-8", errors="replace").read()
                             for a in parse_mpf_testo(testo):
                                 alias_refs.setdefault(a, []).append(filename)
+                            found_da_disco = True
                         except Exception:
                             pass
+                # Fallback se file non leggibile
+                if not found_da_disco and alias_campo:
+                    alias_refs.setdefault(alias_campo, []).append(filename)
 
     return alias_refs

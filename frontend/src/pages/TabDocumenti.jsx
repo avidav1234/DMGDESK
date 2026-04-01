@@ -435,8 +435,14 @@ export default function TabDocumenti({ project }) {
               <div key={a.id} style={{ border:'1px solid #e2e8f0', borderRadius:8,
                 overflow:'hidden', cursor:'pointer', position:'relative',
                 transition:'border-color 0.1s', background:'#f8fafc' }}
-                onMouseEnter={e => e.currentTarget.style.borderColor=col}
-                onMouseLeave={e => e.currentTarget.style.borderColor='#e2e8f0'}
+                onMouseEnter={e => {
+                  e.currentTarget.style.borderColor=col
+                  e.currentTarget.querySelector('.del-btn').style.opacity='1'
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.borderColor='#e2e8f0'
+                  e.currentTarget.querySelector('.del-btn').style.opacity='0'
+                }}
                 onClick={() => openViewer(a)}>
                 <img src={`${API}/${project.id}/preview/${a.id}`}
                   alt={a.filename}
@@ -444,22 +450,24 @@ export default function TabDocumenti({ project }) {
                     objectFit:'cover', display:'block' }}
                   onError={e => { e.target.style.display='none' }}
                 />
+                {/* Pulsante elimina in sovrimpressione */}
+                <button className="del-btn"
+                  onClick={e => { e.stopPropagation(); elimina(a.id) }}
+                  style={{ position:'absolute', top:5, right:5,
+                    width:24, height:24, borderRadius:'50%',
+                    background:'rgba(0,0,0,0.6)', border:'none',
+                    color:'#fff', fontSize:14, lineHeight:1,
+                    cursor:'pointer', display:'flex', alignItems:'center',
+                    justifyContent:'center', opacity:0,
+                    transition:'opacity 0.15s' }}>
+                  ×
+                </button>
                 <div style={{ padding:'5px 8px' }}>
                   <div style={{ fontSize:10, fontWeight:600, color:'#334155',
                     overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                     {a.filename.replace(/\.[^.]+$/, '')}
                   </div>
-                  <div style={{ display:'flex', justifyContent:'space-between',
-                    alignItems:'center' }}>
-                    <BadgeFase fase={a.fase} color={col}/>
-                    <button onClick={e => { e.stopPropagation(); elimina(a.id) }}
-                      style={{ background:'none', border:'none', cursor:'pointer',
-                        color:'#cbd5e1', fontSize:14, padding:'0 2px' }}
-                      onMouseEnter={e => e.currentTarget.style.color='#ef4444'}
-                      onMouseLeave={e => e.currentTarget.style.color='#cbd5e1'}>
-                      ×
-                    </button>
-                  </div>
+                  <BadgeFase fase={a.fase} color={col}/>
                 </div>
               </div>
             ))}

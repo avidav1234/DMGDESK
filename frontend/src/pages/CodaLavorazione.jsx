@@ -127,7 +127,7 @@ export default function CodaLavorazione() {
   const fetchAll = useCallback(async () => {
     try {
       const [rPallets, rMacchina] = await Promise.all([
-        fetch("/api/pallet/"),
+        fetch("/api/pallet"),
         fetch("/api/macchina-live/stato"),
       ]);
 
@@ -306,7 +306,7 @@ export default function CodaLavorazione() {
   // Carica lista progetti per il modal
   const [listaProgetti, setListaProgetti] = useState([]);
   useEffect(()=>{
-    fetch('/api/progetti/').then(r=>r.ok?r.json():[]).then(d=>{
+    fetch('/api/progetti').then(r=>r.ok?r.json():[]).then(d=>{
       // Mostra solo progetti non assegnati ad altri pallet (o già su questo pallet)
       const palletDiQuesto = modalAssegna ? progettiPallet[modalAssegna.palletId]?.id : null
       setListaProgetti((d.projects||d||[]).filter(p=>{

@@ -775,7 +775,7 @@ def _calcola_previsione_vita(projects: list, tools_db: dict, classify_fn, ordine
 
 # Cache per analisi-setup — TTL 60 secondi
 _analisi_setup_cache: dict = {"data": None, "ts": 0}
-_ANALISI_SETUP_TTL = 60  # secondi
+_ANALISI_SETUP_TTL = 300  # secondi (5 min — lettura disco è costosa)
 
 
 def _invalidate_analisi_cache():

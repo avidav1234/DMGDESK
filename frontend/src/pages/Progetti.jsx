@@ -1379,7 +1379,7 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
     return false
   })
   useEffect(()=>{
-    fetch('/api/tools/')
+    fetch('/api/tools')
       .then(r=>r.ok?r.json():[])
       .then(arr=>{
         // Indicizia per tool_id (non per name) per conservare tutti i gemelli
@@ -2544,7 +2544,7 @@ export default function Progetti(){
     const t=setInterval(caricaPalletDisp,10000)
     // Carica pallet state completo per la dashboard
     function caricaPalletState(){
-      fetch('/api/pallet/').then(r=>r.ok?r.json():{pallet:[]})
+      fetch('/api/pallet').then(r=>r.ok?r.json():{pallet:[]})
         .then(d=>setPalletState(d.pallet||[])).catch(()=>{})
     }
     caricaPalletState()

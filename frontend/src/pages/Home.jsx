@@ -38,17 +38,18 @@ export default function Home(){
       fetch('/api/progetti/', {signal:sig}).then(r=>r.ok?r.json():{projects:[]}),
       fetch('/api/progetti/deliveries', {signal:sig}).then(r=>r.ok?r.json():[]),
       fetch('/api/pallet/', {signal:sig}).then(r=>r.ok?r.json():{pallet:[]}),
-      fetch('/api/progetti/analisi-setup/non-utilizzati', {signal:sig}).then(r=>r.ok?r.json():{}).catch(()=>({})),
-    ]).then(([pd,del,pal,s])=>{
+    ]).then(([pd,del,pal])=>{
       if(sig.aborted) return
       setProjects((pd.projects||[]).filter(p=>!p.archived))
       setDeliveries(Array.isArray(del)?del:[])
       setPallet(pal.pallet||[])
-      setSetup(s||{})
       setLoading(false)
     }).catch(e=>{ if(e.name!=='AbortError') setLoading(false) })
+    // analisi-setup in background — non blocca il render iniziale
+    fetch('/api/progetti/analisi-setup/non-utilizzati', {signal:sig})
+      .then(r=>r.ok?r.json():{}).then(s=>{ if(!sig.aborted) setSetup(s||{}) }).catch(()=>{})
     const t=setInterval(()=>
-      fetch('/api/pallet/').then(r=>r.ok?r.json():{pallet:[]}).then(d=>{ if(!sig.aborted) setPallet(d.pallet||[]) })
+      fetch('/api/pallet').then(r=>r.ok?r.json():{pallet:[]}).then(d=>{ if(!sig.aborted) setPallet(d.pallet||[]) })
     ,15000)
     const fetchSessLive=()=>
       fetch('/api/report/sessione-live').then(r=>r.ok?r.json():null)

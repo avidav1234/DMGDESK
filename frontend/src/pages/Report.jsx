@@ -991,7 +991,7 @@ function TabTakt({ sessioni }) {
   useEffect(() => {
     Promise.all([
       fetch('/api/report/tempi-ciclo').then(r=>r.ok?r.json():null),
-      fetch('/api/progetti/').then(r=>r.ok?r.json():null),
+      fetch('/api/progetti').then(r=>r.ok?r.json():null),
     ]).then(([tc, pd]) => {
       if (tc?.cicli) setCicliDb(tc.cicli)
       if (pd?.projects) setProgetti(pd.projects.filter(p=>!p.archived))

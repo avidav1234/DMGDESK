@@ -59,6 +59,7 @@ DEFAULT_CONFIG = {
     "tracker": {
         "workstation": socket.gethostname(),
         "min_session_sec": "30",
+        "idle_timeout_min": "5",
     },
 }
 
@@ -306,7 +307,84 @@ CIMATRON_PATTERNS = [
 ]
 
 
-class WindowTitleAdapter:
+# ── Activity monitor ───────────────────────────────────────────────────────────
+class ActivityMonitor:
+    """
+    Determina se il tempo va contato combinando 3 segnali:
+      1. Mouse/tastiera attivi negli ultimi idle_timeout_sec secondi
+      2. Cimatron è la finestra in foreground
+      3. (implicito) Cimatron ha un documento aperto — gestito dal tracker
+
+    Usa GetLastInputInfo (win32, zero dipendenze extra).
+    """
+
+    def __init__(self, idle_timeout_sec: int = 300):
+        self.idle_timeout_sec = idle_timeout_sec
+        self._ctypes_ok = False
+        try:
+            import ctypes
+            self._ctypes = ctypes
+            self._ctypes_ok = True
+        except ImportError:
+            log.warning("[Activity] ctypes non disponibile — idle detection disabilitata")
+
+    def seconds_since_last_input(self) -> float:
+        """Secondi dall'ultimo evento mouse/tastiera."""
+        if not self._ctypes_ok:
+            return 0.0
+        try:
+            ctypes = self._ctypes
+
+            class LASTINPUTINFO(ctypes.Structure):
+                _fields_ = [("cbSize", ctypes.c_uint), ("dwTime", ctypes.c_uint)]
+
+            lii = LASTINPUTINFO()
+            lii.cbSize = ctypes.sizeof(LASTINPUTINFO)
+            ctypes.windll.user32.GetLastInputInfo(ctypes.byref(lii))
+            tick_now = ctypes.windll.kernel32.GetTickCount()
+            idle_ms = (tick_now - lii.dwTime) & 0xFFFFFFFF  # gestisce wraparound
+            return max(0.0, idle_ms / 1000.0)
+        except Exception as e:
+            log.debug(f"[Activity] GetLastInputInfo: {e}")
+            return 0.0
+
+    def is_cimatron_foreground(self) -> bool:
+        """True se Cimatron ha il focus."""
+        try:
+            import win32gui
+            import win32process
+            import psutil
+            hwnd = win32gui.GetForegroundWindow()
+            if not hwnd:
+                return False
+            _, pid = win32process.GetWindowThreadProcessId(hwnd)
+            name = psutil.Process(pid).name().lower()
+            return "cimatron" in name
+        except Exception:
+            try:
+                import win32gui
+                title = win32gui.GetWindowText(win32gui.GetForegroundWindow())
+                return "Cimatron" in title
+            except Exception:
+                return True  # fallback permissivo se win32 non disponibile
+
+    def is_active(self) -> tuple[bool, str]:
+        """
+        Ritorna (conta_tempo, descrizione).
+        """
+        idle_sec = self.seconds_since_last_input()
+
+        if idle_sec > self.idle_timeout_sec:
+            mins = idle_sec / 60
+            return False, f"idle {mins:.1f}min (soglia={self.idle_timeout_sec//60}min)"
+
+        if not self.is_cimatron_foreground():
+            return False, f"Cimatron non in foreground (idle={idle_sec:.0f}s)"
+
+        return True, f"attivo (idle={idle_sec:.0f}s)"
+
+
+
     """Fallback: legge il titolo della finestra attiva di Windows."""
 
     def __init__(self):
@@ -356,14 +434,15 @@ class CAMTracker:
         self.min_session_sec = int(cfg["tracker"]["min_session_sec"])
         self.flush_interval = int(cfg["dmgdesk"]["flush_interval_sec"])
         self.poll_interval = int(cfg["cimatron"]["poll_interval_sec"])
+        idle_timeout_min = int(cfg["tracker"].get("idle_timeout_min", "5"))
 
         # Stato corrente
         self.current_project: dict | None = None
         self.session_start: float | None = None
+        self.is_paused: bool = False  # True quando idle/non in foreground
 
         # Accumulatore: {project_id: secondi_totali_oggi}
         self.accumulated: dict[str, float] = {}
-        # Metadati per ogni project_id
         self.project_meta: dict[str, dict] = {}
 
         # Backend
@@ -375,6 +454,7 @@ class CAMTracker:
         # Adapter Cimatron (COM → window fallback)
         self.com = CimatronCOMAdapter(cfg["cimatron"]["program_dir"])
         self.window = WindowTitleAdapter()
+        self.activity = ActivityMonitor(idle_timeout_sec=idle_timeout_min * 60)
 
         self._com_tried = False
         self._stop = threading.Event()
@@ -398,9 +478,36 @@ class CAMTracker:
         proj_id = self._project_id(proj)
         now = time.time()
 
+        # ── Controllo attività ────────────────────────────────────────────────
+        # Il tempo conta SOLO se: progetto rilevato + operatore attivo al PC
+        if proj:
+            active, reason = self.activity.is_active()
+        else:
+            active, reason = False, "nessun progetto"
+
+        # Gestione pausa/ripresa
+        if self.current_project and self.session_start:
+            if not active and not self.is_paused:
+                # Entra in pausa — congela il tempo accumulato fino ad ora
+                elapsed = now - self.session_start
+                pid = self._project_id(self.current_project)
+                if elapsed >= self.min_session_sec:
+                    self.accumulated[pid] = self.accumulated.get(pid, 0) + elapsed
+                    self.project_meta[pid] = self.current_project
+                self.session_start = None
+                self.is_paused = True
+                log.info(f"[Tracker] PAUSA — {reason}")
+
+            elif active and self.is_paused:
+                # Ripresa attività — riavvia il timer
+                self.session_start = now
+                self.is_paused = False
+                log.info(f"[Tracker] RIPRESA — {reason}")
+
+        # ── Cambio progetto ───────────────────────────────────────────────────
         if proj_id != self._project_id(self.current_project):
-            # Chiudi sessione precedente
-            if self.current_project and self.session_start:
+            # Chiudi sessione precedente se non in pausa
+            if self.current_project and self.session_start and not self.is_paused:
                 elapsed = now - self.session_start
                 pid = self._project_id(self.current_project)
                 if elapsed >= self.min_session_sec:
@@ -412,19 +519,19 @@ class CAMTracker:
                         f"(tot oggi: {self.accumulated[pid]/3600:.2f}h)"
                     )
                 else:
-                    log.debug(f"[Tracker] Sessione troppo breve scartata: {pid} ({elapsed:.0f}s)")
+                    log.debug(f"[Tracker] Sessione troppo breve: {pid} ({elapsed:.0f}s)")
 
             self.current_project = proj
-            self.session_start = now if proj else None
+            self.is_paused = not active
+            self.session_start = now if (proj and active) else None
 
             if proj:
                 log.info(
-                    f"[Tracker] Progetto attivo → "
-                    f"commessa={proj['commessa']} op={proj['operazione']} "
-                    f"({'path' if proj.get('full_path') else 'title'})"
+                    f"[Tracker] Progetto → commessa={proj['commessa']} op={proj['operazione']} "
+                    f"| {reason}"
                 )
             else:
-                log.debug("[Tracker] Nessun progetto Cimatron rilevato")
+                log.debug("[Tracker] Nessun progetto Cimatron")
 
     def flush(self):
         """Chiude la sessione corrente e invia a DMGDesk."""

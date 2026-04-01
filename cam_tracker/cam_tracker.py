@@ -149,8 +149,8 @@ class CimatronCOMAdapter:
 
             import clr
             clr.AddReference("interop.CimatronE")
-            import CimatronE
-            self.app = CimatronE.Application()
+            from interop.CimatronE import CimApplicationClass
+            self.app = CimApplicationClass()
             _ = self.app.ActiveDocument
             self._available = True
             self._mode = "com"

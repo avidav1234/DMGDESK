@@ -3,12 +3,6 @@ cimatron_query.py
 =================
 Compilato con PyInstaller + manifest Cimatron.
 Legge il path del documento attivo in Cimatron e lo stampa su stdout.
-Il cam_tracker.py lo lancia come subprocess e legge l'output.
-
-Output (una riga):
-  - path completo se documento aperto
-  - stringa vuota se nessun documento
-  - "ERROR: <messaggio>" su stderr in caso di errore
 """
 
 import sys
@@ -21,9 +15,9 @@ def main():
         sys.path.insert(0, CIMATRON_PROGRAM)
         import clr
         clr.AddReference("interop.CimatronE")
-        import CimatronE
+        from interop.CimatronE import CimApplicationClass
 
-        app = CimatronE.Application()
+        app = CimApplicationClass()
         doc = app.ActiveDocument
         if doc:
             print(str(doc.FullName))

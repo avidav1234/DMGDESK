@@ -182,11 +182,17 @@ def calcola_snapshot(
         except Exception:
             pass
 
-    # ── Distribuzione commesse ────────────────────────────────────────────────
+    # ── Distribuzione commesse (con project_id per link rendiconto) ──────────
+    from api.routers.progetti import _load_progetti
+    proj_data = _load_progetti(config)
+    # Mappa nome → id
+    nome_to_id = {p.get("name", ""): p.get("id", "") for p in proj_data.get("projects", [])}
+
     distribuzione = sorted(
         [
             {
                 "commessa":    k,
+                "progetto_id": nome_to_id.get(k, ""),
                 "ore_sec":     v,
                 "ore_str":     _durata_str(v),
                 "pct":         round(v / ore_mac_sec * 100, 1) if ore_mac_sec else 0,

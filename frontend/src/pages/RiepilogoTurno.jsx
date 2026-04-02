@@ -129,8 +129,19 @@ function CardSnapshot({ snap, titolo, colore, icon, onRigenera, caricando }) {
                 textTransform: 'uppercase', letterSpacing: '0.06em',
                 marginBottom: 12 }}>Distribuzione ore macchina</div>
               {snap.distribuzione.map(d => (
-                <BarraCommessa key={d.commessa} item={d}
-                  maxSec={maxSec} colore={colore}/>
+                <div key={d.commessa}>
+                  <BarraCommessa item={d} maxSec={maxSec} colore={colore}/>
+                  {d.progetto_id && (
+                    <div style={{ textAlign: 'right', marginTop: -6, marginBottom: 8 }}>
+                      <button onClick={() => navigate(`/rendiconto/${d.progetto_id}`)}
+                        style={{ fontSize: 11, color: colore, background: 'transparent',
+                          border: 'none', cursor: 'pointer', textDecoration: 'underline',
+                          padding: 0 }}>
+                        Apri rendiconto →
+                      </button>
+                    </div>
+                  )}
+                </div>
               ))}
             </div>
           ) : (
@@ -140,16 +151,6 @@ function CardSnapshot({ snap, titolo, colore, icon, onRigenera, caricando }) {
             </div>
           )}
 
-          {/* Link rendiconto se una sola commessa */}
-          {snap.distribuzione?.length === 1 && (
-            <div style={{ marginTop: 12, textAlign: 'center' }}>
-              <button onClick={() => {}}
-                style={{ fontSize: 11, color: colore, background: 'transparent',
-                  border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>
-                Apri rendiconto →
-              </button>
-            </div>
-          )}
         </div>
       )}
     </div>

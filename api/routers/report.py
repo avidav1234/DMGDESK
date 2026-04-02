@@ -1826,16 +1826,32 @@ async def get_rendiconto_progetto(project_id: str):
     # Filtri sui nomi file di sistema — esclude SPF, CMA, ecc.
     # NON include /_N_WKS che è il prefisso del path grezzo, non del filename estratto
     FILTRI = ("_N_CMA", "_N_CST", "_N_SYF", "_N_MPF_DIR", "BPOSAXIS",
-              "_SPF", "0_MAIN_", "PALLET5", "ROTTURA", "LASEREIN", "BLMEAS")
+              "_SPF", "0_MAIN_", "PALLET5", "ROTTURA", "LASEREIN", "BLMEAS",
+              "FINE_PALLET", "BAX2START")
 
     sessioni_proj = []
     for s in log_data.get("sessioni", []):
         pid = (s.get("progetto_id") or "").strip()
         pnm = (s.get("progetto")    or "").strip()
-        if pid and pid != project_id:
-            continue
-        if not pid and pnm.lower() != nome.lower():
-            continue
+        # Filtra per project_id se disponibile (più affidabile)
+        if pid:
+            if pid != project_id:
+                continue
+        else:
+            # Fallback: confronto nome progetto
+            if pnm.lower() != nome.lower():
+                continue
+        # Verifica di coerenza: almeno un programma deve contenere
+        # la commessa nel nome (evita sessioni orfane con project_id sbagliato)
+        pgms = s.get("programmi", [])
+        if pgms:
+            commessa_prefix = nome.split("_")[0]  # es. "4350"
+            has_matching_pgm = any(
+                commessa_prefix in (p.get("filename") or "").upper()
+                for p in pgms
+            )
+            if not has_matching_pgm:
+                continue
         sessioni_proj.append(s)
 
     # ── Aggregazione programmi ───────────────────────────────────────────────
@@ -1845,8 +1861,16 @@ async def get_rendiconto_progetto(project_id: str):
             fn  = (p.get("filename") or "").strip()
             if not fn or any(f in fn.upper() for f in FILTRI):
                 continue
+            # Escludi programmi wrapper Sinumerik (path _N_ senza .MPF finale)
+            # es: /_N_WKS_DIR/_N_4350_0221_WPD/_N_4350_0221_01_020_MP (senza F)
+            fn_upper = fn.upper()
+            if fn_upper.startswith("/_N_") and not fn_upper.endswith("_MPF"):
+                continue
             dur = p.get("durata_sec") or 0
             fn_key = fn.upper().replace(".MPF", "").split("/")[-1]
+            # Rimuovi prefisso _N_ se presente
+            if fn_key.startswith("_N_"):
+                fn_key = fn_key[3:]
             if fn_key not in pgm_agg:
                 pgm_agg[fn_key] = {"filename": fn_key, "durata_sec": 0, "n_esecuzioni": 0}
             pgm_agg[fn_key]["durata_sec"]   += dur

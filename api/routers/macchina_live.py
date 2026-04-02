@@ -678,13 +678,33 @@ async def aggiorna_stati_da_log():
                 pallet_num = v
 
     # Fonte 3: pallet già in_lavorazione nello stato salvato
-    # Se la macchina sta girando e non vediamo un nuovo PALLET nel log recente,
-    # significa che siamo nel programma figlio — il pallet in_lavorazione è ancora valido
+    # ATTENZIONE: usa questo fallback SOLO se il progetto del pallet in_lavorazione
+    # coincide con il progetto rilevato dal log corrente.
+    # Se il progetto è cambiato (nuovo pezzo in macchina), non usare il pallet vecchio.
     if not pallet_num and stato_pgm in (1, 3):
         for pal in pallets:
             if (pal.get("stato") or "").lower().replace(" ","_") == "in_lavorazione":
-                pallet_num = pal.get("numero")
-                break
+                # Verifica coerenza progetto
+                pal_proj_id   = pal.get("progetto_id") or ""
+                pal_proj_nome = _norm_nome(pal.get("progetto_nome") or "")
+                att_proj_id   = progetto_attivo.get("id") if progetto_attivo else ""
+                att_proj_nome = _norm_nome(progetto_attivo.get("name") if progetto_attivo else "")
+                mpf_proj_norm = _norm_nome(mpf_progetto or "")
+
+                # Match se: stesso project_id, o stesso nome, o nome MPF coincide
+                match = (
+                    (pal_proj_id and att_proj_id and pal_proj_id == att_proj_id) or
+                    (pal_proj_nome and att_proj_nome and pal_proj_nome == att_proj_nome) or
+                    (pal_proj_nome and mpf_proj_norm and pal_proj_nome == mpf_proj_norm)
+                )
+                if match:
+                    pallet_num = pal.get("numero")
+                    break
+                # Se non c'è progetto attivo rilevato, usa comunque il pallet in lavorazione
+                # (non abbiamo informazioni sufficienti per contraddirlo)
+                if not progetto_attivo and not mpf_progetto:
+                    pallet_num = pal.get("numero")
+                    break
 
     # Fonte 4: pallet assegnato al progetto (per id o per nome progetto)
     if not pallet_num and progetto_attivo:

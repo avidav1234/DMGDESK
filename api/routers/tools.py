@@ -257,6 +257,18 @@ async def sync_tools():
         log.error(f"Errore _save_tools_db: {e}\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Errore salvataggio DB: {e}")
 
+    # ── Tracking automatico smontati/montati ──────────────────────────────────
+    lifecycle_stats = {}
+    try:
+        from api.tool_lifecycle import process_sync as _lifecycle_sync
+        from database.db_handler import carica_configurazione as _cfg
+        config = _cfg()
+        tools_folder = (config.get("tools_toa_folder") or "").strip()
+        if tools_folder:
+            lifecycle_stats = _lifecycle_sync(tools_folder, tools)
+    except Exception as _e:
+        log.warning(f"[Lifecycle] Errore tracking: {_e}")
+
     log.info(f"Sync OK: {len(tools)} utensili via {result['format_used'].upper()} — {result['reason']}")
 
     try:
@@ -266,12 +278,13 @@ async def sync_tools():
         pass
 
     return {
-        "ok":              True,
-        "sync_time":       sync_time,
-        "tool_count":      len(tools),
+        "ok":               True,
+        "sync_time":        sync_time,
+        "tool_count":       len(tools),
         "positions_mapped": len(positions),
-        "format_used":     result["format_used"],
-        "reason":          result["reason"],
+        "format_used":      result["format_used"],
+        "reason":           result["reason"],
+        "lifecycle":        lifecycle_stats,
     }
 
 
@@ -574,3 +587,37 @@ async def analisi_fine_vita(body: dict):
         "ha_problemi":  any(a["alert"] for a in analisi),
         "n_alert":      sum(1 for a in analisi if a["alert"]),
     }
+
+
+@router.get("/smontati")
+async def get_smontati(solo_con_vita: bool = False):
+    """
+    Ritorna la lista degli utensili smontati con vita residua salvata.
+    solo_con_vita=true → solo quelli con vita tracciata (MOP11 > 0)
+    """
+    from api.tool_lifecycle import get_smontati as _get_smontati
+    from database.db_handler import carica_configurazione
+    config = carica_configurazione()
+    tools_folder = (config.get("tools_toa_folder") or "").strip()
+    if not tools_folder:
+        return {"smontati": [], "total": 0}
+    smontati = _get_smontati(tools_folder, solo_con_vita=solo_con_vita)
+    return {"smontati": smontati, "total": len(smontati)}
+
+
+@router.get("/vita/{alias}")
+async def get_vita_utensile(alias: str):
+    """
+    Ritorna la vita residua di un utensile per alias.
+    Cerca prima in macchina (TOA), poi in smontati.
+    """
+    from api.tool_lifecycle import get_vita_utensile as _get_vita
+    from database.db_handler import carica_configurazione
+    config = carica_configurazione()
+    tools_folder = (config.get("tools_toa_folder") or "").strip()
+    if not tools_folder:
+        raise HTTPException(status_code=404, detail="tools_folder non configurato")
+    result = _get_vita(tools_folder, alias)
+    if not result:
+        raise HTTPException(status_code=404, detail=f"Utensile {alias} non trovato")
+    return result

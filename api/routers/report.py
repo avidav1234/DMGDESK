@@ -1895,18 +1895,25 @@ async def get_rendiconto_progetto(project_id: str):
 
     # ── Aggregazione utensili ────────────────────────────────────────────────
     # Struttura log: {"alias": durata_sec_int} — dict piatto
+    # NOTA: i dati storici possono essere gonfiati dalla race condition
+    # (3 client chiamavano aggiorna-stati-da-log contemporaneamente → +5s×3 per tick)
+    # Correzione: le ore di ogni utensile non possono superare la durata della sessione.
     ut_agg: dict = {}
     for s in sessioni_proj:
         u = s.get("utensili") or {}
         if not isinstance(u, dict):
             continue
+        # Durata reale della sessione — cap massimo per ogni utensile
+        durata_sess = s.get("durata_sec") or sum(
+            p.get("durata_sec", 0) for p in s.get("programmi", [])
+        )
         for alias, val in u.items():
+            raw_sec = int(val) if isinstance(val, (int, float)) else (val.get("durata_sec", 0) or 0)
+            # Cap: un utensile non può aver lavorato più della sessione intera
+            capped_sec = min(raw_sec, durata_sess) if durata_sess > 0 else raw_sec
             if alias not in ut_agg:
                 ut_agg[alias] = {"alias": alias, "durata_sec": 0}
-            if isinstance(val, (int, float)):
-                ut_agg[alias]["durata_sec"] += int(val)
-            elif isinstance(val, dict):
-                ut_agg[alias]["durata_sec"] += val.get("durata_sec", 0) or 0
+            ut_agg[alias]["durata_sec"] += capped_sec
 
     utensili_list = sorted(ut_agg.values(), key=lambda x: -x["durata_sec"])
     for u in utensili_list:

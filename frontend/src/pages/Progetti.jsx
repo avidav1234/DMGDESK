@@ -107,9 +107,8 @@ function parseMpfFile(filename,content){
   const ipmIdx=tokens.findIndex(t=>t.toUpperCase()==='IPM')
   const numPgm=ipmIdx>=0&&tokens[ipmIdx+1]?tokens[ipmIdx+1]:tokens[tokens.length-1]
   const fase=tokens.length>=3?tokens[tokens.length-(isIPM?3:2)]:''
-  // Legge TEMPO dal commento accanto a M6 — es: "M6 ; TEMPO: 42" o "M6 ; TEMPO: 00:35:16"
-  const m6Line=lines.find(l=>/\bM6\b/.test(l)&&/TEMPO\s*:/i.test(l))
-  const tempoRaw=m6Line&&(m6Line.match(/TEMPO\s*:\s*([\d:]+)/i)||[])[1]
+  // Somma TUTTI i tempi M6 — ogni utensile ha il suo TEMPO
+  // es: "M6 ; TEMPO: 00:01:29" → ogni riga M6 contribuisce al totale
   function parseTempo(raw){
     if(!raw) return null
     if(raw.includes(':')){
@@ -119,7 +118,12 @@ function parseMpfFile(filename,content){
     }
     const n=parseInt(raw); return isNaN(n)?null:n
   }
-  const tempoStimato=parseTempo(tempoRaw)
+  const m6Lines=lines.filter(l=>/\bM6\b/.test(l)&&/TEMPO\s*:/i.test(l))
+  const tempoTotale=m6Lines.reduce((acc,l)=>{
+    const raw=(l.match(/TEMPO\s*:\s*([\d:]+)/i)||[])[1]
+    return acc+(parseTempo(raw)||0)
+  },0)
+  const tempoStimato=tempoTotale>0?tempoTotale:null
   return{numPgm,fase,tipoOp,utensile,diametro,dataPost,filename,tipoGruppo,tempoStimato}
 }
 

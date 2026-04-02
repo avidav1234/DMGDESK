@@ -49,7 +49,7 @@ export default function Home(){
     fetch('/api/progetti/analisi-setup/non-utilizzati', {signal:sig})
       .then(r=>r.ok?r.json():{}).then(s=>{ if(!sig.aborted) setSetup(s||{}) }).catch(()=>{})
     const t=setInterval(()=>
-      fetch('/api/pallet').then(r=>r.ok?r.json():{pallet:[]}).then(d=>{ if(!sig.aborted) setPallet(d.pallet||[]) })
+      fetch('/api/pallet/').then(r=>r.ok?r.json():{pallet:[]}).then(d=>{ if(!sig.aborted) setPallet(d.pallet||[]) })
     ,15000)
     const fetchSessLive=()=>
       fetch('/api/report/sessione-live').then(r=>r.ok?r.json():null)

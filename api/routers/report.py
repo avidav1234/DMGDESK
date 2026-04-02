@@ -1044,6 +1044,37 @@ async def get_sessione_live():
     }
 
 
+@router.post("/reset-sessione")
+async def reset_sessione():
+    """
+    Chiude la sessione corrente e azzera stato_corrente.
+    Usato quando la sessione è orfana (pallet/progetto sbagliato).
+    Il prossimo tick di aggiorna-stati-da-log creerà una nuova sessione corretta.
+    """
+    config = carica_configurazione()
+    data   = _load_log(config)
+    sc     = data.get("stato_corrente", {})
+    now    = datetime.now().isoformat(timespec="seconds")
+
+    # Chiudi sessione orfana se presente
+    if sc.get("sessione_id"):
+        sess = _find_sess(data, sc["sessione_id"])
+        if sess and not sess.get("fine"):
+            # Calcola durata da programmi chiusi
+            pgms_chiusi = [p for p in sess.get("programmi", [])
+                           if p.get("fine") and (p.get("durata_sec") or 0) > 0]
+            sess["durata_sec"] = sum(p["durata_sec"] for p in pgms_chiusi)
+            sess["fine"] = now
+
+    # Azzera stato corrente — il prossimo tick ricostruisce tutto
+    data["stato_corrente"] = {
+        "fermo_sec_giornaliero": sc.get("fermo_sec_giornaliero", 0),
+        "fermo_data": sc.get("fermo_data", ""),
+    }
+    _save_log(config, data)
+    return {"ok": True, "msg": "Sessione resettata — nuovo ciclo al prossimo tick"}
+
+
 @router.get("/export-excel")
 async def export_excel(data: str = Query(default=None)):
     """Genera report Excel giornaliero."""

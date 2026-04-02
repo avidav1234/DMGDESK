@@ -393,6 +393,21 @@ export default function Home(){
                       dal {sessLive.inizio_sessione.slice(11,16)}
                     </div>
                   )}
+                  {!sessMatch&&sessLive?.attiva&&(
+                    <div style={{marginTop:6}}>
+                      <div style={{fontSize:10,color:'#dc2626',marginBottom:4}}>
+                        sessione orfana (P{sessLive.pallet}→P{palletLav?.numero})
+                      </div>
+                      <button onClick={()=>{
+                        fetch('/api/report/reset-sessione',{method:'POST'})
+                          .then(()=>setTimeout(()=>window.location.reload(),1500))
+                      }} style={{fontSize:10,padding:'3px 10px',borderRadius:4,
+                        background:'#dc2626',border:'none',color:'#fff',cursor:'pointer',
+                        fontWeight:600}}>
+                        ↺ Ripristina sessione
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* Timer 2: Programma corrente */}

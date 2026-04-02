@@ -327,15 +327,17 @@ def aggiorna_da_log(
             prev_prog = sc.get("programma_corrente")
             if prev_prog and prev_prog.upper() != programma_attivo.upper():
                 def _prefix(fname):
-                    """Ritorna il prefisso senza suffix numerico Siemens (≥3 cifre)."""
+                    """Ritorna il prefisso senza suffix numerico Siemens (≥3 cifre, ≥800)."""
                     base = (fname or "").upper().replace(".MPF", "")
                     parts = base.split("_")
-                    if parts and parts[-1].isdigit() and len(parts[-1]) >= 3:
+                    # Rimuovi suffix solo se è >= 800 (pattern Siemens: _801, _900, ecc.)
+                    # NON rimuovere suffix sequenziali normali: 001, 002, 003...
+                    if parts and parts[-1].isdigit() and len(parts[-1]) >= 3 and int(parts[-1]) >= 800:
                         return "_".join(parts[:-1])
                     return base
 
-                if _prefix(prev_prog) == _prefix(programma_attivo) and _prefix(prev_prog):
-                    # Stesso programma con suffix diverso → tratta come continuazione
+                if _prefix(prev_prog) == _prefix(programma_attivo) and _prefix(prev_prog) != prev_prog.upper().replace(".MPF",""):
+                    # Stesso programma con suffix Siemens diverso → tratta come continuazione
                     programma_attivo = prev_prog  # usa il nome già registrato
 
             # Quando la macchina riparte, azzera il tracker del fermo

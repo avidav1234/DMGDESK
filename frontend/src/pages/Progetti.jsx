@@ -2174,6 +2174,44 @@ function HomePage({projects,deliveries,palletState,setupData,onNavigateProject,o
   )
 }
 
+function QuickTaskRow({task, onToggle, onDelete, onPriority, onEditText}) {
+  const [editing, setEditing] = useState(false)
+  const [val, setVal] = useState(task.text)
+  const PRIO = {alta:{color:'#dc2626',dot:'🔴'},media:{color:'#d97706',dot:'🟡'},bassa:{color:'#16a34a',dot:'🟢'}}
+  const p = PRIO[task.priority] || PRIO.media
+  return (
+    <div style={{display:'flex',alignItems:'center',gap:6,padding:'6px 4px',borderRadius:6,
+      background:task.done?T.surface2:'transparent',marginBottom:2,opacity:task.done?0.6:1}}>
+      <div onClick={onToggle} style={{width:18,height:18,borderRadius:5,flexShrink:0,cursor:'pointer',
+        display:'flex',alignItems:'center',justifyContent:'center',
+        border:task.done?'none':'1.5px solid #cbd5e1',
+        background:task.done?T.green:'transparent'}}>
+        {task.done&&<span style={{color:'#fff',fontSize:11,fontWeight:800}}>✓</span>}
+      </div>
+      {editing ? (
+        <input autoFocus value={val}
+          onChange={e=>setVal(e.target.value)}
+          onBlur={()=>{onEditText(val);setEditing(false)}}
+          onKeyDown={e=>{if(e.key==='Enter'){onEditText(val);setEditing(false)}if(e.key==='Escape')setEditing(false)}}
+          style={{flex:1,fontSize:12,border:'1px solid #cbd5e1',borderRadius:4,padding:'2px 6px'}}/>
+      ) : (
+        <span onDoubleClick={()=>setEditing(true)} style={{flex:1,fontSize:12,
+          color:task.done?T.textMuted:T.text,
+          textDecoration:task.done?'line-through':'none',cursor:'text',
+          userSelect:'none'}}>
+          {task.text}
+        </span>
+      )}
+      <span onClick={()=>onPriority(task.priority==='alta'?'media':task.priority==='media'?'bassa':'alta')}
+        style={{cursor:'pointer',fontSize:12,flexShrink:0}} title="Cambia priorità">
+        {p.dot}
+      </span>
+      <span onClick={onDelete} style={{cursor:'pointer',color:T.textMuted,fontSize:14,
+        flexShrink:0,lineHeight:1}} title="Elimina">×</span>
+    </div>
+  )
+}
+
 function QuickTasksSidebar({collapsed,onToggleCollapse}){
   const[tasks,setTasks]=useState([])
   const[newText,setNewText]=useState('')

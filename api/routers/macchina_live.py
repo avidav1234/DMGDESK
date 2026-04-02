@@ -51,21 +51,34 @@ RE_LINE = re.compile(
     re.IGNORECASE,
 )
 
+_log_path_cache: dict = {"path": None, "config_hash": None}
+
 def _trova_log_path(config: dict) -> str | None:
     """
     Cerca OpcUaLegacy.log nella share.
-    Prova percorso esplicito, radice share, e percorso_nc_base completo.
+    Risultato in cache — il path non cambia a runtime.
     """
+    # Cache key basata sui campi rilevanti della config
+    key = (config.get("opcua_log_path"), config.get("radice"),
+           config.get("tools_toa_folder"), config.get("percorso_nc_base"))
+    if _log_path_cache["config_hash"] == key and _log_path_cache["path"] is not None:
+        # Verifica che il file esista ancora
+        if Path(_log_path_cache["path"]).exists():
+            return _log_path_cache["path"]
+        else:
+            _log_path_cache["path"] = None  # file sparito — ricerca
+
     # Path esplicito in config (priorità massima)
     explicit = config.get("opcua_log_path") or ""
     if explicit and Path(explicit).exists():
-        return str(Path(explicit))
+        _log_path_cache["path"] = str(Path(explicit))
+        _log_path_cache["config_hash"] = key
+        return _log_path_cache["path"]
 
     # Ricava radice share da radice, tools_toa_folder, o percorso_nc_base
     candidates_base = []
-
-    for key in ["radice", "tools_toa_folder", "percorso_nc_base"]:
-        val = (config.get(key) or "").strip().replace("/", "\\")
+    for k in ["radice", "tools_toa_folder", "percorso_nc_base"]:
+        val = (config.get(k) or "").strip().replace("/", "\\")
         if val:
             p = Path(val)
             candidates_base.append(p)
@@ -74,14 +87,14 @@ def _trova_log_path(config: dict) -> str | None:
                 candidates_base.append(Path(parts[0]) / parts[1])
 
     for base in candidates_base:
-        for suffix in [
-            "OpcUaLegacy.log",
-            "logs/OpcUaLegacy.log",
-            "stato/OpcUaLegacy.log",
-        ]:
+        for suffix in ["OpcUaLegacy.log", "logs/OpcUaLegacy.log", "stato/OpcUaLegacy.log"]:
             full = base / suffix
             if full.exists():
-                return str(full)
+                _log_path_cache["path"] = str(full)
+                _log_path_cache["config_hash"] = key
+                return _log_path_cache["path"]
+
+    _log_path_cache["config_hash"] = key
     return None
 
 

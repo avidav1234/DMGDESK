@@ -36,7 +36,7 @@ function parseProgram(path) {
   return { commessa: nome, posizione: null, fase: null, seq: null, full: nome }
 }
 
-const REFRESH_MS = 5000;
+const REFRESH_MS = 15000; // GlobalPoller gestisce aggiornamenti veloci ogni 5s via evento
 
 export default function CodaLavorazione() {
   const [pallets, setPallets] = useState(

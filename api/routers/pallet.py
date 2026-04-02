@@ -63,20 +63,30 @@ def _default_state() -> dict:
     }
 
 
+_pallet_cache: dict = {"data": None, "mtime": 0.0}
+
 def _load(config: dict) -> dict:
     path = _pallet_path(config)
+    try:
+        mtime = path.stat().st_mtime if path.exists() else 0.0
+    except OSError:
+        mtime = 0.0
+
+    if _pallet_cache["data"] is not None and mtime == _pallet_cache["mtime"]:
+        return _pallet_cache["data"]
+
     if path.exists():
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
-            # Verifica struttura minima
             if not isinstance(data, dict) or not isinstance(data.get("pallet"), list):
                 raise ValueError("struttura pallet_state.json non valida")
-            # Migrazione: aggiunge campi mancanti ai pallet esistenti
             for p in data.get("pallet", []):
                 p.setdefault("progetto_id", None)
                 p.setdefault("progetto_nome", None)
                 p.setdefault("progetto_colore", None)
                 p.setdefault("pct_avanzamento", None)
+            _pallet_cache["data"]  = data
+            _pallet_cache["mtime"] = mtime
             return data
         except (json.JSONDecodeError, ValueError) as e:
             from utils.logger import get_logger as _get_log
@@ -90,6 +100,7 @@ def _load(config: dict) -> dict:
 
 def _save(config: dict, state: dict):
     """Scrittura atomica: scrive su .tmp poi rinomina — sicuro su crash/spegnimento."""
+    _pallet_cache["data"] = None  # invalida cache
     path = _pallet_path(config)
     try:
         path.parent.mkdir(parents=True, exist_ok=True)

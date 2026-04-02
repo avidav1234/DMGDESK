@@ -48,24 +48,41 @@ export default function Home(){
     // analisi-setup in background — non blocca il render iniziale
     fetch('/api/progetti/analisi-setup/non-utilizzati', {signal:sig})
       .then(r=>r.ok?r.json():{}).then(s=>{ if(!sig.aborted) setSetup(s||{}) }).catch(()=>{})
-    const t=setInterval(()=>
-      fetch('/api/pallet/').then(r=>r.ok?r.json():{pallet:[]}).then(d=>{ if(!sig.aborted) setPallet(d.pallet||[]) })
-    ,15000)
+
+    // Sessione live: fetch iniziale + polling 10s
     const fetchSessLive=()=>
       fetch('/api/report/sessione-live').then(r=>r.ok?r.json():null)
         .then(d=>{ if(!sig.aborted) setSessLive(d) }).catch(()=>{})
     fetchSessLive()
     const t2=setInterval(fetchSessLive,10000)
+
+    // Timer UI per countdown ETA
     const t3=setInterval(()=>setTickSec(s=>s+1),1000)
+
+    // Tempi ciclo: carica una volta + refresh ogni 5min (dati lenti)
     const fetchTempiCiclo=()=>
       fetch('/api/report/tempi-ciclo').then(r=>r.ok?r.json():null)
         .then(d=>{ if(!sig.aborted && d?.cicli) setTempiCiclo(d.cicli) }).catch(()=>{})
     fetchTempiCiclo()
     const t4=setInterval(fetchTempiCiclo,300000)
-    // Refresh ore progetto ogni 5min (per aggiornarsi quando sessioni si chiudono)
-    const refreshOreProgetto = () => { progettoCorrenteRef.current = null }
-    const t5=setInterval(refreshOreProgetto, 300000)
-    return()=>{ ac.abort(); clearInterval(t);clearInterval(t2);clearInterval(t3);clearInterval(t4);clearInterval(t5) }
+
+    // Refresh ore progetto ogni 5min
+    const t5=setInterval(()=>{ progettoCorrenteRef.current = null }, 300000)
+
+    // Pallet: ascolta GlobalPoller invece di poll separato (era ogni 15s)
+    // GlobalPoller già gira ogni 5s → nessuna richiesta aggiuntiva
+    const onStati = () => {
+      if(sig.aborted) return
+      fetch('/api/pallet/').then(r=>r.ok?r.json():{pallet:[]})
+        .then(d=>{ if(!sig.aborted) setPallet(d.pallet||[]) }).catch(()=>{})
+    }
+    window.addEventListener('dmgdesk:stati-aggiornati', onStati)
+
+    return()=>{
+      ac.abort()
+      clearInterval(t2); clearInterval(t3); clearInterval(t4); clearInterval(t5)
+      window.removeEventListener('dmgdesk:stati-aggiornati', onStati)
+    }
   },[])
 
   // Fetch ore storiche progetto ogni volta che cambia il progetto in lavorazione

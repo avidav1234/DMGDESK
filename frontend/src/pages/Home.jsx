@@ -508,25 +508,6 @@ export default function Home(){
                   <b style={{color:'#1D5FAD'}}>{lavInfo.inMac}</b> in corso &nbsp;·&nbsp;
                   <b style={{color:'#94a3b8'}}>{lavInfo.daFare}</b> da fare
                 </span>
-                {/* Bottone reset se ci sono troppi programmi "in corso" (anomalia) */}
-                {lavInfo.inMac > 2 && lavInfo.daFare === 0 && (
-                  <button onClick={()=>{
-                    const corrente = sessLive?.programma_corrente || ''
-                    if(!lavInfo.progettoId) return
-                    fetch(`/api/progetti/${lavInfo.progettoId}/reset-stati-programmi`, {
-                      method:'POST',
-                      headers:{'Content-Type':'application/json'},
-                      body: JSON.stringify({escludi_corrente: corrente})
-                    }).then(r=>r.json()).then(d=>{
-                      if(d.ok) window.dispatchEvent(new Event('dmgdesk:stati-aggiornati'))
-                    })
-                  }} title="Resetta programmi bloccati in 'in corso'"
-                  style={{fontSize:10,padding:'2px 8px',borderRadius:4,
-                    background:'#fef2f2',border:'1px solid #fca5a5',
-                    color:'#dc2626',cursor:'pointer',fontWeight:600}}>
-                    ↺ reset stati
-                  </button>
-                )}
                 {sessMatch&&sessLive?.utensile&&(
                   <span style={{marginLeft:'auto',fontSize:11,fontWeight:700,color:'#0d2d5e',
                     background:'#eff6ff',padding:'3px 10px',borderRadius:6,fontFamily:'monospace',flexShrink:0}}>

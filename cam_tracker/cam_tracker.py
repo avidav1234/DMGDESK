@@ -58,7 +58,7 @@ DEFAULT_CONFIG = {
     },
     "tracker": {
         "workstation": socket.gethostname(),
-        "min_session_sec": "30",
+        "min_session_sec": "10",
         "idle_timeout_min": "5",
     },
 }
@@ -187,6 +187,7 @@ class CimatronCOMAdapter:
     def _query_via_exe(self) -> dict | None:
         """Lancia cimatron_query.exe e legge il path dal stdout."""
         import subprocess
+        self._last_timeout = False
         try:
             result = subprocess.run(
                 [str(self._query_exe)],
@@ -201,6 +202,7 @@ class CimatronCOMAdapter:
             return proj
         except subprocess.TimeoutExpired:
             log.warning("[Cimatron EXE] timeout")
+            self._last_timeout = True
             return None
         except Exception as e:
             log.debug(f"[Cimatron EXE] {e}")
@@ -460,14 +462,31 @@ class CAMTracker:
         self._stop = threading.Event()
 
     def _get_project(self) -> dict | None:
-        """Tenta COM prima (path completo), poi window title."""
+        """
+        Tenta EXE/COM prima (path completo → commessa affidabile).
+        Fallback al titolo finestra SOLO se l'EXE non è disponibile,
+        NON in caso di timeout (il timeout non deve causare cambio progetto).
+        """
         if not self._com_tried:
             self.com.try_connect()
             self._com_tried = True
 
         p = self.com.get_active_project()
         if p:
-            return p
+            # Valida: accetta solo commesse numeriche (4 cifre) o formato NNNN_NNNN
+            commessa = p.get("commessa", "")
+            if commessa and re.match(r'^\d{4}', commessa):
+                return p
+            # Commessa non valida (es. E541540221) → ignora questo risultato
+            # ma NON fare fallback al titolo — meglio tenere il progetto precedente
+            return None
+
+        # Fallback al titolo finestra solo se l'exe non ha dato timeout
+        # (se ha dato timeout, self.com._last_timeout è True)
+        if getattr(self.com, '_last_timeout', False):
+            # Timeout EXE → mantieni progetto precedente, non cambiare
+            return self.current_project
+
         return self.window.get_active_project()
 
     def _project_id(self, proj: dict | None) -> str | None:

@@ -1166,3 +1166,45 @@ async def riparsing_utensili(project_id: str):
     return {"aggiornati": aggiornati, "project_id": project_id}
 
 
+
+@router.post("/{project_id}/reset-stati-programmi")
+async def reset_stati_programmi(project_id: str, body: dict = {}):
+    """
+    Resetta i programmi in_main/in_macchina/in_lavorazione → da_fare.
+    Usato quando i programmi sono rimasti 'in corso' dopo un riavvio/reset sessione.
+    
+    body: { "escludi_corrente": "4350_0221_01_002.MPF" }  ← opzionale
+    """
+    config = carica_configurazione()
+    data   = _load_progetti(config)
+    projects = data.get("projects", [])
+
+    progetto = next((p for p in projects if p.get("id") == project_id), None)
+    if not progetto:
+        raise HTTPException(status_code=404, detail="Progetto non trovato")
+
+    escludi = (body.get("escludi_corrente") or "").upper().replace(".MPF", "")
+    STATI_DA_RESETTARE = {"in_main", "in_macchina", "in_lavorazione"}
+    resettati = 0
+
+    for step in progetto.get("steps", []):
+        for task in step.get("tasks", []):
+            if task.get("text", "").strip().lower() != "fresatura":
+                continue
+            for pgm in task.get("programs", []):
+                if pgm.get("tipoGruppo") == "ipm":
+                    continue
+                stato = pgm.get("stato", "da_fare")
+                fn = (pgm.get("filename") or "").upper().replace(".MPF", "")
+                if stato in STATI_DA_RESETTARE and fn != escludi:
+                    pgm["stato"] = "da_fare"
+                    pgm["tempoInizio"] = None
+                    pgm["tempoFine"] = None
+                    resettati += 1
+
+    if resettati > 0:
+        async with _write_lock:
+            _save_progetti(config, data)
+            _invalidate_analisi_cache()
+
+    return {"ok": True, "resettati": resettati, "progetto": progetto.get("name")}

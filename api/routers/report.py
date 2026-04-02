@@ -2088,11 +2088,9 @@ async def get_analytics_commesse():
     ) if oee_giorni else None
 
     # ── Fattore di calibrazione K globale ────────────────────────────────────
-    # K = ore_macchina_reali / ore_cam_stimate, calcolato su commesse COMPLETE
-    # con dati sia CAM che macchina disponibili.
-    # Questo fattore include automaticamente il gap sistematico di calibrazione
-    # (es. 20% di sottostima CAM attuale) — si corregge da solo man mano che
-    # i tempi CAM vengono calibrati meglio.
+    analytics_progetti = []
+    delivery_map = {d.get("projectId"): d for d in deliveries}
+
     k_campioni = []
     for p in progetti:
         nome_p = p.get("name", "")
@@ -2120,9 +2118,6 @@ async def get_analytics_commesse():
         k_confidenza = None
 
     # ── Ratio CAM/Macchina e stima fine lavori ───────────────────────────────
-    analytics_progetti = []
-    delivery_map = {d.get("projectId"): d for d in deliveries}
-
     for p in progetti:
         nome = p.get("name", "")
         pid  = p.get("id", "")

@@ -303,8 +303,13 @@ def aggiorna_da_log(
             _FILTRI_SISTEMA = (
                 "_N_CMA_DIR", "_N_CST_DIR", "_N_SYF_DIR",
                 "_N_MPF_DIR", "_SPF", "BPOSAXIS", "TMPCYC",
-                "0_MAIN_",     # MAIN generato da AnalisiNC — non è un programma di lavorazione
+                "0_MAIN_",     # MAIN generato da AnalisiNC
                 "PALLET5",     # File pallet Siemens
+                "ROTTURA",     # Ciclo rottura utensile
+                "LASEREIN",    # Misura laser
+                "BLMEAS",      # Block measurement
+                "FINE_PALLET", # Fine pallet
+                "BAX2START",   # Routine avvio
             )
             for f in _FILTRI_SISTEMA:
                 if f in programma_attivo.upper():
@@ -1785,8 +1790,10 @@ async def get_rendiconto_progetto(project_id: str):
     consegnato_at  = delivery.get("deliveredAt")  if delivery else None
 
     # ── Sessioni di lavorazione ──────────────────────────────────────────────
-    FILTRI = ("_N_CMA", "_N_CST", "_N_SYF", "_N_MPF", "BPOSAXIS",
-              "/_N_WKS", "_SPF", "0_MAIN_", "PALLET5")
+    # Filtri sui nomi file di sistema — esclude SPF, CMA, ecc.
+    # NON include /_N_WKS che è il prefisso del path grezzo, non del filename estratto
+    FILTRI = ("_N_CMA", "_N_CST", "_N_SYF", "_N_MPF_DIR", "BPOSAXIS",
+              "_SPF", "0_MAIN_", "PALLET5", "ROTTURA", "LASEREIN", "BLMEAS")
 
     sessioni_proj = []
     for s in log_data.get("sessioni", []):

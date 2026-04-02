@@ -512,12 +512,12 @@ def _chiudi_programma(data: dict, sc: dict, now: str):
     pgm_prec = sess["programmi"][-1] if sess["programmi"] else None
 
     def _prefix_norm(fn):
-        """Rimuove il suffix numerico Siemens (≥3 cifre): 4297_0006_001 → 4297_0006
-        NON tocca numeri brevi (1-2 cifre) che sono parte del nome, es. SPIRALE_9."""
+        """Rimuove il suffix numerico Siemens solo se >= 800 (stile _801, _900).
+        NON tocca suffix sequenziali normali (001, 002...) che sono programmi distinti.
+        Questo evita di mergiare 4350_0221_01_001 con 4350_0221_01_002."""
         base = (fn or "").upper().replace(".MPF", "")
         parts = base.split("_")
-        # Solo se l'ultimo token è numerico con almeno 3 cifre (stile suffix Siemens)
-        if parts and parts[-1].isdigit() and len(parts[-1]) >= 3:
+        if parts and parts[-1].isdigit() and len(parts[-1]) >= 3 and int(parts[-1]) >= 800:
             return "_".join(parts[:-1])
         return base
 

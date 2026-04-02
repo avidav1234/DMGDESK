@@ -2069,16 +2069,25 @@ async def get_rendiconto_progetto(project_id: str):
         if cam_file.exists():
             import json as _json
             cam_data = _json.loads(cam_file.read_text(encoding="utf-8"))
-            # Cerca per project_id esatto (es. 4350_0221) o per commessa (es. 4350)
-            # Il nome progetto DMGDesk è tipo "4350_0221"
+            # nome = es. "4297_0006"
+            # Cerca prima per project esatto (es. project="4297_0006")
+            # Solo se non trova nulla, cerca per commessa+operazione
             commessa_proj = nome.split("_")[0] if "_" in nome else nome
-            cam_entries = [
-                e for e in cam_data
-                if e.get("project", "").upper() == nome.upper()
-                or e.get("commessa", "").upper() == commessa_proj.upper()
-            ]
+            operazione_proj = nome.split("_")[1] if "_" in nome else ""
+
+            # Match esatto project_id
+            cam_entries = [e for e in cam_data
+                           if e.get("project", "").upper() == nome.upper()]
+
+            # Fallback: commessa + operazione (es. commessa=4297, op=0006)
+            if not cam_entries and operazione_proj:
+                cam_entries = [
+                    e for e in cam_data
+                    if e.get("commessa", "").upper() == commessa_proj.upper()
+                    and (e.get("operazione") or "").lstrip("0") == operazione_proj.lstrip("0")
+                ]
+
             ore_cam_sec = sum(e.get("seconds", 0) for e in cam_entries)
-            # Aggrega per operazione
             op_agg: dict[str, int] = {}
             for e in cam_entries:
                 op = e.get("operazione") or e.get("project", "")

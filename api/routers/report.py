@@ -419,22 +419,34 @@ def aggiorna_da_log(
                 dirty = True
 
             else:
-                # Stesso programma — accumula tick utensile (5s) e override ridotto
-                if sc.get("sessione_id") and utensile:
+                # Stesso programma — accumula tempo reale trascorso dall'ultimo tick
+                # IMPORTANTE: usa delta temporale reale, NON +5 fisso.
+                # Con +5 fisso e N client connessi il valore veniva moltiplicato per N.
+                ultimo_tick = sc.get("ultimo_tick")
+                if ultimo_tick:
+                    try:
+                        delta_sec = int((datetime.fromisoformat(now) -
+                                        datetime.fromisoformat(ultimo_tick)).total_seconds())
+                        delta_sec = max(0, min(delta_sec, 30))  # cap 30s per anomalie
+                    except Exception:
+                        delta_sec = 0
+                else:
+                    delta_sec = 0
+
+                if sc.get("sessione_id") and utensile and delta_sec > 0:
                     sess = _find_sess(data, sc["sessione_id"])
                     if sess:
                         sess.setdefault("utensili", {})
-                        sess["utensili"][utensile] = sess["utensili"].get(utensile, 0) + 5
+                        sess["utensili"][utensile] = sess["utensili"].get(utensile, 0) + delta_sec
                         dirty = True
                 # Registra secondi con override ridotto (feed < 90% o mandrino < 90%)
-                if sc.get("sessione_id"):
+                if sc.get("sessione_id") and delta_sec > 0:
                     ovr_f = override_feed     if override_feed     is not None else 100
                     ovr_m = override_mandrino if override_mandrino is not None else 100
                     if ovr_f < 90 or ovr_m < 90:
                         sess = _find_sess(data, sc["sessione_id"])
                         if sess:
-                            sess["sec_override_ridotto"] = sess.get("sec_override_ridotto", 0) + 5
-                            # Registra il valore minimo visto per diagnostica
+                            sess["sec_override_ridotto"] = sess.get("sec_override_ridotto", 0) + delta_sec
                             min_ovr = min(ovr_f, ovr_m)
                             if "min_override" not in sess or min_ovr < sess["min_override"]:
                                 sess["min_override"] = min_ovr
@@ -1075,6 +1087,70 @@ async def reset_sessione():
     }
     _save_log(config, data)
     return {"ok": True, "msg": "Sessione resettata — nuovo ciclo al prossimo tick"}
+
+
+@router.post("/correggi-ore-utensili")
+async def correggi_ore_utensili():
+    """
+    Correzione retroattiva ore utensile gonfiate dalla race condition multi-client.
+    
+    Causa: N client chiamavano aggiorna-stati-da-log contemporaneamente → +5s×N per tick.
+    Fix: per ogni sessione gonfiata, scala le ore utensile al valore corretto
+         usando il rapporto durata_programmi / ore_utensili_totali.
+    
+    Idempotente — applicare più volte non cambia il risultato.
+    """
+    config = carica_configurazione()
+    data   = _load_log(config)
+    
+    corrette = 0
+    dettaglio = []
+    
+    for s in data.get("sessioni", []):
+        pgms = s.get("programmi", [])
+        durata_pgms = sum(p.get("durata_sec", 0) for p in pgms)
+        utensili = s.get("utensili", {})
+        if not utensili or not isinstance(utensili, dict):
+            continue
+        
+        ut_tot = sum(v for v in utensili.values() if isinstance(v, (int, float)))
+        
+        # Soglia: correggi solo se gonfiato >40% oltre la durata programmi
+        if durata_pgms <= 0 or ut_tot <= durata_pgms * 1.4:
+            continue
+        
+        # Già corretto in precedenza? Controlla il flag
+        if s.get("utensili_corretti"):
+            continue
+        
+        factor = durata_pgms / ut_tot
+        new_utensili = {}
+        for alias, sec in utensili.items():
+            if isinstance(sec, (int, float)):
+                new_utensili[alias] = max(1, int(sec * factor))
+            else:
+                new_utensili[alias] = sec
+        
+        s["utensili"] = new_utensili
+        s["utensili_corretti"] = True  # flag per idempotenza
+        corrette += 1
+        dettaglio.append({
+            "sessione_id": s["id"],
+            "progetto":    s.get("progetto"),
+            "ut_prima":    ut_tot,
+            "ut_dopo":     sum(v for v in new_utensili.values() if isinstance(v,(int,float))),
+            "factor":      round(factor, 3),
+        })
+    
+    if corrette > 0:
+        _save_log(config, data)
+    
+    return {
+        "ok":       True,
+        "corrette": corrette,
+        "dettaglio": dettaglio,
+        "msg": f"{corrette} sessioni corrette" if corrette else "Nessuna sessione da correggere",
+    }
 
 
 @router.get("/export-excel")
@@ -1895,25 +1971,18 @@ async def get_rendiconto_progetto(project_id: str):
 
     # ── Aggregazione utensili ────────────────────────────────────────────────
     # Struttura log: {"alias": durata_sec_int} — dict piatto
-    # NOTA: i dati storici possono essere gonfiati dalla race condition
-    # (3 client chiamavano aggiorna-stati-da-log contemporaneamente → +5s×3 per tick)
-    # Correzione: le ore di ogni utensile non possono superare la durata della sessione.
     ut_agg: dict = {}
     for s in sessioni_proj:
         u = s.get("utensili") or {}
         if not isinstance(u, dict):
             continue
-        # Durata reale della sessione — cap massimo per ogni utensile
-        durata_sess = s.get("durata_sec") or sum(
-            p.get("durata_sec", 0) for p in s.get("programmi", [])
-        )
         for alias, val in u.items():
-            raw_sec = int(val) if isinstance(val, (int, float)) else (val.get("durata_sec", 0) or 0)
-            # Cap: un utensile non può aver lavorato più della sessione intera
-            capped_sec = min(raw_sec, durata_sess) if durata_sess > 0 else raw_sec
             if alias not in ut_agg:
                 ut_agg[alias] = {"alias": alias, "durata_sec": 0}
-            ut_agg[alias]["durata_sec"] += capped_sec
+            if isinstance(val, (int, float)):
+                ut_agg[alias]["durata_sec"] += int(val)
+            elif isinstance(val, dict):
+                ut_agg[alias]["durata_sec"] += val.get("durata_sec", 0) or 0
 
     utensili_list = sorted(ut_agg.values(), key=lambda x: -x["durata_sec"])
     for u in utensili_list:

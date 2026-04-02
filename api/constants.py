@@ -5,7 +5,13 @@ Centralizza tutti i valori hardcoded per facilitare la configurazione.
 
 # ── Turno di lavoro ───────────────────────────────────────────────────────────
 ORE_TURNO_SEC = 28800          # 8 ore in secondi (turno standard)
-INIZIO_TURNO_ORA = 6           # turno inizia alle 06:00
+INIZIO_TURNO_ORA  = 7          # turno inizia alle 07:30
+INIZIO_TURNO_MIN  = 30
+FINE_TURNO_ORA    = 16         # turno finisce alle 16:30
+FINE_TURNO_MIN    = 30
+# Finestre fisse per riepilogo giornaliero
+# Notte: 16:30 → 07:30 (macchina in autonomia)
+# Giorno: 07:30 → 16:30 (operatore presente, CAM attivo)
 
 # ── Watchdog MchnSrv ──────────────────────────────────────────────────────────
 WATCHDOG_SOGLIA_SEC = 300      # log stale dopo 300s senza aggiornamenti

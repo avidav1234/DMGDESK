@@ -58,6 +58,10 @@ app.include_router(allegati.router)
 # ── CAM Tracker ───────────────────────────────────────────────────────────────
 app.include_router(cam_tracker_router.router, prefix="/api/cam-tracker", tags=["CAM Tracker"])
 
+# ── Turno snapshot ─────────────────────────────────────────────────────────────
+from api.routers import turno as turno_router
+app.include_router(turno_router.router, prefix="/api/turno", tags=["Turno"])
+
 # ── Telegram Monitor ───────────────────────────────────────────────────────────
 app.include_router(telegram_router.router, prefix="/api/telegram", tags=["Telegram"])
 
@@ -65,6 +69,13 @@ app.include_router(telegram_router.router, prefix="/api/telegram", tags=["Telegr
 @app.on_event("startup")
 async def startup():
     log.info("DMG Desk API v16.0 avviata — http://0.0.0.0:8000")
+
+    # ── Scheduler snapshot turno ───────────────────────────────────────────
+    import asyncio as _asyncio
+    from api.turno_snapshot import _scheduler_loop
+    _asyncio.create_task(_scheduler_loop())
+    log.info("Scheduler snapshot turno avviato (07:30 notte / 16:30 giorno)")
+
     # Pulizia file .tmp orfani da atomic write interrotti (crash/spegnimento)
     from pathlib import Path as _P
     from database.db_handler import carica_configurazione as _cfg

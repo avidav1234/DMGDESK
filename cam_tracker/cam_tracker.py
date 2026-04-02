@@ -109,56 +109,66 @@ class DMGDeskClient:
             return False
 
 
-# ── Cimatron COM adapter ───────────────────────────────────────────────────────
+# ── Cimatron daemon adapter ────────────────────────────────────────────────────
 class CimatronCOMAdapter:
     """
-    Legge il documento attivo in Cimatron tramite cimatron_query.exe
-    (subprocess con manifest embedded) oppure via pythonnet diretto.
+    Interroga Cimatron tramite cimatron_daemon.exe — processo persistente.
+
+    Il daemon viene avviato una volta sola, carica le DLL COM, e risponde
+    alle query via stdin/stdout. Elimina il costo di avvio/chiusura ad ogni
+    poll e i timeout durante i calcoli NC.
+
+    Fallback: cimatron_query.exe (vecchio metodo, un processo per query).
     """
 
     def __init__(self, program_dir: str):
         self.program_dir = program_dir
-        self.app = None
-        self._available = False
-        # Path dell'exe query — stessa cartella di questo script
-        self._query_exe = Path(__file__).parent / "cimatron_query.exe"
+        self._available  = False
+        self._mode       = None        # "daemon" | "exe" | "com"
+        self._last_timeout = False
+
+        # Path exe
+        self._daemon_exe = None
+        self._query_exe  = Path(__file__).parent / "cimatron_query.exe"
+
+        # Processo daemon
+        self._proc   = None            # subprocess.Popen
+        self._ready  = False           # daemon ha mandato READY
+        self._errors = 0               # errori consecutivi
 
     def try_connect(self) -> bool:
-        # Metodo 1: cimatron_query.exe nella cartella Cimatron (più affidabile)
-        cim_exe = Path(self.program_dir) / "cimatron_query.exe"
+        """Trova il metodo di connessione migliore disponibile."""
+
+        # ── Metodo 1: cimatron_daemon.exe (preferito) ──────────────────────
+        cim_daemon = Path(self.program_dir) / "cimatron_daemon.exe"
+        loc_daemon = Path(__file__).parent / "cimatron_daemon.exe"
+        # Anche .py funziona se pythonnet è installato in Cimatron
+        loc_daemon_py = Path(__file__).parent / "cimatron_daemon.py"
+
+        for candidate in [cim_daemon, loc_daemon]:
+            if candidate.exists():
+                self._daemon_exe = candidate
+                self._available  = True
+                self._mode       = "daemon"
+                log.info(f"[Cimatron] Daemon: {candidate}")
+                self._start_daemon()
+                return True
+
+        # ── Metodo 2: cimatron_query.exe (fallback) ────────────────────────
+        cim_exe   = Path(self.program_dir) / "cimatron_query.exe"
         local_exe = Path(__file__).parent / "cimatron_query.exe"
 
-        if cim_exe.exists():
-            log.info(f"[Cimatron] Usando {cim_exe}")
-            self._query_exe = cim_exe
-            self._available = True
-            self._mode = "exe"
-            return True
-        elif local_exe.exists():
-            log.info(f"[Cimatron] Usando {local_exe} (locale — potrebbe dare errore SxS)")
-            self._query_exe = local_exe
-            self._available = True
-            self._mode = "exe"
-            return True
+        for candidate in [cim_exe, local_exe]:
+            if candidate.exists():
+                self._query_exe  = candidate
+                self._available  = True
+                self._mode       = "exe"
+                log.info(f"[Cimatron] EXE (legacy): {candidate}")
+                return True
 
-        # Metodo 2: pythonnet diretto (richiede manifest su python.exe)
+        # ── Metodo 3: pythonnet diretto ────────────────────────────────────
         try:
-            base = Path(self.program_dir).parent.parent
-            candidates = [self.program_dir]
-            if base.exists():
-                versioni = sorted(
-                    [str(d / "Program") for d in base.iterdir()
-                     if d.is_dir() and (d / "Program").exists()],
-                    reverse=True
-                )
-                candidates = versioni + candidates
-
-            for path in candidates:
-                if Path(path).exists():
-                    sys.path.insert(0, path)
-                    log.info(f"[Cimatron COM] Usando path: {path}")
-                    break
-
+            sys.path.insert(0, self.program_dir)
             import clr
             clr.AddReference("interop.CimatronE")
             from interop.CimatronE import CimApplicationClass
@@ -168,24 +178,108 @@ class CimatronCOMAdapter:
             self._mode = "com"
             log.info("[Cimatron COM] Connesso via pythonnet")
             return True
-        except ImportError:
-            log.info("[Cimatron COM] pythonnet non disponibile")
-            return False
+        except Exception:
+            pass
+
+        log.warning("[Cimatron] Nessun metodo disponibile")
+        return False
+
+    # ── Daemon lifecycle ───────────────────────────────────────────────────
+
+    def _start_daemon(self):
+        """Avvia cimatron_daemon.exe come processo figlio persistente."""
+        import subprocess
+        try:
+            self._proc = subprocess.Popen(
+                [str(self._daemon_exe)],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                bufsize=1,               # line-buffered
+            )
+            # Aspetta READY (max 15s — caricamento DLL)
+            self._proc.stdout.readline()  # ignora prima riga (potrebbe essere log)
+            # Leggi fino a READY o errore
+            for _ in range(20):
+                line = self._proc.stdout.readline().strip()
+                if line == "READY":
+                    self._ready = True
+                    log.info("[Cimatron Daemon] Avviato e pronto")
+                    return
+                elif line.startswith("ERROR"):
+                    log.warning(f"[Cimatron Daemon] Errore avvio: {line}")
+                    self._proc = None
+                    self._mode = "exe"   # fallback
+                    return
+            log.warning("[Cimatron Daemon] READY non ricevuto — fallback exe")
+            self._proc = None
+            self._mode = "exe"
         except Exception as e:
-            log.debug(f"[Cimatron COM] {e}")
-            return False
+            log.warning(f"[Cimatron Daemon] Impossibile avviare: {e}")
+            self._proc = None
+            self._mode = "exe"
+
+    def _ensure_daemon(self):
+        """Riavvia il daemon se è morto."""
+        if self._proc and self._proc.poll() is None:
+            return True  # ancora vivo
+        log.info("[Cimatron Daemon] Riavvio daemon...")
+        self._ready = False
+        self._start_daemon()
+        return self._ready
+
+    def _query_daemon(self) -> dict | None:
+        """Invia "?" al daemon e legge la risposta."""
+        self._last_timeout = False
+        if not self._ensure_daemon():
+            return None
+        try:
+            self._proc.stdin.write("?\n")
+            self._proc.stdin.flush()
+            # Risposta immediata — nessun timeout perché già connesso
+            line = self._proc.stdout.readline()
+            if not line:
+                # Daemon morto
+                self._proc = None
+                return None
+            full_path = line.strip()
+            if not full_path or full_path.startswith("ERROR"):
+                self._errors += 1
+                return None
+            self._errors = 0
+            proj = parse_project_from_path(full_path)
+            return proj
+        except Exception as e:
+            log.debug(f"[Cimatron Daemon] Errore query: {e}")
+            self._proc = None
+            return None
+
+    def shutdown(self):
+        """Chiude il daemon alla fine del tracker."""
+        if self._proc and self._proc.poll() is None:
+            try:
+                self._proc.stdin.write("exit\n")
+                self._proc.stdin.flush()
+                self._proc.wait(timeout=3)
+            except Exception:
+                self._proc.kill()
+            log.info("[Cimatron Daemon] Chiuso")
+
+    # ── Interfaccia pubblica ───────────────────────────────────────────────
 
     def get_active_project(self) -> dict | None:
         if not self._available:
             return None
-
-        if getattr(self, '_mode', None) == "exe":
+        if self._mode == "daemon":
+            return self._query_daemon()
+        elif self._mode == "exe":
             return self._query_via_exe()
         else:
             return self._query_via_com()
 
     def _query_via_exe(self) -> dict | None:
-        """Lancia cimatron_query.exe e legge il path dal stdout."""
+        """Fallback: lancia cimatron_query.exe per ogni query."""
         import subprocess
         self._last_timeout = False
         try:
@@ -209,7 +303,7 @@ class CimatronCOMAdapter:
             return None
 
     def _query_via_com(self) -> dict | None:
-        """Legge path completo del documento attivo via COM."""
+        """Fallback: pythonnet diretto."""
         try:
             doc = self.app.ActiveDocument
             if doc is None:
@@ -668,3 +762,7 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         log.info("[CAMTracker] Interruzione da tastiera")
         tracker.stop()
+    finally:
+        # Chiudi il daemon se attivo
+        if hasattr(tracker, 'com'):
+            tracker.com.shutdown()

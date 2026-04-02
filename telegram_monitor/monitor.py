@@ -127,10 +127,14 @@ class MachineMonitor:
             log.error(f"Errore lettura stato macchina: {e}")
             return
 
-        connessa   = stato.get("connessa", False)
-        stato_prog = int(stato.get("stato_programma") or 0)
-        allarme    = stato.get("allarme") or None
-        log_stale  = stato.get("log_stale", False)
+        connessa    = stato.get("connessa", False)
+        stato_prog  = int(stato.get("stato_programma") or 0)
+        # Filtra: notifica solo allarmi veri (tipo="allarme"), ignora messaggi informativi
+        # (700000-719999 = PLC messaggi/avvertenze che non fermano la macchina, es. 701515)
+        allarme_raw  = stato.get("allarme") or None
+        allarme_tipo = stato.get("allarme_tipo") or "allarme"
+        allarme      = allarme_raw if allarme_tipo == "allarme" else None
+        log_stale   = stato.get("log_stale", False)
         log_age    = stato.get("log_age_sec")
         programma  = stato.get("programma_attivo") or "\u2014"
         prog_str   = f"<code>{programma}</code>"

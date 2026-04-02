@@ -225,15 +225,21 @@ def _normalizza(raw: dict) -> dict:
         if m_al:
             codice = m_al.group(1)
             testo  = m_al.group(2).strip()
-            # Classificazione Sinumerik 840D:
-            # 700000-709999 = messaggi/avvertenze PLC (non fermano la macchina)
-            # < 700000      = allarmi NCK (fermano la macchina)
+            # Classificazione Sinumerik 840D PowerLine — documentazione ufficiale:
+            #   000000-099999  NCK allarmi (fermano macchina, critici)
+            #   100000-399999  SINAMICS/drive allarmi (critici)
+            #   400000-499999  Safety Integrated (critici)
+            #   500000-599999  PLC allarmi configurabili (possono fermare)
+            #   600000-699999  PLC allarmi utente (possono fermare)
+            #   700000-709999  PLC messaggi informativi (NON fermano) ← solo display
+            #   710000-719999  PLC messaggi avvertenza (NON fermano) ← solo display
+            #   720000-799999  PLC allarmi utente avanzati (fermano)
             try:
                 n = int(codice)
-                if 700000 <= n <= 709999:
-                    tipo = "messaggio"
+                if 700000 <= n <= 719999:
+                    tipo = "messaggio"   # solo display, non notificare
                 else:
-                    tipo = "allarme"
+                    tipo = "allarme"     # ferma o può fermare la macchina
             except ValueError:
                 tipo = "allarme"
             out["allarme"]      = f"{codice}: {testo}"

@@ -121,6 +121,7 @@ class PalletAssoc(BaseModel):
 
 # ── Endpoints ────────────────────────────────────────────────────────────────
 
+@router.get("")
 @router.get("/")
 async def get_progetti():
     """Tutti i progetti + templates, con pallet_assegnato da pallet_state."""

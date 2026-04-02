@@ -2545,7 +2545,7 @@ export default function Progetti(){
     // Non sovrascrivere mentre l'utente sta modificando e salvando
     if(isSaving.current) return
     try{
-      const r=await fetch(API+'/')
+      const r=await fetch(API)
       if(!r.ok) return
       // Ricontrolla dopo la fetch — potrebbe essere partita una modifica nel frattempo
       if(isSaving.current) return
@@ -2574,25 +2574,39 @@ export default function Progetti(){
   },[selectedId])
   useEffect(()=>{
     load()
-    function caricaPalletDisp(){
-      fetch('/api/pallet/disponibili').then(r=>r.ok?r.json():{pallet:[]})
-        .then(d=>setPalletDisponibili(d.pallet||[])).catch(()=>{})
+
+    // Polling consolidato: pallet disponibili + stato ogni 15s
+    // (era duplicato: 10s + 15s separati → ora un solo fetch ogni 15s)
+    function caricaPallet(){
+      fetch('/api/pallet/').then(r=>r.ok?r.json():{pallet:[]})
+        .then(d=>{
+          setPalletState(d.pallet||[])
+          // disponibili = pallet non in_lavorazione
+          setPalletDisponibili((d.pallet||[]).filter(p=>
+            (p.stato||'').toLowerCase().replace(' ','_') !== 'in_lavorazione'
+          ))
+        }).catch(()=>{})
     }
-    caricaPalletDisp()
-    const t=setInterval(caricaPalletDisp,10000)
-    // Carica pallet state completo per la dashboard
-    function caricaPalletState(){
-      fetch('/api/pallet').then(r=>r.ok?r.json():{pallet:[]})
-        .then(d=>setPalletState(d.pallet||[])).catch(()=>{})
-    }
-    caricaPalletState()
-    const t2=setInterval(caricaPalletState,15000)
-    // Polling sync dal desktop ogni 8s
-    const t3=setInterval(silentRefresh,8000)
-    // Carica setup data per utensili critici
+    caricaPallet()
+    const t=setInterval(caricaPallet, 15000)
+
+    // Polling sync dal desktop ogni 8s — usa evento GlobalPoller se disponibile
+    // per evitare doppio fetch quando GlobalPoller è già attivo
+    const t3=setInterval(silentRefresh, 8000)
+
+    // Reagisce all'evento del GlobalPoller (App.jsx) — aggiorna pallet senza polling separato
+    const onUpdate = () => caricaPallet()
+    window.addEventListener('dmgdesk:stati-aggiornati', onUpdate)
+
+    // Carica setup data per utensili critici (una tantum)
     fetch('/api/progetti/analisi-setup/non-utilizzati').then(r=>r.ok?r.json():null)
       .then(d=>{ if(d) setSetupData(d) }).catch(()=>{})
-    return()=>{clearInterval(t);clearInterval(t2);clearInterval(t3)}
+
+    return()=>{
+      clearInterval(t)
+      clearInterval(t3)
+      window.removeEventListener('dmgdesk:stati-aggiornati', onUpdate)
+    }
   },[load,silentRefresh])
 
   // Apre il progetto giusto dopo il caricamento (da sessionStorage o navigation state)

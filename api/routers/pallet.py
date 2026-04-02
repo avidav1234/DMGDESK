@@ -181,6 +181,7 @@ class SetLavorazioneBody(BaseModel):
 
 # ── Endpoints ──────────────────────────────────────────────────────────────
 
+@router.get("")
 @router.get("/")
 async def get_pallet():
     """Restituisce lo stato attuale di tutti i pallet.

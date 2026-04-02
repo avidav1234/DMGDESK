@@ -58,18 +58,37 @@ def _log_path(config: dict) -> Path:
             config.get("percorso_nc_base") or ".")
     return Path(base) / "lavorazioni_log.json"
 
+_log_cache: dict = {"data": None, "ts": 0.0, "mtime": 0.0}
+_LOG_CACHE_TTL = 4.0  # secondi — inferiore al poll interval (5s) ma evita letture multiple nella stessa request
+
 def _load_log(config: dict) -> dict:
+    import time as _time
     p = _log_path(config)
+    now = _time.monotonic()
+
+    # Cache valida se: non scaduta E file non modificato
+    try:
+        mtime = p.stat().st_mtime if p.exists() else 0.0
+    except OSError:
+        mtime = 0.0
+
+    if (_log_cache["data"] is not None
+            and (now - _log_cache["ts"]) < _LOG_CACHE_TTL
+            and mtime == _log_cache["mtime"]):
+        return _log_cache["data"]
+
     if p.exists():
         try:
             data = json.loads(p.read_text(encoding="utf-8"))
-            # Verifica struttura minima
             if not isinstance(data, dict):
                 raise ValueError("Root non è un oggetto JSON")
             if not isinstance(data.get("sessioni"), list):
                 data["sessioni"] = []
             if not isinstance(data.get("stato_corrente"), dict):
                 data["stato_corrente"] = {}
+            _log_cache["data"]  = data
+            _log_cache["ts"]    = now
+            _log_cache["mtime"] = mtime
             return data
         except (json.JSONDecodeError, ValueError) as e:
             from utils.logger import get_logger as _get_log
@@ -87,6 +106,9 @@ def _save_log(config: dict, data: dict):
     Le sessioni più vecchie vengono archiviate in lavorazioni_YYYY.json
     per preservare lo storico senza appesantire il file operativo.
     """
+    # Invalida la cache — il file sta per cambiare
+    _log_cache["data"] = None
+    _log_cache["ts"]   = 0.0
     from datetime import timedelta as _td
     p = _log_path(config)
     p.parent.mkdir(parents=True, exist_ok=True)

@@ -74,10 +74,9 @@ function GlobalPoller() {
       if (isRunning) return
       isRunning = true
       try {
-        // SOLO LETTURA — aggiorna-stati-da-log ora gira come task interno del backend.
-        // Il frontend legge solo lo stato aggiornato senza scrivere nulla.
-        // Questo elimina la race condition con più browser/tab aperti.
-        const r = await fetch('/api/macchina-live/stato')
+        // SOLO LETTURA — legge il risultato dell'ultimo ciclo del poller interno.
+        // Nessuna scrittura dal frontend — elimina race condition con N client aperti.
+        const r = await fetch('/api/macchina-live/tick')
         if (!r.ok) return
         const d = await r.json()
         window.dispatchEvent(new CustomEvent('dmgdesk:stati-aggiornati', { detail: d }))

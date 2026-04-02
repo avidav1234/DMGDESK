@@ -29,7 +29,11 @@ from api.routers.report import aggiorna_da_log, _load_log, _log_path
 
 router = APIRouter()
 
-# ── Parser log ─────────────────────────────────────────────────────────────
+# ── Ultimo tick del poller interno ─────────────────────────────────────────
+# Il task interno aggiorna_stati_da_log() salva qui il risultato dell'ultimo ciclo.
+# Il frontend legge questo valore con GET /tick invece di chiamare POST aggiorna-stati-da-log.
+# In questo modo N client leggono, 1 solo scrittore interno scrive.
+_last_tick: dict = {"aggiornamenti": 0, "ts": None}
 
 VAR_MAP = {
     "workPandProgName":  "programma_attivo",
@@ -939,4 +943,19 @@ async def aggiorna_stati_da_log():
     except Exception as _e:
         updates["_report_err"] = str(_e)
 
+    # Salva l'ultimo tick per il frontend (GET /tick)
+    from datetime import datetime as _dtnow
+    updates["ts"] = _dtnow.now().isoformat(timespec="seconds")
+    _last_tick.update(updates)
+
     return updates
+
+
+@router.get("/tick")
+async def get_last_tick():
+    """
+    Restituisce il risultato dell'ultimo ciclo del poller interno.
+    Usato dal GlobalPoller del frontend — sola lettura, nessuna scrittura.
+    Sostituisce POST aggiorna-stati-da-log chiamato dai client.
+    """
+    return _last_tick

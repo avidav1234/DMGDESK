@@ -76,6 +76,24 @@ async def startup():
     _asyncio.create_task(_scheduler_loop())
     log.info("Scheduler snapshot turno avviato (07:30 notte / 16:30 giorno)")
 
+    # ── Poller macchina interno ────────────────────────────────────────────
+    # Legge OpcUaLegacy.log ogni 5s e aggiorna stati programmi/pallet.
+    # Sostituisce le chiamate dal frontend — un solo scrittore, nessuna race condition.
+    async def _machine_poller_loop():
+        from api.routers.macchina_live import aggiorna_stati_da_log as _aggiorna
+        import asyncio as _aio
+        _log = __import__('logging').getLogger("machine_poller")
+        _log.info("Machine poller interno avviato (ogni 5s)")
+        while True:
+            try:
+                await _aggiorna()
+            except Exception as _e:
+                _log.debug(f"Machine poller: {_e}")
+            await _aio.sleep(5)
+
+    _asyncio.create_task(_machine_poller_loop())
+    log.info("Machine poller interno avviato — frontend non deve più chiamare aggiorna-stati-da-log")
+
     # Pulizia file .tmp orfani da atomic write interrotti (crash/spegnimento)
     from pathlib import Path as _P
     from database.db_handler import carica_configurazione as _cfg

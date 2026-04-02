@@ -59,6 +59,7 @@ def main():
         return
 
     stdout("READY")
+    sys.stdout.flush()
     stderr("[Daemon] Pronto — in attesa di query")
 
     # Cache dell'oggetto AppAccess — evita di ricreare ogni volta

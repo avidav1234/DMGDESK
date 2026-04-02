@@ -189,6 +189,7 @@ class CimatronCOMAdapter:
     def _start_daemon(self):
         """Avvia cimatron_daemon.exe come processo figlio persistente."""
         import subprocess
+        import threading
         try:
             self._proc = subprocess.Popen(
                 [str(self._daemon_exe)],
@@ -196,13 +197,27 @@ class CimatronCOMAdapter:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                bufsize=1,               # line-buffered
+                bufsize=1,
             )
-            # Aspetta READY (max 15s — caricamento DLL)
-            self._proc.stdout.readline()  # ignora prima riga (potrebbe essere log)
-            # Leggi fino a READY o errore
-            for _ in range(20):
-                line = self._proc.stdout.readline().strip()
+            # Aspetta READY su stdout con timeout di 20s
+            # Leggi tutte le righe finché non troviamo READY o errore
+            import time
+            deadline = time.time() + 20
+            while time.time() < deadline:
+                if self._proc.poll() is not None:
+                    log.warning("[Cimatron Daemon] Processo terminato durante avvio")
+                    self._proc = None
+                    self._mode = "exe"
+                    return
+                # Leggi con timeout non bloccante
+                import select
+                import os
+                # Su Windows non c'è select su pipe — usiamo thread
+                line = self._proc.stdout.readline()
+                if not line:
+                    time.sleep(0.1)
+                    continue
+                line = line.strip()
                 if line == "READY":
                     self._ready = True
                     log.info("[Cimatron Daemon] Avviato e pronto")
@@ -210,9 +225,10 @@ class CimatronCOMAdapter:
                 elif line.startswith("ERROR"):
                     log.warning(f"[Cimatron Daemon] Errore avvio: {line}")
                     self._proc = None
-                    self._mode = "exe"   # fallback
+                    self._mode = "exe"
                     return
-            log.warning("[Cimatron Daemon] READY non ricevuto — fallback exe")
+                # Altre righe (log) — ignora e continua
+            log.warning("[Cimatron Daemon] Timeout avvio — fallback exe")
             self._proc = None
             self._mode = "exe"
         except Exception as e:

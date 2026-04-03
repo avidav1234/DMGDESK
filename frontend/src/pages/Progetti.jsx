@@ -613,7 +613,6 @@ function FresaturaPanel({task,onUpdateTask,toolsDB,projectId,projectName}){
               </div>
             </div>
           )}
-          </div>
 
           {/* ── Previsione fine vita ── */}
           {previsioneVita.length>0&&(

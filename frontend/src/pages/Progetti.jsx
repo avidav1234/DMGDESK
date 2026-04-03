@@ -1480,7 +1480,7 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
     const h=Math.floor(tot/3600), m=Math.round((tot%3600)/60)
     return h>0?(m>0?`~${h}h ${m}m`:`~${h}h`):`~${m} min`
   })()
-  const [showMoreMenu, setShowMoreMenu] = React.useState(false)
+  const [showMoreMenu, setShowMoreMenu] = useState(false)
 
   return(
     <PgmSelContext.Provider value={{selectedIds, setSelectedIds}}>

@@ -651,12 +651,24 @@ function FresaturaPanel({task,onUpdateTask,toolsDB,projectId,projectName}){
                     </span>
                   </div>
                   <div style={{background:'#fff3e0',borderRadius:6,padding:'6px 10px',fontSize:11}}>
-                    <span style={{fontWeight:700,color:'#bf360c'}}>⚠ Finisce durante: </span>
-                    <span style={{fontFamily:'monospace',fontWeight:700}}>{a.critico.filename?.replace(/\.MPF$/i,'')}</span>
-                    <span style={{color:'#9a3412'}}> — vita esaurita dopo {a.critico.minutiRottura}min, mancano ancora {a.mancanti}min</span>
-                    <div style={{marginTop:3,fontWeight:700,color:'#e65100'}}>
-                      💡 Sostituire prima del programma <span style={{fontFamily:'monospace'}}>{a.critico.numPgm}</span>
-                    </div>
+                    {a.critico?.nessunGemello ? (
+                      <>
+                        <span style={{fontWeight:700,color:'#bf360c'}}>⚠ Nessun gemello disponibile per: </span>
+                        <span style={{fontFamily:'monospace',fontWeight:700}}>{a.critico.filename?.replace(/\.MPF$/i,'')}</span>
+                        <div style={{marginTop:3,fontWeight:700,color:'#e65100'}}>
+                          💡 Caricare un nuovo duplo prima del programma <span style={{fontFamily:'monospace'}}>{a.critico.numPgm}</span>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <span style={{fontWeight:700,color:'#bf360c'}}>⚠ Finisce durante: </span>
+                        <span style={{fontFamily:'monospace',fontWeight:700}}>{a.critico.filename?.replace(/\.MPF$/i,'')}</span>
+                        <span style={{color:'#9a3412'}}> — vita esaurita dopo {a.critico.minutiRottura}min, mancano ancora {a.mancanti}min</span>
+                        <div style={{marginTop:3,fontWeight:700,color:'#e65100'}}>
+                          💡 Sostituire prima del programma <span style={{fontFamily:'monospace'}}>{a.critico.numPgm}</span>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
               ))}

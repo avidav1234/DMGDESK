@@ -697,13 +697,22 @@ def _calcola_previsione_vita(projects: list, tools_db: dict, classify_fn, ordine
         consumo_tot = sum(p["tempo"] for p in pgm_list)
         vita_tot = sum(vita_gemello(g) for g in gemelli_ordinati)
 
+        # surplus_mancante = quanto manca al punto critico (sempre positivo se è un vero problema)
+        # - nessun_gemello: il programma non ha gemello disponibile → surplus = tempo del pgm
+        # - consumo > vita: surplus = consumo - vita del gemello assegnato
         if critico:
+            if critico.get("nessun_gemello"):
+                surplus = critico["consumo_al_punto"]
+            else:
+                surplus = critico["consumo_al_punto"] - critico.get("vita_gemello", vita_tot)
+                surplus = max(0, surplus)  # sempre >= 0
             alerts.append({
                 "alias":              alias,
                 "vita_rimanente":     vita_tot,
                 "n_gemelli":          n_gemelli,
                 "consumo_totale":     consumo_tot,
-                "surplus_mancante":   consumo_tot - vita_tot,
+                "surplus_mancante":   surplus,
+                "nessun_gemello":     critico.get("nessun_gemello", False),
                 "programmi_n":        len(pgm_list),
                 "programma_critico":  critico,
                 "ok":                 False,

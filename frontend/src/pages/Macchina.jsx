@@ -173,13 +173,26 @@ function CodaEsecuzione({ setupData, onOrdineChanged }) {
                 </div>
                 {cr && (
                   <div style={{ fontSize: 11, color: '#5d4037' }}>
-                    <span style={{ fontWeight: 700, color: '#bf360c' }}>⚠ Finisce durante </span>
-                    <span style={{ fontFamily: 'monospace', fontWeight: 700 }}>{cr.progetto}</span>
-                    <span> pgm <span style={{ fontFamily: 'monospace' }}>{cr.numPgm}</span></span>
-                    <span style={{ color: '#9a3412' }}> — mancano {a.surplus_mancante}min</span>
-                    <span style={{ display: 'block', fontWeight: 700, color: '#e65100', marginTop: 2 }}>
-                      💡 Sostituire prima di iniziare {cr.progetto}
-                    </span>
+                    {a.nessun_gemello ? (
+                      <>
+                        <span style={{ fontWeight: 700, color: '#bf360c' }}>⚠ Nessun gemello disponibile per </span>
+                        <span style={{ fontFamily: 'monospace', fontWeight: 700 }}>{cr.progetto}</span>
+                        <span> pgm <span style={{ fontFamily: 'monospace' }}>{cr.numPgm}</span></span>
+                        <span style={{ display: 'block', fontWeight: 700, color: '#e65100', marginTop: 2 }}>
+                          💡 Caricare un nuovo duplo prima di iniziare {cr.progetto}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <span style={{ fontWeight: 700, color: '#bf360c' }}>⚠ Finisce durante </span>
+                        <span style={{ fontFamily: 'monospace', fontWeight: 700 }}>{cr.progetto}</span>
+                        <span> pgm <span style={{ fontFamily: 'monospace' }}>{cr.numPgm}</span></span>
+                        <span style={{ color: '#9a3412' }}> — mancano {a.surplus_mancante}min</span>
+                        <span style={{ display: 'block', fontWeight: 700, color: '#e65100', marginTop: 2 }}>
+                          💡 Sostituire prima di iniziare {cr.progetto}
+                        </span>
+                      </>
+                    )}
                   </div>
                 )}
               </div>

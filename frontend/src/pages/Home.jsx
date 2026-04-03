@@ -291,6 +291,40 @@ export default function Home(){
     try{ const parts=p.tempoFine.split(' '); const dp=parts[0].split('/'); return new Date(dp[2],dp[1]-1,dp[0]).toDateString()===oggiStr }catch{return false}
   }).length
 
+  // ── ETA per pallet (ore rimanenti stimate) ───────────────────────────────
+  function etaPallet(num){
+    const info = palletInfo(num)
+    if(!info) return null
+    const pgms = (info.proj.steps||[]).flatMap(s=>(s.tasks||[])
+      .filter(t=>t.text?.trim().toLowerCase()==='fresatura')
+      .flatMap(t=>(t.programs||[]).filter(pg=>pg.tipoGruppo!=='ipm')))
+    // Programmi non completati
+    const rimasti = pgms.filter(p=>p.stato!=='completato')
+    if(!rimasti.length) return null
+    // Somma tempiCiclo reali > tempoStimato CAM > fallback media globale
+    const mediaGlobale = (()=>{
+      const tutti = Object.values(tempiCiclo).filter(c=>c.n>=2)
+      return tutti.length ? Math.round(tutti.reduce((a,c)=>a+c.media_sec,0)/tutti.length) : null
+    })()
+    let totSec = 0
+    let haStima = false
+    for(const p of rimasti){
+      const fn = (p.filename||'').toUpperCase()
+      const tc = tempiCiclo[fn]
+      if(tc?.n>=2){ totSec += tc.media_sec; haStima=true }
+      else if(p.tempoStimato){ totSec += parseInt(p.tempoStimato)*60; haStima=true }
+      else if(mediaGlobale){ totSec += mediaGlobale }
+    }
+    if(totSec<=0) return null
+    const fmtEta=(sec)=>{
+      if(sec<60) return '<1 min'
+      if(sec<3600) return `~${Math.round(sec/60)} min`
+      const h=Math.floor(sec/3600), m=Math.round((sec%3600)/60)
+      return m>0?`~${h}h ${m}m`:`~${h}h`
+    }
+    return { sec: totSec, fmt: fmtEta(totSec), haStima, nRimasti: rimasti.length }
+  }
+
   // ── Scadenze ─────────────────────────────────────────────────────────────
   const conScadenza=projects
     .map(p=>({p,d:deliveries.find(d=>d.projectId===p.id),pNum:pallet.find(x=>x.progetto_id===p.id)?.numero}))
@@ -365,7 +399,7 @@ export default function Home(){
           {lavInfo?(
             <div style={{background:'#f0f7ff',border:'1.5px solid #1D5FAD',borderRadius:12,padding:'12px 16px',flexShrink:0}}>
               {/* Header */}
-              <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:8}}>
+              <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:10}}>
                 <div style={{width:11,height:11,borderRadius:2,
                   background:lavInfo.proj.color||'#1D5FAD',flexShrink:0}}/>
                 <span style={{fontSize:16,fontWeight:800,color:'#0d2d5e',flex:1,
@@ -378,111 +412,129 @@ export default function Home(){
                 </span>
               </div>
 
-              {/* Timers — 3 colonne: sessione | programma | ore pallet */}
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:10}}>
+              {/* Timer principale — PROGRAMMA CORRENTE, grande al centro */}
+              <div style={{textAlign:'center',padding:'8px 0 10px',borderBottom:'1px solid #bfdbfe',marginBottom:10}}>
+                <div style={{fontSize:10,fontWeight:700,color:
+                  sessMatch&&sessLive?.anomalia_ciclo?'#dc2626':sessMatch&&sessLive?.in_pausa?'#92400e':'#1D5FAD',
+                  letterSpacing:'0.07em',textTransform:'uppercase',marginBottom:4,
+                  display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
+                  {sessMatch&&sessLive?.anomalia_ciclo&&(
+                    <span style={{fontSize:9,fontWeight:800,color:'#dc2626',background:'#fef2f2',
+                      padding:'1px 6px',borderRadius:3,border:'1px solid #fca5a5'}}>CICLO LUNGO</span>
+                  )}
+                  {sessMatch&&sessLive?.in_pausa&&!sessLive?.anomalia_ciclo&&(
+                    <span style={{fontSize:9,fontWeight:800,color:'#92400e',background:'#fef3c7',
+                      padding:'1px 6px',borderRadius:3,border:'1px solid #fcd34d'}}>PAUSA</span>
+                  )}
+                  Programma corrente
+                </div>
+                <div style={{fontSize:38,fontWeight:900,fontFamily:'monospace',lineHeight:1,
+                  color:sessMatch&&sessLive?.anomalia_ciclo?'#dc2626':sessMatch&&sessLive?.in_pausa?'#92400e':'#0d2d5e'}}>
+                  {sessMatch&&durataProgrammaLive!=null?fmtTimer(durataProgrammaLive):'—:——:——'}
+                </div>
+                {sessMatch&&sessLive?.programma_corrente&&(
+                  <div style={{fontSize:11,color:'#1D5FAD',marginTop:4,fontFamily:'monospace'}}>
+                    {sessLive.programma_corrente.replace('.MPF','').replace('.mpf','')}
+                    {sessMatch&&sessLive?.ciclo_stats&&(
+                      <span style={{color:'#94a3b8',marginLeft:8}}>
+                        media {fmtTimer(sessLive.ciclo_stats.media_sec)} ({sessLive.ciclo_stats.n} cicli)
+                      </span>
+                    )}
+                  </div>
+                )}
+                {sessMatch&&sessLive?.utensile&&(
+                  <div style={{marginTop:6,display:'inline-block',fontSize:11,fontWeight:700,color:'#0d2d5e',
+                    background:'#eff6ff',padding:'3px 12px',borderRadius:6,fontFamily:'monospace'}}>
+                    {sessLive.utensile}
+                    {sessLive.t_number&&(
+                      <span style={{color:'#1D5FAD',marginLeft:8}}>T{sessLive.t_number}</span>
+                    )}
+                  </div>
+                )}
+              </div>
 
-                {/* Timer 1: Sessione pallet (da quando è partito oggi) */}
-                <div style={{background:'#fff',borderRadius:9,padding:'6px 10px',
-                  border:'1px solid #bfdbfe',textAlign:'center'}}>
-                  <div style={{fontSize:10,fontWeight:700,color:'#1D5FAD',letterSpacing:'0.07em',
-                    textTransform:'uppercase',marginBottom:5}}>Sessione pallet</div>
-                  <div style={{fontSize:26,fontWeight:900,color:'#0d2d5e',fontFamily:'monospace',lineHeight:1}}>
+              {/* ETA — prominente */}
+              {etaCalc&&(
+                <div style={{background: etaCalc.anomalia?'#fef2f2':'#dbeafe',
+                  borderRadius:8,padding:'8px 12px',marginBottom:10,
+                  display:'flex',alignItems:'center',justifyContent:'space-between',
+                  border:`1px solid ${etaCalc.anomalia?'#fca5a5':'#93c5fd'}`}}>
+                  <div>
+                    <div style={{fontSize:10,color:etaCalc.anomalia?'#dc2626':'#1D5FAD',marginBottom:1}}>
+                      fine pallet
+                    </div>
+                    <div style={{fontSize:20,fontWeight:900,fontFamily:'monospace',
+                      color:etaCalc.anomalia?'#dc2626':'#0d2d5e',lineHeight:1}}>
+                      {etaCalc.etaFmtPallet}
+                      {(()=>{
+                        const oraFine = new Date(Date.now() + etaCalc.totSec*1000)
+                        return (
+                          <span style={{fontSize:13,fontWeight:700,color:etaCalc.anomalia?'#ef4444':'#1D5FAD',marginLeft:10}}>
+                            → {String(oraFine.getHours()).padStart(2,'0')}:{String(oraFine.getMinutes()).padStart(2,'0')}
+                          </span>
+                        )
+                      })()}
+                    </div>
+                  </div>
+                  <div style={{textAlign:'right'}}>
+                    <div style={{fontSize:10,color:'#64748b'}}>
+                      {etaCalc.nCampioni>=2?`da ${etaCalc.nCampioni} cicli reali`:'da tempi CAM'}
+                    </div>
+                    <div style={{fontSize:10,color:'#64748b',marginTop:1}}>
+                      {etaCalc.nRimanenti} pgm rimanenti
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Timer secondari — compatti in 2 colonne */}
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:10}}>
+                <div style={{background:'#fff',borderRadius:8,padding:'6px 10px',border:'1px solid #bfdbfe'}}>
+                  <div style={{fontSize:9,fontWeight:700,color:'#1D5FAD',letterSpacing:'0.07em',textTransform:'uppercase',marginBottom:3}}>
+                    Sessione pallet
+                  </div>
+                  <div style={{fontSize:18,fontWeight:900,color:'#0d2d5e',fontFamily:'monospace',lineHeight:1}}>
                     {sessMatch?fmtTimer(durataSessioneLive):'—:——:——'}
                   </div>
                   {sessMatch&&sessLive?.inizio_sessione&&(
-                    <div style={{fontSize:10,color:'#64748b',marginTop:4}}>
+                    <div style={{fontSize:10,color:'#64748b',marginTop:2}}>
                       dal {sessLive.inizio_sessione.slice(11,16)}
                     </div>
                   )}
                   {!sessMatch&&sessLive?.attiva&&(
-                    <div style={{marginTop:6}}>
-                      <div style={{fontSize:10,color:'#dc2626',marginBottom:4}}>
-                        sessione orfana (P{sessLive.pallet}→P{palletLav?.numero})
+                    <div style={{marginTop:4}}>
+                      <div style={{fontSize:10,color:'#dc2626',marginBottom:3}}>
+                        orfana (P{sessLive.pallet}→P{palletLav?.numero})
                       </div>
                       <button onClick={()=>{
                         fetch('/api/report/reset-sessione',{method:'POST'})
                           .then(()=>setTimeout(()=>window.location.reload(),1500))
-                      }} style={{fontSize:10,padding:'3px 10px',borderRadius:4,
-                        background:'#dc2626',border:'none',color:'#fff',cursor:'pointer',
-                        fontWeight:600}}>
-                        ↺ Ripristina sessione
+                      }} style={{fontSize:10,padding:'2px 8px',borderRadius:4,
+                        background:'#dc2626',border:'none',color:'#fff',cursor:'pointer',fontWeight:600}}>
+                        ↺ Ripristina
                       </button>
                     </div>
                   )}
                 </div>
-
-                {/* Timer 2: Programma corrente */}
-                <div style={{background:'#fff',borderRadius:9,padding:'8px 10px',
-                  border: sessMatch&&sessLive?.anomalia_ciclo ? '1.5px solid #ef4444' : sessMatch&&sessLive?.in_pausa ? '1.5px solid #f59e0b' : '1px solid #e2e8f0',
-                  textAlign:'center',
-                  background: sessMatch&&sessLive?.anomalia_ciclo ? '#fef2f2' : sessMatch&&sessLive?.in_pausa ? '#fffbeb' : '#fff' }}>
-                  <div style={{fontSize:10,fontWeight:700,
-                    color: sessMatch&&sessLive?.anomalia_ciclo ? '#dc2626' : sessMatch&&sessLive?.in_pausa ? '#92400e' : '#64748b',
-                    letterSpacing:'0.07em',textTransform:'uppercase',marginBottom:5,
-                    display:'flex',alignItems:'center',justifyContent:'center',gap:5}}>
-                    {sessMatch&&sessLive?.anomalia_ciclo&&(
-                      <span style={{fontSize:9,fontWeight:800,color:'#dc2626',
-                        background:'#fef2f2',padding:'1px 5px',borderRadius:3,
-                        border:'1px solid #fca5a5'}}>LUNGO</span>
-                    )}
-                    {sessMatch&&sessLive?.in_pausa&&!sessLive?.anomalia_ciclo&&(
-                      <span style={{fontSize:9,fontWeight:800,color:'#92400e',
-                        background:'#fef3c7',padding:'1px 5px',borderRadius:3,
-                        border:'1px solid #fcd34d'}}>PAUSA</span>
-                    )}
-                    Programma corrente
-                  </div>
-                  <div style={{fontSize:26,fontWeight:900,fontFamily:'monospace',lineHeight:1,
-                    color: sessMatch&&sessLive?.anomalia_ciclo ? '#dc2626' : sessMatch&&sessLive?.in_pausa ? '#92400e' : '#475569'}}>
-                    {sessMatch&&durataProgrammaLive!=null?fmtTimer(durataProgrammaLive):'—:——:——'}
-                  </div>
-                  {sessMatch&&sessLive?.programma_corrente&&(
-                    <div style={{fontSize:10,color:'#64748b',marginTop:4,fontFamily:'monospace',
-                      overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
-                      {sessLive.programma_corrente.replace('.MPF','').replace('.mpf','')}
-                    </div>
-                  )}
-                  {sessMatch&&sessLive?.ciclo_stats&&(
-                    <div style={{fontSize:9,color:'#94a3b8',marginTop:3}}>
-                      media: {fmtTimer(sessLive.ciclo_stats.media_sec)} ({sessLive.ciclo_stats.n} cicli)
-                    </div>
-                  )}
-                </div>
-
-                {/* Timer 3: Ore totali progetto (storico chiuso + sessione live) */}
                 {(()=>{
-                  // Ore storiche: solo sessioni CHIUSE (fine != null) e non-zero
-                  // Il backend esclude sessioni aperte e durata=0 per evitare doppio conteggio
                   const secStorico = oreProgetto?.ore_sec || 0
-                  // Sessione corrente APERTA: usa sessLive.durata_sec calcolato dal backend
-                  // come somma dei programmi eseguiti in questa sessione.
-                  // NON usare durataSessioneLive (= now - inizio_sessione) che gonfia il valore
-                  // se la sessione è rimasta aperta nel log mentre la macchina era ferma.
-                  // Aggiunge tickSec secondi dall'ultimo refresh per far scorrere live.
-                  const secSessioneBase = sessMatch ? (sessLive?.durata_sec || 0) : 0
-                  // tickSec si azzera ad ogni fetch sessione-live (ogni 10s) — no drift
-                  const secSessioneAperta = secSessioneBase > 0 && sessLive?.attiva && !sessLive?.in_pausa
-                    ? secSessioneBase + (tickSec % 10)
-                    : secSessioneBase
-                  const secTot = secStorico + secSessioneAperta
-                  const hh = Math.floor(secTot/3600)
-                  const mm = Math.floor((secTot%3600)/60)
-                  const ss = secTot % 60
-                  const timerStr = `${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}`
-                  const nSessioni = oreProgetto?.n_sessioni || 0
+                  const secSessioneBase = sessMatch?(sessLive?.durata_sec||0):0
+                  const secSessioneAperta = secSessioneBase>0&&sessLive?.attiva&&!sessLive?.in_pausa
+                    ? secSessioneBase+(tickSec%10) : secSessioneBase
+                  const secTot = secStorico+secSessioneAperta
+                  const nSessioni = oreProgetto?.n_sessioni||0
                   const primaData = oreProgetto?.prima_data
-                  return (
-                    <div style={{background:'#fff',borderRadius:9,padding:'6px 10px',
-                      border:'1px solid #bbf7d0',textAlign:'center'}}>
-                      <div style={{fontSize:10,fontWeight:700,color:'#15803d',letterSpacing:'0.07em',
-                        textTransform:'uppercase',marginBottom:4}}>Ore progetto</div>
-                      <div style={{fontSize:26,fontWeight:900,color:'#166534',fontFamily:'monospace',lineHeight:1}}>
-                        {secTot > 0 ? timerStr : '—:——:——'}
+                  return(
+                    <div style={{background:'#fff',borderRadius:8,padding:'6px 10px',border:'1px solid #bbf7d0'}}>
+                      <div style={{fontSize:9,fontWeight:700,color:'#15803d',letterSpacing:'0.07em',textTransform:'uppercase',marginBottom:3}}>
+                        Ore progetto
                       </div>
-                      {secTot > 0 && (
-                        <div style={{fontSize:9,color:'#64748b',marginTop:3}}>
-                          {nSessioni > 0 ? `${nSessioni} sess.` : ''}
-                          {primaData && nSessioni > 1 ? ` · dal ${primaData}` : ''}
+                      <div style={{fontSize:18,fontWeight:900,color:'#166534',fontFamily:'monospace',lineHeight:1}}>
+                        {secTot>0?fmtTimer(secTot):'—:——:——'}
+                      </div>
+                      {secTot>0&&(
+                        <div style={{fontSize:10,color:'#64748b',marginTop:2}}>
+                          {nSessioni>0?`${nSessioni} sess.`:''}{primaData&&nSessioni>1?` · dal ${primaData}`:''}
                         </div>
                       )}
                     </div>
@@ -490,60 +542,23 @@ export default function Home(){
                 })()}
               </div>
 
-              {/* Barra */}
-              <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:10}}>
-                <div style={{flex:1,height:8,background:'rgba(29,95,173,0.15)',borderRadius:4,overflow:'hidden'}}>
+              {/* Barra + stats */}
+              <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:6}}>
+                <div style={{flex:1,height:6,background:'rgba(29,95,173,0.15)',borderRadius:3,overflow:'hidden'}}>
                   <div style={{height:'100%',width:`${lavInfo.pct}%`,
-                    background:lavInfo.proj.color||'#1D5FAD',borderRadius:4,transition:'width 0.4s'}}/>
+                    background:lavInfo.proj.color||'#1D5FAD',borderRadius:3,transition:'width 0.4s'}}/>
                 </div>
-                <span style={{fontSize:14,fontWeight:800,color:'#0d2d5e',minWidth:38,textAlign:'right'}}>
+                <span style={{fontSize:13,fontWeight:800,color:'#0d2d5e',minWidth:38,textAlign:'right'}}>
                   {lavInfo.pct}%
                 </span>
               </div>
-
-              {/* Stats + utensile */}
               <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
                 <span style={{fontSize:12,color:'#64748b'}}>
                   <b style={{color:'#16a34a'}}>{lavInfo.done}</b> completati &nbsp;·&nbsp;
                   <b style={{color:'#1D5FAD'}}>{lavInfo.inMac}</b> in corso &nbsp;·&nbsp;
                   <b style={{color:'#94a3b8'}}>{lavInfo.daFare}</b> da fare
                 </span>
-                {sessMatch&&sessLive?.utensile&&(
-                  <span style={{marginLeft:'auto',fontSize:11,fontWeight:700,color:'#0d2d5e',
-                    background:'#eff6ff',padding:'3px 10px',borderRadius:6,fontFamily:'monospace',flexShrink:0}}>
-                    {sessLive.utensile}
-                    {sessLive.t_number&&(
-                      <span style={{color:'#1D5FAD',marginLeft:8}}>T{sessLive.t_number}</span>
-                    )}
-                  </span>
-                )}
               </div>
-
-              {/* ETA — riga semplice */}
-              {etaCalc&&(
-                <div style={{display:'flex',alignItems:'center',gap:8,
-                  marginTop:6,padding:'7px 10px',borderRadius:8,flexWrap:'wrap',
-                  background: etaCalc.anomalia ? '#fef2f2' : '#f0f7ff',
-                  border: `1px solid ${etaCalc.anomalia ? '#fca5a5' : '#bfdbfe'}`}}>
-                  {etaCalc.anomalia&&(
-                    <span style={{fontSize:10,fontWeight:800,color:'#dc2626',
-                      background:'#fff',padding:'2px 7px',borderRadius:4,
-                      border:'1px solid #fca5a5',flexShrink:0}}>CICLO LUNGO</span>
-                  )}
-                  <span style={{fontSize:11,color: etaCalc.anomalia?'#dc2626':'#1D5FAD'}}>
-                    pgm corrente: <b>{etaCalc.etaFmtPgm}</b>
-                  </span>
-                  <span style={{fontSize:11,color:'#64748b'}}>·</span>
-                  <span style={{fontSize:11,color:'#0d2d5e'}}>
-                    fine pallet: <b>{etaCalc.etaFmtPallet}</b>
-                  </span>
-                  <span style={{marginLeft:'auto',fontSize:10,color:'#94a3b8',fontStyle:'italic',flexShrink:0}}>
-                    {etaCalc.nCampioni >= 2 ? `da ${etaCalc.nCampioni} cicli reali`
-                     : etaCalc.fontePgm === 'media globale' ? 'media globale'
-                     : 'da tempi CAM'}
-                  </span>
-                </div>
-              )}
             </div>
           ):(
             <div style={{background:'#fff',border:'1px solid #e2e8f0',borderRadius:12,
@@ -598,6 +613,18 @@ export default function Home(){
                           <span style={{fontSize:11,color:c.fg,opacity:0.7}}>{info.done}/{info.tot} pgm</span>
                           <span style={{fontSize:13,fontWeight:800,color:c.fg}}>{info.pct}%</span>
                         </div>
+                        {(()=>{
+                          const eta = etaPallet(n)
+                          if(!eta) return null
+                          const etaBg = isLav ? 'rgba(29,95,173,0.15)' : 'rgba(0,0,0,0.08)'
+                          return(
+                            <div style={{fontSize:11,fontWeight:700,color:c.fg,
+                              background:etaBg,borderRadius:4,padding:'2px 5px',
+                              textAlign:'center',marginTop:2}}>
+                              {eta.fmt}
+                            </div>
+                          )
+                        })()}
                       </>
                     ):(
                       <div style={{fontSize:11,fontWeight:600,color:'#cbd5e1',marginTop:'auto'}}>Vuoto</div>
@@ -741,126 +768,183 @@ export default function Home(){
             Metriche turno
           </div>
 
-          {/* Da fare con % completamento */}
+          {/* Card metriche — compatta, gerarchizzata */}
           {(()=>{
             const totale = allPgm.length
             const completatiTot = allPgm.filter(p=>p.stato==='completato').length
             const pctTot = totale ? Math.round(completatiTot/totale*100) : 0
-            return (
-              <div style={{background:'#eff6ff',borderRadius:10,padding:'12px 16px'}}>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:2}}>
-                  <div style={{fontSize:32,fontWeight:900,color:'#0d2d5e',lineHeight:1}}>{daFareTot}</div>
-                  <div style={{fontSize:13,fontWeight:700,color:'#1D5FAD'}}>{pctTot}%</div>
-                </div>
-                <div style={{fontSize:12,fontWeight:700,color:'#0d2d5e',marginBottom:4}}>Da fare</div>
-                <div style={{height:4,background:'#bfdbfe',borderRadius:2,overflow:'hidden',marginBottom:4}}>
-                  <div style={{height:'100%',width:`${pctTot}%`,background:'#1D5FAD',borderRadius:2,transition:'width 0.4s'}}/>
-                </div>
-                <div style={{fontSize:10,color:'#1D5FAD',opacity:0.8}}>
-                  {completatiTot}/{totale} pgm · {projects.length} lavori
-                </div>
-              </div>
-            )
-          })()}
-
-          {/* In macchina con ritmo */}
-          {(()=>{
-            // Ritmo: completatiOggi / ore turno trascorse (stimiamo 8h turno dalle 06:00)
-            const ora = now.getHours()
-            const oreTurno = Math.max(0.5, ora >= 6 ? ora - 6 : ora + 18) // ore dall'inizio turno
-            const ritmo = oreTurno > 0 ? (completatiOggi / oreTurno).toFixed(1) : '—'
-            return (
-              <div style={{background:'#dbeafe',borderRadius:10,padding:'12px 16px'}}>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:2}}>
-                  <div style={{fontSize:32,fontWeight:900,color:'#1D5FAD',lineHeight:1}}>{inMacTot}</div>
-                  {completatiOggi > 0 && <div style={{fontSize:12,fontWeight:700,color:'#1e40af'}}>~{ritmo}/h</div>}
-                </div>
-                <div style={{fontSize:12,fontWeight:700,color:'#1D5FAD',marginBottom:2}}>In macchina</div>
-                <div style={{fontSize:10,color:'#1D5FAD',opacity:0.8}}>
-                  {completatiOggi} completati oggi
-                </div>
-              </div>
-            )
-          })()}
-
-          {/* Completati oggi con stima fine */}
-          {(()=>{
             const ora = now.getHours()
             const oreTurno = Math.max(0.5, ora >= 6 ? ora - 6 : ora + 18)
-            const ritmo = completatiOggi > 0 ? completatiOggi / oreTurno : null
-            let stimaLabel = null
-            if (ritmo && daFareTot > 0) {
-              const oreRim = daFareTot / ritmo
-              if (oreRim < 1) stimaLabel = `~${Math.round(oreRim*60)}min`
-              else if (oreRim < 24) stimaLabel = `~${oreRim.toFixed(1)}h`
-              else stimaLabel = `~${Math.round(oreRim/24)}gg`
-            }
-            return (
-              <div style={{background:'#dcfce7',borderRadius:10,padding:'12px 16px'}}>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:2}}>
-                  <div style={{fontSize:32,fontWeight:900,color:'#166534',lineHeight:1}}>{completatiOggi}</div>
-                  {stimaLabel && <div style={{fontSize:11,fontWeight:700,color:'#15803d',textAlign:'right',lineHeight:1.3}}>
-                    fine<br/>{stimaLabel}
-                  </div>}
+            const ritmo = oreTurno > 0 ? (completatiOggi / oreTurno).toFixed(1) : null
+            return(
+              <div style={{background:'#fff',border:'1px solid #e2e8f0',borderRadius:12,padding:'12px 14px'}}>
+                {/* Principale: completati oggi */}
+                <div style={{background:'#eff6ff',borderRadius:8,padding:'10px 12px',marginBottom:8}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline'}}>
+                    <div style={{fontSize:30,fontWeight:900,color:'#0d2d5e',lineHeight:1}}>{completatiOggi}</div>
+                    {ritmo&&completatiOggi>0&&(
+                      <div style={{fontSize:12,fontWeight:700,color:'#1D5FAD'}}>~{ritmo}/h</div>
+                    )}
+                  </div>
+                  <div style={{fontSize:11,fontWeight:700,color:'#1D5FAD',marginTop:2}}>completati oggi</div>
                 </div>
-                <div style={{fontSize:12,fontWeight:700,color:'#166534',marginBottom:2}}>Completati oggi</div>
-                <div style={{fontSize:10,color:'#166534',opacity:0.8}}>
-                  {stimaLabel ? `stima al ritmo attuale` : 'nel turno corrente'}
+                {/* Secondari: griglia 2x2 */}
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginBottom:8}}>
+                  <div style={{background:'#f8fafc',borderRadius:7,padding:'8px 10px'}}>
+                    <div style={{fontSize:22,fontWeight:900,color:'#1D5FAD',lineHeight:1}}>{inMacTot}</div>
+                    <div style={{fontSize:10,color:'#64748b',marginTop:2}}>in macchina</div>
+                  </div>
+                  <div style={{background:'#f8fafc',borderRadius:7,padding:'8px 10px'}}>
+                    <div style={{fontSize:22,fontWeight:900,color:'#0d2d5e',lineHeight:1}}>{daFareTot}</div>
+                    <div style={{fontSize:10,color:'#64748b',marginTop:2}}>da fare</div>
+                  </div>
+                  <div style={{background:critici>0?'#fef2f2':'#f8fafc',borderRadius:7,padding:'8px 10px'}}>
+                    <div style={{fontSize:22,fontWeight:900,color:critici>0?'#dc2626':'#64748b',lineHeight:1}}>{critici}</div>
+                    <div style={{fontSize:10,color:critici>0?'#dc2626':'#64748b',marginTop:2}}>critici</div>
+                  </div>
+                  <div style={{background:'#f8fafc',borderRadius:7,padding:'8px 10px'}}>
+                    <div style={{fontSize:13,fontWeight:800,color:'#0d2d5e',lineHeight:1}}>{pctTot}%</div>
+                    <div style={{height:4,background:'#bfdbfe',borderRadius:2,overflow:'hidden',margin:'4px 0 2px'}}>
+                      <div style={{height:'100%',width:`${pctTot}%`,background:'#1D5FAD',borderRadius:2}}/>
+                    </div>
+                    <div style={{fontSize:10,color:'#64748b'}}>{completatiTot}/{totale} pgm</div>
+                  </div>
                 </div>
+                {/* Fermo giornaliero inline */}
+                {sessLive&&(()=>{
+                  const fermoSec = sessLive?.fermo_sec_giornaliero||0
+                  if(fermoSec===0&&sessLive?.attiva&&!sessLive?.in_pausa) return null
+                  const hh=Math.floor(fermoSec/3600), mm=Math.floor((fermoSec%3600)/60), ss=fermoSec%60
+                  const fermoFmt=hh>0?`${hh}h ${String(mm).padStart(2,'0')}m`:mm>0?`${mm}m ${String(ss).padStart(2,'0')}s`:`${ss}s`
+                  const isFermo=!sessLive?.attiva||sessLive?.in_pausa
+                  const fermoColor=fermoSec>3600?'#dc2626':fermoSec>1800?'#d97706':'#64748b'
+                  const fermoBg=fermoSec>3600?'#fef2f2':fermoSec>1800?'#fffbeb':'#f8fafc'
+                  return(
+                    <div style={{background:fermoBg,border:`1px solid ${fermoColor}33`,borderRadius:7,
+                      padding:'8px 10px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                      <div>
+                        <div style={{fontSize:16,fontWeight:900,color:fermoColor,fontFamily:'monospace',lineHeight:1}}>{fermoFmt}</div>
+                        <div style={{fontSize:10,color:fermoColor,marginTop:2}}>
+                          {isFermo?'macchina ferma':'fermo oggi'}
+                        </div>
+                      </div>
+                      {isFermo&&(
+                        <span style={{fontSize:9,fontWeight:800,color:fermoColor,
+                          background:`${fermoColor}18`,padding:'2px 6px',borderRadius:3,letterSpacing:'0.05em'}}>
+                          FERMO
+                        </span>
+                      )}
+                    </div>
+                  )
+                })()}
               </div>
             )
           })()}
 
-          {/* Tempo fermo giornaliero — sempre visibile, anche a macchina ferma */}
+          {/* ── ORE MACCHINA RIMANENTI — nuova card ─────────────────── */}
           {(()=>{
-            // Non mostrare se sessLive non è ancora caricato
-            if (!sessLive) return null
-            const fermoSec = sessLive?.fermo_sec_giornaliero || 0
-            // Nascondi se macchina attiva e nessun fermo ancora accumulato
-            if (fermoSec === 0 && sessLive?.attiva && !sessLive?.in_pausa) return null
-            const hh = Math.floor(fermoSec / 3600)
-            const mm = Math.floor((fermoSec % 3600) / 60)
-            const ss = fermoSec % 60
-            const fermoFmt = hh > 0
-              ? `${hh}h ${String(mm).padStart(2,'0')}m`
-              : mm > 0
-                ? `${mm}m ${String(ss).padStart(2,'0')}s`
-                : `${ss}s`
-            const isFermo = !sessLive?.attiva || sessLive?.in_pausa
-            const fermoColor   = fermoSec > 3600 ? '#dc2626' : fermoSec > 1800 ? '#d97706' : '#64748b'
-            const fermoBg      = fermoSec > 3600 ? '#fef2f2' : fermoSec > 1800 ? '#fffbeb' : '#f8fafc'
-            return (
-              <div style={{background:fermoBg,border:`1px solid ${fermoColor}33`,
-                borderRadius:10,padding:'12px 16px'}}>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:2}}>
-                  <div style={{fontSize:28,fontWeight:900,color:fermoColor,lineHeight:1,
-                    fontFamily:'monospace'}}>{fermoFmt}</div>
-                  {isFermo&&(
-                    <span style={{fontSize:10,fontWeight:800,color:fermoColor,
-                      background:`${fermoColor}18`,padding:'2px 7px',borderRadius:4,
-                      letterSpacing:'0.05em'}}>
-                      FERMO
-                    </span>
-                  )}
+            const palletAttivi = [1,2,3,4,5,6]
+              .map(n=>({ n, info: palletInfo(n), eta: etaPallet(n), colors: palletColors(n) }))
+              .filter(x=>x.info&&x.eta)
+              .sort((a,b)=>a.eta.sec-b.eta.sec)
+            if(!palletAttivi.length) return null
+            const totSec = palletAttivi.reduce((acc,x)=>acc+x.eta.sec,0)
+            const fmtTot=(sec)=>{
+              if(sec<3600) return `~${Math.round(sec/60)} min`
+              const h=Math.floor(sec/3600), m=Math.round((sec%3600)/60)
+              return m>0?`~${h}h ${m}m`:`~${h}h`
+            }
+            return(
+              <div style={{background:'#faf5ff',border:'1.5px solid #a78bfa',borderRadius:12,padding:'12px 14px'}}>
+                <div style={{fontSize:10,fontWeight:800,letterSpacing:'0.1em',color:'#6d28d9',
+                  textTransform:'uppercase',marginBottom:8}}>ore macchina rimanenti</div>
+                <div style={{display:'flex',flexDirection:'column',gap:0}}>
+                  {palletAttivi.map(({n,info,eta,colors},i)=>{
+                    const isLive=colors.label==='LIVE'
+                    return(
+                      <div key={n} onClick={()=>nav('/progetti',{state:{openId:info.proj.id}})}
+                        style={{display:'flex',alignItems:'center',gap:8,
+                          padding:'7px 0',cursor:'pointer',
+                          borderTop:i>0?'1px solid #ede9fe':'none'}}>
+                        <div style={{fontSize:11,fontWeight:800,color:isLive?'#4c1d95':'#6d28d9',
+                          minWidth:22,background:isLive?'#ddd6fe':'#ede9fe',
+                          borderRadius:4,padding:'1px 4px',textAlign:'center'}}>
+                          P{n}
+                        </div>
+                        <div style={{flex:1,overflow:'hidden'}}>
+                          <div style={{fontSize:11,fontWeight:700,color:'#3b0764',
+                            overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                            {info.proj.name}
+                          </div>
+                          <div style={{fontSize:9,color:'#7c3aed'}}>
+                            {isLive?'IN ESECUZIONE':'in attesa'} · {eta.nRimasti} pgm
+                          </div>
+                        </div>
+                        <div style={{textAlign:'right',flexShrink:0}}>
+                          <div style={{fontSize:13,fontWeight:900,fontFamily:'monospace',
+                            color:isLive?'#4c1d95':'#5b21b6'}}>
+                            {eta.fmt}
+                          </div>
+                          {!eta.haStima&&(
+                            <div style={{fontSize:9,color:'#a78bfa'}}>stima grezza</div>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
-                <div style={{fontSize:12,fontWeight:700,color:fermoColor,marginBottom:1}}>
-                  Tempo fermo oggi
-                </div>
-                <div style={{fontSize:10,color:fermoColor,opacity:0.7}}>
-                  {isFermo ? 'macchina ferma adesso' : 'accumulato nel turno'}
+                <div style={{borderTop:'1px solid #c4b5fd',marginTop:6,paddingTop:6,
+                  display:'flex',justifyContent:'space-between',alignItems:'baseline'}}>
+                  <span style={{fontSize:10,color:'#6d28d9'}}>totale rimanente</span>
+                  <span style={{fontSize:14,fontWeight:900,fontFamily:'monospace',color:'#3b0764'}}>
+                    {fmtTot(totSec)}
+                  </span>
                 </div>
               </div>
             )
           })()}
 
-          {/* Critici */}
-          <div style={{background:'#fef2f2',borderRadius:10,padding:'12px 16px'}}>
-            <div style={{fontSize:32,fontWeight:900,color:'#dc2626',lineHeight:1,marginBottom:2}}>{critici}</div>
-            <div style={{fontSize:12,fontWeight:700,color:'#dc2626',marginBottom:1}}>Critici</div>
-            <div style={{fontSize:10,color:'#dc2626',opacity:0.7}}>scaduti o in scadenza oggi</div>
+          {/* Utensili problemi */}
+          <div style={{background:'#fff',border:'1px solid #e2e8f0',borderRadius:12,padding:'10px 14px'}}>
+            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+              <span style={{fontSize:10,fontWeight:800,letterSpacing:'0.1em',color:'#64748b',textTransform:'uppercase'}}>
+                Utensili — attenzione
+              </span>
+              {utensiliProblema.length>0?(
+                <span style={{fontSize:10,fontWeight:800,color:'#dc2626',
+                  background:'#fef2f2',padding:'2px 8px',borderRadius:8}}>
+                  {utensiliProblema.length}
+                </span>
+              ):(
+                <span style={{fontSize:11,color:'#94a3b8'}}>— in attesa dati</span>
+              )}
+            </div>
+            {utensiliProblema.length===0?(
+              <div style={{color:'#22c55e',fontSize:13,fontWeight:600}}>✓ Nessun problema rilevato</div>
+            ):(
+              <div style={{display:'flex',flexDirection:'column',gap:5}}>
+                {utensiliProblema.map(u=>(
+                  <div key={u.alias}
+                    style={{display:'flex',alignItems:'center',gap:10,
+                      background:u.bg,border:`1px solid ${u.border}`,
+                      borderRadius:8,padding:'6px 10px'}}>
+                    <span style={{fontSize:10,fontWeight:800,color:u.color,
+                      background:'#fff',padding:'2px 8px',borderRadius:4,
+                      border:`1px solid ${u.border}`,flexShrink:0,
+                      minWidth:68,textAlign:'center'}}>{u.label}</span>
+                    <span style={{fontSize:12,fontWeight:700,color:'#1e293b',
+                      fontFamily:'monospace',flex:1,
+                      overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{u.alias}</span>
+                    {u.detail&&<span style={{fontSize:11,color:u.color,opacity:0.8,
+                      flexShrink:0,maxWidth:160,overflow:'hidden',
+                      textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{u.detail}</span>}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
-        </div>
+        </div>{/* fine col-side */}
 
       </div>
     </div>

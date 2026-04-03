@@ -1418,7 +1418,7 @@ function LancioNCModal({project, toolsDB, initialSelectedIds, onLancia, onClose}
   )
 }
 
-function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onSaveAsTemplate,onLanciaNC,palletDisponibili=[],palletStato=[]}){
+function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onSaveAsTemplate,onLanciaNC,palletDisponibili=[],palletStato=[],delivery=null}){
   const navPD = useNavigate()
   // Carica tools_machine una volta sola per questo progetto
   const [toolsDB, setToolsDB] = useState(null)
@@ -1604,9 +1604,8 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
         {(()=>{
           const taskTot = project.steps.flatMap(s=>s.tasks||[]).length
           const taskDone = project.steps.flatMap(s=>s.tasks||[]).filter(t=>t.done).length
-          const del = (palletDisponibili||[]).find ? null : null  // delivery passata dal parent
-          // Scadenza — la leggiamo da palletStato per semplicità (non disponibile qui)
-          // La mostriamo solo se mpfTot > 0
+          const days = delivery?.dueDate&&!delivery.delivered ? daysUntil(delivery.dueDate) : null
+          const urg = days!==null ? deliveryUrgency(days) : null
           return(
             <div style={{display:'grid',gridTemplateColumns:'1fr auto',gap:16,alignItems:'center',marginBottom:12}}>
               <div>
@@ -1630,8 +1629,23 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
                   </>
                 )}
               </div>
-              {/* StatusBadge compatto a destra */}
-              <StatusBadge progress={progress}/>
+              {/* Destra: scadenza + status badge */}
+              <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:5,flexShrink:0}}>
+                {urg&&days!==null&&(
+                  <span style={{fontSize:12,fontWeight:700,color:urg.color,
+                    background:urg.bg,padding:'3px 10px',borderRadius:6,
+                    border:`1px solid ${urg.color}33`,whiteSpace:'nowrap'}}>
+                    {urg.dot} {days===0?'OGGI':days<0?`Scaduto ${Math.abs(days)}gg fa`:`${days}gg alla consegna`}
+                  </span>
+                )}
+                {delivery?.delivered&&(
+                  <span style={{fontSize:12,fontWeight:700,color:T.green,
+                    background:T.greenBg,padding:'3px 10px',borderRadius:6}}>
+                    ✓ Consegnato
+                  </span>
+                )}
+                <StatusBadge progress={progress}/>
+              </div>
             </div>
           )
         })()}
@@ -3243,7 +3257,7 @@ export default function Progetti(){
           {isOnEditor?(
             <TemplateEditor template={editingTemplate} onSave={saveTemplate} onCancel={()=>{setPage('templates');setEditingTemplate(null)}}/>
           ):isOnProject?(
-            <ProjectDetail project={selectedProject} onBack={()=>setSelectedId(null)} onUpdate={updateProject} onDelete={deleteProject} onArchive={archiveProject} templates={templates} onSaveAsTemplate={tmpl=>{setTemplates(ts=>{const next=ts.some(t=>t.id===tmpl.id)?ts.map(t=>t.id===tmpl.id?tmpl:t):[...ts,tmpl];persistTemplates(next);return next})}} onLanciaNC={lanciaNC} palletDisponibili={palletDisponibili} palletStato={palletState}/>
+            <ProjectDetail project={selectedProject} onBack={()=>setSelectedId(null)} onUpdate={updateProject} onDelete={deleteProject} onArchive={archiveProject} templates={templates} onSaveAsTemplate={tmpl=>{setTemplates(ts=>{const next=ts.some(t=>t.id===tmpl.id)?ts.map(t=>t.id===tmpl.id?tmpl:t):[...ts,tmpl];persistTemplates(next);return next})}} onLanciaNC={lanciaNC} palletDisponibili={palletDisponibili} palletStato={palletState} delivery={getDelivery(selectedProject?.id)}/>
           ):page==='home'?(
             <HomePage projects={projects} deliveries={deliveries} palletState={palletState} setupData={setupData}
               onNavigateProject={id=>{setSelectedId(id);setPage('projects')}}

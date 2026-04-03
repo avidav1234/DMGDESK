@@ -641,18 +641,60 @@ def _calcola_previsione_vita(projects: list, tools_db: dict, classify_fn, ordine
         ]
         if not abilitati: continue
 
-        best = max(abilitati, key=lambda t: t.get("life_remaining") or 0)
-        life_rem = best.get("life_remaining")
-        life_tot = best.get("life_total")
+        # ── Logica gemelli corretta ───────────────────────────────────────────
+        # Ogni programma è calibrato per consumare ~1 vita di utensile.
+        # Al termine del programma il duplo usato viene inibito.
+        # Il programma successivo chiama lo stesso alias e Siemens prende
+        # il PRIMO gemello non inibito — quindi i gemelli si consumano uno per programma.
+        #
+        # Algoritmo: ordina i gemelli per vita rimanente decrescente
+        # (Siemens prende il primo disponibile, che è tipicamente quello con più vita).
+        # Poi assegna un gemello per programma e verifica se la vita copre il consumo.
 
-        if life_rem is not None and life_rem > 0:
-            vita_rim_min = round(life_rem)
-        elif life_tot and best.get("life_percent") is not None:
-            vita_rim_min = round((best["life_percent"] / 100) * life_tot)
-        else:
-            continue
+        def vita_gemello(t):
+            lr = t.get("life_remaining")
+            lt = t.get("life_total")
+            lp = t.get("life_percent")
+            if lr is not None and lr > 0:
+                return round(lr)
+            if lt and lp is not None:
+                return round((lp / 100) * lt)
+            return 0
 
-        if vita_rim_min <= 0: continue
+        # Ordina gemelli per vita decrescente (Siemens prende il più "fresco")
+        gemelli_ordinati = sorted(abilitati, key=vita_gemello, reverse=True)
+        n_gemelli = len(gemelli_ordinati)
+
+        critico = None
+        for i, pgm in enumerate(pgm_list):
+            # Quale gemello userebbe questo programma?
+            if i < len(gemelli_ordinati):
+                gemello = gemelli_ordinati[i]
+                vita_disponibile = vita_gemello(gemello)
+            else:
+                # Più programmi che gemelli → non c'è utensile disponibile
+                critico = {
+                    **pgm,
+                    "minuto_rottura":   0,
+                    "consumo_al_punto": pgm["tempo"],
+                    "nessun_gemello":   True,
+                }
+                break
+
+            consumo = pgm["tempo"]
+            if consumo > vita_disponibile:
+                # Questo programma supera la vita del gemello assegnato
+                critico = {
+                    **pgm,
+                    "minuto_rottura":   max(0, vita_disponibile),
+                    "consumo_al_punto": consumo,
+                    "vita_gemello":     vita_disponibile,
+                }
+                break
+
+        # Calcola consumo totale per il report
+        consumo_tot = sum(p["tempo"] for p in pgm_list)
+        vita_tot = sum(vita_gemello(g) for g in gemelli_ordinati)
 
         consumo = 0
         critico = None
@@ -668,10 +710,10 @@ def _calcola_previsione_vita(projects: list, tools_db: dict, classify_fn, ordine
         if critico:
             alerts.append({
                 "alias":              alias,
-                "vita_rimanente":     vita_rim_min,
-                "vita_rimanente_pct": round(best.get("life_percent") or 0, 1),
-                "consumo_totale":     consumo,
-                "surplus_mancante":   consumo - vita_rim_min,
+                "vita_rimanente":     vita_tot,
+                "n_gemelli":          n_gemelli,
+                "consumo_totale":     consumo_tot,
+                "surplus_mancante":   consumo_tot - vita_tot,
                 "programmi_n":        len(pgm_list),
                 "programma_critico":  critico,
                 "ok":                 False,
@@ -721,8 +763,7 @@ def _calcola_previsione_vita(projects: list, tools_db: dict, classify_fn, ordine
 
     alerts = []
     for alias, pgm_list in utensile_queue.items():
-        # Trova vita rimanente: life_remaining è in SECONDI → converti in minuti
-        vita_rim_min = None
+        # Logica gemelli: ogni programma consuma ~1 vita di utensile → 1 gemello per programma
         abilitati = [
             t for t in tools_db.values()
             if (t.get("name") or "").upper().strip() == alias
@@ -732,40 +773,38 @@ def _calcola_previsione_vita(projects: list, tools_db: dict, classify_fn, ordine
         if not abilitati:
             continue
 
-        # Usa il gemello con più vita rimanente
-        best = max(abilitati, key=lambda t: t.get("life_remaining") or 0)
-        life_rem_sec = best.get("life_remaining")   # minuti
-        life_tot_sec = best.get("life_total")       # minuti
+        def _vita(t):
+            lr = t.get("life_remaining")
+            lt, lp = t.get("life_total"), t.get("life_percent")
+            if lr is not None and lr > 0: return round(lr)
+            if lt and lp is not None: return round((lp / 100) * lt)
+            return 0
 
-        if life_rem_sec is not None and life_rem_sec > 0:
-            vita_rim_min = round(life_rem_sec)   # già in minuti
-        elif life_tot_sec and best.get("life_percent") is not None:
-            # Fallback: percentuale × vita totale (entrambi in minuti)
-            vita_rim_min = round((best["life_percent"] / 100) * life_tot_sec)
+        gemelli_ord = sorted(abilitati, key=_vita, reverse=True)
 
-        if vita_rim_min is None or vita_rim_min <= 0:
-            continue
-
-        # Simula consumo in ordine
-        consumo = 0
         critico = None
-        for pgm in pgm_list:
-            consumo += pgm["tempo"]
-            if consumo > vita_rim_min and critico is None:
-                min_nel_pgm = vita_rim_min - (consumo - pgm["tempo"])
-                critico = {
-                    **pgm,
-                    "minuto_rottura": max(0, min_nel_pgm),
-                    "consumo_al_punto": consumo,
-                }
+        for i, pgm in enumerate(pgm_list):
+            if i < len(gemelli_ord):
+                vita_disponibile = _vita(gemelli_ord[i])
+            else:
+                critico = {**pgm, "minuto_rottura": 0,
+                           "consumo_al_punto": pgm["tempo"], "nessun_gemello": True}
+                break
+            if pgm["tempo"] > vita_disponibile:
+                critico = {**pgm, "minuto_rottura": max(0, vita_disponibile),
+                           "consumo_al_punto": pgm["tempo"]}
+                break
+
+        consumo_tot = sum(p["tempo"] for p in pgm_list)
+        vita_tot = sum(_vita(g) for g in gemelli_ord)
 
         if critico:
             alerts.append({
                 "alias":             alias,
-                "vita_rimanente":    vita_rim_min,
-                "vita_rimanente_pct": round(best.get("life_percent") or 0, 1),
-                "consumo_totale":    consumo,
-                "surplus_mancante":  consumo - vita_rim_min,
+                "vita_rimanente":    vita_tot,
+                "n_gemelli":         len(gemelli_ord),
+                "consumo_totale":    consumo_tot,
+                "surplus_mancante":  consumo_tot - vita_tot,
                 "programmi_n":       len(pgm_list),
                 "programma_critico": critico,
                 "ok":                False,

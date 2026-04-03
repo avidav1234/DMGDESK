@@ -488,22 +488,38 @@ function FresaturaPanel({task,onUpdateTask,toolsDB,projectId,projectName}){
     }
     const alerts=[]
     for(const [alias, pgms] of Object.entries(perUtensile)){
-      // Trova vita rimanente (life_percent = minuti)
+      // Logica gemelli: ogni programma consuma ~1 vita → 1 gemello per programma
+      // Siemens prende il primo gemello non inibito in ordine di vita decrescente
       const utensili=Object.values(toolsDB).filter(t=>
         (t.name||'').toUpperCase().trim()===alias && t.is_enabled && !t.is_worn)
       if(!utensili.length) continue
-      // life_remaining e life_total sono già in minuti (Sinumerik 840D)
-      const lifeRem=Math.max(...utensili.map(t=>t.life_remaining||0))
-      const lifeTot=Math.max(...utensili.map(t=>t.life_total||0))
-      const vitaRim=lifeRem>0
-        ? Math.round(lifeRem)
-        : Math.round((Math.max(...utensili.map(t=>t.life_percent||0))/100)*lifeTot)
-      let consumo=0, critico=null
-      for(const p of pgms){
-        consumo+=parseInt(p.tempoStimato)||0
-        if(consumo>vitaRim && !critico) critico={...p, minutiRottura: vitaRim-(consumo-(parseInt(p.tempoStimato)||0))}
+
+      const vitaGemello = t => {
+        if(t.life_remaining>0) return Math.round(t.life_remaining)
+        if(t.life_total&&t.life_percent!=null) return Math.round((t.life_percent/100)*t.life_total)
+        return 0
       }
-      if(critico) alerts.push({alias, vitaRim, consumoTot:consumo, critico, mancanti:consumo-vitaRim})
+      // Ordina per vita decrescente (Siemens prende il più "fresco")
+      const gemelli=[...utensili].sort((a,b)=>vitaGemello(b)-vitaGemello(a))
+
+      let critico=null
+      for(let i=0;i<pgms.length;i++){
+        const p=pgms[i]
+        const tempo=parseInt(p.tempoStimato)||0
+        if(i>=gemelli.length){
+          // Più programmi che gemelli disponibili
+          critico={...p, minutiRottura:0, nessunGemello:true}
+          break
+        }
+        const vita=vitaGemello(gemelli[i])
+        if(tempo>vita){
+          critico={...p, minutiRottura:Math.max(0,vita), vitaGemello:vita}
+          break
+        }
+      }
+      const consumoTot=pgms.reduce((s,p)=>s+(parseInt(p.tempoStimato)||0),0)
+      const vitaTot=gemelli.reduce((s,g)=>s+vitaGemello(g),0)
+      if(critico) alerts.push({alias, vitaRim:vitaTot, nGemelli:gemelli.length, consumoTot, critico, mancanti:consumoTot-vitaTot})
     }
     return alerts.sort((a,b)=>b.mancanti-a.mancanti)
   })()

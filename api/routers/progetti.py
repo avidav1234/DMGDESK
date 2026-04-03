@@ -696,17 +696,6 @@ def _calcola_previsione_vita(projects: list, tools_db: dict, classify_fn, ordine
         consumo_tot = sum(p["tempo"] for p in pgm_list)
         vita_tot = sum(vita_gemello(g) for g in gemelli_ordinati)
 
-        consumo = 0
-        critico = None
-        for pgm in pgm_list:
-            consumo += pgm["tempo"]
-            if consumo > vita_rim_min and critico is None:
-                critico = {
-                    **pgm,
-                    "minuto_rottura":   max(0, vita_rim_min - (consumo - pgm["tempo"])),
-                    "consumo_al_punto": consumo,
-                }
-
         if critico:
             alerts.append({
                 "alias":              alias,

@@ -708,6 +708,85 @@ export default function CodaLavorazione() {
         <style>{`@keyframes blink{0%,100%{opacity:1}50%{opacity:0.3}}`}</style>
       </div>
 
+        {/* ── Card stato macchina compatta ─────────────────────────── */}
+        <div style={{
+          background: inLavorazione ? '#0d2d5e' : '#ffffff',
+          border: '1px solid ' + (inLavorazione ? '#1a4080' : '#e2e8f0'),
+          borderRadius: 12, padding: '12px 16px', flexShrink: 0
+        }}>
+          {/* Riga principale: stato + programma + utensile */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: prog || utensile ? 10 : 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{
+                width: 10, height: 10, borderRadius: '50%', flexShrink: 0,
+                background: inLavorazione ? '#22c55e' : '#94a3b8',
+                boxShadow: inLavorazione ? '0 0 6px #22c55e' : 'none'
+              }}/>
+              <span style={{ fontSize: 13, fontWeight: 800,
+                color: inLavorazione ? '#fff' : '#374151' }}>
+                {inLavorazione ? 'IN ESECUZIONE' : 'FERMA'}
+              </span>
+            </div>
+            {macchina?.pallet_attivo > 0 && (
+              <span style={{ fontSize: 11, color: inLavorazione ? '#93c5fd' : '#94a3b8' }}>
+                Pallet {macchina.pallet_attivo}
+              </span>
+            )}
+            {overrideStato?.ridotto && (
+              <span style={{ fontSize: 11, fontWeight: 700, color: '#92400e',
+                background: '#fef3c7', padding: '2px 8px', borderRadius: 5, marginLeft: 'auto' }}>
+                Feed {overrideStato.feed}% · Man {overrideStato.mandrino}%
+              </span>
+            )}
+          </div>
+
+          {/* Programma + utensile */}
+          {(prog || utensile) && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div>
+                <div style={{ fontSize: 9, letterSpacing: 1, marginBottom: 4,
+                  color: inLavorazione ? '#93c5fd' : '#94a3b8', textTransform: 'uppercase' }}>Programma</div>
+                {prog ? (
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'baseline' }}>
+                    {[
+                      { label: 'COMM.', val: prog.commessa },
+                      { label: 'POS.', val: prog.posizione },
+                      { label: 'FASE', val: prog.fase },
+                      { label: 'N°', val: prog.seq },
+                    ].filter(x => x.val).map(x => (
+                      <div key={x.label} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                        <span style={{ fontSize: 9, color: inLavorazione ? '#93c5fd' : '#94a3b8',
+                          letterSpacing: 1, marginBottom: 1 }}>{x.label}</span>
+                        <span style={{ fontSize: 15, fontWeight: 700, fontFamily: 'monospace',
+                          color: inLavorazione ? '#fff' : '#0d2d5e', lineHeight: 1 }}>{x.val}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <span style={{ fontSize: 13, color: inLavorazione ? '#4e7aad' : '#94a3b8' }}>—</span>
+                )}
+              </div>
+              <div>
+                <div style={{ fontSize: 9, letterSpacing: 1, marginBottom: 4,
+                  color: inLavorazione ? '#93c5fd' : '#94a3b8', textTransform: 'uppercase' }}>Utensile</div>
+                {utensile ? (
+                  <div>
+                    <div style={{ fontSize: 15, fontWeight: 800, fontFamily: 'monospace',
+                      color: inLavorazione ? '#fbbf24' : '#0d2d5e', letterSpacing: '-0.02em' }}>{utensile}</div>
+                    {tNum > 0 && (
+                      <div style={{ fontSize: 11, color: inLavorazione ? '#93c5fd' : '#64748b', marginTop: 2 }}>
+                        T{tNum}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <span style={{ fontSize: 13, color: inLavorazione ? '#4e7aad' : '#94a3b8' }}>—</span>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Allarmi standalone se non IN LAVORAZIONE */}
         {(!inLavorazione) && alarm && alarmTipo === 'allarme' && (
           <div style={{ background: '#fef2f2', border: '1px solid #fca5a5',

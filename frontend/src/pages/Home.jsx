@@ -338,17 +338,24 @@ export default function Home(){
   const utensiliProblema=(()=>{
     const map={}
     ;(setup.non_utilizzati||[]).filter(u=>u.provenienza==='richiesto_da_progetto').forEach(u=>{
-      map[u.alias]={alias:u.alias,tipo:'mancante',label:'MANCANTE',color:'#dc2626',bg:'#fef2f2',border:'#fca5a5',detail:(u.progetti||[]).map(r=>r.progetto).join(', ')}
+      map[u.alias]={alias:u.alias,tipo:'mancante',label:'MANCANTE',color:'#dc2626',bg:'#fef2f2',border:'#fca5a5',
+        detail:(u.progetti||[]).map(r=>r.progetto).join(', '),
+        progetti:u.progetti||[]}
     })
     ;(setup.da_montare||[]).forEach(u=>{
-      if(!map[u.alias]) map[u.alias]={alias:u.alias,tipo:'da_montare',label:'DA MONTARE',color:'#d97706',bg:'#fffbeb',border:'#fcd34d',detail:`pos. ${u.posizione||'—'}`}
+      if(!map[u.alias]) map[u.alias]={alias:u.alias,tipo:'da_montare',label:'DA MONTARE',color:'#d97706',bg:'#fffbeb',border:'#fcd34d',
+        detail:(u.progetti||[]).length>0?(u.progetti||[]).map(r=>r.progetto).join(', '):`pos. ${u.posizione||'—'}`,
+        posizione:u.posizione,progetti:u.progetti||[]}
     })
     ;(setup.fin_vita||[]).forEach(u=>{
       const pct=typeof u.life_percent==='number'?u.life_percent:null
-      if(!map[u.alias]) map[u.alias]={alias:u.alias,tipo:'fin_vita',label:pct!==null?`${pct.toFixed(0)}%`:'FINE VITA',color:'#c2410c',bg:'#fff7ed',border:'#fdba74',detail:`pos. ${u.posizione||'—'}`}
+      if(!map[u.alias]) map[u.alias]={alias:u.alias,tipo:'fin_vita',label:pct!==null?`${pct.toFixed(0)}%`:'FINE VITA',color:'#c2410c',bg:'#fff7ed',border:'#fdba74',
+        detail:(u.progetti||[]).length>0?(u.progetti||[]).map(r=>r.progetto).join(', '):`pos. ${u.position||u.posizione||'—'}`,
+        posizione:u.position||u.posizione,progetti:u.progetti||[]}
     })
     ;(setup.previsione_vita?.utensili_critici||[]).forEach(u=>{
-      if(!map[u.alias]) map[u.alias]={alias:u.alias,tipo:'rischio',label:`pgm ${u.programma_critico||'?'}`,color:'#7c3aed',bg:'#f5f3ff',border:'#c4b5fd',detail:u.progetto||''}
+      if(!map[u.alias]) map[u.alias]={alias:u.alias,tipo:'rischio',label:`pgm ${u.programma_critico||'?'}`,color:'#7c3aed',bg:'#f5f3ff',border:'#c4b5fd',
+        detail:u.progetto||'',progetti:u.progetto?[{progetto:u.progetto,file:u.programma_critico}]:[]}
     })
     return Object.values(map).sort((a,b)=>({mancante:0,da_montare:1,fin_vita:2,rischio:3}[a.tipo]||9)-({mancante:0,da_montare:1,fin_vita:2,rischio:3}[b.tipo]||9))
   })()
@@ -885,19 +892,43 @@ export default function Home(){
               <div style={{display:'flex',flexDirection:'column',gap:5}}>
                 {utensiliProblema.map(u=>(
                   <div key={u.alias}
-                    style={{display:'flex',alignItems:'center',gap:10,
-                      background:u.bg,border:`1px solid ${u.border}`,
+                    style={{background:u.bg,border:`1px solid ${u.border}`,
                       borderRadius:8,padding:'6px 10px'}}>
-                    <span style={{fontSize:10,fontWeight:800,color:u.color,
-                      background:'#fff',padding:'2px 8px',borderRadius:4,
-                      border:`1px solid ${u.border}`,flexShrink:0,
-                      minWidth:68,textAlign:'center'}}>{u.label}</span>
-                    <span style={{fontSize:12,fontWeight:700,color:'#1e293b',
-                      fontFamily:'monospace',flex:1,
-                      overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{u.alias}</span>
-                    {u.detail&&<span style={{fontSize:11,color:u.color,opacity:0.8,
-                      flexShrink:0,maxWidth:160,overflow:'hidden',
-                      textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{u.detail}</span>}
+                    {/* Riga principale */}
+                    <div style={{display:'flex',alignItems:'center',gap:10}}>
+                      <span style={{fontSize:10,fontWeight:800,color:u.color,
+                        background:'#fff',padding:'2px 8px',borderRadius:4,
+                        border:`1px solid ${u.border}`,flexShrink:0,
+                        minWidth:68,textAlign:'center'}}>{u.label}</span>
+                      <span style={{fontSize:12,fontWeight:700,color:'#1e293b',
+                        fontFamily:'monospace',flex:1,
+                        overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{u.alias}</span>
+                      {u.posizione&&<span style={{fontSize:10,color:u.color,opacity:0.7,flexShrink:0}}>
+                        pos.{u.posizione}
+                      </span>}
+                    </div>
+                    {/* Riga contesto: progetti + file */}
+                    {u.progetti?.length>0&&(
+                      <div style={{marginTop:4,paddingTop:4,borderTop:`1px solid ${u.border}`,
+                        display:'flex',flexDirection:'column',gap:2}}>
+                        {u.progetti.slice(0,3).map((r,i)=>(
+                          <div key={i} style={{display:'flex',alignItems:'center',gap:6}}>
+                            <div style={{width:4,height:4,borderRadius:'50%',
+                              background:u.color,flexShrink:0,opacity:0.6}}/>
+                            <span style={{fontSize:10,fontWeight:700,color:u.color,
+                              opacity:0.9,flexShrink:0}}>{r.progetto}</span>
+                            {r.file&&<span style={{fontSize:10,fontFamily:'monospace',
+                              color:'#64748b',overflow:'hidden',textOverflow:'ellipsis',
+                              whiteSpace:'nowrap'}}>{r.file.replace('.MPF','').replace('.mpf','')}</span>}
+                          </div>
+                        ))}
+                        {u.progetti.length>3&&(
+                          <span style={{fontSize:10,color:u.color,opacity:0.6}}>
+                            +{u.progetti.length-3} altri programmi
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

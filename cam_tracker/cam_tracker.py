@@ -571,6 +571,37 @@ class CAMTracker:
         self._com_tried = False
         self._stop = threading.Event()
 
+        # GUI opzionale
+        self.gui = None
+        self._gui_thread = None
+        self._init_gui()
+
+    def _init_gui(self):
+        """Avvia la finestra di stato in un thread separato (solo se tkinter disponibile)."""
+        try:
+            from cam_tracker_gui import TrackerGUI
+            def _run():
+                self.gui = TrackerGUI()
+                self.gui.run()
+            self._gui_thread = threading.Thread(target=_run, daemon=True)
+            self._gui_thread.start()
+            # Aspetta che la GUI sia pronta
+            import time as _t
+            for _ in range(20):
+                if self.gui is not None:
+                    break
+                _t.sleep(0.1)
+        except Exception as e:
+            log.debug(f"[GUI] Non disponibile: {e}")
+
+    def _gui(self, method: str, *args):
+        """Chiama un metodo della GUI in modo sicuro (ignora se GUI non disponibile)."""
+        try:
+            if self.gui:
+                getattr(self.gui, method)(*args)
+        except Exception:
+            pass
+
     def _get_project(self) -> dict | None:
         """
         Tenta EXE/COM prima (path completo → commessa affidabile).
@@ -617,7 +648,6 @@ class CAMTracker:
         # Gestione pausa/ripresa
         if self.current_project and self.session_start:
             if not active and not self.is_paused:
-                # Entra in pausa — congela il tempo accumulato fino ad ora
                 elapsed = now - self.session_start
                 pid = self._project_id(self.current_project)
                 if elapsed >= self.min_session_sec:
@@ -626,16 +656,19 @@ class CAMTracker:
                 self.session_start = None
                 self.is_paused = True
                 log.info(f"[Tracker] PAUSA — {reason}")
+                self._gui("set_progetto", pid, False)
+                self._gui("add_log", f"Pausa — {pid}", "info")
 
             elif active and self.is_paused:
-                # Ripresa attività — riavvia il timer
                 self.session_start = now
                 self.is_paused = False
                 log.info(f"[Tracker] RIPRESA — {reason}")
+                pid = self._project_id(self.current_project)
+                self._gui("set_progetto", pid, True)
+                self._gui("add_log", f"Ripresa — {pid}", "ok")
 
         # ── Cambio progetto ───────────────────────────────────────────────────
         if proj_id != self._project_id(self.current_project):
-            # Chiudi sessione precedente se non in pausa
             if self.current_project and self.session_start and not self.is_paused:
                 elapsed = now - self.session_start
                 pid = self._project_id(self.current_project)
@@ -659,8 +692,13 @@ class CAMTracker:
                     f"[Tracker] Progetto → commessa={proj['commessa']} op={proj['operazione']} "
                     f"| {reason}"
                 )
+                self._gui("set_progetto", proj_id, active)
+                self._gui("add_log",
+                          f"{proj['commessa']}_{proj['operazione']} — {'attivo' if active else 'in foreground'}",
+                          "ok" if active else "info")
             else:
                 log.debug("[Tracker] Nessun progetto Cimatron")
+                self._gui("set_progetto", "—", False)
 
     def flush(self):
         """Chiude la sessione corrente e invia a DMGDesk."""
@@ -697,6 +735,11 @@ class CAMTracker:
         ok = self.client.send_sessions(payload)
         if ok:
             self.accumulated.clear()
+            ts = datetime.now().strftime("%H:%M:%S")
+            n  = len(payload["sessions"])
+            self._gui("set_ultimo_invio", ts, n)
+            self._gui("add_log", f"Inviati {n} record a DMGDesk", "ok")
+            self._gui("set_ore", {})
         else:
             # Salva localmente per retry al prossimo flush
             self._save_pending(payload)
@@ -742,26 +785,41 @@ class CAMTracker:
         )
         last_flush = time.time()
         last_reconnect = 0
-        RECONNECT_INTERVAL = 60  # riprova connessione ogni 60s se offline
+        RECONNECT_INTERVAL = 60
+        dmgdesk_online = False
 
         # Tenta connessione a DMGDesk
         if self.client.ping():
+            dmgdesk_online = True
             log.info(f"[CAMTracker] DMGDesk raggiungibile: {self.cfg['dmgdesk']['url']}")
+            self._gui("set_dmgdesk", True)
+            self._gui("add_log", f"DMGDesk raggiungibile", "ok")
             self._retry_pending()
         else:
             log.warning(f"[CAMTracker] DMGDesk non raggiungibile — modalità offline, retry ogni {RECONNECT_INTERVAL}s")
+            self._gui("set_dmgdesk", False)
+            self._gui("add_log", "DMGDesk non raggiungibile — modalità offline", "warn")
 
         while not self._stop.is_set():
             self.tick()
 
             now = time.time()
 
+            # Aggiorna ore GUI
+            self._gui("set_ore", self.accumulated)
+
             # Riconnessione attiva se offline
             if now - last_reconnect >= RECONNECT_INTERVAL:
                 last_reconnect = now
-                if self.client.ping():
-                    # DMGDesk tornato online — invia pending
-                    self._retry_pending()
+                online = self.client.ping()
+                if online != dmgdesk_online:
+                    dmgdesk_online = online
+                    self._gui("set_dmgdesk", online)
+                    if online:
+                        self._gui("add_log", "DMGDesk tornato online", "ok")
+                        self._retry_pending()
+                    else:
+                        self._gui("add_log", "DMGDesk offline", "warn")
 
             if now - last_flush >= self.flush_interval:
                 self.flush()

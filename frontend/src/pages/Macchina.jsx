@@ -480,7 +480,7 @@ export default function Macchina() {
 
   return (
     <>
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 12, padding: '12px 20px 0' }}>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 12, padding: '12px 20px 0', overflowY: 'auto' }}>
       <SectionHeader title="Utensili in macchina" subtitle="" />
 
       {/* Coda Esecuzione */}
@@ -637,8 +637,8 @@ export default function Macchina() {
 
       {/* Tabella utensili */}
       {loading ? <Loader /> : tools.length === 0 ? null : (
-        <div style={{ flex: 1, overflow: 'auto', background: 'var(--bg-surface)',
-          borderRadius: 10, border: '1px solid var(--border)' }}>
+        <div style={{ overflow: 'visible', background: 'var(--bg-surface)',
+          borderRadius: 10, border: '1px solid var(--border)', marginBottom: 12 }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ borderBottom: '2px solid var(--border)', background: '#f8fafc' }}>

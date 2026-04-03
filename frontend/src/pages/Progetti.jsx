@@ -2619,11 +2619,10 @@ function QuickTasksSidebar({collapsed,onToggleCollapse}){
   const[tasks,setTasks]=useState([])
   const[newText,setNewText]=useState('')
   const[newPrio,setNewPrio]=useState('media')
-  const[filter,setFilter]=useState('tutti')
+  const[showDone,setShowDone]=useState(false)
   const inputRef=useRef(null)
   const pendingCount=tasks.filter(t=>!t.done).length
 
-  // Carica da API all'avvio e ogni 15s
   useEffect(()=>{
     const load=()=>fetch('/api/progetti/quick-tasks').then(r=>r.ok?r.json():{tasks:[]}).then(d=>setTasks(d.tasks||[])).catch(()=>{})
     load()
@@ -2631,7 +2630,6 @@ function QuickTasksSidebar({collapsed,onToggleCollapse}){
     return()=>clearInterval(t)
   },[])
 
-  // Salva su API ogni volta che tasks cambia
   const saveRef=useRef(null)
   useEffect(()=>{
     if(saveRef.current) clearTimeout(saveRef.current)
@@ -2640,64 +2638,131 @@ function QuickTasksSidebar({collapsed,onToggleCollapse}){
     },400)
   },[tasks])
 
-  const filtered=tasks.filter(t=>{
-    if(filter==='da_fare') return !t.done
-    if(filter==='fatti')   return t.done
-    if(filter==='alta')    return t.priority==='alta'
-    if(filter==='media')   return t.priority==='media'
-    if(filter==='bassa')   return t.priority==='bassa'
-    return true
-  })
   function addTask(){
     if(!newText.trim()) return
     setTasks(ts=>[{id:uid(),text:newText.trim(),priority:newPrio,done:false,createdAt:new Date().toISOString()},...ts])
-    setNewText('');inputRef.current?.focus()
+    setNewText('')
+    inputRef.current?.focus()
   }
+
+  const PRIO_COLOR={alta:'#E24B4A',media:'#EF9F27',bassa:'#1D9E75'}
+  const PRIO_NEXT={alta:'media',media:'bassa',bassa:'alta'}
+
+  const daFare=tasks.filter(t=>!t.done)
+  const fatti=tasks.filter(t=>t.done)
+
   if(collapsed){
     return(
-      <div onClick={onToggleCollapse} title='Apri task rapidi'
-        style={{width:32,flexShrink:0,background:T.surface,borderLeft:`1px solid ${T.border}`,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',cursor:'pointer',userSelect:'none'}}>
-        <div style={{writingMode:'vertical-rl',transform:'rotate(180deg)',fontSize:12,fontWeight:700,color:T.textSub,letterSpacing:'0.1em',display:'flex',alignItems:'center',gap:6}}>
-          ⚡ TASK RAPIDI
-          {pendingCount>0&&<span style={{background:T.accent,color:'#fff',borderRadius:10,fontSize:10,fontWeight:800,padding:'2px 5px',writingMode:'horizontal-tb'}}>{pendingCount}</span>}
+      <div onClick={onToggleCollapse} title='Apri note rapide'
+        style={{width:32,flexShrink:0,background:T.surface,borderLeft:`1px solid ${T.border}`,
+          display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',
+          cursor:'pointer',userSelect:'none'}}>
+        <div style={{writingMode:'vertical-rl',transform:'rotate(180deg)',fontSize:12,fontWeight:700,
+          color:T.textSub,letterSpacing:'0.1em',display:'flex',alignItems:'center',gap:6}}>
+          ⚡ NOTE RAPIDE
+          {pendingCount>0&&<span style={{background:T.accent,color:'#fff',borderRadius:10,
+            fontSize:10,fontWeight:800,padding:'2px 5px',writingMode:'horizontal-tb'}}>{pendingCount}</span>}
         </div>
       </div>
     )
   }
+
   return(
-    <div style={{width:280,flexShrink:0,background:T.surface,borderLeft:`1px solid ${T.border}`,display:'flex',flexDirection:'column',overflow:'hidden'}}>
-      <div style={{padding:'14px 14px 10px',borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
-        <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
-          <span style={{fontSize:16}}>⚡</span>
-          <span style={{fontSize:14,fontWeight:800,color:T.text,flex:1}}>Task Rapidi</span>
-          {pendingCount>0&&<span style={{background:T.accent,color:'#fff',borderRadius:20,fontSize:11,fontWeight:800,padding:'2px 8px'}}>{pendingCount}</span>}
-          <button onClick={onToggleCollapse} style={{background:'none',border:`1px solid ${T.border}`,borderRadius:6,color:T.textMuted,fontSize:12,padding:'2px 7px',cursor:'pointer'}}>✕</button>
-        </div>
-        <div style={{display:'flex',flexDirection:'column',gap:6}}>
-          <input ref={inputRef} value={newText} onChange={e=>setNewText(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')addTask()}} placeholder='Nuovo task...'
-            style={{background:T.surface2,border:`1.5px solid ${T.border}`,borderRadius:8,padding:'8px 10px',color:T.text,fontSize:13,outline:'none',width:'100%'}}/>
-          <div style={{display:'flex',gap:5}}>
-            {Object.entries(PRIORITY).map(([key,p])=>(
-              <button key={key} onClick={()=>setNewPrio(key)} style={{flex:1,background:newPrio===key?p.bg:'transparent',border:`1.5px solid ${newPrio===key?p.color:T.border}`,borderRadius:6,color:newPrio===key?p.color:T.textMuted,fontSize:11,fontWeight:700,padding:'5px 0',cursor:'pointer'}}>{p.dot} {p.label}</button>
+    <div style={{width:220,flexShrink:0,background:T.surface,borderLeft:`1px solid ${T.border}`,
+      display:'flex',flexDirection:'column',overflow:'hidden'}}>
+
+      {/* Header minimo */}
+      <div style={{padding:'8px 12px',borderBottom:`1px solid ${T.border}`,flexShrink:0,
+        display:'flex',alignItems:'center',gap:8}}>
+        <span style={{fontSize:13,fontWeight:700,color:T.text,flex:1}}>⚡ Note rapide</span>
+        {pendingCount>0&&<span style={{background:T.accent,color:'#fff',borderRadius:20,
+          fontSize:10,fontWeight:800,padding:'1px 7px'}}>{pendingCount}</span>}
+        <button onClick={onToggleCollapse}
+          style={{background:'none',border:`1px solid ${T.border}`,borderRadius:5,
+            color:T.textMuted,fontSize:11,padding:'2px 6px',cursor:'pointer'}}>✕</button>
+      </div>
+
+      {/* Lista — da fare in cima */}
+      <div style={{flex:1,overflowY:'auto',padding:'4px 0'}}>
+        {daFare.length===0&&fatti.length===0&&(
+          <div style={{textAlign:'center',padding:'28px 16px',color:T.textMuted,fontSize:12,lineHeight:1.6}}>
+            Nessuna nota.<br/>Aggiungine una in fondo.
+          </div>
+        )}
+        {daFare.map(task=>(
+          <div key={task.id}
+            style={{display:'flex',alignItems:'center',gap:8,padding:'7px 12px',
+              borderBottom:`1px solid ${T.border}`,transition:'background 0.1s'}}
+            onMouseEnter={e=>e.currentTarget.style.background=T.surface2}
+            onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+            {/* Dot priorità — click per completare */}
+            <div onClick={()=>setTasks(ts=>ts.map(t=>t.id===task.id?{...t,done:true}:t))}
+              title="Segna come fatto"
+              style={{width:10,height:10,borderRadius:'50%',flexShrink:0,cursor:'pointer',
+                background:PRIO_COLOR[task.priority]||PRIO_COLOR.media,
+                transition:'transform 0.1s'}}
+              onMouseEnter={e=>e.currentTarget.style.transform='scale(1.3)'}
+              onMouseLeave={e=>e.currentTarget.style.transform='scale(1)'}/>
+            <span style={{flex:1,fontSize:12,color:T.text,lineHeight:1.4,
+              wordBreak:'break-word'}}>{task.text}</span>
+            {/* Cambia priorità */}
+            <button onClick={()=>setTasks(ts=>ts.map(t=>t.id===task.id?{...t,priority:PRIO_NEXT[t.priority]||'media'}:t))}
+              title="Cambia priorità"
+              style={{background:'none',border:'none',cursor:'pointer',
+                color:T.textMuted,fontSize:11,padding:'0 2px',opacity:0.5,flexShrink:0}}>⇅</button>
+            {/* Elimina */}
+            <button onClick={()=>setTasks(ts=>ts.filter(t=>t.id!==task.id))}
+              style={{background:'none',border:'none',cursor:'pointer',
+                color:T.textMuted,fontSize:13,padding:'0 2px',opacity:0.4,flexShrink:0,lineHeight:1}}>×</button>
+          </div>
+        ))}
+
+        {/* Completati — collassati di default */}
+        {fatti.length>0&&(
+          <div>
+            <div onClick={()=>setShowDone(v=>!v)}
+              style={{display:'flex',alignItems:'center',gap:6,padding:'6px 12px',
+                cursor:'pointer',fontSize:11,color:T.textMuted,userSelect:'none',
+                borderTop:daFare.length>0?`1px solid ${T.border}`:'none'}}>
+              <span>{showDone?'▼':'▶'}</span>
+              <span>Completati ({fatti.length})</span>
+            </div>
+            {showDone&&fatti.map(task=>(
+              <div key={task.id}
+                style={{display:'flex',alignItems:'center',gap:8,padding:'6px 12px',
+                  borderBottom:`1px solid ${T.border}`,opacity:0.45}}>
+                <div onClick={()=>setTasks(ts=>ts.map(t=>t.id===task.id?{...t,done:false}:t))}
+                  style={{width:10,height:10,borderRadius:'50%',flexShrink:0,cursor:'pointer',
+                    background:'#94a3b8'}}/>
+                <span style={{flex:1,fontSize:12,color:T.textMuted,
+                  textDecoration:'line-through',lineHeight:1.4}}>{task.text}</span>
+                <button onClick={()=>setTasks(ts=>ts.filter(t=>t.id!==task.id))}
+                  style={{background:'none',border:'none',cursor:'pointer',
+                    color:T.textMuted,fontSize:13,padding:'0 2px',lineHeight:1,flexShrink:0}}>×</button>
+              </div>
             ))}
           </div>
-          <button onClick={addTask} style={{background:T.accent,border:'none',borderRadius:8,color:'#fff',fontWeight:700,fontSize:13,padding:'8px',cursor:'pointer',width:'100%'}}>+ Aggiungi</button>
-        </div>
+        )}
       </div>
-      <div style={{padding:'8px 10px',borderBottom:`1px solid ${T.border}`,display:'flex',flexWrap:'wrap',gap:4,flexShrink:0}}>
-        {[['tutti',`Tutti (${tasks.length})`],['da_fare',`Da fare (${tasks.filter(t=>!t.done).length})`],['fatti',`Fatti (${tasks.filter(t=>t.done).length})`],['alta','🔴'],['media','🟡'],['bassa','🟢']].map(([key,label])=>(
-          <button key={key} onClick={()=>setFilter(key)} style={{background:filter===key?T.surface2:'transparent',border:`1px solid ${filter===key?T.borderStrong:'transparent'}`,borderRadius:6,color:filter===key?T.text:T.textMuted,fontSize:11,fontWeight:600,padding:'3px 8px',cursor:'pointer'}}>{label}</button>
-        ))}
-      </div>
-      <div style={{flex:1,overflowY:'auto',padding:'8px'}}>
-        {filtered.length===0&&<div style={{textAlign:'center',padding:'30px 10px',color:T.textMuted,fontSize:13}}>{filter==='tutti'?'Nessun task ancora.\nAggiungine uno!':'Nessun task in questa categoria.'}</div>}
-        {filtered.map(task=>(
-          <QuickTaskRow key={task.id} task={task}
-            onToggle={()=>setTasks(ts=>ts.map(t=>t.id===task.id?{...t,done:!t.done}:t))}
-            onDelete={()=>setTasks(ts=>ts.filter(t=>t.id!==task.id))}
-            onPriority={p=>setTasks(ts=>ts.map(t=>t.id===task.id?{...t,priority:p}:t))}
-            onEditText={text=>setTasks(ts=>ts.map(t=>t.id===task.id?{...t,text}:t))}/>
-        ))}
+
+      {/* Input compatto in fondo */}
+      <div style={{padding:'8px 10px',borderTop:`1px solid ${T.border}`,
+        display:'flex',gap:6,alignItems:'center',flexShrink:0,background:T.surface}}>
+        {/* Dot priorità — click per ciclare */}
+        <div onClick={()=>setNewPrio(PRIO_NEXT[newPrio]||'media')}
+          title={`Priorità: ${newPrio}`}
+          style={{width:10,height:10,borderRadius:'50%',flexShrink:0,cursor:'pointer',
+            background:PRIO_COLOR[newPrio],transition:'transform 0.1s'}}
+          onMouseEnter={e=>e.currentTarget.style.transform='scale(1.3)'}
+          onMouseLeave={e=>e.currentTarget.style.transform='scale(1)'}/>
+        <input
+          ref={inputRef}
+          value={newText}
+          onChange={e=>setNewText(e.target.value)}
+          onKeyDown={e=>{if(e.key==='Enter')addTask()}}
+          placeholder='Aggiungi nota...'
+          style={{flex:1,background:T.surface2,border:`1px solid ${T.border}`,
+            borderRadius:6,padding:'5px 8px',color:T.text,fontSize:12,outline:'none'}}/>
       </div>
     </div>
   )

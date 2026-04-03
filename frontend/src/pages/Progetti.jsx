@@ -1617,6 +1617,253 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
     </PgmSelContext.Provider>
   )
 }
+// ── ProgettiListaFiltrata ─────────────────────────────────────────────────────
+function ProgettiListaFiltrata({inProgress,completed,urgentProjects,palletState,deliveries,getDelivery,setDelivery,deleteProject,archiveProject,setSelectedId,nowStr}){
+  const[vista,setVista]=useState('lista')   // 'lista' | 'griglia'
+  const[filtroStato,setFiltroStato]=useState('tutti')  // 'tutti'|'in_corso'|'completati'|'critici'|'con_pallet'
+  const[filtroOrdine,setFiltroOrdine]=useState('scadenza') // 'scadenza'|'pallet'|'avanzamento'|'nome'
+
+  // Calcola ETA per progetto — ore rimanenti stimate dai tempi CAM
+  function etaProgetto(project){
+    const pgms=(project.steps||[]).flatMap(s=>(s.tasks||[])
+      .filter(t=>t.text?.trim().toLowerCase()==='fresatura')
+      .flatMap(t=>(t.programs||[]).filter(pg=>pg.tipoGruppo!=='ipm')))
+    const rimasti=pgms.filter(p=>p.stato!=='completato')
+    if(!rimasti.length) return null
+    let tot=0, haStima=false
+    for(const p of rimasti){
+      if(p.tempoStimato){ tot+=parseInt(p.tempoStimato)*60; haStima=true }
+    }
+    if(!tot) return null
+    const h=Math.floor(tot/3600), m=Math.round((tot%3600)/60)
+    return { sec: tot, fmt: h>0?(m>0?`~${h}h ${m}m`:`~${h}h`):`~${m} min`, haStima }
+  }
+
+  // Arricchisci ogni progetto con pallet e urgenza
+  const tutti=[...inProgress,...completed].map(p=>{
+    const del=getDelivery(p.id)
+    const days=del?.dueDate&&!del.delivered?daysUntil(del.dueDate):null
+    const urg=deliveryUrgency(days)
+    const pal=palletState?.find(x=>x.progetto_id===p.id)
+    const palNum=pal?.numero||p.pallet_assegnato||null
+    const palStato=(pal?.stato||'').toLowerCase().replace('_',' ')
+    const isLive=palStato==='in lavorazione'
+    const eta=etaProgetto(p)
+    const progress=getProgress(p)
+    const mpfTot=(p.steps||[]).flatMap(s=>s.tasks||[]).filter(t=>t.text?.trim().toLowerCase()==='fresatura').flatMap(t=>(t.programs||[]).filter(x=>x.tipoGruppo!=='ipm'))
+    const mpfDone=mpfTot.filter(x=>x.stato==='completato').length
+    return{...p,_del:del,_days:days,_urg:urg,_pal:palNum,_isLive:isLive,_eta:eta,_progress:progress,_mpfTot:mpfTot.length,_mpfDone:mpfDone}
+  })
+
+  // Filtro stato
+  const filtrati=tutti.filter(p=>{
+    if(filtroStato==='in_corso') return p._progress<100
+    if(filtroStato==='completati') return p._progress===100
+    if(filtroStato==='critici') return p._days!==null&&p._days<=7
+    if(filtroStato==='con_pallet') return !!p._pal
+    return true
+  })
+
+  // Ordine
+  const ordinati=[...filtrati].sort((a,b)=>{
+    if(filtroOrdine==='scadenza'){
+      const da=a._days??9999, db=b._days??9999
+      return da-db
+    }
+    if(filtroOrdine==='pallet'){
+      if(a._pal&&!b._pal) return -1
+      if(!a._pal&&b._pal) return 1
+      return (a._pal||99)-(b._pal||99)
+    }
+    if(filtroOrdine==='avanzamento') return a._progress-b._progress
+    if(filtroOrdine==='nome') return a.name.localeCompare(b.name)
+    return 0
+  })
+
+  const criticiN=urgentProjects.length
+  const conPalletN=tutti.filter(p=>p._pal).length
+
+  return(
+    <div>
+      {/* Banner critici */}
+      {criticiN>0&&(
+        <div style={{background:T.redBg,border:`1.5px solid ${T.red}33`,borderRadius:12,padding:'12px 18px',marginBottom:14,display:'flex',alignItems:'center',gap:10}}>
+          <span style={{fontSize:18}}>🎯</span>
+          <div>
+            <span style={{fontSize:13,fontWeight:800,color:T.red,letterSpacing:'0.07em'}}>FOCUS — {criticiN} CONSEGN{criticiN===1?'A':'E'} ENTRO 7 GIORNI · </span>
+            <span style={{fontSize:13,color:T.textSub}}>{urgentProjects.map(p=>p.name).join(' · ')}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Toolbar filtri + vista */}
+      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:14,flexWrap:'wrap'}}>
+        {/* Filtri stato */}
+        {[
+          ['tutti',`Tutti (${tutti.length})`],
+          ['in_corso',`In corso (${inProgress.length})`],
+          ['completati',`Completati (${completed.length})`],
+          ...(criticiN>0?[['critici',`⚠ Critici (${criticiN})`]]:[]),
+          ...(conPalletN>0?[['con_pallet',`Con pallet (${conPalletN})`]]:[]),
+        ].map(([key,label])=>(
+          <button key={key} onClick={()=>setFiltroStato(key)}
+            style={{background:filtroStato===key?T.accent:'transparent',
+              border:`1px solid ${filtroStato===key?T.accent:T.border}`,
+              borderRadius:20,color:filtroStato===key?'#fff':T.textSub,
+              fontSize:12,fontWeight:600,padding:'4px 12px',cursor:'pointer'}}>
+            {label}
+          </button>
+        ))}
+
+        <div style={{marginLeft:'auto',display:'flex',gap:6,alignItems:'center'}}>
+          {/* Ordine */}
+          <select value={filtroOrdine} onChange={e=>setFiltroOrdine(e.target.value)}
+            style={{background:T.surface2,border:`1px solid ${T.border}`,borderRadius:6,
+              color:T.textSub,fontSize:12,padding:'4px 8px',outline:'none',cursor:'pointer'}}>
+            <option value='scadenza'>Per scadenza</option>
+            <option value='pallet'>Per pallet</option>
+            <option value='avanzamento'>Per avanzamento</option>
+            <option value='nome'>Per nome</option>
+          </select>
+
+          {/* Toggle vista */}
+          <div style={{display:'flex',border:`1px solid ${T.border}`,borderRadius:6,overflow:'hidden'}}>
+            {[['lista','☰'],['griglia','⊞']].map(([v,icon])=>(
+              <button key={v} onClick={()=>setVista(v)}
+                style={{background:vista===v?T.surface2:'transparent',border:'none',
+                  color:vista===v?T.accent:T.textMuted,fontSize:14,
+                  padding:'4px 9px',cursor:'pointer'}}>
+                {icon}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {ordinati.length===0&&(
+        <div style={{textAlign:'center',padding:'40px 0',color:T.textMuted,fontSize:13}}>Nessun progetto in questa categoria.</div>
+      )}
+
+      {/* Vista lista compatta */}
+      {vista==='lista'&&ordinati.length>0&&(
+        <div style={{display:'flex',flexDirection:'column',gap:3}}>
+          {ordinati.map(p=>{
+            const d=p._del
+            return(
+              <div key={p.id} onClick={()=>setSelectedId(p.id)}
+                style={{background:T.surface,border:`1px solid ${p._isLive?'#1D5FAD':T.border}`,
+                  borderLeft:`4px solid ${p._isLive?'#1D5FAD':p._urg&&d&&!d.delivered?p._urg.color:p.color}`,
+                  borderRadius:8,padding:'8px 14px',cursor:'pointer',
+                  background:p._isLive?'#f0f7ff':T.surface,
+                  display:'flex',alignItems:'center',gap:10,
+                  transition:'background 0.12s'}}>
+
+                {/* Colore + nome */}
+                <div style={{flex:1,minWidth:0,display:'flex',alignItems:'center',gap:8}}>
+                  <span style={{fontSize:14,fontWeight:700,color:T.text,
+                    overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                    {p.name}
+                  </span>
+                  {p._isLive&&(
+                    <span style={{fontSize:10,fontWeight:800,color:'#fff',background:'#1D5FAD',
+                      padding:'1px 6px',borderRadius:3,flexShrink:0,letterSpacing:'0.05em'}}>LIVE</span>
+                  )}
+                </div>
+
+                {/* Pallet */}
+                {p._pal?(
+                  <span style={{fontSize:11,fontWeight:700,color:p._isLive?'#0d2d5e':'#854d0e',
+                    background:p._isLive?'#dbeafe':'#fefce8',padding:'2px 7px',borderRadius:4,flexShrink:0}}>
+                    P{p._pal}
+                  </span>
+                ):(
+                  <span style={{fontSize:11,color:T.textMuted,flexShrink:0,minWidth:28,textAlign:'center'}}>—</span>
+                )}
+
+                {/* Scadenza */}
+                {d?.dueDate&&!d.delivered?(
+                  <span style={{fontSize:11,fontWeight:700,color:p._urg.color,
+                    background:p._urg.bg,padding:'2px 8px',borderRadius:4,flexShrink:0,minWidth:50,textAlign:'center'}}>
+                    {p._days===0?'OGGI':p._days<0?`${Math.abs(p._days)}gg fa`:`${p._days}gg`}
+                  </span>
+                ):(
+                  <span style={{minWidth:50}}/>
+                )}
+
+                {/* Doppia barra progresso */}
+                <div style={{width:110,flexShrink:0}}>
+                  <div style={{display:'flex',justifyContent:'space-between',fontSize:9,
+                    color:T.textMuted,marginBottom:2}}>
+                    <span>prep {p._progress}%</span>
+                    {p._mpfTot>0&&<span>NC {p._mpfDone}/{p._mpfTot}</span>}
+                  </div>
+                  <div style={{height:4,background:T.surface2,borderRadius:2,overflow:'hidden',position:'relative'}}>
+                    <div style={{position:'absolute',left:0,top:0,height:'100%',
+                      width:`${p._progress}%`,background:p.color,borderRadius:2}}/>
+                    {p._mpfTot>0&&(
+                      <div style={{position:'absolute',left:`${p._progress}%`,top:0,height:'100%',
+                        width:`${Math.round(p._mpfDone/p._mpfTot*100*(100-p._progress)/100)}%`,
+                        background:'#16a34a',borderRadius:2}}/>
+                    )}
+                  </div>
+                </div>
+
+                {/* ETA */}
+                <span style={{fontSize:12,fontWeight:700,fontFamily:'monospace',
+                  color:p._eta?'#1D5FAD':T.textMuted,flexShrink:0,minWidth:70,textAlign:'right'}}>
+                  {p._eta?p._eta.fmt:'—'}
+                </span>
+
+                <span style={{fontSize:12,color:T.textMuted,flexShrink:0}}>›</span>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Vista griglia */}
+      {vista==='griglia'&&ordinati.length>0&&(()=>{
+        const inProg=ordinati.filter(p=>p._progress<100)
+        const done=ordinati.filter(p=>p._progress===100)
+        return(
+          <>
+            {inProg.length>0&&(
+              <>
+                <div style={{fontSize:13,color:T.textSub,fontWeight:700,letterSpacing:'0.06em',marginBottom:14}}>IN CORSO — {inProg.length}</div>
+                <div style={{display:'grid',gridTemplateColumns:'repeat(2, 1fr)',gap:14,marginBottom:32}}>
+                  {inProg.map((p,i)=>{
+                    const d=getDelivery(p.id)
+                    const isLast=i===inProg.length-1&&inProg.length%2!==0
+                    return <div key={p.id} style={{gridColumn:isLast?'1 / -1':undefined,maxWidth:isLast?'calc(50% - 7px)':undefined}}>
+                      <ProjectCard project={p} onClick={()=>setSelectedId(p.id)} onDelete={deleteProject} onArchive={archiveProject} delivery={d}
+                        onSetDelivery={(pid,date,toggle)=>{if(toggle!==undefined&&d)setDelivery(d.id,{delivered:toggle,deliveredAt:toggle?nowStr():null},true);else if(date!==null)d?setDelivery(d.id,{dueDate:date},true):setDelivery(uid(),{projectId:pid,dueDate:date,delivered:false},false);else if(d)setDelivery(d.id,{dueDate:''},true)}}/>
+                    </div>
+                  })}
+                </div>
+              </>
+            )}
+            {done.length>0&&(
+              <>
+                <div style={{fontSize:13,color:T.textSub,fontWeight:700,letterSpacing:'0.06em',marginBottom:14}}>COMPLETATI — {done.length}</div>
+                <div style={{display:'grid',gridTemplateColumns:'repeat(2, 1fr)',gap:14}}>
+                  {done.map((p,i)=>{
+                    const d=getDelivery(p.id)
+                    const isLast=i===done.length-1&&done.length%2!==0
+                    return <div key={p.id} style={{gridColumn:isLast?'1 / -1':undefined,maxWidth:isLast?'calc(50% - 7px)':undefined}}>
+                      <ProjectCard project={p} onClick={()=>setSelectedId(p.id)} onDelete={deleteProject} onArchive={archiveProject} delivery={d}
+                        onSetDelivery={(pid,date,toggle)=>{if(toggle!==undefined&&d)setDelivery(d.id,{delivered:toggle,deliveredAt:toggle?nowStr():null},true);else if(date!==null)d?setDelivery(d.id,{dueDate:date},true):setDelivery(uid(),{projectId:pid,dueDate:date,delivered:false},false);else if(d)setDelivery(d.id,{dueDate:''},true)}}/>
+                    </div>
+                  })}
+                </div>
+              </>
+            )}
+          </>
+        )
+      })()}
+    </div>
+  )
+}
+
 // ── ProjectCard ────────────────────────────────────────────────────────────────
 function ProjectCard({project,onClick,onDelete,onArchive,delivery,onSetDelivery}){
   const progress=getProgress(project)
@@ -2910,7 +3157,7 @@ export default function Progetti(){
               </div>
             </div>
           ):(
-            <div style={{flex:1,overflowY:'auto',padding:'24px 28px',background:T.bg}}>
+            <div style={{flex:1,overflowY:'auto',padding:'16px 28px',background:T.bg}}>
               {inProgress.length===0&&completed.length===0&&(
                 <div style={{textAlign:'center',padding:'80px 0'}}>
                   <div style={{fontSize:48,marginBottom:16}}>🚀</div>
@@ -2919,44 +3166,27 @@ export default function Progetti(){
                   <button onClick={()=>setShowNewProject(true)} style={{background:T.accent,border:'none',borderRadius:10,color:'#fff',fontWeight:700,fontSize:16,padding:'12px 28px',cursor:'pointer'}}>+ Crea il primo progetto</button>
                 </div>
               )}
-              {urgentProjects.length>0&&(
-                <div style={{background:T.redBg,border:`1.5px solid ${T.red}33`,borderRadius:14,padding:'14px 18px',marginBottom:22,display:'flex',alignItems:'center',gap:10}}>
-                  <span style={{fontSize:22}}>🎯</span>
-                  <div>
-                    <div style={{fontSize:13,fontWeight:800,color:T.red,letterSpacing:'0.07em'}}>FOCUS — {urgentProjects.length} CONSEGN{urgentProjects.length===1?'A':'E'} ENTRO 7 GIORNI</div>
-                    <div style={{fontSize:13,color:T.textSub,marginTop:2}}>{urgentProjects.map(p=>p.name).join(' · ')}</div>
-                  </div>
-                </div>
-              )}
-              {inProgress.length>0&&(
-                <>
-                  <div style={{fontSize:13,color:T.textSub,fontWeight:700,letterSpacing:'0.06em',marginBottom:14}}>IN CORSO — {inProgress.length} · ordinati per priorità</div>
-                  <div style={{display:'grid',gridTemplateColumns:'repeat(2, 1fr)',gap:14,marginBottom:32}}>
-                    {inProgress.map((p,i)=>{
-                      const d=getDelivery(p.id)
-                      const isLast = i===inProgress.length-1 && inProgress.length%2!==0
-                      return <div key={p.id} style={{gridColumn:isLast?'1 / -1':undefined, maxWidth:isLast?'calc(50% - 7px)':undefined}}>
-                        <ProjectCard project={p} onClick={()=>setSelectedId(p.id)} onDelete={deleteProject} onArchive={archiveProject} delivery={d}
-                          onSetDelivery={(pid,date,toggle)=>{if(toggle!==undefined&&d)setDelivery(d.id,{delivered:toggle,deliveredAt:toggle?nowStr():null},true);else if(date!==null)d?setDelivery(d.id,{dueDate:date},true):setDelivery(uid(),{projectId:pid,dueDate:date,delivered:false},false);else if(d)setDelivery(d.id,{dueDate:''},true)}}/>
-                      </div>
-                    })}
-                  </div>
-                </>
-              )}
-              {completed.length>0&&(
-                <>
-                  <div style={{fontSize:13,color:T.textSub,fontWeight:700,letterSpacing:'0.06em',marginBottom:14}}>COMPLETATI — {completed.length}</div>
-                  <div style={{display:'grid',gridTemplateColumns:'repeat(2, 1fr)',gap:14}}>
-                    {completed.map((p,i)=>{
-                      const d=getDelivery(p.id)
-                      const isLast = i===completed.length-1 && completed.length%2!==0
-                      return <div key={p.id} style={{gridColumn:isLast?'1 / -1':undefined, maxWidth:isLast?'calc(50% - 7px)':undefined}}>
-                        <ProjectCard project={p} onClick={()=>setSelectedId(p.id)} onDelete={deleteProject} onArchive={archiveProject} delivery={d}
-                          onSetDelivery={(pid,date,toggle)=>{if(toggle!==undefined&&d)setDelivery(d.id,{delivered:toggle,deliveredAt:toggle?nowStr():null},true);else if(date!==null)d?setDelivery(d.id,{dueDate:date},true):setDelivery(uid(),{projectId:pid,dueDate:date,delivered:false},false);else if(d)setDelivery(d.id,{dueDate:''},true)}}/>
-                      </div>
-                    })}
-                  </div>
-                </>
+
+              {/* ── TOOLBAR FILTRI ────────────────────────────────────── */}
+              {(inProgress.length>0||completed.length>0)&&(()=>{
+                // Stato locale filtri — usiamo ref per non causare re-render del parent
+                // (i filtri vivono nel render inline tramite IIFE con useState locale)
+                return null
+              })()}
+              {(inProgress.length>0||completed.length>0)&&(
+                <ProgettiListaFiltrata
+                  inProgress={inProgress}
+                  completed={completed}
+                  urgentProjects={urgentProjects}
+                  palletState={palletState}
+                  deliveries={deliveries}
+                  getDelivery={getDelivery}
+                  setDelivery={setDelivery}
+                  deleteProject={deleteProject}
+                  archiveProject={archiveProject}
+                  setSelectedId={setSelectedId}
+                  nowStr={nowStr}
+                />
               )}
             </div>
           )}

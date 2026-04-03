@@ -483,15 +483,20 @@ class ActivityMonitor:
     def is_active(self) -> tuple[bool, str]:
         """
         Ritorna (conta_tempo, descrizione).
+
+        Conta il tempo se:
+        - C'è stato input (mouse/tastiera) negli ultimi idle_timeout_sec secondi
+        - Cimatron è aperto (verificato dal caller tramite get_active_project)
+
+        NON richiede che Cimatron sia in foreground — l'utente può lavorare
+        su altre finestre mentre Cimatron calcola in background.
+        La pausa scatta solo dopo idle_timeout_min minuti senza nessun input.
         """
         idle_sec = self.seconds_since_last_input()
 
         if idle_sec > self.idle_timeout_sec:
             mins = idle_sec / 60
             return False, f"idle {mins:.1f}min (soglia={self.idle_timeout_sec//60}min)"
-
-        if not self.is_cimatron_foreground():
-            return False, f"Cimatron non in foreground (idle={idle_sec:.0f}s)"
 
         return True, f"attivo (idle={idle_sec:.0f}s)"
 

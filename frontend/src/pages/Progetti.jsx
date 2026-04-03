@@ -340,12 +340,13 @@ function classifyTool(alias, toolsDB){
 }
 
 // ── FresaturaPanel ─────────────────────────────────────────────────────────────
-function FresaturaPanel({task,onUpdateTask,toolsDB,projectId}){
+function FresaturaPanel({task,onUpdateTask,toolsDB,projectId,projectName}){
   const fileInputRef=useRef(null)
   const programs=Array.isArray(task.programs)?task.programs:[]
   const[expanded,setExpanded]=useState(false)
   const[collapsedGroups,setCollapsedGroups]=useState({ipm:true,fresatura:true})
   const[uploadMsg,setUploadMsg]=useState(null)
+  const[uploadWarn,setUploadWarn]=useState(null)  // warning file progetto sbagliato
   const { selectedIds: selected, setSelectedIds: setSelected } = useContext(PgmSelContext)
   const TOOL_BADGE={
     ok:          {dot:'✓',color:'#166534',bg:'#dcfce7'},
@@ -367,9 +368,35 @@ function FresaturaPanel({task,onUpdateTask,toolsDB,projectId}){
     const files=Array.from(e.target.files)
     let nuovi=0, aggiornati=0
     let updatedPrograms=[...programs]
+    const fileFuoriProgetto=[]  // file con prefisso non corrispondente al progetto
+
+    // Estrae il prefisso commessa_posizione da un filename
+    // es. "4297_0006_01_003.MPF" → "4297_0006"
+    function prefissoFile(filename){
+      const base=filename.replace(/\.MPF$/i,'').replace(/\.mpf$/i,'')
+      const parts=base.split('_')
+      if(parts.length>=2) return `${parts[0]}_${parts[1]}`
+      return parts[0]||''
+    }
+    // Prefisso atteso dal nome progetto
+    // es. projectName="4297_0006" → "4297_0006"
+    //     projectName="4297_0006 - Lavorazione" → "4297_0006"
+    const prefissoProgetto=(projectName||'').split(/[\s\-–]/)[0].replace(/\.MPF$/i,'')
+
     for(const file of files){
       const text=await file.text()
       const info=parseMpfFile(file.name,text)
+
+      // Controlla prefisso solo se abbiamo un prefisso progetto valido (formato NNNN_NNNN)
+      if(prefissoProgetto && /^\d{4}_\d{4}/.test(prefissoProgetto)){
+        const pfFile=prefissoFile(file.name)
+        if(pfFile && pfFile.toUpperCase()!==prefissoProgetto.toUpperCase()){
+          fileFuoriProgetto.push({filename:file.name, prefisso:pfFile, atteso:prefissoProgetto})
+          // Non blocchiamo il caricamento — avvisiamo ma procediamo
+          // L'operatore potrebbe avere buone ragioni (es. programma condiviso)
+        }
+      }
+
       const existing=updatedPrograms.find(p=>p.filename===info.filename)
       if(existing){
         // Aggiorna metadati, mantieni stato/tempi/operatore
@@ -397,6 +424,10 @@ function FresaturaPanel({task,onUpdateTask,toolsDB,projectId}){
     })
     updatePrograms(sorted)
     e.target.value=''
+    if(fileFuoriProgetto.length>0){
+      setUploadWarn(fileFuoriProgetto)
+      setTimeout(()=>setUploadWarn(null), 12000)
+    }
     if(aggiornati>0||nuovi>0){
       const parts=[]
       if(nuovi) parts.push(`${nuovi} nuov${nuovi===1?'o':'i'}`)
@@ -558,6 +589,30 @@ function FresaturaPanel({task,onUpdateTask,toolsDB,projectId}){
             <button onClick={()=>fileInputRef.current.click()} style={{background:'#0d2d5e',border:'none',borderRadius:7,color:'#fff',fontWeight:700,fontSize:13,padding:'7px 14px',cursor:'pointer'}}>📂 Carica .mpf</button>
             {total>0&&<span style={{fontSize:12,color:T.textMuted}}>{ipmPrograms.length>0&&`📏 ${ipmPrograms.length} IPM · `}⚙️ {fresPrograms.length} fresatura</span>}
             {uploadMsg&&<span style={{fontSize:12,fontWeight:700,color:'#166534',background:'#dcfce7',padding:'3px 10px',borderRadius:6}}>✓ {uploadMsg}</span>}
+          </div>
+
+          {/* ── Warning file progetto sbagliato ── */}
+          {uploadWarn&&uploadWarn.length>0&&(
+            <div style={{background:'#fef2f2',border:'1px solid #fca5a5',borderRadius:8,
+              padding:'10px 14px',margin:'0 0 0 0',borderTop:'1px solid #fca5a5'}}>
+              <div style={{fontSize:12,fontWeight:700,color:'#dc2626',marginBottom:6,
+                display:'flex',alignItems:'center',gap:6}}>
+                ⚠ {uploadWarn.length} file non appartengono a questo progetto
+              </div>
+              {uploadWarn.map((w,i)=>(
+                <div key={i} style={{fontSize:11,color:'#991b1b',fontFamily:'monospace',
+                  background:'#fff',borderRadius:4,padding:'3px 8px',marginBottom:3,
+                  display:'flex',alignItems:'center',gap:8}}>
+                  <span style={{fontWeight:700}}>{w.filename}</span>
+                  <span style={{color:'#dc2626'}}>→ prefisso <b>{w.prefisso}</b>, atteso <b>{w.atteso}</b></span>
+                </div>
+              ))}
+              <div style={{fontSize:11,color:'#b91c1c',marginTop:6,fontStyle:'italic'}}>
+                I file sono stati caricati ma potrebbero appartenere a un altro progetto.
+                Verifica prima di generare il MAIN.
+              </div>
+            </div>
+          )}
           </div>
 
           {/* ── Previsione fine vita ── */}
@@ -770,7 +825,7 @@ function UtensiliProgetto({projectId}){
 }
 
 // ── TaskItem ───────────────────────────────────────────────────────────────────
-function TaskItem({task,idx,stepId,onToggle,onUpdateTask,onDelete,isNext,onReorderTask,toolsDB,projectId}){
+function TaskItem({task,idx,stepId,onToggle,onUpdateTask,onDelete,isNext,onReorderTask,toolsDB,projectId,projectName}){
   const[hovered,setHovered]=useState(false)
   const[dragOver,setDragOver]=useState(false)
   const[addingNote,setAddingNote]=useState(false)
@@ -843,14 +898,14 @@ function TaskItem({task,idx,stepId,onToggle,onUpdateTask,onDelete,isNext,onReord
         </div>
       )}
       {task.text?.trim().toLowerCase()==='fresatura'&&(
-        <div style={{marginTop:8}}><FresaturaPanel task={task} onUpdateTask={onUpdateTask} toolsDB={toolsDB} projectId={projectId} /></div>
+        <div style={{marginTop:8}}><FresaturaPanel task={task} onUpdateTask={onUpdateTask} toolsDB={toolsDB} projectId={projectId} projectName={projectName}/></div>
       )}
     </div>
   )
 }
 
 // ── StepSection ────────────────────────────────────────────────────────────────
-function StepSection({step,stepIdx,nextTaskId,onToggle,onUpdateTask,onAddTask,onDeleteTask,onReorderTask,onReorderStep,onDeleteStep,projectColor,toolsDB,projectId}){
+function StepSection({step,stepIdx,nextTaskId,onToggle,onUpdateTask,onAddTask,onDeleteTask,onReorderTask,onReorderStep,onDeleteStep,projectColor,toolsDB,projectId,projectName}){
   const[collapsed,setCollapsed]=useState(false)
   const[adding,setAdding]=useState(false)
   const[newTask,setNewTask]=useState('')
@@ -883,7 +938,7 @@ function StepSection({step,stepIdx,nextTaskId,onToggle,onUpdateTask,onAddTask,on
               onToggle={onToggle} onUpdateTask={onUpdateTask}
               onDelete={tid=>onDeleteTask(step.id,tid)}
               isNext={task.id===nextTaskId} onReorderTask={onReorderTask}
-              toolsDB={toolsDB} projectId={projectId}/>
+              toolsDB={toolsDB} projectId={projectId} projectName={projectName}/>
           ))}
           {adding?(
             <div style={{display:'flex',gap:8,marginTop:8,marginLeft:22}}>
@@ -1689,7 +1744,7 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
                 onDeleteTask={deleteTask} onReorderTask={reorderTask}
                 onReorderStep={reorderStep} onDeleteStep={deleteStep}
                 totalSteps={project.steps.length} projectColor={project.color}
-                toolsDB={toolsDB} projectId={project.id}/>
+                toolsDB={toolsDB} projectId={project.id} projectName={project.name}/>
             ))}
             {addingStep?(
               <div style={{display:'flex',gap:10,marginTop:10}}>

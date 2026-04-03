@@ -860,6 +860,27 @@ async def aggiorna_stati_da_log():
                     if progetto_con_match: break
                 if progetto_con_match: break
 
+        # ── Automazione cross-pallet: quando parte il primo programma di un nuovo
+        # progetto, completa i programmi in_lavorazione di TUTTI gli altri progetti.
+        # Questo gestisce il caso dell'ultimo programma di una sequenza pallet:
+        #   Pallet 6 finisce (ultimo pgm in_lavorazione) → Pallet 3 parte
+        #   → il primo programma di P3 triggera il completamento dell'ultimo di P6
+        if progetto_con_match:
+            pid_corrente = (progetto_con_match.get("id") or "")
+            for p_altro in projects:
+                if (p_altro.get("id") or "") == pid_corrente:
+                    continue  # stesso progetto — gestito sotto
+                for s in p_altro.get("steps", []):
+                    for t in s.get("tasks", []):
+                        if t.get("text","").strip().lower() != "fresatura": continue
+                        for pgm in t.get("programs", []):
+                            if pgm.get("tipoGruppo") == "ipm": continue
+                            if pgm.get("stato") == "in_lavorazione":
+                                pgm["stato"] = "completato"
+                                pgm["tempoFine"] = pgm.get("tempoFine") or now_str
+                                proj_dirty = True
+                                updates["completato"] += 1
+
         if progetto_con_match:
             tgt = mpf_filename.upper().replace(".MPF","").strip()
             for step in progetto_con_match.get("steps", []):

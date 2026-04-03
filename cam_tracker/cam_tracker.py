@@ -620,9 +620,8 @@ class CAMTracker:
 
     def _get_project(self) -> dict | None:
         """
-        Tenta EXE/COM prima (path completo → commessa affidabile).
-        Fallback al titolo finestra SOLO se l'EXE non è disponibile,
-        NON in caso di timeout (il timeout non deve causare cambio progetto).
+        Tenta daemon/EXE/COM prima (path completo → commessa affidabile).
+        Fallback al titolo finestra SOLO se nessun metodo COM è disponibile.
         """
         if not self._com_tried:
             self.com.try_connect()
@@ -630,18 +629,25 @@ class CAMTracker:
 
         p = self.com.get_active_project()
         if p:
-            # Valida: accetta solo commesse numeriche (4 cifre) o formato NNNN_NNNN
+            # Valida: accetta solo commesse numeriche (4 cifre iniziali)
             commessa = p.get("commessa", "")
             if commessa and re.match(r'^\d{4}', commessa):
                 return p
-            # Commessa non valida (es. E541540221) → ignora questo risultato
-            # ma NON fare fallback al titolo — meglio tenere il progetto precedente
+            # Commessa non valida (es. E541540221, 1D24103D...) — Cimatron aperto
+            # ma senza un progetto valido (finestra vuota o documento non strutturato)
+            # Ritorna None — non fare fallback al titolo (darebbe stesso risultato)
             return None
 
-        # Fallback al titolo finestra solo se l'exe non ha dato timeout
-        # (se ha dato timeout, self.com._last_timeout è True)
+        # EXE/COM non disponibile o timeout → fallback al titolo
+        # Ma non se il daemon è attivo (in quel caso ha già risposto sopra)
+        if self.com._mode == "daemon":
+            # Daemon attivo ma nessun documento valido → nessun progetto
+            if getattr(self.com, '_last_timeout', False):
+                return self.current_project
+            return None
+
+        # Solo per modalità exe/com legacy
         if getattr(self.com, '_last_timeout', False):
-            # Timeout EXE → mantieni progetto precedente, non cambiare
             return self.current_project
 
         return self.window.get_active_project()

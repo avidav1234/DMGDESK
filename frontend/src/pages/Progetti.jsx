@@ -1,7 +1,7 @@
 // Progetti.jsx — WorkTrack porting fedele COMPLETO per DMGDesk
 // Persistenza su file via /api/progetti — identico all'app originale
 
-import { useState, useEffect, useCallback, useRef, createContext, useContext } from 'react'
+import React, { useState, useEffect, useCallback, useRef, createContext, useContext } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import TabDocumenti from './TabDocumenti'
 
@@ -1448,6 +1448,7 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
   const[newStepName,setNewStepName]=useState('')
   const[confirm,setConfirm]=useState(null)
   const[showSaveTemplate,setShowSaveTemplate]=useState(false)
+  const[showMoreMenu,setShowMoreMenu]=useState(false)
   const logRef=useRef(null)
   const next=getNextTask(project)
   const progress=getProgress(project)
@@ -1480,7 +1481,6 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
     const h=Math.floor(tot/3600), m=Math.round((tot%3600)/60)
     return h>0?(m>0?`~${h}h ${m}m`:`~${h}h`):`~${m} min`
   })()
-  const [showMoreMenu, setShowMoreMenu] = useState(false)
 
   return(
     <PgmSelContext.Provider value={{selectedIds, setSelectedIds}}>

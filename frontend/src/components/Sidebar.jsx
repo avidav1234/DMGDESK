@@ -22,7 +22,7 @@ const ICONS = {
 const NAV_PRIMARY = [
   { to: '/home',       icon: 'home',      label: 'Home',      title: 'Home' },
   { to: '/progetti',   icon: 'lavori',    label: 'Lavori',    title: 'Lavori' },
-  { to: '/coda',       icon: 'macchina',  label: 'Macchina',  title: 'Macchina' },
+  { to: '/coda',       icon: 'macchina',  label: 'Coda',      title: 'Coda Lavorazione' },
   { to: '/analisi-nc', icon: 'analisi',   label: 'Analisi',   title: 'Analisi NC', alertKey: 'analisi' },
   { to: '/macchina',   icon: 'utensili',  label: 'Utensili',  title: 'Utensili', alertKey: 'utensili' },
   { to: '/report',     icon: 'report',    label: 'Report',    title: 'Report Lavorazioni' },
@@ -207,7 +207,7 @@ export default function Sidebar() {
           display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
           transition: 'all 0.3s', cursor: 'pointer',
         }}>
-          {/* Dot + LIVE/JOG/FERMO */}
+          {/* Dot + LIVE + Pallet su una riga */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <div style={{
               width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
@@ -233,40 +233,18 @@ export default function Sidebar() {
              : statoMacchina?.isJog    ? 'JOG'
              : 'FERMO'}
             </span>
+            {statoMacchina?.attiva && statoMacchina?.pallet && (
+              <span style={{
+                fontSize: 9, fontWeight: 800, fontFamily: 'var(--font-mono)',
+                color: '#7eb8f5', letterSpacing: '0.04em',
+              }}>P{statoMacchina.pallet}</span>
+            )}
+            {statoMacchina?.logStale && statoMacchina?.logAgeSec && (
+              <span style={{ fontSize: 7, color: '#fca5a5', fontFamily: 'var(--font-mono)' }}>
+                {Math.round(statoMacchina.logAgeSec / 60)}m
+              </span>
+            )}
           </div>
-          {/* Pallet attivo */}
-          {statoMacchina?.attiva && statoMacchina?.pallet && (
-            <div style={{
-              fontSize: 9, fontWeight: 800, fontFamily: 'var(--font-mono)',
-              color: '#7eb8f5', letterSpacing: '0.04em',
-            }}>
-              P{statoMacchina.pallet}
-            </div>
-          )}
-          {/* Programma corrente (troncato) */}
-          {statoMacchina?.attiva && statoMacchina?.programma && (
-            <div style={{
-              fontSize: 7, fontFamily: 'var(--font-mono)', color: 'rgba(134,239,172,0.7)',
-              textAlign: 'center', lineHeight: 1.3, wordBreak: 'break-all',
-              maxHeight: 22, overflow: 'hidden',
-            }}>
-              {statoMacchina.programma.replace('.MPF','').replace('.mpf','').split('_').slice(-2).join('_')}
-            </div>
-          )}
-          {/* Badge STALE — MchnSrv fermo */}
-          {statoMacchina?.logStale && (
-            <div style={{ fontSize: 7, fontFamily: 'var(--font-mono)', color: '#fca5a5',
-              textAlign: 'center', lineHeight: 1.3 }}>
-              {statoMacchina.logAgeSec
-                ? `${Math.round(statoMacchina.logAgeSec / 60)}min`
-                : 'offline'}
-            </div>
-          )}
-          {!statoMacchina?.logStale && !statoMacchina?.attiva && (
-            <div style={{ fontSize: 7, color: 'rgba(100,116,139,0.6)', fontFamily: 'var(--font-mono)' }}>
-              in attesa
-            </div>
-          )}
         </div>
       </NavLink>
 

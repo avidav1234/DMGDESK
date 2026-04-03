@@ -124,7 +124,24 @@ function parseMpfFile(filename,content){
     return acc+(parseTempo(raw)||0)
   },0)
   const tempoStimato=tempoTotale>0?tempoTotale:null
-  return{numPgm,fase,tipoOp,utensile,diametro,dataPost,filename,tipoGruppo,tempoStimato}
+
+  // Estrae lista completa utensili con tempi — per ogni M6 risale fino a 5 righe cercando T="..."
+  // Struttura: [{alias, tempoMin}]  — usata per verifica completamento multi-utensile
+  const utensili = []
+  lines.forEach((line, idx) => {
+    if(!/\bM6\b/.test(line)) return
+    let alias = ''
+    for(let i = idx - 1; i >= Math.max(0, idx - 5); i--) {
+      const m = lines[i].match(/T\s*=\s*"([^"]+)"/)
+      if(m) { alias = m[1].trim(); break }
+    }
+    if(!alias) return  // M6 senza T= — salta
+    const raw = (line.match(/TEMPO\s*:\s*([\d:]+)/i)||[])[1]
+    const tempoMin = parseTempo(raw) || null
+    utensili.push({ alias, tempoMin })
+  })
+
+  return{numPgm,fase,tipoOp,utensile,diametro,dataPost,filename,tipoGruppo,tempoStimato,utensili}
 }
 
 const STATO_NEXT={da_fare:'in_main',in_main:'in_lavorazione',in_lavorazione:'completato',completato:'da_fare'}
@@ -363,12 +380,14 @@ function FresaturaPanel({task,onUpdateTask,toolsDB,projectId}){
           tipoOp:     info.tipoOp     || p.tipoOp,
           tempoStimato: info.tempoStimato || p.tempoStimato,
           numPgm:     info.numPgm     || p.numPgm,
+          utensili:   info.utensili?.length ? info.utensili : p.utensili,
           // stato, operatore, tempoInizio, tempoFine → invariati
         }:p)
         aggiornati++
       } else {
         updatedPrograms.push({id:uid(),...info,stato:'da_fare',operatore:'',
-          tempoStimato:info.tempoStimato||'',tempoInizio:null,tempoFine:null})
+          tempoStimato:info.tempoStimato||'',tempoInizio:null,tempoFine:null,
+          utensili:info.utensili||[]})
         nuovi++
       }
     }

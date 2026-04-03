@@ -813,8 +813,11 @@ export default function Home(){
 
           {/* Tempo fermo giornaliero — sempre visibile, anche a macchina ferma */}
           {(()=>{
+            // Non mostrare se sessLive non è ancora caricato
+            if (!sessLive) return null
             const fermoSec = sessLive?.fermo_sec_giornaliero || 0
-            if (fermoSec === 0 && sessLive?.attiva) return null  // in esecuzione, nessun fermo ancora
+            // Nascondi se macchina attiva e nessun fermo ancora accumulato
+            if (fermoSec === 0 && sessLive?.attiva && !sessLive?.in_pausa) return null
             const hh = Math.floor(fermoSec / 3600)
             const mm = Math.floor((fermoSec % 3600) / 60)
             const ss = fermoSec % 60

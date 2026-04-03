@@ -662,8 +662,9 @@ class CAMTracker:
             active, reason = False, "nessun progetto"
 
         # Gestione pausa/ripresa
-        if self.current_project and self.session_start:
-            if not active and not self.is_paused:
+        if self.current_project:
+            if self.session_start and not active and not self.is_paused:
+                # Entra in pausa
                 elapsed = now - self.session_start
                 pid = self._project_id(self.current_project)
                 if elapsed >= self.min_session_sec:
@@ -676,10 +677,11 @@ class CAMTracker:
                 self._gui("add_log", f"Pausa — {pid}", "info")
 
             elif active and self.is_paused:
+                # Ripresa — funziona anche se session_start era None
                 self.session_start = now
                 self.is_paused = False
-                log.info(f"[Tracker] RIPRESA — {reason}")
                 pid = self._project_id(self.current_project)
+                log.info(f"[Tracker] RIPRESA — {reason}")
                 self._gui("set_progetto", pid, True)
                 self._gui("add_log", f"Ripresa — {pid}", "ok")
 

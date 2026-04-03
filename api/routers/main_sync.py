@@ -28,7 +28,7 @@ from typing import Optional
 
 from fastapi import APIRouter
 
-from database.config import carica_configurazione
+from database.db_handler import carica_configurazione
 from api.routers.progetti import _load_progetti, _save_progetti, _proj_lock
 from api.routers.report import _load_log, _log_path
 

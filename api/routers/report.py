@@ -2688,13 +2688,15 @@ async def export_rendiconto(project_id: str):
 
 # ── Mappa termica utilizzo macchina ───────────────────────────────────────────
 @router.get("/heatmap-utilizzo")
-async def heatmap_utilizzo(config=Depends(get_config)):
+async def heatmap_utilizzo():
     """
     Ritorna una griglia giorni × fasce orarie con ore di produzione.
     Fasce: mattina 07:30-16:30, sera 16:30-22:00, notte 22:00-07:30
     Storico: ultime 4 settimane (28 giorni)
     """
     from datetime import date, timedelta, datetime as dt
+
+    config = carica_configurazione()
 
     FASCE = [
         {"key": "notte",   "label": "Notte",   "da": 22*60,      "a": 24*60 + 7*60+30},  # 22:00-07:30 (+giorno)

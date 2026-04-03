@@ -900,6 +900,21 @@ async def aggiorna_stati_da_log():
                 if not pgm_in_lav and not pgm_in_main:
                     continue  # progetto pulito, niente da fare
 
+                # Controlla se il progetto era effettivamente in esecuzione
+                # (ha almeno un programma completato o in_lavorazione)
+                # Se tutti i programmi sono in_main senza mai essere stati eseguiti,
+                # non è un'interruzione — è semplicemente un progetto pianificato in anticipo
+                had_completato = any(
+                    pg.get("stato") == "completato"
+                    for s in p_altro.get("steps", [])
+                    for t in s.get("tasks", [])
+                    if t.get("text","").strip().lower() == "fresatura"
+                    for pg in t.get("programs", [])
+                    if pg.get("tipoGruppo") != "ipm"
+                )
+                if not pgm_in_lav and not had_completato:
+                    continue  # progetto non ancora iniziato — non è interruzione
+
                 # Completa i programmi che stavano girando
                 for pgm in pgm_in_lav:
                     pgm["stato"] = "completato"
@@ -950,7 +965,10 @@ async def aggiorna_stati_da_log():
                                 pgm["stato"] = "in_lavorazione"
                                 pgm["tempoInizio"] = pgm.get("tempoInizio") or now_str
                                 pgm["tempoFine"]   = None
-                                pgm["_utensili_visti"] = []  # reset tracking utensili
+                                # Reset utensili visti solo se è una nuova esecuzione
+                                # (tempoInizio era None → partenza fresca)
+                                if not pgm.get("tempoInizio"):
+                                    pgm["_utensili_visti"] = []
                                 proj_dirty = True
                                 updates["in_macchina"] += 1
                             else:
@@ -968,7 +986,7 @@ async def aggiorna_stati_da_log():
                                     proj_dirty = True
 
                         else:
-                            # Altro programma → se era in_lavorazione → verifica utensili attesi
+                            # Altro programma dello stesso progetto → se era in_lavorazione → verifica utensili attesi
                             if pgm.get("stato") == "in_lavorazione":
                                 utensili_attesi = [
                                     u["alias"].upper().strip()
@@ -983,14 +1001,16 @@ async def aggiorna_stati_da_log():
 
                                 if utensili_attesi and mancanti:
                                     # Utensili attesi non incontrati → interruzione utensile
-                                    # Programma torna in_main (non completato), pallet → GUASTO
+                                    # Programma torna in_main, pallet del progetto CORRENTE → GUASTO
                                     pgm["stato"] = "in_main"
                                     pgm["tempoInizio"] = None
                                     pgm["tempoFine"]   = None
                                     pgm.pop("_utensili_visti", None)
                                     proj_dirty = True
 
-                                    # Pallet del progetto corrente → GUASTO
+                                    # Pallet del progetto a cui appartiene questo pgm → GUASTO
+                                    # (progetto_con_match è il progetto del NUOVO programma,
+                                    #  qui siamo nel ramo "altro pgm dello stesso progetto")
                                     pid_pgm = progetto_con_match.get("id") or ""
                                     for pal in pallet_data.get("pallet", []):
                                         if pal.get("progetto_id") == pid_pgm:

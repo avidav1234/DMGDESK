@@ -465,15 +465,17 @@ function FresaturaPanel({task,onUpdateTask,toolsDB,projectId}){
           background: inMacchina>0?'#E8F0FA': allDone?'#f0fdf4':'#F8FAFC',
           borderRadius: expanded?'10px 10px 0 0':'10px'}}>
 
-        {/* Barra progresso mini verticale sinistra */}
-        <div style={{width:3,height:32,background:'#e2e8f0',borderRadius:2,flexShrink:0,overflow:'hidden'}}>
-          <div style={{width:'100%',height:`${fresPrograms.length>0?Math.round(doneTotal/fresPrograms.length*100):0}%`,
-            background: allDone?'#16a34a':'#1D5FAD',borderRadius:2,marginTop:'auto',
-            position:'relative',top:`${100-Math.round(doneTotal/(fresPrograms.length||1)*100)}%`}}/>
-        </div>
-
         <span style={{fontSize:12}}>⚙️</span>
         <span style={{fontSize:13,fontWeight:700,color:'#0d2d5e'}}>Fresatura</span>
+
+        {/* Barra progresso orizzontale inline */}
+        {fresPrograms.length>0&&(
+          <div style={{flex:1,maxWidth:120,height:5,background:'#dbeafe',borderRadius:3,overflow:'hidden',flexShrink:0}}>
+            <div style={{height:'100%',
+              width:`${Math.round(doneTotal/fresPrograms.length*100)}%`,
+              background:allDone?'#16a34a':'#1D5FAD',borderRadius:3,transition:'width 0.3s'}}/>
+          </div>
+        )}
 
         {/* Programma in macchina — il più importante */}
         {inMacchina>0&&(()=>{

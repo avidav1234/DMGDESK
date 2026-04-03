@@ -719,46 +719,6 @@ export default function Home(){
             })()}
           </div>
 
-          {/* ── UTENSILI ────────────────────────────────────────────── */}
-          <div style={{background:'#fff',border:'1px solid #e2e8f0',borderRadius:12,padding:'10px 16px'}}>
-            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
-              <span style={{fontSize:10,fontWeight:800,letterSpacing:'0.1em',color:'#64748b',textTransform:'uppercase'}}>
-                Utensili — attenzione
-              </span>
-              {utensiliProblema.length>0?(
-                <span style={{fontSize:10,fontWeight:800,color:'#dc2626',
-                  background:'#fef2f2',padding:'2px 8px',borderRadius:8}}>
-                  {utensiliProblema.length}
-                </span>
-              ):(
-                <span style={{fontSize:11,color:'#94a3b8'}}>— in attesa dati</span>
-              )}
-            </div>
-            {utensiliProblema.length===0?(
-              <div style={{color:'#22c55e',fontSize:13,fontWeight:600}}>✓ Nessun problema rilevato</div>
-            ):(
-              <div style={{display:'flex',flexDirection:'column',gap:5}}>
-                {utensiliProblema.map(u=>(
-                  <div key={u.alias}
-                    style={{display:'flex',alignItems:'center',gap:10,
-                      background:u.bg,border:`1px solid ${u.border}`,
-                      borderRadius:8,padding:'6px 10px'}}>
-                    <span style={{fontSize:10,fontWeight:800,color:u.color,
-                      background:'#fff',padding:'2px 8px',borderRadius:4,
-                      border:`1px solid ${u.border}`,flexShrink:0,
-                      minWidth:68,textAlign:'center'}}>{u.label}</span>
-                    <span style={{fontSize:12,fontWeight:700,color:'#1e293b',
-                      fontFamily:'monospace',flex:1,
-                      overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{u.alias}</span>
-                    {u.detail&&<span style={{fontSize:11,color:u.color,opacity:0.8,
-                      flexShrink:0,maxWidth:160,overflow:'hidden',
-                      textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{u.detail}</span>}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
           </div>
         </div>{/* fine col-main */}
 

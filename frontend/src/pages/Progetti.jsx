@@ -476,10 +476,10 @@ function FresaturaPanel({task,onUpdateTask,toolsDB,projectId,projectName}){
   // Previsione fine vita — calcola per ogni utensile il punto di rottura
   const previsioneVita = (() => {
     if(!toolsDB||!haTempi) return []
-    // Raggruppa programmi da fare per utensile in ordine
     const perUtensile = {}
     for(const p of fresPrograms){
-      if(p.stato==='completato') continue
+      // Solo programmi pianificati nel MAIN — da_fare non è ancora pianificato
+      if(!['in_main','in_lavorazione','in_macchina'].includes(p.stato)) continue
       const alias=(p.utensile||'').toUpperCase().trim()
       const tempo=parseInt(p.tempoStimato)||0
       if(!alias||!tempo) continue

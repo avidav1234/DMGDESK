@@ -578,7 +578,8 @@ def _calcola_previsione_vita(projects: list, tools_db: dict, classify_fn, ordine
                     continue
                 for pgm in task.get("programs", []):
                     if pgm.get("tipoGruppo") == "ipm": continue
-                    if pgm.get("stato") == "completato": continue
+                    stato = pgm.get("stato", "da_fare")
+                    if stato not in ("in_main", "in_lavorazione", "in_macchina"): continue
                     alias = (pgm.get("utensile") or "").upper().strip()
                     try: tempo = int(pgm.get("tempoStimato") or 0)
                     except: tempo = 0

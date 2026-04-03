@@ -459,30 +459,76 @@ function FresaturaPanel({task,onUpdateTask,toolsDB,projectId}){
   })()
   return(
     <div style={{marginTop:8,background:T.surface,border:'1.5px solid #1D5FAD33',borderRadius:10}}>
-      <div onClick={()=>setExpanded(v=>!v)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',cursor:'pointer',background:'#E8F0FA',userSelect:'none'}}>
-        <span style={{fontSize:15}}>⚙️</span>
-        <span style={{fontSize:13,fontWeight:800,color:'#0d2d5e',flex:1}}>PROGRAMMI FRESATURA</span>
-        {toolsDB&&(()=>{
-          const issues=programs.filter(p=>['in_macchina','in_main','in_lavorazione'].includes(p.stato)&&p.utensile&&p.tipoGruppo!=='ipm'&&['mancante','fin_vita','disabilitato'].includes(classifyTool(p.utensile,toolsDB)))
-          return issues.length>0?(
-            <span style={{fontSize:11,fontWeight:700,color:'#dc2626',background:'#fef2f2',padding:'2px 8px',borderRadius:20,border:'1px solid #C0392B44'}}>
-              ⚠ {issues.length} utensil{issues.length===1?'e':'i'} problematic{issues.length===1?'o':'i'}
+      <div onClick={()=>setExpanded(v=>!v)}
+        style={{display:'flex',alignItems:'center',gap:8,padding:'9px 14px',
+          cursor:'pointer',userSelect:'none',
+          background: inMacchina>0?'#E8F0FA': allDone?'#f0fdf4':'#F8FAFC',
+          borderRadius: expanded?'10px 10px 0 0':'10px'}}>
+
+        {/* Barra progresso mini verticale sinistra */}
+        <div style={{width:3,height:32,background:'#e2e8f0',borderRadius:2,flexShrink:0,overflow:'hidden'}}>
+          <div style={{width:'100%',height:`${fresPrograms.length>0?Math.round(doneTotal/fresPrograms.length*100):0}%`,
+            background: allDone?'#16a34a':'#1D5FAD',borderRadius:2,marginTop:'auto',
+            position:'relative',top:`${100-Math.round(doneTotal/(fresPrograms.length||1)*100)}%`}}/>
+        </div>
+
+        <span style={{fontSize:12}}>⚙️</span>
+        <span style={{fontSize:13,fontWeight:700,color:'#0d2d5e'}}>Fresatura</span>
+
+        {/* Programma in macchina — il più importante */}
+        {inMacchina>0&&(()=>{
+          const pgmLive=fresPrograms.find(p=>['in_macchina','in_main','in_lavorazione'].includes(p.stato))
+          return pgmLive?(
+            <span style={{fontSize:11,fontWeight:700,color:'#fff',background:'#1D5FAD',
+              padding:'2px 8px',borderRadius:4,fontFamily:'monospace',flexShrink:0,
+              maxWidth:160,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+              ⚙ {(pgmLive.filename||'').replace(/\.MPF$/i,'')||`#${pgmLive.numPgm}`}
             </span>
           ):null
         })()}
-        {/* ETA totale */}
-        {haTempi&&<span style={{fontSize:11,fontWeight:700,color:'#475569',background:'#fff',padding:'2px 9px',borderRadius:20,border:'1px solid #e2e8f0'}}>
-          ⏱ {fmtTempo(totaleStimato)} tot
-        </span>}
-        {haTempi&&rimanente>0&&rimanente<totaleStimato&&<span style={{fontSize:11,fontWeight:700,color:'#0d2d5e',background:'#eef4fb',padding:'2px 9px',borderRadius:20,border:'1px solid #c5d9f0'}}>
-          {fmtTempo(rimanente)} rim.
-        </span>}
-        {previsioneVita.length>0&&<span style={{fontSize:11,fontWeight:700,color:'#e65100',background:'#fff3e0',padding:'2px 9px',borderRadius:20,border:'1px solid #ffb74d'}}>
-          🔮 {previsioneVita.length} a rischio
-        </span>}
-        {inMacchina>0&&<span style={{fontSize:11,fontWeight:700,color:'#0d2d5e',background:'#fff',padding:'2px 9px',borderRadius:20,border:'1px solid #1D5FAD44'}}>⚙ {inMacchina} in macchina</span>}
-        {total>0&&<span style={{fontSize:12,fontWeight:700,color:allDone?'#166534':'#0d2d5e',background:allDone?'#dcfce7':'#fff',padding:'2px 10px',borderRadius:20,border:`1px solid ${allDone?'#166534':'#0d2d5e'}44`}}>{doneTotal}/{total} {allDone?'✓':'completati'}</span>}
-        <span style={{fontSize:11,color:'#0d2d5e',fontWeight:700}}>{expanded?'▲':'▼'}</span>
+
+        {/* Contatore programmi */}
+        <span style={{fontSize:11,fontWeight:700,
+          color:allDone?'#166534':'#475569',
+          background:allDone?'#dcfce7':'#f1f5f9',
+          padding:'2px 8px',borderRadius:4}}>
+          {doneTotal}/{fresPrograms.length}{allDone?' ✓':''}
+        </span>
+
+        {/* ETA rimanente */}
+        {haTempi&&rimanente>0&&(
+          <span style={{fontSize:11,fontWeight:700,color:'#1D5FAD',
+            fontFamily:'monospace',flexShrink:0}}>
+            {fmtTempo(rimanente)} rim.
+          </span>
+        )}
+
+        {/* Alert utensili — visibile senza espandere */}
+        {toolsDB&&(()=>{
+          const issues=fresPrograms.filter(p=>
+            p.stato!=='completato'&&p.utensile&&
+            ['mancante','fin_vita','disabilitato'].includes(classifyTool(p.utensile,toolsDB)))
+          return issues.length>0?(
+            <span style={{fontSize:11,fontWeight:700,color:'#dc2626',
+              background:'#fef2f2',padding:'2px 7px',borderRadius:4,
+              border:'1px solid #fca5a5',flexShrink:0}}>
+              ⚠ {issues.length} utensil{issues.length===1?'e':'i'}
+            </span>
+          ):null
+        })()}
+
+        {/* Previsione vita */}
+        {previsioneVita.length>0&&(
+          <span style={{fontSize:11,fontWeight:700,color:'#e65100',
+            background:'#fff3e0',padding:'2px 7px',borderRadius:4,
+            border:'1px solid #ffb74d',flexShrink:0}}>
+            🔮 {previsioneVita.length} a rischio
+          </span>
+        )}
+
+        <span style={{marginLeft:'auto',fontSize:11,color:'#0d2d5e',fontWeight:700,flexShrink:0}}>
+          {expanded?'▲':'▼'}
+        </span>
       </div>
       {expanded&&(
         <div>
@@ -1421,16 +1467,33 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
 
   const Tab=({id,label})=>(<button onClick={()=>setActiveTab(id)} style={{background:'none',border:'none',cursor:'pointer',color:activeTab===id?project.color:T.textSub,fontSize:15,fontWeight:700,padding:'10px 0',borderBottom:activeTab===id?`3px solid ${project.color}`:'3px solid transparent',marginRight:24,transition:'all 0.15s'}}>{label}</button>)
 
+  // ── Dati derivati per header ─────────────────────────────────────────────
+  const mpfTotDetail = mpfList.length
+  const mpfDoneDetail = mpfList.filter(p=>p.stato==='completato').length
+  const mpfInMacDetail = mpfList.filter(p=>['in_macchina','in_main','in_lavorazione'].includes(p.stato)).length
+  const ncPctDetail = mpfTotDetail>0 ? Math.round(mpfDoneDetail/mpfTotDetail*100) : 0
+  const etaDetail = (()=>{
+    const rimasti = mpfList.filter(p=>p.stato!=='completato')
+    let tot=0
+    for(const p of rimasti){ if(p.tempoStimato) tot+=parseInt(p.tempoStimato)*60 }
+    if(!tot) return null
+    const h=Math.floor(tot/3600), m=Math.round((tot%3600)/60)
+    return h>0?(m>0?`~${h}h ${m}m`:`~${h}h`):`~${m} min`
+  })()
+  const [showMoreMenu, setShowMoreMenu] = React.useState(false)
+
   return(
     <PgmSelContext.Provider value={{selectedIds, setSelectedIds}}>
     <div style={{display:'flex',flexDirection:'column',height:'100%',background:T.bg,fontFamily:"var(--font-display)"}}>
       {/* Header */}
       <div style={{padding:'10px 20px 0',borderBottom:`1px solid ${T.border}`,flexShrink:0,background:T.surface}}>
-        <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
 
-          {/* ── SINISTRA: primari ── */}
+        {/* RIGA 1: navigazione + nome + pallet + CTA */}
+        <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
           <button onClick={onBack} style={{background:'none',border:`1px solid ${T.border}`,borderRadius:7,color:T.textSub,fontSize:12,padding:'5px 10px',cursor:'pointer',fontWeight:600,flexShrink:0}}>← Indietro</button>
-          <div style={{width:10,height:10,borderRadius:'50%',background:project.color,flexShrink:0}}/>
+          <div style={{width:9,height:9,borderRadius:2,background:project.color,flexShrink:0}}/>
+
+          {/* Nome editabile */}
           {editingName
             ? <div style={{display:'flex',gap:6,flex:1,alignItems:'center'}}>
                 <input autoFocus value={editNameVal}
@@ -1439,7 +1502,7 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
                     if(e.key==='Enter'){onUpdate({...project,name:editNameVal.trim()||project.name});setEditingName(false)}
                     if(e.key==='Escape')setEditingName(false)
                   }}
-                  style={{fontSize:16,fontWeight:800,color:T.text,background:T.surface2,
+                  style={{fontSize:15,fontWeight:800,color:T.text,background:T.surface2,
                     border:`2px solid ${project.color}`,borderRadius:8,padding:'4px 10px',outline:'none',flex:1}}/>
                 <button onClick={()=>{onUpdate({...project,name:editNameVal.trim()||project.name});setEditingName(false)}}
                   style={{background:project.color,border:'none',borderRadius:7,color:'#fff',fontWeight:700,fontSize:12,padding:'4px 10px',cursor:'pointer'}}>✓</button>
@@ -1447,28 +1510,23 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
                   style={{background:'none',border:`1px solid ${T.border}`,borderRadius:7,color:T.textSub,fontSize:12,padding:'4px 8px',cursor:'pointer'}}>✕</button>
               </div>
             : <div style={{display:'flex',alignItems:'center',gap:4,flex:1,minWidth:0}}>
-                <div style={{fontSize:17,fontWeight:800,color:T.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{project.name}</div>
+                <div style={{fontSize:16,fontWeight:800,color:T.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{project.name}</div>
                 <button onClick={()=>{setEditNameVal(project.name);setEditingName(true)}}
-                  title="Rinomina" style={{background:'none',border:'none',cursor:'pointer',color:T.textMuted,fontSize:11,opacity:0.4,padding:'2px 3px',flexShrink:0}}>✏️</button>
+                  title="Rinomina" style={{background:'none',border:'none',cursor:'pointer',color:T.textMuted,fontSize:11,opacity:0.35,padding:'2px 3px',flexShrink:0}}>✏️</button>
               </div>
           }
-          <StatusBadge progress={progress}/>
 
-          {/* Pallet — prominente, con indicatore live */}
+          {/* Pallet — prominente */}
           {(()=>{
             const palInfo = palletStato.find(p=>p.numero===project.pallet_assegnato)
             const isLav = palInfo && (palInfo.stato||'').toLowerCase().replace('_',' ')==='in lavorazione'
             return (
-              <div style={{display:'flex',alignItems:'center',gap:4,
-                background: isLav ? '#dbeafe' : '#eef4fb',
-                border: `1px solid ${isLav ? '#1D5FAD' : '#c5d9f0'}`,
-                borderRadius:8,padding:'4px 10px',flexShrink:0,
-                transition:'all 0.3s'}}>
-                {isLav && (
-                  <span style={{width:7,height:7,borderRadius:'50%',background:'#1D5FAD',
-                    flexShrink:0,display:'inline-block',animation:'pulse-dot 1.5s ease-in-out infinite'}}/>
-                )}
-                <span style={{fontSize:11,fontWeight:700,color: isLav?'#0d2d5e':'#0d2d5e'}}>P:</span>
+              <div style={{display:'flex',alignItems:'center',gap:5,
+                background: isLav?'#dbeafe':'#eef4fb',
+                border:`1px solid ${isLav?'#1D5FAD':'#c5d9f0'}`,
+                borderRadius:7,padding:'4px 10px',flexShrink:0}}>
+                {isLav&&<span style={{width:6,height:6,borderRadius:'50%',background:'#1D5FAD',flexShrink:0,display:'inline-block',animation:'pulse-dot 1.5s ease-in-out infinite'}}/>}
+                <span style={{fontSize:11,fontWeight:700,color:'#0d2d5e'}}>P:</span>
                 <select value={project.pallet_assegnato||''}
                   onChange={async e=>{
                     const val=e.target.value?parseInt(e.target.value):null
@@ -1477,81 +1535,111 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
                     if(val){const r=await fetch('/api/pallet/'+val+'/assegna-progetto',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({progetto_id:project.id,progetto_nome:project.name,progetto_colore:project.color||'#0d2d5e'})});if(!r.ok){const err=await r.json().catch(()=>({}));setPalletError(err.detail||'Errore assegnazione pallet');setTimeout(()=>setPalletError(null),4000);return}}
                     onUpdate({...project,pallet_assegnato:val})
                   }}
-                  style={{fontSize:12,fontWeight:700,background:'transparent',
-                    color: isLav?'#1D5FAD':'#0d2d5e',
-                    border:'none',padding:'0 2px',cursor:'pointer',outline:'none'}}>
+                  style={{fontSize:12,fontWeight:700,background:'transparent',color:isLav?'#1D5FAD':'#0d2d5e',border:'none',padding:'0 2px',cursor:'pointer',outline:'none'}}>
                   <option value=''>—</option>
                   {[1,2,3,4,5,6].map(n=>{const disp=palletDisponibili.find(p=>p.numero===n);const isAss=project.pallet_assegnato===n;if(!disp&&!isAss)return null;return <option key={n} value={n}>P{n}{isAss?' ✓':''}</option>})}
                 </select>
                 {project.pallet_assegnato&&(
-                  <span onClick={()=>navPD('/coda')}
-                    style={{fontSize:10,fontWeight:700,cursor:'pointer',
-                      color: isLav?'#1D5FAD':'#0d2d5e',opacity: isLav?1:0.6}}>
-                    {isLav ? 'LIVE →' : '→'}
+                  <span onClick={()=>navPD('/coda')} style={{fontSize:10,fontWeight:700,cursor:'pointer',color:isLav?'#1D5FAD':'#0d2d5e',opacity:isLav?1:0.6}}>
+                    {isLav?'LIVE →':'→'}
                   </span>
                 )}
               </div>
             )
           })()}
+
           {palletError&&(
-            <div style={{fontSize:11,fontWeight:700,color:'#dc2626',
-              background:'#fef2f2',border:'1px solid #fca5a5',
-              borderRadius:6,padding:'5px 10px',marginTop:4,flexShrink:0}}>
+            <span style={{fontSize:11,fontWeight:700,color:'#dc2626',background:'#fef2f2',border:'1px solid #fca5a5',borderRadius:6,padding:'4px 10px',flexShrink:0}}>
               ⚠ {palletError}
-            </div>
+            </span>
           )}
 
-          {/* Lancia in NC — CTA principale */}
-          {mpfList.length>0&&<button onClick={()=>setShowLancioModal(true)}
-            style={{background:'#0d2d5e',border:'none',borderRadius:8,color:'#fff',fontWeight:800,fontSize:13,padding:'7px 16px',cursor:'pointer',flexShrink:0}}>
-            📄 Lancia in NC →
-          </button>}
+          {/* CTA primaria */}
+          {mpfList.length>0&&(
+            <button onClick={()=>setShowLancioModal(true)}
+              style={{background:'#0d2d5e',border:'none',borderRadius:8,color:'#fff',fontWeight:800,fontSize:13,padding:'7px 16px',cursor:'pointer',flexShrink:0}}>
+              📄 Lancia in NC →
+            </button>
+          )}
 
-          {/* ── DESTRA: secondari piccoli ── */}
-          <div style={{marginLeft:'auto',display:'flex',gap:5,flexShrink:0}}>
-            <button onClick={()=>navPD(`/rendiconto/${project.id}`)}
+          {/* Rendiconto — secondario visibile */}
+          <button onClick={()=>navPD(`/rendiconto/${project.id}`)}
+            style={{background:'none',border:`1px solid ${T.border}`,borderRadius:6,
+              color:'#1D5FAD',fontSize:12,padding:'5px 10px',cursor:'pointer',fontWeight:600,flexShrink:0}}>
+            📊
+          </button>
+
+          {/* Menu ⋯ — secondari nascosti */}
+          <div style={{position:'relative',flexShrink:0}}>
+            <button onClick={()=>setShowMoreMenu(v=>!v)}
               style={{background:'none',border:`1px solid ${T.border}`,borderRadius:6,
-                color:'#1D5FAD',fontSize:11,padding:'4px 9px',cursor:'pointer',fontWeight:600}}
-              title="Rendiconto commessa">
-              📊 Rendiconto
+                color:T.textSub,fontSize:13,padding:'5px 10px',cursor:'pointer'}}>
+              ⋯
             </button>
-            <button onClick={()=>setShowSaveTemplate(true)}
-              style={{background:'none',border:`1px solid ${T.border}`,borderRadius:6,color:T.textMuted,fontSize:11,padding:'4px 9px',cursor:'pointer'}} title="Salva come Template">
-              💾 Template
-            </button>
-            <button onClick={()=>setConfirm('archive')}
-              style={{background:'none',border:`1px solid ${T.border}`,borderRadius:6,color:T.textMuted,fontSize:11,padding:'4px 9px',cursor:'pointer'}} title={project.archived?'Riattiva':'Archivia'}>
-              {project.archived?'📤':'📦'}
-            </button>
-            <button onClick={()=>setConfirm('delete')}
-              style={{background:'none',border:`1px solid ${T.red}44`,borderRadius:6,color:T.red,fontSize:11,padding:'4px 9px',cursor:'pointer'}} title="Elimina">
-              🗑️
-            </button>
+            {showMoreMenu&&(
+              <div style={{position:'absolute',right:0,top:'calc(100% + 4px)',
+                background:T.surface,border:`1px solid ${T.border}`,borderRadius:10,
+                boxShadow:'0 4px 16px rgba(0,0,0,0.12)',zIndex:50,minWidth:160,overflow:'hidden'}}>
+                {[
+                  {label:'💾 Salva come template', action:()=>{setShowSaveTemplate(true);setShowMoreMenu(false)}},
+                  {label:project.archived?'📤 Riattiva':'📦 Archivia', action:()=>{setConfirm('archive');setShowMoreMenu(false)}},
+                  {label:'🗑️ Elimina', action:()=>{setConfirm('delete');setShowMoreMenu(false)}, danger:true},
+                ].map((item,i)=>(
+                  <button key={i} onClick={item.action}
+                    style={{display:'block',width:'100%',textAlign:'left',
+                      background:'none',border:'none',borderTop:i>0?`1px solid ${T.border}`:'none',
+                      color:item.danger?T.red:T.text,fontSize:13,padding:'10px 16px',
+                      cursor:'pointer',fontWeight:item.danger?600:400}}>
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
-        <div style={{marginBottom:14}}>
-          <div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}>
-            <span style={{fontSize:13,color:T.textSub,fontWeight:600}}>Avanzamento</span>
-            <span style={{fontSize:13,color:project.color,fontWeight:700}}>{progress}% — {project.steps.flatMap(s=>s.tasks||[]).filter(t=>t.done).length} di {project.steps.flatMap(s=>s.tasks||[]).length} task completati</span>
-          </div>
-          <ProgressBar value={progress} color={project.color}/>
-        </div>
-        {next&&(
-          <div style={{background:T.accentBg,border:`1.5px solid ${T.accent}44`,borderRadius:10,padding:'12px 16px',marginBottom:14,display:'flex',alignItems:'flex-start',gap:10}}>
-            <span style={{fontSize:20,flexShrink:0}}>📍</span>
-            <div>
-              <div style={{fontSize:12,color:T.accent,fontWeight:700,letterSpacing:'0.06em',marginBottom:3}}>RIPRENDI DA QUI</div>
-              <div style={{fontSize:15,color:T.text,fontWeight:600}}><span style={{color:T.textSub,fontWeight:400}}>{next.step.title} › </span>{next.task.text}</div>
-              {next.task.text?.trim().toLowerCase()==='fresatura'&&Array.isArray(next.task.programs)&&next.task.programs.length>0&&(
-                <div style={{display:'flex',alignItems:'center',gap:8,marginTop:5}}>
-                  <span style={{fontSize:13,color:'#0d2d5e',fontWeight:700}}>⚙️ {next.task.programs.filter(p=>p.stato==='completato').length}/{next.task.programs.length} programmi completati</span>
-                  {next.task.programs.filter(p=>['in_macchina','in_main','in_lavorazione'].includes(p.stato)).length>0&&<span style={{fontSize:12,color:'#0d2d5e',background:'#E8F0FA',padding:'2px 10px',borderRadius:10}}>{next.task.programs.filter(p=>['in_macchina','in_main','in_lavorazione'].includes(p.stato)).length} in macchina</span>}
+
+        {/* RIGA 2: doppie barre + ETA + scadenza */}
+        {(()=>{
+          const taskTot = project.steps.flatMap(s=>s.tasks||[]).length
+          const taskDone = project.steps.flatMap(s=>s.tasks||[]).filter(t=>t.done).length
+          const del = (palletDisponibili||[]).find ? null : null  // delivery passata dal parent
+          // Scadenza — la leggiamo da palletStato per semplicità (non disponibile qui)
+          // La mostriamo solo se mpfTot > 0
+          return(
+            <div style={{display:'grid',gridTemplateColumns:'1fr auto',gap:16,alignItems:'center',marginBottom:12}}>
+              <div>
+                {/* Barra preparazione */}
+                <div style={{display:'flex',justifyContent:'space-between',fontSize:10,color:T.textMuted,marginBottom:3}}>
+                  <span>Preparazione — {taskDone}/{taskTot} task · {progress}%</span>
                 </div>
-              )}
+                <div style={{height:5,background:T.surface2,borderRadius:3,overflow:'hidden',marginBottom:4}}>
+                  <div style={{height:'100%',width:`${progress}%`,background:project.color,borderRadius:3,transition:'width 0.3s'}}/>
+                </div>
+                {/* Barra NC */}
+                {mpfTotDetail>0&&(
+                  <>
+                    <div style={{display:'flex',justifyContent:'space-between',fontSize:10,color:T.textMuted,marginBottom:3}}>
+                      <span>NC — {mpfDoneDetail}/{mpfTotDetail} programmi{mpfInMacDetail>0?` · ${mpfInMacDetail} in macchina`:''}</span>
+                      {etaDetail&&<span style={{color:'#1D5FAD',fontWeight:600}}>{etaDetail} rimanenti</span>}
+                    </div>
+                    <div style={{height:4,background:T.surface2,borderRadius:2,overflow:'hidden'}}>
+                      <div style={{height:'100%',width:`${ncPctDetail}%`,background:'#16a34a',borderRadius:2,transition:'width 0.3s'}}/>
+                    </div>
+                  </>
+                )}
+              </div>
+              {/* StatusBadge compatto a destra */}
+              <StatusBadge progress={progress}/>
             </div>
-          </div>
-        )}
-        <div><Tab id='tasks' label='Task'/><Tab id='documenti' label='Documenti'/><Tab id='log' label={`Log aggiornamenti (${(project.log||[]).length})`}/></div>
+          )
+        })()}
+
+        {/* Tab */}
+        <div style={{display:'flex',gap:0}}>
+          <Tab id='tasks' label='Task'/>
+          <Tab id='documenti' label='Documenti'/>
+          <Tab id='log' label={`Log (${(project.log||[]).length})`}/>
+        </div>
       </div>
       {/* Body */}
       <div style={{flex:1,overflow:'auto',padding:'20px 28px'}}>

@@ -480,23 +480,34 @@ class ActivityMonitor:
             except Exception:
                 return True  # fallback permissivo se win32 non disponibile
 
+    def is_cimatron_foreground(self) -> bool:
+        """True se una finestra Cimatron ha il focus."""
+        try:
+            import win32gui
+            hwnd = win32gui.GetForegroundWindow()
+            if not hwnd:
+                return False
+            title = win32gui.GetWindowText(hwnd)
+            result = "cimatron" in title.lower()
+            if not result:
+                log.debug(f"[Activity] Foreground: '{title}' — non è Cimatron")
+            return result
+        except Exception:
+            return True  # fallback permissivo se win32 non disponibile
+
     def is_active(self) -> tuple[bool, str]:
         """
         Ritorna (conta_tempo, descrizione).
-
-        Conta il tempo se:
-        - C'è stato input (mouse/tastiera) negli ultimi idle_timeout_sec secondi
-        - Cimatron è aperto (verificato dal caller tramite get_active_project)
-
-        NON richiede che Cimatron sia in foreground — l'utente può lavorare
-        su altre finestre mentre Cimatron calcola in background.
-        La pausa scatta solo dopo idle_timeout_min minuti senza nessun input.
+        Conta il tempo solo se Cimatron è in foreground E c'è stato input recente.
         """
         idle_sec = self.seconds_since_last_input()
 
         if idle_sec > self.idle_timeout_sec:
             mins = idle_sec / 60
             return False, f"idle {mins:.1f}min (soglia={self.idle_timeout_sec//60}min)"
+
+        if not self.is_cimatron_foreground():
+            return False, f"Cimatron non in foreground (idle={idle_sec:.0f}s)"
 
         return True, f"attivo (idle={idle_sec:.0f}s)"
 

@@ -770,24 +770,27 @@ class CAMTracker:
 
 # ── Entry point ────────────────────────────────────────────────────────────────
 def _acquire_lock() -> bool:
-    """Crea un file .pid per impedire istanze multiple. Ritorna True se OK."""
-    import os, sys, psutil
+    """Crea un file .pid per impedire istanze multiple. Solo stdlib, no psutil."""
+    import os
     lock_path = Path(__file__).parent / "cam_tracker.pid"
-    
-    # Controlla se esiste già un lock
+
     if lock_path.exists():
         try:
             old_pid = int(lock_path.read_text().strip())
-            if psutil.pid_exists(old_pid):
-                # Verifica che sia davvero un processo cam_tracker
-                proc = psutil.Process(old_pid)
-                cmdline = " ".join(proc.cmdline()).lower()
-                if "cam_tracker" in cmdline:
-                    log.error(f"[CAMTracker] Già in esecuzione (PID {old_pid}) — uscita")
-                    return False
+            # Verifica se il processo è ancora vivo (funziona su Windows e Linux)
+            # os.kill(pid, 0) non invia segnali — controlla solo se il processo esiste
+            try:
+                os.kill(old_pid, 0)
+                # Processo vivo — controlla che sia davvero cam_tracker
+                # Su Windows os.kill(pid,0) funziona per qualsiasi processo vivo
+                log.error(f"[CAMTracker] Già in esecuzione (PID {old_pid}) — uscita")
+                return False
+            except (OSError, ProcessLookupError):
+                # PID non esiste più — lock stale, sovrascriviamo
+                pass
         except Exception:
-            pass  # PID stale — sovrascrivi
-    
+            pass
+
     lock_path.write_text(str(os.getpid()))
     return True
 

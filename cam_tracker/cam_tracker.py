@@ -769,7 +769,37 @@ class CAMTracker:
 
 
 # ── Entry point ────────────────────────────────────────────────────────────────
+def _acquire_lock() -> bool:
+    """Crea un file .pid per impedire istanze multiple. Ritorna True se OK."""
+    import os, sys, psutil
+    lock_path = Path(__file__).parent / "cam_tracker.pid"
+    
+    # Controlla se esiste già un lock
+    if lock_path.exists():
+        try:
+            old_pid = int(lock_path.read_text().strip())
+            if psutil.pid_exists(old_pid):
+                # Verifica che sia davvero un processo cam_tracker
+                proc = psutil.Process(old_pid)
+                cmdline = " ".join(proc.cmdline()).lower()
+                if "cam_tracker" in cmdline:
+                    log.error(f"[CAMTracker] Già in esecuzione (PID {old_pid}) — uscita")
+                    return False
+        except Exception:
+            pass  # PID stale — sovrascrivi
+    
+    lock_path.write_text(str(os.getpid()))
+    return True
+
+def _release_lock():
+    lock_path = Path(__file__).parent / "cam_tracker.pid"
+    try: lock_path.unlink(missing_ok=True)
+    except Exception: pass
+
 if __name__ == "__main__":
+    if not _acquire_lock():
+        import sys; sys.exit(1)
+
     cfg = load_config()
     tracker = CAMTracker(cfg)
 
@@ -782,3 +812,4 @@ if __name__ == "__main__":
         # Chiudi il daemon se attivo
         if hasattr(tracker, 'com'):
             tracker.com.shutdown()
+        _release_lock()

@@ -29,7 +29,7 @@ from typing import Optional
 from fastapi import APIRouter
 
 from database.db_handler import carica_configurazione
-from api.routers.progetti import _load_progetti, _save_progetti, _proj_lock
+from api.routers.progetti import _load_progetti, _save_progetti, _write_lock
 from api.routers.report import _load_log, _log_path
 
 log = logging.getLogger("toolmanager")
@@ -231,7 +231,7 @@ async def job_sync_main_log():
             log.info(f"main_sync: aggiornato {progetto.get('name')}")
 
     if any_dirty:
-        async with _proj_lock:
+        async with _write_lock:
             from api.routers.progetti import _invalidate_analisi_cache
             _save_progetti(config, proj_data)
             _invalidate_analisi_cache()
@@ -275,7 +275,7 @@ async def salva_main_snapshot(body: dict):
         "main_sync_ts":   datetime.now().isoformat(timespec="seconds"),
     }
 
-    async with _proj_lock:
+    async with _write_lock:
         _save_progetti(config, proj_data)
 
     log.info(f"main_sync: snapshot salvato per {progetto.get('name')} → {main_path}")
@@ -322,7 +322,7 @@ async def reset_guasto(project_id: str):
                     if pgm.get("stato") not in ("completato", "in_lavorazione"):
                         pgm["stato"] = "da_fare"
 
-    async with _proj_lock:
+    async with _write_lock:
         _save_progetti(config, proj_data)
 
     log.info(f"main_sync: reset GUASTO → {progetto.get('name')}")

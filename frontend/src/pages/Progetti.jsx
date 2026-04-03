@@ -1746,40 +1746,58 @@ function ProgettiListaFiltrata({inProgress,completed,urgentProjects,palletState,
 
       {/* Vista lista compatta */}
       {vista==='lista'&&ordinati.length>0&&(
-        <div style={{display:'flex',flexDirection:'column',gap:3}}>
+        <div style={{display:'flex',flexDirection:'column',gap:2}}>
+          {/* Header colonne */}
+          <div style={{display:'grid',
+            gridTemplateColumns:'minmax(0,1fr) 48px 70px 180px 80px 14px',
+            gap:12,padding:'0 14px 4px',alignItems:'center'}}>
+            <span style={{fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:'0.07em',textTransform:'uppercase'}}>Progetto</span>
+            <span style={{fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:'0.07em',textAlign:'center'}}>Pallet</span>
+            <span style={{fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:'0.07em',textAlign:'center'}}>Scadenza</span>
+            <span style={{fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:'0.07em'}}>Avanzamento</span>
+            <span style={{fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:'0.07em',textAlign:'right'}}>ETA rimanente</span>
+            <span/>
+          </div>
+
           {ordinati.map(p=>{
             const d=p._del
+            // Barra prep: larghezza = p._progress%
+            // Barra NC sovrapposta a destra della prep, verde: mpfDone/mpfTot
+            const ncPct=p._mpfTot>0?Math.round(p._mpfDone/p._mpfTot*100):0
             return(
               <div key={p.id} onClick={()=>setSelectedId(p.id)}
                 style={{
                   background:p._isLive?'#f0f7ff':T.surface,
-                  border:`1px solid ${p._isLive?'#1D5FAD':T.border}`,
-                  borderLeft:`4px solid ${p._isLive?'#1D5FAD':p._urg&&d&&!d.delivered?p._urg.color:p.color}`,
-                  borderRadius:8,padding:'8px 14px',cursor:'pointer',
+                  border:`1px solid ${p._isLive?'#93c5fd':T.border}`,
+                  borderLeft:`4px solid ${p._isLive?'#1D5FAD':p._urg&&d&&!d.delivered&&p._days<=7?p._urg.color:p.color}`,
+                  borderRadius:8,padding:'9px 14px',cursor:'pointer',
                   display:'grid',
-                  gridTemplateColumns:'minmax(160px,1fr) 44px 64px 160px 80px 16px',
+                  gridTemplateColumns:'minmax(0,1fr) 48px 70px 180px 80px 14px',
                   alignItems:'center',gap:12,
-                  transition:'background 0.12s'}}>
+                  transition:'background 0.1s'}}
+                onMouseEnter={e=>e.currentTarget.style.background=p._isLive?'#e0efff':'#f8fafc'}
+                onMouseLeave={e=>e.currentTarget.style.background=p._isLive?'#f0f7ff':T.surface}>
 
-                {/* Nome + badge LIVE */}
+                {/* Colonna 1: Nome + badge LIVE */}
                 <div style={{display:'flex',alignItems:'center',gap:7,minWidth:0}}>
-                  <span style={{fontSize:14,fontWeight:700,color:T.text,
+                  <div style={{width:8,height:8,borderRadius:2,background:p.color,flexShrink:0}}/>
+                  <span style={{fontSize:13,fontWeight:700,color:T.text,
                     overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
                     {p.name}
                   </span>
                   {p._isLive&&(
-                    <span style={{fontSize:10,fontWeight:800,color:'#fff',background:'#1D5FAD',
-                      padding:'1px 6px',borderRadius:3,flexShrink:0,letterSpacing:'0.05em'}}>LIVE</span>
+                    <span style={{fontSize:9,fontWeight:800,color:'#fff',background:'#1D5FAD',
+                      padding:'1px 5px',borderRadius:3,flexShrink:0,letterSpacing:'0.06em'}}>LIVE</span>
                   )}
                 </div>
 
-                {/* Pallet */}
+                {/* Colonna 2: Pallet */}
                 <div style={{textAlign:'center'}}>
                   {p._pal?(
                     <span style={{fontSize:11,fontWeight:700,
                       color:p._isLive?'#0d2d5e':'#854d0e',
                       background:p._isLive?'#dbeafe':'#fefce8',
-                      padding:'2px 7px',borderRadius:4}}>
+                      padding:'2px 6px',borderRadius:4,display:'inline-block'}}>
                       P{p._pal}
                     </span>
                   ):(
@@ -1787,12 +1805,12 @@ function ProgettiListaFiltrata({inProgress,completed,urgentProjects,palletState,
                   )}
                 </div>
 
-                {/* Scadenza */}
+                {/* Colonna 3: Scadenza */}
                 <div style={{textAlign:'center'}}>
                   {d?.dueDate&&!d.delivered?(
                     <span style={{fontSize:11,fontWeight:700,color:p._urg.color,
                       background:p._urg.bg,padding:'2px 8px',borderRadius:4,
-                      display:'inline-block',width:'100%',textAlign:'center'}}>
+                      display:'inline-block',minWidth:50,textAlign:'center'}}>
                       {p._days===0?'OGGI':p._days<0?`${Math.abs(p._days)}gg fa`:`${p._days}gg`}
                     </span>
                   ):(
@@ -1800,34 +1818,41 @@ function ProgettiListaFiltrata({inProgress,completed,urgentProjects,palletState,
                   )}
                 </div>
 
-                {/* Doppia barra progresso */}
+                {/* Colonna 4: Doppia barra progresso — due righe indipendenti */}
                 <div>
+                  {/* Riga etichette */}
                   <div style={{display:'flex',justifyContent:'space-between',fontSize:9,
                     color:T.textMuted,marginBottom:2}}>
                     <span>prep {p._progress}%</span>
                     {p._mpfTot>0&&<span>NC {p._mpfDone}/{p._mpfTot}</span>}
                   </div>
-                  <div style={{height:4,background:T.surface2,borderRadius:2,overflow:'hidden',position:'relative'}}>
-                    <div style={{position:'absolute',left:0,top:0,height:'100%',
-                      width:`${p._progress}%`,background:p.color,borderRadius:2}}/>
-                    {p._mpfTot>0&&(
-                      <div style={{position:'absolute',left:`${p._progress}%`,top:0,height:'100%',
-                        width:`${Math.round(p._mpfDone/p._mpfTot*100)}%`,
-                        background:'#16a34a',borderRadius:2}}/>
-                    )}
+                  {/* Barra prep */}
+                  <div style={{height:4,background:T.surface2,borderRadius:2,overflow:'hidden',marginBottom:2}}>
+                    <div style={{height:'100%',width:`${p._progress}%`,
+                      background:p.color,borderRadius:2,transition:'width 0.3s'}}/>
                   </div>
+                  {/* Barra NC separata — solo se ci sono programmi */}
+                  {p._mpfTot>0&&(
+                    <div style={{height:3,background:T.surface2,borderRadius:2,overflow:'hidden'}}>
+                      <div style={{height:'100%',width:`${ncPct}%`,
+                        background:'#16a34a',borderRadius:2,transition:'width 0.3s'}}/>
+                    </div>
+                  )}
                 </div>
 
-                {/* ETA */}
+                {/* Colonna 5: ETA */}
                 <div style={{textAlign:'right'}}>
-                  <span style={{fontSize:12,fontWeight:700,fontFamily:'monospace',
+                  <div style={{fontSize:12,fontWeight:700,fontFamily:'monospace',
                     color:p._eta?'#1D5FAD':T.textMuted}}>
                     {p._eta?p._eta.fmt:'—'}
-                  </span>
+                  </div>
+                  {p._eta&&!p._eta.haStima&&(
+                    <div style={{fontSize:9,color:T.textMuted}}>stima grezza</div>
+                  )}
                 </div>
 
-                {/* Freccia */}
-                <span style={{fontSize:12,color:T.textMuted,textAlign:'center'}}>›</span>
+                {/* Colonna 6: Freccia */}
+                <span style={{fontSize:12,color:T.textMuted}}>›</span>
               </div>
             )
           })}

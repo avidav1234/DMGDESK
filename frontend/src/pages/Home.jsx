@@ -298,31 +298,47 @@ export default function Home(){
     const pgms = (info.proj.steps||[]).flatMap(s=>(s.tasks||[])
       .filter(t=>t.text?.trim().toLowerCase()==='fresatura')
       .flatMap(t=>(t.programs||[]).filter(pg=>pg.tipoGruppo!=='ipm')))
-    // Programmi non completati
-    const rimasti = pgms.filter(p=>p.stato!=='completato')
-    if(!rimasti.length) return null
-    // Somma tempiCiclo reali > tempoStimato CAM > fallback media globale
+
+    // Separazione in_main vs totale
+    const inMain  = pgms.filter(p=>['in_main','in_lavorazione','in_macchina'].includes(p.stato))
+    const totali  = pgms.filter(p=>p.stato!=='completato')
+    if(!totali.length) return null
+
     const mediaGlobale = (()=>{
       const tutti = Object.values(tempiCiclo).filter(c=>c.n>=2)
       return tutti.length ? Math.round(tutti.reduce((a,c)=>a+c.media_sec,0)/tutti.length) : null
     })()
-    let totSec = 0
-    let haStima = false
-    for(const p of rimasti){
-      const fn = (p.filename||'').toUpperCase()
-      const tc = tempiCiclo[fn]
-      if(tc?.n>=2){ totSec += tc.media_sec; haStima=true }
-      else if(p.tempoStimato){ totSec += parseInt(p.tempoStimato)*60; haStima=true }
-      else if(mediaGlobale){ totSec += mediaGlobale }
-    }
-    if(totSec<=0) return null
     const fmtEta=(sec)=>{
       if(sec<60) return '<1 min'
       if(sec<3600) return `~${Math.round(sec/60)} min`
       const h=Math.floor(sec/3600), m=Math.round((sec%3600)/60)
       return m>0?`~${h}h ${m}m`:`~${h}h`
     }
-    return { sec: totSec, fmt: fmtEta(totSec), haStima, nRimasti: rimasti.length }
+    const calcolaTempi=(lista)=>{
+      let sec=0, haStima=false
+      for(const p of lista){
+        const fn=(p.filename||'').toUpperCase()
+        const tc=tempiCiclo[fn]
+        if(tc?.n>=2){ sec+=tc.media_sec; haStima=true }
+        else if(p.tempoStimato){ sec+=parseInt(p.tempoStimato)*60; haStima=true }
+        else if(mediaGlobale){ sec+=mediaGlobale }
+      }
+      return { sec, haStima }
+    }
+
+    const { sec: secMain, haStima: haStimMain } = calcolaTempi(inMain)
+    const { sec: secTot,  haStima: haStimTot  } = calcolaTempi(totali)
+
+    if(secTot<=0) return null
+    return {
+      sec:        secMain || secTot,   // usa in_main per ordinare; fallback su totale
+      fmt:        fmtEta(secMain || secTot),
+      fmtTot:     fmtEta(secTot),
+      haStima:    haStimMain || haStimTot,
+      nMain:      inMain.length,       // programmi in_main (pianificati)
+      nTotali:    totali.length,       // tutti i non-completati
+      haMain:     inMain.length > 0,
+    }
   }
 
   // ── Scadenze ─────────────────────────────────────────────────────────────
@@ -843,15 +859,36 @@ export default function Home(){
                             overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
                             {info.proj.name}
                           </div>
-                          <div style={{fontSize:9,color:'#7c3aed'}}>
-                            {isLive?'IN ESECUZIONE':'in attesa'} · {eta.nRimasti} pgm
+                          <div style={{display:'flex',alignItems:'baseline',gap:4}}>
+                            <span style={{fontSize:9,fontWeight:700,color:isLive?'#4c1d95':'#7c3aed'}}>
+                              {isLive?'IN ESECUZIONE':'in attesa'}
+                            </span>
+                            {/* in_main grande */}
+                            {eta.haMain&&(
+                              <span style={{fontSize:11,fontWeight:800,color:'#3b0764'}}>
+                                {eta.nMain} pgm
+                              </span>
+                            )}
+                            {/* totali piccoli */}
+                            {eta.nTotali>eta.nMain&&(
+                              <span style={{fontSize:9,color:'#a78bfa'}}>
+                                / {eta.nTotali} tot
+                              </span>
+                            )}
                           </div>
                         </div>
                         <div style={{textAlign:'right',flexShrink:0}}>
+                          {/* in_main grande */}
                           <div style={{fontSize:13,fontWeight:900,fontFamily:'monospace',
                             color:isLive?'#4c1d95':'#5b21b6'}}>
                             {eta.fmt}
                           </div>
+                          {/* totale piccolo */}
+                          {eta.nTotali>eta.nMain&&(
+                            <div style={{fontSize:9,color:'#a78bfa',fontFamily:'monospace'}}>
+                              {eta.fmtTot} tot
+                            </div>
+                          )}
                           {!eta.haStima&&(
                             <div style={{fontSize:9,color:'#a78bfa'}}>stima grezza</div>
                           )}
@@ -862,10 +899,12 @@ export default function Home(){
                 </div>
                 <div style={{borderTop:'1px solid #c4b5fd',marginTop:6,paddingTop:6,
                   display:'flex',justifyContent:'space-between',alignItems:'baseline'}}>
-                  <span style={{fontSize:10,color:'#6d28d9'}}>totale rimanente</span>
-                  <span style={{fontSize:14,fontWeight:900,fontFamily:'monospace',color:'#3b0764'}}>
-                    {fmtTot(totSec)}
-                  </span>
+                  <span style={{fontSize:10,color:'#6d28d9'}}>totale in macchina</span>
+                  <div style={{textAlign:'right'}}>
+                    <span style={{fontSize:14,fontWeight:900,fontFamily:'monospace',color:'#3b0764'}}>
+                      {fmtTot(palletAttivi.reduce((acc,x)=>acc+x.eta.sec,0))}
+                    </span>
+                  </div>
                 </div>
               </div>
             )

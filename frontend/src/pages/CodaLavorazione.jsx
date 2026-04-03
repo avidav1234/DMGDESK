@@ -735,7 +735,7 @@ export default function CodaLavorazione() {
           </div>
         )}
 
-      </div>{/* fine col sinistra */}
+      </div>
       {palletMenu && createPortal(
         <div style={{ position: 'fixed', inset: 0, zIndex: 9998 }}
           onClick={() => setPalletMenu(null)}>
@@ -1002,8 +1002,8 @@ export default function CodaLavorazione() {
           </div>
         )}
 
-      </div>{/* fine col destra */}
-      </div>{/* fine due colonne */}
+      </div>
+      </div>
     </div>
   );
 }

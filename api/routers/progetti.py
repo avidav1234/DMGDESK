@@ -556,7 +556,7 @@ async def check_utensili_progetto(project_id: str):
     return {"project_id": project_id, "utensili": result, "summary": summary}
 
 
-def _calcola_previsione_vita(projects: list, tools_db: dict, classify_fn, ordine_pallet: list = None) -> list:
+def _calcola_previsione_vita(projects: list, tools_db: dict, classify_fn, ordine_pallet: list = None, pallet_state_data: dict = None) -> list:
     """
     Per ogni utensile con vita_rimanente, simula il consumo cumulato
     scorrendo i progetti nell'ordine della coda macchina (ordine_pallet),
@@ -602,12 +602,14 @@ def _calcola_previsione_vita(projects: list, tools_db: dict, classify_fn, ordine
     # ordine_pallet = [3, 4, 5] → pallet 3 prima, poi 4, poi 5
     sequenza_globale = []
     if ordine_pallet:
-        # Prima i progetti in coda nell'ordine definito
-        progetti_in_coda = {p.get("id"): p for p in projects}
-        pallet_progetto = {}  # numero_pallet → progetto_id (dai progetti stessi)
-        for p in projects:
-            pn = p.get("pallet_numero")
-            if pn: pallet_progetto[pn] = p.get("id")
+        # Usa pallet_state per sapere quale progetto è ATTUALMENTE sul pallet
+        pallet_progetto = {}
+        psd = pallet_state_data or {}
+        for pal in psd.get("pallet", []):
+            pid = pal.get("progetto_id")
+            pnum = pal.get("numero")
+            if pid and pnum:
+                pallet_progetto[pnum] = pid
 
         for num_pallet in ordine_pallet:
             pid = pallet_progetto.get(num_pallet)
@@ -882,7 +884,8 @@ async def get_analisi_setup():
         "sync_time":      sync_time,
         "previsione_vita": _calcola_previsione_vita(
             projects, tools_db, _ct,
-            ordine_pallet=pallet_state_data.get("ordine_esecuzione", [])
+            ordine_pallet=pallet_state_data.get("ordine_esecuzione", []),
+            pallet_state_data=pallet_state_data,
         ),
     }
     import time as _time

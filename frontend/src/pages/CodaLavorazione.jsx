@@ -457,22 +457,79 @@ export default function CodaLavorazione() {
   }
   function codaDrop() { salvaCoda(codaOrdine); dragCodaIdx.current = null }
 
+  // ETA da programmi espansi (tempoStimato)
+  function etaDaPgm(palletNum) {
+    const pgmData = pgmInMacchina[palletNum]
+    if (!pgmData?.programmi?.length) return null
+    let tot = 0
+    for (const p of pgmData.programmi) {
+      if (p.stato === 'completato') continue
+      if (p.tempoStimato) tot += parseInt(p.tempoStimato) * 60
+    }
+    if (!tot) return null
+    const h = Math.floor(tot / 3600), m = Math.round((tot % 3600) / 60)
+    return h > 0 ? (m > 0 ? `~${h}h ${m}m` : `~${h}h`) : `~${m} min`
+  }
+
   return (
     <div style={{
       display: "flex",
-      gap: 20,
-      padding: 20,
+      flexDirection: "column",
+      gap: 10,
+      padding: 16,
       height: "100%",
       boxSizing: "border-box",
       background: "var(--bg-base, #eef2f7)",
+      overflow: "hidden",
     }}>
+
+      {/* ── Banner override ridotto — in cima ───────────────────────── */}
+      {overrideStato?.ridotto && (
+        <div style={{ flexShrink: 0, padding: '10px 16px', borderRadius: 10,
+          background: '#fffbeb', border: '1.5px solid #f59e0b',
+          display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 12, fontWeight: 800, color: '#92400e',
+            background: '#fef3c7', padding: '3px 10px', borderRadius: 6, flexShrink: 0 }}>
+            OVERRIDE RIDOTTO
+          </span>
+          {overrideStato.feed != null && overrideStato.feed < 90 && (
+            <span style={{ fontSize: 13, fontFamily: 'monospace', color: '#92400e' }}>
+              Feed: <b>{overrideStato.feed}%</b>
+            </span>
+          )}
+          {overrideStato.mandrino != null && overrideStato.mandrino < 90 && (
+            <span style={{ fontSize: 13, fontFamily: 'monospace', color: '#92400e' }}>
+              Mandrino: <b>{overrideStato.mandrino}%</b>
+            </span>
+          )}
+          <span style={{ fontSize: 11, color: '#a16207', marginLeft: 'auto', fontStyle: 'italic' }}>
+            {overrideStato.feed_stato === 'basso' || overrideStato.mandrino_stato === 'basso'
+              ? 'Override molto basso — controllare setup o utensile'
+              : 'Operatore ha rallentato la macchina'}
+          </span>
+        </div>
+      )}
+
+      {/* ── Programma senza progetto ─────────────────────────────────── */}
+      {liveCtx && !liveCtx.match && liveCtx.programma_attivo && (
+        <div style={{ flexShrink: 0, padding: '8px 14px', borderRadius: 8,
+          background: '#F5F4F0', border: '1px solid #D8D5CC',
+          fontSize: 12, color: '#9A978E', display: 'flex', gap: 8 }}>
+          <span>⚙</span>
+          <span>In esecuzione: <code style={{ fontFamily: 'monospace' }}>{liveCtx.programma_attivo}</code> — nessun progetto associato</span>
+        </div>
+      )}
+
+      {/* ── Due colonne ──────────────────────────────────────────────── */}
+      <div style={{ flex: 1, minHeight: 0, display: 'flex', gap: 14, overflow: 'hidden' }}>
+
+      {/* COL SINISTRA */}
+      <div style={{ flex: '0 0 calc(50% - 7px)', minWidth: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
 
       {/* ── Banner live context (programma in esecuzione) ───────── */}
       {liveCtx?.match && (
-        <div style={{ marginBottom: 16, padding: '12px 16px', borderRadius: 10,
-          background: liveCtx.match.allerta_utensile === 'fin_vita' ? '#FEF9C3'
-            : liveCtx.match.allerta_utensile === 'disabilitato' ? '#FEE2E2'
-            : '#EFF6FF',
+        <div style={{ flexShrink: 0, padding: '12px 16px', borderRadius: 10,
+          background: liveCtx.match.allerta_utensile ? '#FEF9C3' : '#EFF6FF',
           border: `1px solid ${liveCtx.match.allerta_utensile ? '#D97706' : '#1D5FAD'}44`,
           display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -501,8 +558,7 @@ export default function CodaLavorazione() {
             <div style={{ flex: 1, height: 5, background: '#E2E8F0', borderRadius: 3, overflow: 'hidden' }}>
               <div style={{ height: '100%', borderRadius: 3,
                 width: `${liveCtx.match.pct_avanzamento}%`,
-                background: liveCtx.match.progetto_colore,
-                transition: 'width 0.5s' }}/>
+                background: liveCtx.match.progetto_colore, transition: 'width 0.5s' }}/>
             </div>
             <span style={{ fontSize: 12, fontWeight: 700, color: '#5A5750', minWidth: 80 }}>
               {liveCtx.match.programmi_completati}/{liveCtx.match.programmi_totali} pgm · {liveCtx.match.pct_avanzamento}%
@@ -515,336 +571,171 @@ export default function CodaLavorazione() {
           </div>
         </div>
       )}
-      {liveCtx && !liveCtx.match && liveCtx.programma_attivo && (
-        <div style={{ marginBottom: 12, padding: '8px 14px', borderRadius: 8,
-          background: '#F5F4F0', border: '1px solid #D8D5CC',
-          fontSize: 12, color: '#9A978E', display: 'flex', gap: 8 }}>
-          <span>⚙</span>
-          <span>In esecuzione: <code style={{ fontFamily: 'monospace' }}>{liveCtx.programma_attivo}</code> — nessun progetto associato</span>
-        </div>
-      )}
-
-      {/* ── Banner override ridotto ─────────────────────────────────── */}
-      {overrideStato?.ridotto && (
-        <div style={{ marginBottom: 12, padding: '10px 16px', borderRadius: 10,
-          background: '#fffbeb', border: '1.5px solid #f59e0b',
-          display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 12, fontWeight: 800, color: '#92400e',
-            background: '#fef3c7', padding: '3px 10px', borderRadius: 6, flexShrink: 0 }}>
-            OVERRIDE RIDOTTO
-          </span>
-          {overrideStato.feed != null && overrideStato.feed < 90 && (
-            <span style={{ fontSize: 13, fontFamily: 'monospace', color: '#92400e' }}>
-              Feed: <b>{overrideStato.feed}%</b>
-            </span>
-          )}
-          {overrideStato.mandrino != null && overrideStato.mandrino < 90 && (
-            <span style={{ fontSize: 13, fontFamily: 'monospace', color: '#92400e' }}>
-              Mandrino: <b>{overrideStato.mandrino}%</b>
-            </span>
-          )}
-          <span style={{ fontSize: 11, color: '#a16207', marginLeft: 'auto', fontStyle: 'italic' }}>
-            {overrideStato.feed_stato === 'basso' || overrideStato.mandrino_stato === 'basso'
-              ? 'Override molto basso — controllare setup o utensile'
-              : 'Operatore ha rallentato la macchina'}
-          </span>
-        </div>
-      )}
-
-      <div style={{ flex: '0 0 calc(50% - 8px)', minWidth: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
-      {/* ── Griglia 2×3 pallet ─────────────────────────────────── */}
+      {/* ── Griglia pallet ─────────────────────────────────── */}
       <div style={{ flexShrink: 0 }}>
-        <div style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 10,
-        }}>
-          <span style={{ fontSize: 12, fontWeight: 700, color: "#0d2d5e", letterSpacing: 1 }}>
-            PALLET
-          </span>
-          {lastUpdate && (
-            <span style={{ fontSize: 10, color: "#94a3b8" }}>{lastUpdate}</span>
-          )}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: '#0d2d5e', letterSpacing: 1, textTransform: 'uppercase' }}>Pallet</span>
+          {lastUpdate && <span style={{ fontSize: 10, color: '#94a3b8' }}>{lastUpdate}</span>}
         </div>
 
-        <div style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(2, 1fr)",
-          gridTemplateRows: "auto",
-          gap: 10,
-          alignItems: "start",
-        }}>
-          {pallets.map(p => {
-            const s        = STATI[p.stato] || STATI["VUOTO"];
-            const isActive = macchina?.pallet_attivo === p.id;
-            const isLav    = p.stato === "IN LAVORAZIONE";
-            const hasProj  = !!progettiPallet[p.id];
-            const isEmpty  = !hasProj && p.stato === "VUOTO";
-            const proj     = progettiPallet[p.id];
-            const isAvviato  = p.stato === "IN LAVORAZIONE";
-            const isCompleto = proj && proj.pct === 100;
-            const cardBg     = isCompleto ? "#dcfce7" : isAvviato ? "#dbeafe" : isEmpty ? "#F8F7F5" : s.bg;
-            const cardBorder = isCompleto ? "#16a34a" : isAvviato ? "#1D5FAD" : isActive ? "#f59e0b" : isEmpty ? "#E8E6E0" : s.border;
-            const cardFg     = isCompleto ? "#14532d" : isAvviato ? "#0d2d5e" : isEmpty ? "#B0ADA4" : s.fg;
-
-            return (
-              <div
-                key={p.id}
-                title={isLav ? "Gestito automaticamente dalla macchina" : "Click per cambiare stato"}
-                style={{
-                  background:   cardBg,
-                  border:       `2px solid ${cardBorder}`,
-                  borderRadius: 10,
-                  padding:      isEmpty ? "10px 14px" : "14px 16px",
-                  cursor:       isLav ? "default" : "pointer",
-                  position:     "relative",
-                  height:       isEmpty ? 90 : 200,
-                  boxShadow:    isActive
-                    ? "0 0 0 3px rgba(245,158,11,0.25), 0 2px 6px rgba(0,0,0,0.12)"
-                    : isEmpty ? "none" : "0 1px 3px rgba(0,0,0,0.07)",
-                  display:        "flex",
-                  flexDirection:  "column",
-                  justifyContent: "space-between",
-                  transition: "all 0.2s",
-                  userSelect: "none",
-                  opacity: isEmpty ? 0.6 : 1,
-                }}
-                onClick={(e) => {
-                  if (isLav) return;
-                  setPalletMenu({ id: p.id, x: e.clientX, y: e.clientY });
-                }}
-              >
-                {/* Numero + stato */}
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                  <span style={{ fontSize: isEmpty ? 24 : 42, fontWeight: 900, color: cardFg, lineHeight: 1 }}>
-                    P{p.id}
+        {/* Pallet LIVE — a tutta larghezza, con stato macchina integrato */}
+        {pallets.filter(p => p.stato === 'IN LAVORAZIONE').map(p => {
+          const proj = progettiPallet[p.id]
+          return (
+            <div key={p.id} style={{
+              background: '#dbeafe', border: '2px solid #1D5FAD',
+              borderRadius: 12, padding: '12px 16px', marginBottom: 8
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                <span style={{ fontSize: 28, fontWeight: 900, color: '#0d2d5e', lineHeight: 1 }}>P{p.id}</span>
+                <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c55e',
+                  boxShadow: '0 0 6px #22c55e', flexShrink: 0 }}/>
+                <span style={{ fontSize: 12, fontWeight: 800, color: '#1D5FAD', letterSpacing: '0.06em' }}>IN LAVORAZIONE</span>
+                {/* Programma corrente integrato */}
+                {prog && (
+                  <span style={{ fontSize: 12, fontFamily: 'monospace', color: '#1D5FAD',
+                    background: '#fff', padding: '2px 8px', borderRadius: 5, marginLeft: 4 }}>
+                    {prog.full}
                   </span>
-                  {isActive && (
-                    <span style={{
-                      width: 9, height: 9, borderRadius: "50%",
-                      background: "#f59e0b", display: "inline-block",
-                      animation: "blink 1.4s infinite",
-                    }} />
-                  )}
-                </div>
-
-                {/* Stato label */}
-                {isEmpty ? (
-                  <div style={{fontSize:11, color:'#B0ADA4', fontWeight:700, letterSpacing:1}}>VUOTO</div>
-                ) : (
-                  <div style={{flex:1,minHeight:0,display:'flex',flexDirection:'column',justifyContent:'flex-end',gap:2}}>
-                    <div style={{fontSize:11,fontWeight:800,color:cardFg,letterSpacing:1,textTransform:'uppercase'}}>
-                      {p.stato}
-                    </div>
-                    {progettiPallet[p.id] ? (
-                      <div style={{marginTop:2}}>
-                        <div style={{display:'flex',alignItems:'center',gap:4,marginBottom:3}}>
-                          <div style={{width:7,height:7,borderRadius:'50%',background:progettiPallet[p.id].colore,flexShrink:0}}/>
-                          <span style={{fontSize:13,fontWeight:800,color:cardFg,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
-                            {progettiPallet[p.id].nome}
-                          </span>
-                        </div>
-                        <div style={{height:6,background:'rgba(0,0,0,0.12)',borderRadius:3,overflow:'hidden'}}>
-                          <div style={{height:'100%',background:progettiPallet[p.id].colore,width:`${progettiPallet[p.id].pct}%`,borderRadius:2}}/>
-                        </div>
-                        <div style={{display:'flex',justifyContent:'space-between',marginTop:2}}>
-                          <span style={{fontSize:10,color:cardFg,opacity:0.8}}>{progettiPallet[p.id].completati}/{progettiPallet[p.id].totale} pgm</span>
-                          <span style={{fontSize:12,fontWeight:800,color:cardFg}}>{progettiPallet[p.id].pct}%</span>
-                        </div>
-                        {progettiPallet[p.id].pct===100 && p.stato!=='FINITO' && (
-                          <button onClick={e=>{e.stopPropagation();setPalletStato(p.id,'FINITO')}}
-                            style={{marginTop:3,width:'100%',background:'#166534',border:'none',borderRadius:4,
-                              color:'#fff',fontWeight:700,fontSize:9,padding:'3px 0',cursor:'pointer'}}>
-                            ✓ Segna Finito
-                          </button>
-                        )}
-                      </div>
-                    ) : (
-                      <button onClick={e=>{e.stopPropagation();setModalAssegna({palletId:p.id})}}
-                        style={{marginTop:4,width:'100%',background:'transparent',
-                          border:'1px dashed rgba(0,0,0,0.2)',borderRadius:4,
-                          color:s.fg,opacity:0.5,fontWeight:600,fontSize:8,padding:'3px 0',cursor:'pointer'}}>
-                        + Assegna progetto
-                      </button>
-                    )}
-                  </div>
+                )}
+                {/* Utensile */}
+                {utensile && (
+                  <span style={{ fontSize: 12, fontFamily: 'monospace', fontWeight: 700,
+                    color: '#92400e', background: '#fef3c7', padding: '2px 8px', borderRadius: 5 }}>
+                    {utensile}{tNum > 0 ? ` T${tNum}` : ''}
+                  </span>
+                )}
+                {/* Allarme */}
+                {alarm && alarmTipo === 'allarme' && (
+                  <span style={{ fontSize: 11, fontWeight: 700, color: '#991b1b',
+                    background: '#fef2f2', padding: '2px 8px', borderRadius: 5, marginLeft: 'auto' }}>
+                    🔴 {alarm}
+                  </span>
+                )}
+                {alarm && alarmTipo === 'messaggio' && (
+                  <span style={{ fontSize: 11, fontWeight: 700, color: '#92400e',
+                    background: '#fffbeb', padding: '2px 8px', borderRadius: 5, marginLeft: 'auto' }}>
+                    🟡 {alarm}
+                  </span>
                 )}
               </div>
-            );
+              {proj && (
+                <>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
+                    <div style={{ width: 7, height: 7, borderRadius: '50%', background: proj.colore, flexShrink: 0 }}/>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: '#0d2d5e' }}>{proj.nome}</span>
+                    <span style={{ fontSize: 11, color: '#1D5FAD', marginLeft: 'auto' }}>
+                      {proj.completati}/{proj.totale} pgm · {proj.pct}%
+                    </span>
+                  </div>
+                  <div style={{ height: 5, background: 'rgba(29,95,173,0.15)', borderRadius: 3, overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${proj.pct}%`, background: proj.colore, borderRadius: 3 }}/>
+                  </div>
+                </>
+              )}
+              {!proj && (
+                <div style={{ fontSize: 12, color: '#64748b', fontStyle: 'italic' }}>Nessun progetto assegnato</div>
+              )}
+            </div>
+          )
+        })}
+
+        {/* Pallet con progetto non in lavorazione — card normale */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+          {pallets.filter(p => p.stato !== 'IN LAVORAZIONE' && progettiPallet[p.id]).map(p => {
+            const s        = STATI[p.stato] || STATI['VUOTO']
+            const isActive = macchina?.pallet_attivo === p.id
+            const proj     = progettiPallet[p.id]
+            const isCompleto = proj && proj.pct === 100
+            const cardBg   = isCompleto ? '#dcfce7' : s.bg
+            const cardBorder = isCompleto ? '#16a34a' : isActive ? '#f59e0b' : s.border
+            const cardFg   = isCompleto ? '#14532d' : s.fg
+            return (
+              <div key={p.id}
+                title="Click per cambiare stato"
+                style={{ background: cardBg, border: `2px solid ${cardBorder}`, borderRadius: 10,
+                  padding: '12px 14px', cursor: 'pointer', position: 'relative',
+                  boxShadow: isActive ? '0 0 0 3px rgba(245,158,11,0.25)' : 'none',
+                  transition: 'all 0.2s', userSelect: 'none' }}
+                onClick={e => setPalletMenu({ id: p.id, x: e.clientX, y: e.clientY })}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
+                  <span style={{ fontSize: 28, fontWeight: 900, color: cardFg, lineHeight: 1 }}>P{p.id}</span>
+                  <span style={{ fontSize: 9, fontWeight: 800, color: cardFg, letterSpacing: 1,
+                    background: `${cardBorder}22`, padding: '2px 6px', borderRadius: 4 }}>{p.stato}</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
+                  <div style={{ width: 6, height: 6, borderRadius: '50%', background: proj.colore, flexShrink: 0 }}/>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: cardFg,
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{proj.nome}</span>
+                </div>
+                <div style={{ height: 4, background: 'rgba(0,0,0,0.1)', borderRadius: 2, overflow: 'hidden', marginBottom: 3 }}>
+                  <div style={{ height: '100%', background: proj.colore, width: `${proj.pct}%`, borderRadius: 2 }}/>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: 10, color: cardFg, opacity: 0.8 }}>{proj.completati}/{proj.totale} pgm</span>
+                  <span style={{ fontSize: 12, fontWeight: 800, color: cardFg }}>{proj.pct}%</span>
+                </div>
+                {isCompleto && p.stato !== 'FINITO' && (
+                  <button onClick={e => { e.stopPropagation(); setPalletStato(p.id, 'FINITO') }}
+                    style={{ marginTop: 5, width: '100%', background: '#166534', border: 'none', borderRadius: 4,
+                      color: '#fff', fontWeight: 700, fontSize: 9, padding: '3px 0', cursor: 'pointer' }}>
+                    ✓ Segna Finito
+                  </button>
+                )}
+              </div>
+            )
           })}
         </div>
 
+        {/* Pallet VUOTO — riga compatta */}
+        {pallets.filter(p => p.stato !== 'IN LAVORAZIONE' && !progettiPallet[p.id]).length > 0 && (
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {pallets.filter(p => p.stato !== 'IN LAVORAZIONE' && !progettiPallet[p.id]).map(p => (
+              <div key={p.id}
+                onClick={e => { if (p.stato !== 'IN LAVORAZIONE') setPalletMenu({ id: p.id, x: e.clientX, y: e.clientY }) }}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px',
+                  background: '#f1f5f9', border: '1px dashed #cbd5e1', borderRadius: 8,
+                  cursor: 'pointer', opacity: 0.6, userSelect: 'none' }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: '#94a3b8' }}>P{p.id}</span>
+                <span style={{ fontSize: 9, fontWeight: 700, color: '#94a3b8', letterSpacing: '0.05em' }}>VUOTO</span>
+                <span style={{ fontSize: 10, color: '#94a3b8' }}>+</span>
+              </div>
+            ))}
+          </div>
+        )}
+
         <ModalAssegna/>
-      <style>{`
-          @keyframes blink {
-            0%, 100% { opacity: 1; }
-            50%       { opacity: 0.3; }
-          }
-        `}</style>
+        <style>{`@keyframes blink{0%,100%{opacity:1}50%{opacity:0.3}}`}</style>
       </div>
 
-        {/* Stato macchina + programma + utensile — tutto in un blocco compatto */}
-        <div style={{
-          background:   inLavorazione ? "#0d2d5e" : "#ffffff",
-          border:       `1px solid ${inLavorazione ? "#1a4080" : "#e2e8f0"}`,
-          borderRadius: 12,
-          padding:      "14px 18px",
-          display:      "flex",
-          flexDirection: "column",
-          gap:          10,
-        }}>
-          {/* Riga stato */}
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{
-              width: 12, height: 12, borderRadius: "50%", flexShrink: 0,
-              background:   inLavorazione ? "#22c55e" : "#94a3b8",
-              boxShadow:    inLavorazione ? "0 0 8px #22c55e" : "none",
-            }} />
-            <span style={{ fontSize: 14, fontWeight: 800,
-              color: inLavorazione ? "#ffffff" : "#374151" }}>
-              {inLavorazione ? "IN LAVORAZIONE" : "FERMA"}
-            </span>
-            {macchina?.pallet_attivo > 0 && (
-              <span style={{ fontSize: 11, color: inLavorazione ? "#93c5fd" : "#94a3b8" }}>
-                · Pallet {macchina.pallet_attivo}
-              </span>
-            )}
-          </div>
-
-          {/* Programma + utensile sulla stessa riga */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            <div>
-              <div style={{ fontSize: 10, letterSpacing: 1, marginBottom: 6,
-                color: inLavorazione ? "#93c5fd" : "#94a3b8" }}>PROGRAMMA</div>
-              {prog ? (
-                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  {/* Tutti i campi alla stessa dimensione */}
-                  <div style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap" }}>
-                    {[
-                      { label: "COMM.", val: prog.commessa },
-                      { label: "POS.",  val: prog.posizione },
-                      { label: "FASE",  val: prog.fase },
-                      { label: "N°",    val: prog.seq },
-                    ].filter(x => x.val).map(x => (
-                      <div key={x.label} style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-                        <span style={{ fontSize: 9, letterSpacing: 1,
-                          color: inLavorazione ? "#93c5fd" : "#94a3b8",
-                          marginBottom: 2 }}>{x.label}</span>
-                        <span style={{ fontSize: 16, fontWeight: 700, fontFamily: "monospace",
-                          color: inLavorazione ? "#ffffff" : "#0d2d5e",
-                          lineHeight: 1 }}>{x.val}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <span style={{ fontSize: 13, color: inLavorazione ? "#4e7aad" : "#94a3b8" }}>—</span>
-              )}
-            </div>
-            <div>
-              <div style={{ fontSize: 10, letterSpacing: 1, marginBottom: 4,
-                color: inLavorazione ? "#93c5fd" : "#94a3b8" }}>UTENSILE ATTIVO</div>
-              {utensile ? (
-                <div>
-                  <div style={{ fontSize: 16, fontWeight: 800,
-                    color: inLavorazione ? "#fbbf24" : "#0d2d5e",
-                    fontFamily: 'var(--font-mono)', letterSpacing: '-0.02em' }}>{utensile}</div>
-                  {tNum > 0 && (
-                    <div style={{ fontSize: 11, fontWeight: 600,
-                      color: inLavorazione ? "#93c5fd" : "#64748b", marginTop: 2 }}>
-                      Posizione T{tNum}
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <span style={{ fontSize: 13, color: inLavorazione ? "#4e7aad" : "#94a3b8" }}>—</span>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Progetti attivi sui pallet — riepilogo */}
-        {Object.keys(progettiPallet).length > 0 && (
-          <div style={{ background: "#ffffff", border: "1px solid #e2e8f0",
-            borderRadius: 12, padding: "14px 18px" }}>
-            <div style={{ fontSize: 10, color: "#94a3b8", letterSpacing: 1, marginBottom: 10 }}>
-              PROGETTI IN CORSO
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {Object.entries(progettiPallet).map(([palletNum, proj]) => (
-                <div key={palletNum} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b", minWidth: 24 }}>
-                    P{palletNum}
-                  </span>
-                  <div style={{ width: 8, height: 8, borderRadius: "50%",
-                    background: proj.colore, flexShrink: 0 }}/>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: "#0d2d5e", flex: 1,
-                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {proj.nome}
-                  </span>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <div style={{ width: 60, height: 5, background: "#e2e8f0",
-                      borderRadius: 3, overflow: "hidden" }}>
-                      <div style={{ height: "100%", background: proj.colore,
-                        width: `${proj.pct}%`, borderRadius: 3 }}/>
-                    </div>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: "#374151", minWidth: 32 }}>
-                      {proj.pct}%
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Allarmi e messaggi */}
-        {alarm && alarmTipo === 'allarme' && (
-          <div style={{
-            background: '#fef2f2', border: '1px solid #fca5a5',
-            borderRadius: 12, padding: '12px 16px',
-          }}>
-            <div style={{ fontSize: 10, color: '#991b1b', letterSpacing: 1,
-                          marginBottom: 4, fontWeight: 700 }}>
+        {/* Allarmi standalone se non IN LAVORAZIONE */}
+        {(!inLavorazione) && alarm && alarmTipo === 'allarme' && (
+          <div style={{ background: '#fef2f2', border: '1px solid #fca5a5',
+            borderRadius: 12, padding: '12px 16px', flexShrink: 0 }}>
+            <div style={{ fontSize: 10, color: '#991b1b', letterSpacing: 1, marginBottom: 4, fontWeight: 700 }}>
               🔴 ALLARME MACCHINA
             </div>
-            <div style={{ fontSize: 12, color: '#991b1b', fontWeight: 500 }}>
-              {alarm}
-            </div>
+            <div style={{ fontSize: 12, color: '#991b1b', fontWeight: 500 }}>{alarm}</div>
           </div>
         )}
-
-        {alarm && alarmTipo === 'messaggio' && (
-          <div style={{
-            background: '#fffbeb', border: '1px solid #fcd34d',
-            borderRadius: 12, padding: '12px 16px',
-          }}>
-            <div style={{ fontSize: 10, color: '#92400e', letterSpacing: 1,
-                          marginBottom: 4, fontWeight: 700 }}>
+        {(!inLavorazione) && alarm && alarmTipo === 'messaggio' && (
+          <div style={{ background: '#fffbeb', border: '1px solid #fcd34d',
+            borderRadius: 12, padding: '12px 16px', flexShrink: 0 }}>
+            <div style={{ fontSize: 10, color: '#92400e', letterSpacing: 1, marginBottom: 4, fontWeight: 700 }}>
               🟡 MESSAGGIO MACCHINA
             </div>
-            <div style={{ fontSize: 12, color: '#92400e', fontWeight: 500 }}>
-              {alarm}
-            </div>
+            <div style={{ fontSize: 12, color: '#92400e', fontWeight: 500 }}>{alarm}</div>
           </div>
         )}
 
-        {/* Errore connessione */}
         {error && (
-          <div style={{
-            background:   "#fef3c7",
-            border:       "1px solid #fcd34d",
-            borderRadius: 8,
-            padding:      "8px 12px",
-            fontSize:     11,
-            color:        "#92400e",
-          }}>
+          <div style={{ background: '#fef3c7', border: '1px solid #fcd34d',
+            borderRadius: 8, padding: '8px 12px', fontSize: 11, color: '#92400e', flexShrink: 0 }}>
             ⚠️ {error}
           </div>
         )}
 
-      {/* Menu selezione stato pallet manuale */}
+      </div>{/* fine col sinistra */}
       {palletMenu && createPortal(
         <div style={{ position: 'fixed', inset: 0, zIndex: 9998 }}
           onClick={() => setPalletMenu(null)}>
@@ -950,14 +841,15 @@ export default function CodaLavorazione() {
       , document.body)}
       </div>
 
-      <div style={{ flex: '0 0 calc(50% - 8px)', display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0, overflowY: 'auto' }}>
+      {/* COL DESTRA */}
+      <div style={{ flex: '0 0 calc(50% - 7px)', display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0, overflowY: 'auto' }}>
 
         {/* ── CODA UNIFICATA: pallet + programmi inline ──────────── */}
         {assegnatiCoda.length > 0 && (
           <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '12px 16px' }}>
             {/* Header */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-              <span style={{ fontSize: 13, fontWeight: 800, color: '#0d2d5e' }}>📋 CODA ESECUZIONE</span>
+              <span style={{ fontSize: 13, fontWeight: 800, color: '#0d2d5e' }}>📋 Coda esecuzione</span>
               {codaSaving && <span style={{ fontSize: 11, color: '#94a3b8' }}>salvataggio…</span>}
               {(() => {
                 const totSel = Object.values(pgmSelezionati).reduce((acc, s) => acc + (s?.size || 0), 0)
@@ -974,7 +866,7 @@ export default function CodaLavorazione() {
               })()}
             </div>
 
-            {/* Pallet in coda — drag&drop con programmi espandibili */}
+            {/* Pallet in coda */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {inCodaList.map((p, idx) => {
                 const pgmData = pgmInMacchina[p.numero]
@@ -986,6 +878,7 @@ export default function CodaLavorazione() {
                 const nInLav  = pgmData?.programmi?.filter(pg => pg.stato === 'in_lavorazione').length || 0
                 const nInMain = pgmData?.programmi?.filter(pg => pg.stato === 'in_main').length || 0
                 const sel     = pgmSelezionati[p.numero] || new Set()
+                const eta     = etaDaPgm(p.numero)
 
                 return (
                   <div key={p.numero}
@@ -1006,17 +899,14 @@ export default function CodaLavorazione() {
                         n.has(p.numero) ? n.delete(p.numero) : n.add(p.numero)
                         return n
                       })}>
-                      {/* Posizione coda */}
                       <span style={{ fontSize: 9, fontWeight: 800, color: col,
                         background: col + '18', padding: '2px 6px', borderRadius: 8, flexShrink: 0 }}>
                         {idx + 1}°
                       </span>
-                      {/* Pallet num */}
                       <span style={{ fontSize: 13, fontWeight: 900, color: col, minWidth: 24 }}>P{p.numero}</span>
-                      {/* Nome progetto */}
                       <span style={{ fontSize: 12, fontWeight: 700, color: '#0d2d5e',
-                        fontFamily: 'monospace', flex: 1 }}>{p.progetto_nome}</span>
-                      {/* Badge stato */}
+                        fontFamily: 'monospace', flex: 1,
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.progetto_nome}</span>
                       {isLav && <span style={{ fontSize: 10, fontWeight: 700, color: '#1D5FAD',
                         background: '#dbeafe', padding: '1px 6px', borderRadius: 5, flexShrink: 0 }}>LIVE</span>}
                       {nInLav > 0 && !isLav && <span style={{ fontSize: 10, color: '#1D5FAD',
@@ -1025,7 +915,11 @@ export default function CodaLavorazione() {
                       {nInMain > 0 && <span style={{ fontSize: 10, color: '#92400e',
                         background: '#fef3c7', padding: '1px 6px', borderRadius: 5, flexShrink: 0 }}>
                         {nInMain} coda</span>}
-                      {/* Espandi / Rimuovi */}
+                      {/* ETA — nuova */}
+                      {eta && (
+                        <span style={{ fontSize: 11, fontWeight: 700, fontFamily: 'monospace',
+                          color: isLav ? '#1D5FAD' : '#475569', flexShrink: 0 }}>{eta}</span>
+                      )}
                       {hasPgm && <span style={{ fontSize: 11, color: '#94a3b8', flexShrink: 0 }}>
                         {espanso ? '▴' : '▾'}
                       </span>}
@@ -1101,7 +995,6 @@ export default function CodaLavorazione() {
           </div>
         )}
 
-        {/* Nessun progetto */}
         {assegnatiCoda.length === 0 && (
           <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12,
             padding: '32px 20px', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
@@ -1109,7 +1002,8 @@ export default function CodaLavorazione() {
           </div>
         )}
 
-      </div>
+      </div>{/* fine col destra */}
+      </div>{/* fine due colonne */}
     </div>
   );
 }

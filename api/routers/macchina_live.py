@@ -541,6 +541,175 @@ async def get_live_context():
     }
 
 
+
+
+# ── Helper: scenario detection ───────────────────────────────────────────────
+# Funzioni pure estratte dal tick per leggibilità e riuso.
+# Ricevono e modificano i dati in-place; restituiscono (proj_dirty, pallet_dirty).
+
+def _itera_programmi_fresatura(progetto: dict):
+    """Genera tutti i programmi fresatura non-IPM di un progetto."""
+    for s in progetto.get("steps", []):
+        for t in s.get("tasks", []):
+            if t.get("text", "").strip().lower() != "fresatura":
+                continue
+            for pgm in t.get("programs", []):
+                if pgm.get("tipoGruppo") == "ipm":
+                    continue
+                yield pgm
+
+
+def _progetto_mai_iniziato(progetto: dict) -> bool:
+    """
+    True se il progetto non ha mai avuto programmi in esecuzione o completati.
+    Usato per distinguere 'pianificato in anticipo' da 'interrotto a metà'.
+    Considera anche IPM — fanno parte del lavoro.
+    """
+    for s in progetto.get("steps", []):
+        for t in s.get("tasks", []):
+            if t.get("text", "").strip().lower() != "fresatura":
+                continue
+            for pgm in t.get("programs", []):
+                if pgm.get("stato") in ("completato", "in_lavorazione"):
+                    return False
+    return True
+
+
+def _ha_main_valido(progetto: dict) -> bool:
+    """
+    True se il progetto ha un main_snapshot con path valido su disco.
+    Se il MAIN esiste, i programmi in_main sono intenzionali — non è interruzione.
+    """
+    snap = progetto.get("main_snapshot")
+    if not snap:
+        return False
+    path = snap.get("main_path")
+    if not path:
+        return False
+    try:
+        return Path(path).exists()
+    except Exception:
+        return False
+
+
+def _gestisci_cross_pallet(
+    p_altro: dict,
+    pallet_data: dict,
+    now_str: str,
+    updates: dict,
+) -> tuple[bool, bool]:
+    """
+    Quando parte un nuovo progetto, analizza p_altro per rilevare:
+    - Scenario A: completamento normale (solo in_lavorazione, nessun in_main)
+    - Scenario B: interruzione (in_main residui su progetto già avviato)
+
+    Restituisce (proj_dirty, pallet_dirty).
+    """
+    proj_dirty = pallet_dirty = False
+
+    pgm_in_lav  = [p for p in _itera_programmi_fresatura(p_altro) if p.get("stato") == "in_lavorazione"]
+    pgm_in_main = [p for p in _itera_programmi_fresatura(p_altro) if p.get("stato") == "in_main"]
+
+    if not pgm_in_lav and not pgm_in_main:
+        return False, False
+
+    # Protezione 1: progetto mai iniziato → non è interruzione
+    if not pgm_in_lav and _progetto_mai_iniziato(p_altro):
+        return False, False
+
+    # Protezione 2: progetto ha un MAIN valido su disco → i programmi in_main
+    # sono pianificati intenzionalmente, non residui di un'interruzione
+    if not pgm_in_lav and _ha_main_valido(p_altro):
+        return False, False
+
+    # Completa i programmi che stavano girando
+    for pgm in pgm_in_lav:
+        pgm["stato"] = "completato"
+        pgm["tempoFine"] = pgm.get("tempoFine") or now_str
+        proj_dirty = True
+        updates["completato"] += 1
+
+    if pgm_in_main:
+        # Scenario B — programmi non eseguiti → reset conservativo
+        for pgm in pgm_in_main:
+            pgm["stato"] = "da_fare"
+            pgm["tempoInizio"] = None
+            pgm["tempoFine"]   = None
+        proj_dirty = True
+
+        # Pallet → GUASTO
+        pid = p_altro.get("id") or ""
+        for pal in pallet_data.get("pallet", []):
+            if pal.get("progetto_id") == pid:
+                if (pal.get("stato") or "").upper() not in ("FINITO", "GUASTO"):
+                    pal["stato"] = "guasto"
+                    pallet_dirty = True
+                    updates["pallet_guasto"] = updates.get("pallet_guasto", 0) + 1
+                break
+
+        n = len(pgm_in_main)
+        nome = p_altro.get("name", "?")
+        updates.setdefault("interruzioni", []).append({
+            "progetto": nome,
+            "pgm_mancanti": n,
+            "msg": f"{nome}: {n} pgm non eseguiti → pallet GUASTO"
+        })
+
+    return proj_dirty, pallet_dirty
+
+
+def _verifica_utensili_pgm(
+    pgm: dict,
+    progetto: dict,
+    pallet_data: dict,
+    now_str: str,
+    updates: dict,
+) -> tuple[str, bool, bool]:
+    """
+    Verifica se tutti gli utensili attesi sono stati visti durante l'esecuzione.
+    Restituisce (nuovo_stato, proj_dirty, pallet_dirty).
+    """
+    utensili_attesi = [
+        u["alias"].upper().strip()
+        for u in (pgm.get("utensili") or [])
+        if u.get("alias")
+    ]
+    utensili_visti = [
+        u.upper().strip()
+        for u in (pgm.get("_utensili_visti") or [])
+    ]
+    mancanti = [u for u in utensili_attesi if u not in utensili_visti]
+
+    pgm.pop("_utensili_visti", None)
+
+    if utensili_attesi and mancanti:
+        # Utensili mancanti → programma non completato
+        pgm["stato"] = "in_main"
+        pgm["tempoInizio"] = None
+        pgm["tempoFine"]   = None
+
+        pid = progetto.get("id") or ""
+        pallet_dirty = False
+        for pal in pallet_data.get("pallet", []):
+            if pal.get("progetto_id") == pid:
+                if (pal.get("stato") or "").upper() not in ("FINITO", "GUASTO"):
+                    pal["stato"] = "guasto"
+                    pallet_dirty = True
+                break
+
+        updates.setdefault("interruzioni_utensile", []).append({
+            "programma": pgm.get("filename", "?"),
+            "mancanti":  mancanti,
+            "msg": f"{pgm.get('filename','?')}: utensili mancanti {mancanti} → GUASTO"
+        })
+        return "in_main", True, pallet_dirty
+    else:
+        pgm["stato"] = "completato"
+        pgm["tempoFine"] = pgm.get("tempoFine") or now_str
+        updates["completato"] += 1
+        return "completato", True, False
+
+
 @router.post("/aggiorna-stati-da-log")
 async def aggiorna_stati_da_log():
     """
@@ -861,93 +1030,14 @@ async def aggiorna_stati_da_log():
                 if progetto_con_match: break
 
         # ── Scenario detection cross-pallet ─────────────────────────────────
-        # Quando arriva un programma di Progetto Y, analizza tutti gli altri progetti:
-        #
-        # Scenario A — completamento normale dell'ultimo programma:
-        #   Progetto X aveva solo in_lavorazione (nessun in_main residuo)
-        #   → ultimo programma → completato  ✓
-        #
-        # Scenario B — interruzione a metà (pallet rimosso prima del completamento):
-        #   Progetto X aveva N programmi in_main, solo M < N sono comparsi nel log
-        #   → programmi in_lavorazione → completato
-        #   → programmi in_main rimasti → da_fare  (reset conservativo)
-        #   → pallet di X → GUASTO
-        #   → alert registrato
-        #
-        # Eccezione: se il nuovo programma è dello stesso progetto (es. pgm aggiunto
-        # dall'operatore durante la lavorazione) → nessun GUASTO, normale continuazione.
         if progetto_con_match:
             pid_corrente = (progetto_con_match.get("id") or "")
             for p_altro in projects:
                 if (p_altro.get("id") or "") == pid_corrente:
-                    continue  # stesso progetto — NON è interruzione
-
-                # Raccoglie programmi fresatura non-IPM di questo progetto
-                pgm_in_lav   = []  # erano in esecuzione
-                pgm_in_main  = []  # erano pianificati ma non eseguiti
-
-                for s in p_altro.get("steps", []):
-                    for t in s.get("tasks", []):
-                        if t.get("text","").strip().lower() != "fresatura": continue
-                        for pgm in t.get("programs", []):
-                            if pgm.get("tipoGruppo") == "ipm": continue
-                            stato = pgm.get("stato", "da_fare")
-                            if stato == "in_lavorazione":
-                                pgm_in_lav.append(pgm)
-                            elif stato == "in_main":
-                                pgm_in_main.append(pgm)
-
-                if not pgm_in_lav and not pgm_in_main:
-                    continue  # progetto pulito, niente da fare
-
-                # Controlla se il progetto era effettivamente in esecuzione
-                # (ha almeno un programma completato o in_lavorazione)
-                # Se tutti i programmi sono in_main senza mai essere stati eseguiti,
-                # non è un'interruzione — è semplicemente un progetto pianificato in anticipo
-                had_completato = any(
-                    pg.get("stato") == "completato"
-                    for s in p_altro.get("steps", [])
-                    for t in s.get("tasks", [])
-                    if t.get("text","").strip().lower() == "fresatura"
-                    for pg in t.get("programs", [])
-                    if pg.get("tipoGruppo") != "ipm"
-                )
-                if not pgm_in_lav and not had_completato:
-                    continue  # progetto non ancora iniziato — non è interruzione
-
-                # Completa i programmi che stavano girando
-                for pgm in pgm_in_lav:
-                    pgm["stato"] = "completato"
-                    pgm["tempoFine"] = pgm.get("tempoFine") or now_str
-                    proj_dirty = True
-                    updates["completato"] += 1
-
-                if pgm_in_main:
-                    # Scenario B — programmi pianificati non eseguiti
-                    # Reset a da_fare (conservativo — non sappiamo se saltati o da rifare)
-                    for pgm in pgm_in_main:
-                        pgm["stato"] = "da_fare"
-                        pgm["tempoInizio"] = None
-                        pgm["tempoFine"]   = None
-                        proj_dirty = True
-
-                    # Pallet di questo progetto → GUASTO
-                    pid_altro = p_altro.get("id") or ""
-                    for pal in pallet_data.get("pallet", []):
-                        if pal.get("progetto_id") == pid_altro:
-                            if (pal.get("stato") or "").upper() not in ("FINITO", "GUASTO"):
-                                pal["stato"] = "guasto"
-                                pallet_dirty = True
-                                updates["pallet_guasto"] = updates.get("pallet_guasto", 0) + 1
-                            break
-
-                    n_mancanti = len(pgm_in_main)
-                    nome_altro = p_altro.get("name", "?")
-                    updates.setdefault("interruzioni", []).append({
-                        "progetto": nome_altro,
-                        "pgm_mancanti": n_mancanti,
-                        "msg": f"{nome_altro}: {n_mancanti} pgm non eseguiti → pallet GUASTO"
-                    })
+                    continue
+                pd, pal_d = _gestisci_cross_pallet(p_altro, pallet_data, now_str, updates)
+                if pd:   proj_dirty   = True
+                if pal_d: pallet_dirty = True
 
         if progetto_con_match:
             tgt = mpf_filename.upper().replace(".MPF","").strip()
@@ -986,51 +1076,12 @@ async def aggiorna_stati_da_log():
                                     proj_dirty = True
 
                         else:
-                            # Altro programma dello stesso progetto → se era in_lavorazione → verifica utensili attesi
+                            # Altro programma dello stesso progetto → verifica utensili
                             if pgm.get("stato") == "in_lavorazione":
-                                utensili_attesi = [
-                                    u["alias"].upper().strip()
-                                    for u in (pgm.get("utensili") or [])
-                                    if u.get("alias")
-                                ]
-                                utensili_visti = [
-                                    u.upper().strip()
-                                    for u in (pgm.get("_utensili_visti") or [])
-                                ]
-                                mancanti = [u for u in utensili_attesi if u not in utensili_visti]
-
-                                if utensili_attesi and mancanti:
-                                    # Utensili attesi non incontrati → interruzione utensile
-                                    # Programma torna in_main, pallet del progetto CORRENTE → GUASTO
-                                    pgm["stato"] = "in_main"
-                                    pgm["tempoInizio"] = None
-                                    pgm["tempoFine"]   = None
-                                    pgm.pop("_utensili_visti", None)
-                                    proj_dirty = True
-
-                                    # Pallet del progetto a cui appartiene questo pgm → GUASTO
-                                    # (progetto_con_match è il progetto del NUOVO programma,
-                                    #  qui siamo nel ramo "altro pgm dello stesso progetto")
-                                    pid_pgm = progetto_con_match.get("id") or ""
-                                    for pal in pallet_data.get("pallet", []):
-                                        if pal.get("progetto_id") == pid_pgm:
-                                            if (pal.get("stato") or "").upper() not in ("FINITO", "GUASTO"):
-                                                pal["stato"] = "guasto"
-                                                pallet_dirty = True
-                                            break
-
-                                    updates.setdefault("interruzioni_utensile", []).append({
-                                        "programma": pgm.get("filename", "?"),
-                                        "mancanti": mancanti,
-                                        "msg": f"{pgm.get('filename','?')}: utensili non incontrati {mancanti} → GUASTO"
-                                    })
-                                else:
-                                    # Tutti gli utensili attesi visti (o nessun atteso) → completato
-                                    pgm["stato"] = "completato"
-                                    pgm["tempoFine"] = pgm.get("tempoFine") or now_str
-                                    pgm.pop("_utensili_visti", None)
-                                    proj_dirty = True
-                                    updates["completato"] += 1
+                                _, pd, pal_d = _verifica_utensili_pgm(
+                                    pgm, progetto_con_match, pallet_data, now_str, updates)
+                                if pd:   proj_dirty   = True
+                                if pal_d: pallet_dirty = True
 
     # ── Automazione 5: stop macchina → completa ultimo programma ─────────
     # Quando stato_pgm torna a 0/5, l'ultimo programma girato resta in_lavorazione
@@ -1051,37 +1102,10 @@ async def aggiorna_stati_da_log():
                             pgm_in_lav.append(pgm)
             if pgm_in_lav:
                 for pgm in pgm_in_lav:
-                    utensili_attesi = [
-                        u["alias"].upper().strip()
-                        for u in (pgm.get("utensili") or [])
-                        if u.get("alias")
-                    ]
-                    utensili_visti = [
-                        u.upper().strip()
-                        for u in (pgm.get("_utensili_visti") or [])
-                    ]
-                    mancanti = [u for u in utensili_attesi if u not in utensili_visti]
-
-                    if utensili_attesi and mancanti:
-                        # Stop con utensili mancanti → torna in_main, pallet GUASTO
-                        pgm["stato"] = "in_main"
-                        pgm["tempoInizio"] = None
-                        pgm["tempoFine"]   = None
-                        pgm.pop("_utensili_visti", None)
-                        proj_dirty = True
-                        # Pallet → GUASTO
-                        for pal in pallet_data.get("pallet", []):
-                            if pal.get("progetto_id") == (p.get("id") or ""):
-                                if (pal.get("stato") or "").upper() not in ("FINITO", "GUASTO"):
-                                    pal["stato"] = "guasto"
-                                    pallet_dirty = True
-                                break
-                    else:
-                        pgm["stato"] = "completato"
-                        pgm["tempoFine"] = pgm.get("tempoFine") or now_str
-                        pgm.pop("_utensili_visti", None)
-                        proj_dirty = True
-                        updates["completato"] += 1
+                    _, pd, pal_d = _verifica_utensili_pgm(
+                        pgm, p, pallet_data, now_str, updates)
+                    if pd:   proj_dirty   = True
+                    if pal_d: pallet_dirty = True
 
     if proj_dirty:
         # Lock serializza con update_progetto dalla UI (stesso asyncio.Lock)

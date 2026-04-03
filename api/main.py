@@ -65,6 +65,14 @@ app.include_router(turno_router.router, prefix="/api/turno", tags=["Turno"])
 # ── Telegram Monitor ───────────────────────────────────────────────────────────
 app.include_router(telegram_router.router, prefix="/api/telegram", tags=["Telegram"])
 
+# ── Main Sync ─────────────────────────────────────────────────────────────────
+from api.routers import main_sync as main_sync_router
+app.include_router(main_sync_router.router)
+
+# ── Backup ────────────────────────────────────────────────────────────────────
+from api.routers import backup as backup_router
+app.include_router(backup_router.router)
+
 
 @app.on_event("startup")
 async def startup():
@@ -93,6 +101,40 @@ async def startup():
 
     _asyncio.create_task(_machine_poller_loop())
     log.info("Machine poller interno avviato — frontend non deve più chiamare aggiorna-stati-da-log")
+
+    # ── Main sync job — ogni 5 minuti ─────────────────────────────────────
+    async def _main_sync_loop():
+        from api.routers.main_sync import job_sync_main_log
+        import asyncio as _aio
+        _log = __import__('logging').getLogger("main_sync")
+        _log.info("Main sync job avviato (ogni 5 minuti)")
+        await _aio.sleep(30)  # attendi avvio completo prima del primo sync
+        while True:
+            try:
+                await job_sync_main_log()
+            except Exception as _e:
+                _log.warning(f"Main sync error: {_e}")
+            await _aio.sleep(300)  # 5 minuti
+
+    _asyncio.create_task(_main_sync_loop())
+    log.info("Main sync job avviato (MAIN+LOG → stati programmi, ogni 5 min)")
+
+    # ── Backup giornaliero ────────────────────────────────────────────────
+    async def _backup_loop():
+        from api.routers.backup import job_backup_giornaliero
+        import asyncio as _aio
+        _log = __import__('logging').getLogger("backup")
+        _log.info("Backup job avviato (ogni 24h, prima esecuzione tra 60s)")
+        await _aio.sleep(60)
+        while True:
+            try:
+                await job_backup_giornaliero()
+            except Exception as _e:
+                _log.warning(f"Backup error: {_e}")
+            await _aio.sleep(86400)  # 24 ore
+
+    _asyncio.create_task(_backup_loop())
+    log.info("Backup giornaliero avviato")
 
     # Pulizia file .tmp orfani da atomic write interrotti (crash/spegnimento)
     from pathlib import Path as _P

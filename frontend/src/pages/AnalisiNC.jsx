@@ -314,7 +314,19 @@ export default function AnalisiNC() {
     }))
     setMainBusy(true); setMainError(null)
     try {
-      const res = await api.salvaMain({ nome_cartella: nomeCompleto, percorso_cartella: percorso, programmi })
+      // Recupera project_id dal sessionStorage (impostato da Progetti.jsx al lancio)
+      let projectId = null
+      try {
+        const lancio = sessionStorage.getItem('dmgdesk_lancio_nc')
+        if (lancio) projectId = JSON.parse(lancio).projectId || null
+      } catch {}
+
+      const res = await api.salvaMain({
+        nome_cartella: nomeCompleto,
+        percorso_cartella: percorso,
+        programmi,
+        project_id: projectId,
+      })
       setGlobalSuccess(`✓ ${res.nome_file} salvato`)
       const blob = new Blob([''], { type: 'text/plain' })
       setMainGeneratoFile(new File([blob], res.nome_file, { type: 'text/plain' }))

@@ -892,6 +892,27 @@ export default function CodaLavorazione() {
                   color:'#9A978E',letterSpacing:'0.08em',background:'#F8F7F4',
                   borderTop:'1px solid #E8E6E0'}}>STATO</div>
 
+                {/* Reset GUASTO — visibile solo se pallet è in GUASTO */}
+                {pal?.stato?.toUpperCase() === 'GUASTO' && proj && (
+                  <div onClick={async () => {
+                    setPalletMenu(null)
+                    try {
+                      const r = await fetch(`/api/main-sync/reset-guasto/${proj.id}`, { method: 'POST' })
+                      const d = await r.json()
+                      if (d.ok) await fetchAll()
+                    } catch {}
+                  }}
+                    style={{padding:'9px 14px',cursor:'pointer',fontSize:12,fontWeight:700,
+                      color:'#166534',background:'#dcfce7',
+                      display:'flex',alignItems:'center',gap:8,
+                      borderBottom:'1px solid #E8E6E0'}}
+                    onMouseEnter={e=>e.currentTarget.style.background='#bbf7d0'}
+                    onMouseLeave={e=>e.currentTarget.style.background='#dcfce7'}>
+                    <span>🔄</span>
+                    <span>Reset GUASTO — riallinea da MAIN</span>
+                  </div>
+                )}
+
                 {/* Voci stato */}
                 {STATI_MENU.map(({s, dot, bg, fg}) => {
                   const sel = pal?.stato === s

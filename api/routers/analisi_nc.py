@@ -432,6 +432,7 @@ class SalvaMainRequest(BaseModel):
     nome_cartella: str               # es. "TEST"
     percorso_cartella: str           # es. "C:/Tool_App/TEST" — cartella dove scrivere
     programmi: List[ProgrammaNC]
+    project_id: Optional[str] = None  # ID progetto DMGDesk — per main_snapshot
 
 class SalvaMainResponse(BaseModel):
     ok: bool
@@ -617,6 +618,19 @@ async def salva_main(body: SalvaMainRequest):
 
     _save_recente(str(dest_dir))
     log.info(f"MAIN salvato su disco: {percorso_file} ({len(body.programmi)} programmi)")
+
+    # ── Salva snapshot nel progetto (per main_sync) ───────────────────────
+    if body.project_id:
+        try:
+            from api.routers.main_sync import salva_main_snapshot as _snap
+            await _snap({
+                "project_id": body.project_id,
+                "main_path":  str(percorso_file),
+                "programmi":  [p.nome_file for p in body.programmi if p.nome_file],
+            })
+        except Exception as _e:
+            log.warning(f"main_sync snapshot: {_e}")  # non blocca la risposta
+
     return SalvaMainResponse(
         ok=True,
         percorso_file=str(percorso_file),

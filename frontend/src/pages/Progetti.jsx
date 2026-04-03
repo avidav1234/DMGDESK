@@ -503,19 +503,18 @@ function FresaturaPanel({task,onUpdateTask,toolsDB,projectId,projectName}){
       const gemelli=[...utensili].sort((a,b)=>vitaGemello(b)-vitaGemello(a))
 
       let critico=null
-      for(let i=0;i<pgms.length;i++){
-        const p=pgms[i]
+      const gemVita=gemelli.map(g=>vitaGemello(g))
+      let gIdx=0
+      for(const p of pgms){
         const tempo=parseInt(p.tempoStimato)||0
-        if(i>=gemelli.length){
-          // Più programmi che gemelli disponibili
-          critico={...p, minutiRottura:0, nessunGemello:true}
-          break
+        if(!tempo) continue
+        let cons=tempo, coperto=false
+        while(gIdx<gemVita.length){
+          if(gemVita[gIdx]>=cons){ gemVita[gIdx]-=cons; coperto=true; break }
+          else if(gemVita[gIdx]>0){ cons-=gemVita[gIdx]; gemVita[gIdx]=0; gIdx++ }
+          else { gIdx++ }
         }
-        const vita=vitaGemello(gemelli[i])
-        if(tempo>vita){
-          critico={...p, minutiRottura:Math.max(0,vita), vitaGemello:vita}
-          break
-        }
+        if(!coperto){ critico={...p, minutiRottura:0, vitaGemello:0, nessunGemello:true}; break }
       }
       const consumoTot=pgms.reduce((s,p)=>s+(parseInt(p.tempoStimato)||0),0)
       const vitaTot=gemelli.reduce((s,g)=>s+vitaGemello(g),0)

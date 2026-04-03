@@ -667,31 +667,46 @@ def _calcola_previsione_vita(projects: list, tools_db: dict, classify_fn, ordine
         n_gemelli = len(gemelli_ordinati)
 
         critico = None
-        for i, pgm in enumerate(pgm_list):
-            # Quale gemello userebbe questo programma?
-            if i < len(gemelli_ordinati):
-                gemello = gemelli_ordinati[i]
-                vita_disponibile = vita_gemello(gemello)
+        # Simulazione sequenziale: ogni programma consuma vita dal gemello corrente.
+        # Quando la vita del gemello corrente si esaurisce, passa al successivo.
+        # Alert solo quando nessun gemello riesce a coprire il programma corrente.
+        gemelli_vita = [vita_gemello(g) for g in gemelli_ordinati]  # vita residua per gemello
+        g_idx = 0  # gemello attuale
+
+        for pgm in pgm_list:
+            consumo = pgm["tempo"]
+            if not consumo:
+                continue
+
+            # Consuma dal gemello corrente; se non basta, passa al successivo
+            while g_idx < len(gemelli_vita):
+                vita_disponibile = gemelli_vita[g_idx]
+                if vita_disponibile >= consumo:
+                    # Il gemello corrente copre questo programma
+                    gemelli_vita[g_idx] -= consumo
+                    break
+                elif vita_disponibile > 0:
+                    # Il gemello corrente copre parzialmente — passa al successivo
+                    consumo -= vita_disponibile
+                    gemelli_vita[g_idx] = 0
+                    g_idx += 1
+                else:
+                    # Gemello esaurito — passa al successivo
+                    g_idx += 1
             else:
-                # Più programmi che gemelli → non c'è utensile disponibile
+                # Nessun gemello disponibile per questo programma
                 critico = {
                     **pgm,
                     "minuto_rottura":   0,
                     "consumo_al_punto": pgm["tempo"],
+                    "vita_gemello":     0,
                     "nessun_gemello":   True,
                 }
                 break
 
-            consumo = pgm["tempo"]
-            if consumo > vita_disponibile:
-                # Questo programma supera la vita del gemello assegnato
-                critico = {
-                    **pgm,
-                    "minuto_rottura":   max(0, vita_disponibile),
-                    "consumo_al_punto": consumo,
-                    "vita_gemello":     vita_disponibile,
-                }
-                break
+            # Controlla se il gemello corrente ha vita sufficiente dall'inizio
+            # (non durante il while — verifica se il programma avrebbe causato alert)
+            # Nota: se siamo arrivati qui senza break, il programma è coperto
 
         # Calcola consumo totale per il report
         consumo_tot = sum(p["tempo"] for p in pgm_list)

@@ -741,20 +741,29 @@ class CAMTracker:
             f"poll={self.poll_interval}s flush={self.flush_interval}s"
         )
         last_flush = time.time()
+        last_reconnect = 0
+        RECONNECT_INTERVAL = 60  # riprova connessione ogni 60s se offline
 
         # Tenta connessione a DMGDesk
         if self.client.ping():
             log.info(f"[CAMTracker] DMGDesk raggiungibile: {self.cfg['dmgdesk']['url']}")
+            self._retry_pending()
         else:
-            log.warning(f"[CAMTracker] DMGDesk non raggiungibile — modalità offline")
-
-        # Retry eventuali pending al boot
-        self._retry_pending()
+            log.warning(f"[CAMTracker] DMGDesk non raggiungibile — modalità offline, retry ogni {RECONNECT_INTERVAL}s")
 
         while not self._stop.is_set():
             self.tick()
 
-            if time.time() - last_flush >= self.flush_interval:
+            now = time.time()
+
+            # Riconnessione attiva se offline
+            if now - last_reconnect >= RECONNECT_INTERVAL:
+                last_reconnect = now
+                if self.client.ping():
+                    # DMGDesk tornato online — invia pending
+                    self._retry_pending()
+
+            if now - last_flush >= self.flush_interval:
                 self.flush()
                 last_flush = time.time()
 

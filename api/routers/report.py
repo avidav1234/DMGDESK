@@ -2308,16 +2308,25 @@ async def get_analytics_commesse():
         ]
         ore_giorno_reali = (
             sum(s.get("durata_sec") or 0 for s in ultimi7) / min(7, max(1, len(ultimi7)))
-        ) if ultimi7 else (ORE_TURNO_SEC * 0.6)  # default 60% utilizzo
+        ) if ultimi7 else 0
+
+        # Se la media giornaliera è < 1h (progetto appena iniziato o pochissimi dati),
+        # usa il fallback 60% del turno per evitare stime assurde (es. 5000gg)
+        ORE_MINIMA_GIORNO = 3600  # 1h minima per una stima sensata
+        if ore_giorno_reali < ORE_MINIMA_GIORNO:
+            ore_giorno_reali = ORE_TURNO_SEC * 0.6  # default 60% utilizzo
 
         giorni_rimanenti = (
             round(stima_rimanente_corretta_sec / ore_giorno_reali)
             if ore_giorno_reali > 0 and stima_rimanente_corretta_sec > 0
             else None
         )
+        # Cap a 365gg — oltre non ha senso mostrare una stima
+        if giorni_rimanenti is not None and giorni_rimanenti > 365:
+            giorni_rimanenti = None
         data_fine_stimata = (
             (oggi + timedelta(days=giorni_rimanenti)).isoformat()
-            if giorni_rimanenti is not None
+            if giorni_rimanenti is not None and giorni_rimanenti <= 365
             else None
         )
 

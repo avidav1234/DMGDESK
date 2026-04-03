@@ -173,26 +173,10 @@ function CodaEsecuzione({ setupData, onOrdineChanged }) {
                 </div>
                 {cr && (
                   <div style={{ fontSize: 11, color: '#5d4037' }}>
-                    {a.nessun_gemello ? (
-                      <>
-                        <span style={{ fontWeight: 700, color: '#bf360c' }}>⚠ Nessun gemello disponibile per </span>
-                        <span style={{ fontFamily: 'monospace', fontWeight: 700 }}>{cr.progetto}</span>
-                        <span> pgm <span style={{ fontFamily: 'monospace' }}>{cr.numPgm}</span></span>
-                        <span style={{ display: 'block', fontWeight: 700, color: '#e65100', marginTop: 2 }}>
-                          💡 Caricare un nuovo duplo prima di iniziare {cr.progetto}
-                        </span>
-                      </>
-                    ) : (
-                      <>
-                        <span style={{ fontWeight: 700, color: '#bf360c' }}>⚠ Finisce durante </span>
-                        <span style={{ fontFamily: 'monospace', fontWeight: 700 }}>{cr.progetto}</span>
-                        <span> pgm <span style={{ fontFamily: 'monospace' }}>{cr.numPgm}</span></span>
-                        <span style={{ color: '#9a3412' }}> — mancano {a.surplus_mancante}min</span>
-                        <span style={{ display: 'block', fontWeight: 700, color: '#e65100', marginTop: 2 }}>
-                          💡 Sostituire prima di iniziare {cr.progetto}
-                        </span>
-                      </>
-                    )}
+                    <span style={{ fontWeight: 700, color: '#bf360c' }}>⚠ Finisce durante </span>
+                    <span style={{ fontFamily: 'monospace', fontWeight: 700 }}>{cr.progetto}</span>
+                    <span> pgm <span style={{ fontFamily: 'monospace' }}>{cr.numPgm}</span></span>
+                    <span style={{ color: '#9a3412' }}> — {a.vita_rimanente}min disponibili / {a.consumo_totale}min richiesti</span>
                   </div>
                 )}
               </div>
@@ -373,14 +357,10 @@ export default function Macchina() {
                         borderRadius:7,padding:'8px 12px',fontSize:12}}>
                         <div style={{fontWeight:800,color:'#e65100',marginBottom:3}}>
                           ⚠ Finisce durante: <span style={{fontFamily:'monospace'}}>{cr.filename?.replace(/\.MPF$/i,'')}</span>
-                          <span style={{color:'#9a6b2e',marginLeft:6,fontWeight:600}}>({cr.fase})</span>
+                          <span style={{color:'#9a6b2e',marginLeft:6,fontWeight:600}}>pgm {cr.numPgm}</span>
                         </div>
                         <div style={{color:'#5d4037'}}>
-                          Vita esaurita dopo <strong>{cr.minuto_rottura}min</strong> su questo programma
-                          {' '}— mancano ancora <strong>{alert.surplus_mancante}min</strong> di lavorazione
-                        </div>
-                        <div style={{marginTop:4,color:'#bf360c',fontWeight:700}}>
-                          💡 Sostituire prima del programma <span style={{fontFamily:'monospace'}}>{cr.numPgm}</span> di {cr.progetto}
+                          {alert.vita_rimanente}min disponibili / {alert.consumo_totale}min richiesti
                         </div>
                       </div>}
                     </div>

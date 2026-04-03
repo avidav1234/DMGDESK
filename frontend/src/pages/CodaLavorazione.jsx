@@ -530,7 +530,7 @@ export default function CodaLavorazione() {
       {liveCtx?.match && (
         <div style={{ flexShrink: 0, padding: '12px 16px', borderRadius: 10,
           background: liveCtx.match.allerta_utensile ? '#FEF9C3' : '#EFF6FF',
-          border: `1px solid ${liveCtx.match.allerta_utensile ? '#D97706' : '#1D5FAD'}44`,
+          border: '1px solid ' + (liveCtx.match.allerta_utensile ? '#D97706' : '#1D5FAD') + '44',
           display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ width: 10, height: 10, borderRadius: '50%',
@@ -661,7 +661,7 @@ export default function CodaLavorazione() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
                   <span style={{ fontSize: 28, fontWeight: 900, color: cardFg, lineHeight: 1 }}>P{p.id}</span>
                   <span style={{ fontSize: 9, fontWeight: 800, color: cardFg, letterSpacing: 1,
-                    background: `${cardBorder}22`, padding: '2px 6px', borderRadius: 4 }}>{p.stato}</span>
+                    background: cardBorder + '22', padding: '2px 6px', borderRadius: 4 }}>{p.stato}</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
                   <div style={{ width: 6, height: 6, borderRadius: '50%', background: proj.colore, flexShrink: 0 }}/>
@@ -839,7 +839,6 @@ export default function CodaLavorazione() {
           </div>
         </div>
       , document.body)}
-      </div>
 
       {/* COL DESTRA */}
       <div style={{ flex: '0 0 calc(50% - 7px)', display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0, overflowY: 'auto' }}>
@@ -930,7 +929,7 @@ export default function CodaLavorazione() {
 
                     {/* Programmi espansi inline */}
                     {espanso && hasPgm && (
-                      <div style={{ borderTop: `1px solid ${col}22`, background: '#fff',
+                      <div style={{ borderTop: '1px solid ' + col + '22', background: '#fff',
                         padding: '6px 10px', display: 'flex', flexDirection: 'column', gap: 2 }}>
                         {pgmData.programmi.map(pgm => {
                           const checked = sel.has(pgm.id)

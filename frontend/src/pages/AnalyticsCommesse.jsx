@@ -196,17 +196,128 @@ function RigaProgetto({ p, onClick }) {
   )
 }
 
+// ── Mappa termica utilizzo ────────────────────────────────────────────────────
+function HeatmapUtilizzo({ data }) {
+  if (!data?.giorni?.length) return null
+
+  const { giorni, fasce } = data
+  const FASCIA_ORDER = ['notte', 'mattina', 'sera']
+  const FASCIA_LABEL = { notte: 'Notte 22–07', mattina: 'Mattina 07:30–16:30', sera: 'Sera 16:30–22' }
+
+  // Colore cella: bianco → verde scuro, basato su pct (0-100)
+  function cellaColor(pct) {
+    if (pct === 0) return '#f8fafc'
+    if (pct < 15)  return '#dcfce7'
+    if (pct < 35)  return '#86efac'
+    if (pct < 55)  return '#22c55e'
+    if (pct < 75)  return '#16a34a'
+    return '#14532d'
+  }
+  function testoColor(pct) {
+    return pct >= 55 ? '#fff' : '#374151'
+  }
+
+  // Raggruppa per settimana
+  const settimane = []
+  for (let i = 0; i < giorni.length; i += 7) {
+    settimane.push(giorni.slice(i, i + 7))
+  }
+
+  const GIORNI_IT = { Mon:'Lun', Tue:'Mar', Wed:'Mer', Thu:'Gio', Fri:'Ven', Sat:'Sab', Sun:'Dom' }
+
+  return (
+    <div style={{background:'#fff', border:'1px solid #e2e8f0',
+      borderRadius:12, padding:'20px 24px', marginBottom:16}}>
+      <div style={{fontSize:11, color:'#94a3b8', marginBottom:14,
+        textTransform:'uppercase', letterSpacing:'0.06em', fontWeight:700}}>
+        Mappa termica utilizzo macchina — ultime 4 settimane
+      </div>
+
+      <div style={{overflowX:'auto'}}>
+        <table style={{borderCollapse:'collapse', width:'100%', minWidth:600}}>
+          <thead>
+            <tr>
+              <th style={{width:110, fontSize:10, color:'#94a3b8',
+                textAlign:'left', paddingBottom:6, fontWeight:600}}>Fascia</th>
+              {giorni.map(g => (
+                <th key={g.data} style={{fontSize:9, color:'#94a3b8',
+                  textAlign:'center', paddingBottom:6, fontWeight:600,
+                  minWidth:28}}>
+                  <div>{GIORNI_IT[g.giorno] || g.giorno}</div>
+                  <div style={{color: g.dom === 1 ? '#0d2d5e' : '#cbd5e1'}}>{g.dom}/{g.mese}</div>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {FASCIA_ORDER.map(fk => (
+              <tr key={fk}>
+                <td style={{fontSize:10, color:'#475569', paddingRight:10,
+                  paddingTop:3, paddingBottom:3, whiteSpace:'nowrap',
+                  fontWeight:600}}>
+                  {FASCIA_LABEL[fk]}
+                </td>
+                {giorni.map(g => {
+                  const cella = g.celle?.[fk] || { sec:0, ore:0, pct:0 }
+                  const bg = cellaColor(cella.pct)
+                  const fg = testoColor(cella.pct)
+                  return (
+                    <td key={g.data} title={`${g.data} ${FASCIA_LABEL[fk]}: ${cella.ore}h`}
+                      style={{
+                        background: bg, color: fg,
+                        fontSize: 8, textAlign: 'center',
+                        padding: '4px 2px',
+                        border: '1px solid #f1f5f9',
+                        borderRadius: 3,
+                        fontFamily: 'var(--font-mono)',
+                        fontWeight: cella.pct > 0 ? 700 : 400,
+                        cursor: 'default',
+                        minWidth: 28, height: 28,
+                      }}>
+                      {cella.ore > 0 ? `${cella.ore}h` : ''}
+                    </td>
+                  )
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Legenda */}
+      <div style={{display:'flex', alignItems:'center', gap:6, marginTop:12,
+        fontSize:10, color:'#94a3b8'}}>
+        <span>0h</span>
+        {[0, 15, 35, 55, 75, 100].map((pct, i, arr) => (
+          <div key={pct} style={{
+            width: 20, height: 12, borderRadius: 2,
+            background: cellaColor(pct),
+            border: '1px solid #e2e8f0'
+          }}/>
+        ))}
+        <span>8h</span>
+        <span style={{marginLeft:12}}>per cella (max = 8h)</span>
+      </div>
+    </div>
+  )
+}
+
 // ── Pagina principale ─────────────────────────────────────────────────────────
 export default function AnalyticsCommesse() {
   const [data, setData] = useState(null)
+  const [heatmap, setHeatmap] = useState(null)
   const [loading, setLoading] = useState(true)
   const navigate = useNavigate()
 
   useEffect(() => {
-    fetch('/api/report/analytics-commesse')
-      .then(r => r.ok ? r.json() : null)
-      .then(d => { setData(d); setLoading(false) })
-      .catch(() => setLoading(false))
+    Promise.all([
+      fetch('/api/report/analytics-commesse').then(r => r.ok ? r.json() : null),
+      fetch('/api/report/heatmap-utilizzo').then(r => r.ok ? r.json() : null),
+    ]).then(([analytics, hm]) => {
+      setData(analytics)
+      setHeatmap(hm)
+      setLoading(false)
+    }).catch(() => setLoading(false))
   }, [])
 
   if (loading) return (
@@ -331,6 +442,9 @@ export default function AnalyticsCommesse() {
             </div>
           )}
         </div>
+
+        {/* Mappa termica */}
+        <HeatmapUtilizzo data={heatmap} />
 
         {/* Tabella progetti */}
         <div style={{background:'#fff', border:'1px solid #e2e8f0', borderRadius:12,

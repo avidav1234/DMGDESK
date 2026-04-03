@@ -2684,3 +2684,136 @@ async def export_rendiconto(project_id: str):
     rend["riepilogo_testo"] = righe
     rend["export_ts"] = datetime.now().isoformat()
     return rend
+
+
+# ── Mappa termica utilizzo macchina ───────────────────────────────────────────
+@router.get("/heatmap-utilizzo")
+async def heatmap_utilizzo(config=Depends(get_config)):
+    """
+    Ritorna una griglia giorni × fasce orarie con ore di produzione.
+    Fasce: mattina 07:30-16:30, sera 16:30-22:00, notte 22:00-07:30
+    Storico: ultime 4 settimane (28 giorni)
+    """
+    from datetime import date, timedelta, datetime as dt
+
+    FASCE = [
+        {"key": "notte",   "label": "Notte",   "da": 22*60,      "a": 24*60 + 7*60+30},  # 22:00-07:30 (+giorno)
+        {"key": "mattina", "label": "Mattina",  "da": 7*60+30,    "a": 16*60+30},          # 07:30-16:30
+        {"key": "sera",    "label": "Sera",     "da": 16*60+30,   "a": 22*60},             # 16:30-22:00
+    ]
+    # Valore assoluto massimo per cella = 8h (mattina) / 5.5h (sera) / 9.5h (notte)
+    # Usiamo 8h come cap comune per normalizzare il colore
+    MAX_SEC_CELLA = 8 * 3600
+
+    oggi = date.today()
+    da_data = oggi - timedelta(days=27)  # 28 giorni incluso oggi
+
+    data = _load_log(config)
+    sessioni = data.get("sessioni", [])
+
+    # Anche archivio se presente
+    try:
+        arch_path = Path(config.get("log_path", "")).parent / "lavorazioni_log_archivio.json"
+        if arch_path.exists():
+            arch = json.loads(arch_path.read_text(encoding="utf-8"))
+            sessioni = sessioni + arch.get("sessioni", [])
+    except Exception:
+        pass
+
+    # Griglia: {data_iso: {fascia_key: sec}}
+    griglia: dict[str, dict[str, int]] = {}
+    for i in range(28):
+        d = (da_data + timedelta(days=i)).isoformat()
+        griglia[d] = {"mattina": 0, "sera": 0, "notte": 0}
+
+    def minuti_del_giorno(ts_iso: str) -> int:
+        """Converte timestamp ISO in minuti dall'inizio del giorno."""
+        try:
+            t = dt.fromisoformat(ts_iso)
+            return t.hour * 60 + t.minute + t.second // 60
+        except Exception:
+            return 0
+
+    def secondi_in_fascia(inizio_iso: str, fine_iso: str, fascia: dict) -> int:
+        """
+        Calcola quanti secondi di una sessione cadono in una fascia oraria.
+        Gestisce la fascia notte che attraversa la mezzanotte.
+        """
+        try:
+            t_in = dt.fromisoformat(inizio_iso)
+            t_fin = dt.fromisoformat(fine_iso)
+        except Exception:
+            return 0
+
+        tot = 0
+        # Spezza la sessione in slot da 1 minuto e conta quanti cadono in fascia
+        # Approssimazione efficiente: usa i bordi della fascia
+        fa, fb = fascia["da"], fascia["a"]  # minuti
+
+        # Itera su ogni minuto della sessione (cap a 16h per sicurezza)
+        durata_min = int((t_fin - t_in).total_seconds() / 60)
+        durata_min = min(durata_min, 16 * 60)
+
+        for m in range(durata_min):
+            ts = t_in + timedelta(minutes=m)
+            mdg = ts.hour * 60 + ts.minute
+
+            if fascia["key"] == "notte":
+                # Notte: 22:00-24:00 oppure 00:00-07:30
+                in_fascia = mdg >= 22*60 or mdg < 7*60+30
+            else:
+                in_fascia = fa <= mdg < fb
+
+            if in_fascia:
+                tot += 60  # 1 minuto = 60 secondi
+
+        return tot
+
+    for sess in sessioni:
+        inizio = sess.get("inizio")
+        fine   = sess.get("fine")
+        if not inizio or not fine:
+            continue
+        try:
+            data_sess = dt.fromisoformat(inizio).date()
+        except Exception:
+            continue
+        if data_sess < da_data or data_sess > oggi:
+            continue
+
+        data_iso = data_sess.isoformat()
+        if data_iso not in griglia:
+            continue
+
+        for fascia in FASCE:
+            sec = secondi_in_fascia(inizio, fine, fascia)
+            griglia[data_iso][fascia["key"]] += sec
+
+    # Formatta output
+    giorni = []
+    for i in range(28):
+        d = da_data + timedelta(days=i)
+        d_iso = d.isoformat()
+        celle = griglia[d_iso]
+        giorni.append({
+            "data":    d_iso,
+            "giorno":  d.strftime("%a"),   # Lun, Mar, ...
+            "dom":     d.day,
+            "mese":    d.month,
+            "celle":   {
+                k: {
+                    "sec":  v,
+                    "ore":  round(v / 3600, 1),
+                    "pct":  min(100, round(v / MAX_SEC_CELLA * 100)),
+                }
+                for k, v in celle.items()
+            }
+        })
+
+    return {
+        "giorni":      giorni,
+        "fasce":       [{"key": f["key"], "label": f["label"]} for f in FASCE],
+        "max_sec":     MAX_SEC_CELLA,
+        "da_data":     da_data.isoformat(),
+        "a_data":      oggi.isoformat(),
+    }

@@ -351,6 +351,7 @@ async def job_nc_scanner():
 # ── Endpoint manuali ───────────────────────────────────────────────────────────
 
 @router.post("/scansiona")
+@router.get("/scansiona")
 async def scansiona_ora():
     """Esegue la scansione immediatamente (senza attendere lo scheduler)."""
     config = carica_configurazione()

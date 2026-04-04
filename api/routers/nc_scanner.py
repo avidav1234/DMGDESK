@@ -54,11 +54,43 @@ def _nome_progetto(commessa: str, posizione_raw: str) -> str:
     """
     return f"{commessa.strip()}_{_norm_posizione(posizione_raw)}"
 
+def _estrai_info_filename(filename: str) -> dict:
+    """
+    Estrae commessa, posizione, fase, sequenza dal nome file.
+
+    4 token: commessa_pos_fase_seq  → 4297_005_01_014.MPF
+    3 token: commessa_pos_seq       → 4297_006_004.MPF (fase unica)
+    """
+    base = Path(filename).stem.upper()
+    # Rimuovi eventuale suffisso WPD o altro
+    tokens = base.split("_")
+    # Filtra token non numerici in fondo (es. suffissi Siemens _801)
+    while tokens and not tokens[-1].isdigit():
+        tokens.pop()
+
+    if len(tokens) >= 4:
+        commessa  = tokens[0]
+        posizione = tokens[1]
+        fase      = tokens[2]
+        seq       = tokens[3]
+    elif len(tokens) == 3:
+        commessa  = tokens[0]
+        posizione = tokens[1]
+        fase      = "1"   # fase unica
+        seq       = tokens[2]
+    else:
+        commessa = posizione = fase = seq = ""
+
+    return {
+        "commessa":  commessa,
+        "posizione": posizione,
+        "fase":      fase,
+        "seq":       seq,
+    }
+
+
 def _norm_fase(raw: str) -> str:
-    """
-    Normalizza il nome fase per il confronto.
-    Fase-1 / fase-1 / fase_1 / Fase 1 → fase1
-    """
+    """Fase-1 / fase-1 / fase_1 / Fase 1 → fase1"""
     return re.sub(r"[\s\-_]+", "", raw.lower())
 
 
@@ -108,28 +140,18 @@ def _parse_mpf_metadati(path: Path) -> dict:
             if m:
                 tempo_tot += parse_tempo(m.group(1))
 
-    # tipoGruppo
-    fname_upper = path.name.upper()
-    tipo = "ipm" if "_IPM_" in fname_upper else "fresatura"
-
-    # numPgm: ultimo token numerico del filename
-    base = path.stem.upper()
-    tokens = base.split("_")
-    num_pgm = tokens[-1] if tokens else ""
-
-    # fase dal path (cartella nonno rispetto al file)
-    fase = ""
-    parts = path.parts
-    if len(parts) >= 2:
-        fase = parts[-2]  # cartella immediata del file
+    # Estrai info strutturate dal filename
+    info = _estrai_info_filename(path.name)
 
     return {
         "filename":     path.name,
         "utensile":     utensile,
         "tempoStimato": tempo_tot or None,
         "tipoGruppo":   tipo,
-        "numPgm":       num_pgm,
-        "fase_cartella": fase,
+        "numPgm":       info["seq"] or path.stem.split("_")[-1],
+        "fase_da_file": info["fase"],   # fase estratta dal filename
+        "commessa":     info["commessa"],
+        "posizione":    info["posizione"],
     }
 
 
@@ -244,7 +266,7 @@ def scansiona_directory(config: dict) -> dict:
             stats["errori"].append(f"{mpf_path.name}: {e}")
             continue
 
-        fase_label = meta.get("fase_cartella") or fase_cartella
+        fase_label = fase_cartella or meta.get("fase_da_file") or ""
 
         # Trova task Fresatura
         task = _trova_o_crea_task_fresatura(project, fase_label)
@@ -378,6 +400,10 @@ async def anteprima_scansione():
             fase = parts[2] if (re.search(r"fase", fc) or fc.isdigit()) else ""
         else:
             fase = ""
+        # Se fase da cartella vuota, usa fase da filename
+        if not fase:
+            info = _estrai_info_filename(mpf_path.name)
+            fase = f"fase {info['fase']}" if info["fase"] and info["fase"] != "1" else ("unica" if info["fase"] == "1" else "")
         project   = proj_index.get(nome_proj.upper())
         if project:
             trovati.append({"file": mpf_path.name, "progetto": nome_proj, "fase": fase})

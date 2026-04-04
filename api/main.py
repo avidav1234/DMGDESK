@@ -73,6 +73,10 @@ app.include_router(main_sync_router.router)
 from api.routers import backup as backup_router
 app.include_router(backup_router.router)
 
+# ── NC Scanner ────────────────────────────────────────────────────────────────
+from api.routers import nc_scanner as nc_scanner_router
+app.include_router(nc_scanner_router.router)
+
 
 @app.on_event("startup")
 async def startup():

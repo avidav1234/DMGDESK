@@ -142,6 +142,7 @@ def _parse_mpf_metadati(path: Path) -> dict:
 
     # Estrai info strutturate dal filename
     info = _estrai_info_filename(path.name)
+    tipo = "ipm" if "_IPM_" in path.name.upper() else "fresatura"
 
     return {
         "filename":     path.name,

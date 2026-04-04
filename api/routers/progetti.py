@@ -10,7 +10,9 @@ from pathlib import Path
 from datetime import datetime
 import json
 import asyncio
+import logging
 
+log = logging.getLogger("progetti")
 from database.db_handler import carica_configurazione
 
 router = APIRouter()
@@ -177,8 +179,72 @@ async def get_deliveries():
 async def save_deliveries(body: Any = Body(...)):
     """Salva l'intera lista deliveries (sostituisce tutto)."""
     config = carica_configurazione()
+    deliveries_old = _load_deliveries(config)
+    old_map = {d.get("projectId"): d for d in deliveries_old}
+
     deliveries = body if isinstance(body, list) else []
     _save_deliveries(config, deliveries)
+
+    # ── Aggiorna STEP Analyzer per commesse appena consegnate ─────────────
+    # Quando una commessa passa a delivered=True, legge le ore reali dal log
+    # e le manda allo STEP Analyzer per arricchire lo storico predittivo.
+    for d in deliveries:
+        pid = d.get("projectId")
+        if not pid or not d.get("delivered"):
+            continue
+        if old_map.get(pid, {}).get("delivered"):
+            continue  # era già consegnata — niente da fare
+
+        # Cerca il nome del progetto
+        proj_data = _load_progetti(config)
+        proj = next((p for p in proj_data.get("projects", []) if p.get("id") == pid), None)
+        if not proj:
+            continue
+        nome = proj.get("name", "")
+
+        # Legge ore macchina reali dal log
+        try:
+            from api.routers.report import _load_log
+            log_data = _load_log(config)
+            ore_sec = sum(
+                s.get("durata_sec") or 0
+                for s in log_data.get("sessioni", [])
+                if (s.get("progetto") or "").strip() == nome
+            )
+            if ore_sec < 60:
+                continue  # meno di 1 minuto — non affidabile
+
+            ore_macchina = round(ore_sec / 3600, 2)
+
+            # Lead time: da prima sessione a oggi
+            sessioni_progetto = [
+                s for s in log_data.get("sessioni", [])
+                if (s.get("progetto") or "").strip() == nome and s.get("inizio")
+            ]
+            lead_time = None
+            if sessioni_progetto:
+                from datetime import date as _date
+                prima = min(s["inizio"][:10] for s in sessioni_progetto)
+                oggi  = _date.today().isoformat()
+                lead_time = (
+                    _date.fromisoformat(oggi) - _date.fromisoformat(prima)
+                ).days
+
+            # Aggiorna STEP Analyzer via API interna
+            import httpx as _hx
+            async with _hx.AsyncClient(timeout=10) as client:
+                await client.patch(
+                    f"http://127.0.0.1:8002/commessa/{nome}",
+                    json={
+                        "ore_macchina":     ore_macchina,
+                        "lead_time_giorni": lead_time,
+                        "data_consegna":    _date.today().isoformat(),
+                    }
+                )
+            log.info(f"STEP Analyzer aggiornato: {nome} → {ore_macchina}h macchina, {lead_time}gg lead time")
+        except Exception as e:
+            log.debug(f"STEP update skip {pid}: {e}")
+
     return {"ok": True, "count": len(deliveries)}
 
 

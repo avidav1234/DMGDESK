@@ -145,7 +145,7 @@ async def startup():
         from api.routers.nc_scanner import job_nc_scanner
         import asyncio as _aio
         _log = __import__('logging').getLogger("nc_scanner")
-        _log.info("NC Scanner avviato (ogni 10 min)")
+        _log.info("NC Scanner avviato (ogni 1 min)")
         await _aio.sleep(45)  # attendi avvio completo
         while True:
             try:
@@ -155,7 +155,7 @@ async def startup():
             await _aio.sleep(60)  # 1 minuto
 
     _asyncio.create_task(_nc_scanner_loop())
-    log.info("NC Scanner avviato (scansione directory NC ogni 10 min)")
+    log.info("NC Scanner avviato (scansione directory NC ogni 1 min, solo file modificati)")
 
     # Pulizia file .tmp orfani da atomic write interrotti (crash/spegnimento)
     from pathlib import Path as _P

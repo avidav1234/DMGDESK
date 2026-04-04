@@ -17,6 +17,7 @@ Ogni minuto:
   - Non tocca mai stato di programmi in_main/completato/in_lavorazione
 """
 
+import os
 import re
 import json
 import logging
@@ -101,11 +102,44 @@ def _parse_mpf_metadati(path: Path) -> dict:
     - utensile (primo T="..." prima di M6)
     - tempoStimato (somma tutti i TEMPO: HH:MM:SS sulle righe M6)
     - tipoGruppo (ipm se filename contiene _IPM_)
+
+    Usa apertura condivisa (read-only, share_all) per non bloccare Cimatron
+    se sta scrivendo lo stesso file nello stesso momento.
     """
+    content = None
+
+    # Su Windows: apri con FILE_SHARE_READ|WRITE|DELETE per non entrare
+    # in conflitto con Cimatron che potrebbe stare salvando il file.
+    # Su altri OS: fallback a open() normale.
     try:
-        content = path.read_text(encoding="utf-8", errors="replace")
+        import msvcrt, ctypes
+        GENERIC_READ          = 0x80000000
+        FILE_SHARE_ALL        = 0x00000007   # read+write+delete
+        OPEN_EXISTING         = 3
+        FILE_FLAG_SEQUENTIAL  = 0x08000000
+        handle = ctypes.windll.kernel32.CreateFileW(
+            str(path), GENERIC_READ, FILE_SHARE_ALL,
+            None, OPEN_EXISTING, FILE_FLAG_SEQUENTIAL, None
+        )
+        INVALID = ctypes.c_void_p(-1).value
+        if handle and handle != INVALID:
+            try:
+                import io
+                fd   = msvcrt.open_osfhandle(handle, os.O_RDONLY)
+                with io.open(fd, encoding="utf-8", errors="replace", closefd=True) as f:
+                    content = f.read()
+            except Exception:
+                try: ctypes.windll.kernel32.CloseHandle(handle)
+                except: pass
     except Exception:
-        return {}
+        pass   # non Windows o errore import
+
+    if content is None:
+        try:
+            content = path.read_text(encoding="utf-8", errors="replace")
+        except Exception:
+            return {}
+
 
     lines = content.splitlines()
 
@@ -278,6 +312,9 @@ def scansiona_directory(config: dict) -> dict:
         except Exception as e:
             stats["errori"].append(f"{mpf_path.name}: {e}")
             continue
+
+        # Aggiorna cache mtime — file letto con successo
+        _mtime_cache[path_key] = mtime
 
         fase_label = fase_cartella or meta.get("fase_da_file") or ""
 

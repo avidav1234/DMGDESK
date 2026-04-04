@@ -21,7 +21,7 @@ log = logging.getLogger("step_client")
 router = APIRouter(prefix="/api/step", tags=["STEP Analyzer"])
 
 STEP_ANALYZER_URL = "http://127.0.0.1:8002"
-TIMEOUT = 60  # secondi — l'analisi STEP può richiedere 5-10s
+TIMEOUT = 120  # secondi — cadquery può impiegare 10-15s su file grandi
 
 
 async def _call(method: str, path: str, **kwargs):

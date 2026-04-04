@@ -18,7 +18,7 @@ from pathlib import Path
 from datetime import datetime
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -170,6 +170,61 @@ class AggiornaDatiRequest(BaseModel):
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
+
+@app.post("/analizza-upload")
+async def analizza_upload(
+    file: UploadFile = File(...),
+    commessa: str = Form(...),
+    ore_macchina: str = Form(""),
+    lead_time_giorni: str = Form(""),
+    note: str = Form(""),
+):
+    """
+    Riceve il file STEP via upload (invece del path su disco).
+    Salva in una cartella temporanea, analizza, poi elimina.
+    """
+    import tempfile, shutil
+    from fastapi import UploadFile as _UF, File as _F, Form as _Fm
+
+    # Salva in temp
+    suffix = Path(file.filename).suffix or ".stp"
+    tmp = Path(tempfile.mktemp(suffix=suffix))
+    try:
+        content = await file.read()
+        tmp.write_bytes(content)
+
+        file_hash = hashlib.md5(content).hexdigest()
+        db = _load_features()
+        existing = db.get(commessa, {})
+
+        if existing.get("file_hash") == file_hash and existing.get("features"):
+            features = existing["features"]
+            cached = True
+        else:
+            log.info(f"Analisi STEP upload: {commessa} — {file.filename} ({len(content)//1024}KB)")
+            features = estrai_features(str(tmp))
+            cached = False
+
+        record = {
+            "commessa":          commessa,
+            "path_step":         file.filename,
+            "file_hash":         file_hash,
+            "analizzato":        datetime.now().isoformat(timespec="seconds"),
+            "features":          features,
+            "ore_macchina":      float(ore_macchina) if ore_macchina else existing.get("ore_macchina"),
+            "lead_time_giorni":  int(lead_time_giorni) if lead_time_giorni else existing.get("lead_time_giorni"),
+            "data_inizio":       existing.get("data_inizio"),
+            "data_consegna":     existing.get("data_consegna"),
+            "note":              note or existing.get("note"),
+        }
+        db[commessa] = record
+        _save_features(db)
+
+        return {"ok": True, "commessa": commessa, "features": features, "cached": cached}
+    finally:
+        if tmp.exists():
+            tmp.unlink()
+
 
 @app.get("/stato")
 def stato():

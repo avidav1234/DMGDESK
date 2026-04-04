@@ -758,16 +758,20 @@ export default function Macchina() {
       )}
 
       {/* ── Storico sostituzioni ─────────────────────────────────────── */}
-      {storico.length > 0 && (
-        <div style={{background:'var(--bg-surface)',border:'1px solid var(--border)',
-          borderRadius:10,overflow:'hidden',marginBottom:12}}>
-          <div style={{padding:'10px 14px',borderBottom:'1px solid var(--border)',
-            display:'flex',alignItems:'center',gap:8}}>
-            <span style={{fontSize:10,fontWeight:700,letterSpacing:'0.1em',
-              color:'var(--text-dim)',textTransform:'uppercase'}}>Storico sostituzioni</span>
-            <span style={{fontSize:10,fontWeight:700,color:'#6d28d9',
-              background:'#f5f3ff',padding:'2px 8px',borderRadius:8}}>{storico.length}</span>
+      <div style={{background:'var(--bg-surface)',border:'1px solid var(--border)',
+        borderRadius:10,overflow:'hidden',marginBottom:12}}>
+        <div style={{padding:'10px 14px',borderBottom:'1px solid var(--border)',
+          display:'flex',alignItems:'center',gap:8}}>
+          <span style={{fontSize:10,fontWeight:700,letterSpacing:'0.1em',
+            color:'var(--text-dim)',textTransform:'uppercase'}}>Storico sostituzioni</span>
+          {storico.length>0&&<span style={{fontSize:10,fontWeight:700,color:'#6d28d9',
+            background:'#f5f3ff',padding:'2px 8px',borderRadius:8}}>{storico.length}</span>}
+        </div>
+        {storico.length===0?(
+          <div style={{padding:'16px',fontSize:12,color:'var(--text-dim)',textAlign:'center'}}>
+            Nessuna sostituzione registrata — si aggiorna automaticamente ad ogni sync TOA
           </div>
+        ):(
           <table style={{width:'100%',borderCollapse:'collapse'}}>
             <thead>
               <tr style={{background:'#f8fafc'}}>
@@ -805,8 +809,8 @@ export default function Macchina() {
               })}
             </tbody>
           </table>
-        </div>
-      )}
+        )}
+      </div>
 
       <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
     </div>

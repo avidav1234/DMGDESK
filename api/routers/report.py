@@ -2327,6 +2327,7 @@ async def get_analytics_commesse():
 
         # Stima fine lavori
         # Programmi rimanenti × tempo ciclo medio
+        # Stima rimanente TOTALE (tutti i non-completati) — per giorni_rimanenti
         pgm_rimanenti = [
             pg for s in p.get("steps", [])
             for t in s.get("tasks", [])
@@ -2337,6 +2338,21 @@ async def get_analytics_commesse():
         stima_rimanente_sec = sum(
             int(pg.get("tempoStimato") or 0) * 60
             for pg in pgm_rimanenti
+            if pg.get("tempoStimato")
+        )
+
+        # Stima in_main — solo programmi pianificati nel MAIN (per Gantt e ore_rimanenti)
+        pgm_in_main = [
+            pg for s in p.get("steps", [])
+            for t in s.get("tasks", [])
+            if t.get("text", "").strip().lower() == "fresatura"
+            for pg in t.get("programs", [])
+            if pg.get("tipoGruppo") != "ipm"
+            and pg.get("stato") in ("in_main", "in_lavorazione", "in_macchina")
+        ]
+        stima_in_main_sec = sum(
+            int(pg.get("tempoStimato") or 0) * 60
+            for pg in pgm_in_main
             if pg.get("tempoStimato")
         )
 
@@ -2457,7 +2473,7 @@ async def get_analytics_commesse():
                 "alert":               alert,
                 "pallet_numero":       pallet_map.get(pid, {}).get("numero"),
                 "is_live":             pallet_map.get(pid, {}).get("stato") == "in_lavorazione",
-                "ore_rimanenti":       round((stima_rimanente_corretta_sec or stima_rimanente_sec or 0) / 3600, 2),
+                "ore_rimanenti":       round((stima_in_main_sec) / 3600, 2),
             })
 
     # Ordina: alert prima, poi per ore macchina decrescenti

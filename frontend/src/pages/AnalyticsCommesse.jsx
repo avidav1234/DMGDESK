@@ -493,27 +493,30 @@ export default function AnalyticsCommesse() {
           const righe = (progetti||[]).filter(p => p.pallet_numero)
           if (!righe.length) return null
           const maxOre = Math.max(...righe.map(p => (p.ore_rimanenti||0)), 1)
-          const fmtOre = sec => {
-            if (!sec) return '—'
-            const h = Math.floor(sec/3600), m = Math.round((sec%3600)/60)
-            return m > 0 ? `${h}h ${m}m` : `${h}h`
+          const fmtOre = h => {
+            if (!h) return '—'
+            const hh = Math.floor(h), mm = Math.round((h - hh) * 60)
+            return mm > 0 ? `${hh}h ${mm}m` : `${hh}h`
           }
           return (
             <div style={{background:'#fff',borderRadius:12,padding:'16px 20px',
               boxShadow:'0 1px 3px rgba(0,0,0,0.06)',marginBottom:16}}>
               <div style={{fontSize:11,fontWeight:700,letterSpacing:'0.08em',
-                color:'#64748b',textTransform:'uppercase',marginBottom:12}}>
-                Gantt pallet — ore rimanenti
+                color:'#64748b',textTransform:'uppercase',marginBottom:4}}>
+                Gantt pallet — ore in_main
+              </div>
+              <div style={{fontSize:10,color:'#94a3b8',marginBottom:12}}>
+                Solo programmi pianificati nel MAIN
               </div>
               <div style={{display:'flex',flexDirection:'column',gap:8}}>
                 {righe.sort((a,b)=>(a.pallet_numero||9)-(b.pallet_numero||9)).map(p => {
                   const ore = p.ore_rimanenti || 0
-                  const pct = Math.min(Math.round(ore / maxOre * 100), 100)
+                  const pct = ore > 0 ? Math.min(Math.round(ore / maxOre * 100), 100) : 0
                   const color = p.is_live ? '#1D5FAD' : '#64748b'
                   const bg    = p.is_live ? '#dbeafe' : '#f1f5f9'
                   return (
                     <div key={p.id} onClick={()=>navigate(`/rendiconto/${p.id}`)}
-                      style={{display:'grid',gridTemplateColumns:'32px 120px 1fr 72px',
+                      style={{display:'grid',gridTemplateColumns:'32px 120px 1fr 80px',
                         alignItems:'center',gap:10,cursor:'pointer'}}>
                       <div style={{fontSize:11,fontWeight:800,color:color,
                         background:bg,borderRadius:4,padding:'2px 4px',
@@ -524,12 +527,14 @@ export default function AnalyticsCommesse() {
                       </div>
                       <div style={{height:18,background:'#f1f5f9',borderRadius:4,
                         overflow:'hidden',position:'relative'}}>
-                        <div style={{height:'100%',width:`${pct}%`,
-                          background: p.is_live
-                            ? 'linear-gradient(90deg,#1D5FAD,#3b82f6)'
-                            : 'linear-gradient(90deg,#94a3b8,#cbd5e1)',
-                          borderRadius:4,transition:'width .3s'}}/>
-                        {p.data_fine_stimata && (
+                        {ore > 0 && (
+                          <div style={{height:'100%',width:`${pct}%`,
+                            background: p.is_live
+                              ? 'linear-gradient(90deg,#1D5FAD,#3b82f6)'
+                              : 'linear-gradient(90deg,#94a3b8,#cbd5e1)',
+                            borderRadius:4,transition:'width .3s'}}/>
+                        )}
+                        {p.data_fine_stimata && ore > 0 && (
                           <span style={{position:'absolute',right:6,top:'50%',
                             transform:'translateY(-50%)',fontSize:9,
                             color:'#64748b',fontWeight:600}}>
@@ -538,8 +543,8 @@ export default function AnalyticsCommesse() {
                         )}
                       </div>
                       <div style={{fontSize:11,fontFamily:'monospace',
-                        fontWeight:700,color:color,textAlign:'right'}}>
-                        {fmtOre(ore*3600)}
+                        fontWeight:700,color: ore>0?color:'#94a3b8',textAlign:'right'}}>
+                        {fmtOre(ore)}
                       </div>
                     </div>
                   )

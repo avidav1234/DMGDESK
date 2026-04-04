@@ -200,9 +200,12 @@ def scansiona_directory(config: dict) -> dict:
     for mpf_path in base.rglob("*.MPF"):
         stats["scansionati"] += 1
 
+        # Ignora i file MAIN generati da DMGDesk
+        if mpf_path.name.upper().startswith("0_MAIN_"):
+            continue
+
         parts = mpf_path.relative_to(base).parts
         # Struttura attesa: commessa / posizione / [fase /] file.MPF
-        # o:                commessa / posizione / file.MPF (senza fase)
         if len(parts) < 3:
             stats["orfani"] += 1
             continue
@@ -215,8 +218,18 @@ def scansiona_directory(config: dict) -> dict:
         posizione  = parts[1]   # es. 0005, P0005
         nome_proj  = _nome_progetto(commessa, posizione)
 
-        # Fase: la cartella immediata del file (se non è la posizione stessa)
-        fase_cartella = parts[-2] if len(parts) >= 3 else ""
+        # Fase: la cartella tra posizione e file
+        # Se len==3: commessa/posizione/file.MPF → nessuna fase esplicita
+        # Se len==4: commessa/posizione/fase/file.MPF → fase = parts[2]
+        # Se len>=5: commessa/posizione/fase/sotto/file.MPF → fase = parts[2]
+        if len(parts) >= 4:
+            fase_cartella = parts[2]
+            # Verifica che sembri una fase (contiene "fase" o è numerica)
+            fc_lower = fase_cartella.lower()
+            if not (re.search(r"fase", fc_lower) or fc_lower.isdigit()):
+                fase_cartella = ""  # cartella non è una fase (es. WPD, OLD, report)
+        else:
+            fase_cartella = ""  # file direttamente in posizione, nessuna fase
 
         # Cerca progetto
         project = proj_index.get(nome_proj.upper())
@@ -351,15 +364,23 @@ async def anteprima_scansione():
 
     trovati, orfani = [], []
     for mpf_path in base.rglob("*.MPF"):
+        if mpf_path.name.upper().startswith("0_MAIN_"):
+            continue
         parts = mpf_path.relative_to(base).parts
         if len(parts) < 3:
             continue
         if parts[0].lower() in IGNORE_DIRS:
             continue
         nome_proj = _nome_progetto(parts[0], parts[1])
+        # Fase: solo se cartella contiene "fase" o è numerica
+        if len(parts) >= 4:
+            fc = parts[2].lower()
+            fase = parts[2] if (re.search(r"fase", fc) or fc.isdigit()) else ""
+        else:
+            fase = ""
         project   = proj_index.get(nome_proj.upper())
         if project:
-            trovati.append({"file": mpf_path.name, "progetto": nome_proj, "fase": parts[-2] if len(parts) >= 3 else ""})
+            trovati.append({"file": mpf_path.name, "progetto": nome_proj, "fase": fase})
         else:
             orfani.append({"file": mpf_path.name, "path": str(mpf_path.relative_to(base)), "progetto_atteso": nome_proj})
 

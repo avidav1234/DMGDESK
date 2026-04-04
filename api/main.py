@@ -76,6 +76,9 @@ app.include_router(backup_router.router)
 from api.routers import tool_history as tool_history_router
 app.include_router(tool_history_router.router)
 
+from api.routers import step_client as step_client_router
+app.include_router(step_client_router.router)
+
 from api.routers import pallet_history as pallet_history_router
 app.include_router(pallet_history_router.router)
 

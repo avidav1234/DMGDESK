@@ -751,7 +751,7 @@ class CAMTracker:
                     stp = trovati[0]
                     break
             if not stp:
-                log.debug(f"[STEP] Nessun file .stp in {cartella}")
+                log.warning(f"[STEP] Nessun file .stp in {cartella}")
                 return
 
             log.info(f"[STEP] Trovato {stp.name} per {project_id} — invio a STEP Analyzer")
@@ -770,9 +770,9 @@ class CAMTracker:
             else:
                 log.warning(f"[STEP] Errore analisi {project_id}: {resp.status_code} — {resp.text[:200]}")
         except Exception as e:
-            log.debug(f"[STEP] Analisi background fallita per {project_id}: {e}")
+            log.warning(f"[STEP] Analisi background fallita per {project_id}: {e}")
         except Exception as e:
-            log.debug(f"[STEP] Analisi background fallita per {project_id}: {e}")
+            log.warning(f"[STEP] Analisi background fallita per {project_id}: {e}")
 
     def flush(self):
         """Chiude la sessione corrente e invia a DMGDesk."""
@@ -882,7 +882,7 @@ class CAMTracker:
                         daemon=True
                     ).start()
             except Exception as e:
-                log.debug(f"[STEP] Analisi avvio fallita: {e}")
+                log.warning(f"[STEP] Analisi avvio fallita: {e}")
         else:
             log.warning(f"[CAMTracker] DMGDesk non raggiungibile — modalità offline, retry ogni {RECONNECT_INTERVAL}s")
             self._gui("set_dmgdesk", False)

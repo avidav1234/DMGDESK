@@ -2345,6 +2345,44 @@ async def get_analytics_commesse():
             else None
         )
 
+        # ── Intervallo di confidenza ±N giorni ──────────────────────────────
+        # Basato sulla varianza delle ore/giorno negli ultimi 14gg (reparto)
+        # Varianza alta → ±più giorni; varianza bassa → ±meno giorni
+        confidenza_giorni = None
+        confidenza_label  = None
+        if giorni_rimanenti is not None and ore_giorno_reali > 0:
+            # Raccoglie ore/giorno degli ultimi 14gg su TUTTI i progetti (velocità reparto)
+            campioni_14gg = []
+            for s in sessioni_all:
+                if s.get("data", "") >= (oggi - timedelta(days=14)).isoformat():
+                    dur = s.get("durata_sec") or 0
+                    if dur > 0:
+                        campioni_14gg.append(dur)
+
+            if len(campioni_14gg) >= 3:
+                import statistics as _stats
+                media_camp = _stats.mean(campioni_14gg)
+                stdev_camp = _stats.stdev(campioni_14gg) if len(campioni_14gg) >= 2 else 0
+                cv = stdev_camp / media_camp if media_camp > 0 else 0  # coefficiente di variazione
+
+                # cv basso (<0.3) → alta confidenza ±1-2gg
+                # cv medio (0.3-0.6) → media confidenza ±3-5gg
+                # cv alto (>0.6) → bassa confidenza ±7+gg
+                if stima_rimanente_corretta_sec > 0:
+                    # Propaga l'incertezza: delta_giorni = cv × giorni_rimanenti
+                    confidenza_giorni = max(1, round(cv * giorni_rimanenti))
+                    confidenza_giorni = min(confidenza_giorni, 30)  # cap a 30gg
+                    if cv < 0.3:
+                        confidenza_label = "alta"
+                    elif cv < 0.6:
+                        confidenza_label = "media"
+                    else:
+                        confidenza_label = "bassa"
+            else:
+                # Pochi dati storici → confidenza bassa con ±fisso
+                confidenza_giorni = min(max(2, round(giorni_rimanenti * 0.3)), 14)
+                confidenza_label  = "bassa"
+
         # Alert scadenza
         delivery = delivery_map.get(pid, {})
         scadenza = delivery.get("dueDate")
@@ -2380,6 +2418,8 @@ async def get_analytics_commesse():
                 "k_applicato":         k_medio,
                 "giorni_rimanenti":    giorni_rimanenti,
                 "data_fine_stimata":   data_fine_stimata,
+                "confidenza_giorni":   confidenza_giorni,
+                "confidenza_label":    confidenza_label,
                 "scadenza":            scadenza,
                 "consegnato":          consegnato,
                 "alert":               alert,

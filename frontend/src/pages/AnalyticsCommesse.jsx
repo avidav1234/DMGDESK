@@ -171,6 +171,13 @@ function RigaProgetto({ p, onClick }) {
               {p.giorni_rimanenti}gg
               {p.k_applicato ? ` · K=${p.k_applicato}` : ' · grezzo'}
             </div>
+            {p.confidenza_giorni && (
+              <div style={{fontSize:10, fontWeight:600,
+                color: p.confidenza_label==='alta' ? '#16a34a'
+                     : p.confidenza_label==='media' ? '#d97706' : '#94a3b8'}}>
+                ±{p.confidenza_giorni}gg · {p.confidenza_label}
+              </div>
+            )}
           </div>
         ) : (
           <span style={{fontSize:11, color:'#94a3b8'}}>—</span>

@@ -92,8 +92,13 @@ async def analizza_upload(
 
 @router.get("/simili/{commessa}")
 async def simili(commessa: str, top: int = 5, soglia: float = 60.0):
-    return await _call("get", f"/simili/{commessa}",
-                       params={"top": top, "soglia": soglia})
+    try:
+        return await _call("get", f"/simili/{commessa}",
+                           params={"top": top, "soglia": soglia})
+    except HTTPException as e:
+        if e.status_code == 404:
+            return {"commessa_ref": commessa, "n_totale": 0, "simili": [], "non_in_storico": True}
+        raise
 
 
 @router.get("/storico")

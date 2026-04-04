@@ -188,7 +188,8 @@ def aggiorna_dati(commessa: str, req: AggiornaDatiRequest):
 @app.get("/simili/{commessa}")
 def simili(commessa: str, top: int=5, soglia: float=60.0):
     db = _load_features()
-    if commessa not in db: raise HTTPException(404, f"Commessa {commessa} non in storico")
+    if commessa not in db:
+        return {"commessa_ref": commessa, "n_totale": 0, "simili": [], "non_in_storico": True}
     feat_ref = db[commessa]["features"]
     risultati = []
     for nome, rec in db.items():

@@ -1539,12 +1539,11 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
   const[schedaPredittiva,setSchedaPredittiva]=useState(null)
 
   useEffect(()=>{
-    // Carica scheda predittiva da STEP Analyzer (se disponibile)
     const nome = project.name?.toUpperCase()
     if(!nome) return
     fetch(`/api/step/simili/${encodeURIComponent(nome)}?top=3&soglia=60`)
       .then(r=>r.ok?r.json():null)
-      .then(d=>{ if(d?.simili?.length>0) setSchedaPredittiva(d) })
+      .then(d=>{ if(d) setSchedaPredittiva(d) })
       .catch(()=>{})
   },[project.name])
   const logRef=useRef(null)
@@ -1750,12 +1749,22 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
         {schedaPredittiva && (
           <div style={{background:'#f5f3ff',border:'1px solid #c4b5fd',borderRadius:10,
             padding:'10px 14px',marginBottom:10,fontSize:12}}>
-            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom: schedaPredittiva.simili?.length>0 ? 8 : 0}}>
               <span style={{fontSize:10,fontWeight:800,letterSpacing:'0.08em',
                 color:'#6d28d9',textTransform:'uppercase'}}>Predizione da geometria</span>
-              <span style={{fontSize:10,color:'#a78bfa'}}>
-                {schedaPredittiva.n_totale} pezz{schedaPredittiva.n_totale===1?'o':'i'} simil{schedaPredittiva.n_totale===1?'e':'i'} trovati
-              </span>
+              {schedaPredittiva.non_in_storico ? (
+                <span style={{fontSize:10,color:'#a78bfa'}}>
+                  STEP non ancora analizzato — verrà analizzato automaticamente via CAM Tracker
+                </span>
+              ) : schedaPredittiva.simili?.length === 0 ? (
+                <span style={{fontSize:10,color:'#a78bfa'}}>
+                  ✓ STEP in storico · nessun pezzo simile ancora (storico in crescita)
+                </span>
+              ) : (
+                <span style={{fontSize:10,color:'#a78bfa'}}>
+                  {schedaPredittiva.n_totale} pezz{schedaPredittiva.n_totale===1?'o':'i'} simil{schedaPredittiva.n_totale===1?'e':'i'} trovati
+                </span>
+              )}
             </div>
             <div style={{display:'flex',gap:16,flexWrap:'wrap'}}>
               {schedaPredittiva.simili.map((s,i)=>{

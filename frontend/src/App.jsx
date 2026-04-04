@@ -17,6 +17,7 @@ import CamTracker    from './pages/CamTracker'
 import AnalyticsCommesse from './pages/AnalyticsCommesse'
 import AlertUtensili from './pages/AlertUtensili'
 import RiepilogoTurno from './pages/RiepilogoTurno'
+import StepAnalyzer  from './pages/StepAnalyzer'
 
 // ── Error Boundary globale ──────────────────────────────────────────────────
 // Previene schermo bianco su eccezioni non gestite nei componenti React.
@@ -118,6 +119,7 @@ function MainContent() {
         <Route path="/analytics"    element={<Wrap><AnalyticsCommesse /></Wrap>} />
         <Route path="/alert-utensili" element={<Wrap><AlertUtensili /></Wrap>} />
         <Route path="/turno"          element={<Wrap><RiepilogoTurno /></Wrap>} />
+        <Route path="/step-analyzer"  element={<Wrap><StepAnalyzer /></Wrap>} />
       </Routes>
     </main>
   )

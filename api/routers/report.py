@@ -2288,16 +2288,20 @@ async def get_analytics_commesse():
     delivery_map = {d.get("projectId"): d for d in deliveries}
 
     k_campioni = []
+    K_MIN = 0.5   # minimo plausibile: 1h CAM → almeno 30min macchina
+    K_MAX = 20.0  # massimo plausibile: 1h CAM → max 20h macchina
+    CAM_MIN_SEC = 1800  # almeno 30 min CAM per essere un campione valido
     for p in progetti:
         nome_p = p.get("name", "")
         delivery_p = delivery_map.get(p.get("id", ""), {})
-        # Solo commesse consegnate (complete) con dati sia CAM che macchina
         if not delivery_p.get("delivered"):
             continue
         mac_s = ore_mac.get(nome_p, 0)
         cam_s = ore_cam.get(nome_p.upper(), 0)
-        if mac_s > 0 and cam_s > 0:
-            k_campioni.append(mac_s / cam_s)
+        if mac_s > 0 and cam_s >= CAM_MIN_SEC:
+            k = mac_s / cam_s
+            if K_MIN <= k <= K_MAX:
+                k_campioni.append(k)
 
     k_medio   = round(sum(k_campioni) / len(k_campioni), 2) if k_campioni else None
     k_std     = round((sum((k - k_medio)**2 for k in k_campioni) / len(k_campioni))**0.5, 2) if len(k_campioni) > 1 else None
@@ -2359,7 +2363,7 @@ async def get_analytics_commesse():
         # Applica fattore K alla stima CAM se disponibile
         # Senza K: stima grezza (include bias sistematico)
         # Con K: stima corretta basata su storico reale
-        if stima_rimanente_sec > 0 and k_medio:
+        if stima_rimanente_sec > 0 and k_medio and k_medio <= K_MAX:
             stima_rimanente_corretta_sec = round(stima_rimanente_sec * k_medio)
         else:
             stima_rimanente_corretta_sec = stima_rimanente_sec
@@ -2473,7 +2477,7 @@ async def get_analytics_commesse():
                 "alert":               alert,
                 "pallet_numero":       pallet_map.get(pid, {}).get("numero"),
                 "is_live":             pallet_map.get(pid, {}).get("stato") == "in_lavorazione",
-                "ore_rimanenti":       round((stima_in_main_sec) / 3600, 2),
+                "ore_rimanenti":       round((stima_rimanente_corretta_sec or stima_rimanente_sec or 0) / 3600, 2),
             })
 
     # Ordina: alert prima, poi per ore macchina decrescenti

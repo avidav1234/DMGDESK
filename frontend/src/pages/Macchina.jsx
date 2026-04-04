@@ -216,6 +216,12 @@ export default function Macchina() {
   const [setupPopup, setSetupPopup]   = useState(false)
   const [setupData,  setSetupData]    = useState(null)
   const [setupLoading, setSetupLoading] = useState(false)
+  const [storico, setStotico]         = useState([])
+
+  useEffect(() => {
+    fetch('/api/tool-history/sostituzioni?limit=50')
+      .then(r=>r.json()).then(d=>setStotico(d.sostituzioni||[])).catch(()=>{})
+  }, [])
 
   // ── Popup Analisi Setup (componente interno) ──────────────────────────────
   const SetupPannel = () => {
@@ -750,6 +756,58 @@ export default function Macchina() {
           </table>
         </div>
       )}
+
+      {/* ── Storico sostituzioni ─────────────────────────────────────── */}
+      {storico.length > 0 && (
+        <div style={{background:'var(--bg-surface)',border:'1px solid var(--border)',
+          borderRadius:10,overflow:'hidden',marginBottom:12}}>
+          <div style={{padding:'10px 14px',borderBottom:'1px solid var(--border)',
+            display:'flex',alignItems:'center',gap:8}}>
+            <span style={{fontSize:10,fontWeight:700,letterSpacing:'0.1em',
+              color:'var(--text-dim)',textTransform:'uppercase'}}>Storico sostituzioni</span>
+            <span style={{fontSize:10,fontWeight:700,color:'#6d28d9',
+              background:'#f5f3ff',padding:'2px 8px',borderRadius:8}}>{storico.length}</span>
+          </div>
+          <table style={{width:'100%',borderCollapse:'collapse'}}>
+            <thead>
+              <tr style={{background:'#f8fafc'}}>
+                {['Data','Alias','Pos','Vita prima','Vita dopo','Tipo'].map(h=>(
+                  <th key={h} style={{padding:'8px 12px',textAlign:'left',fontSize:10,
+                    fontFamily:'var(--font-mono)',color:'var(--text-dim)',fontWeight:700,
+                    textTransform:'uppercase',letterSpacing:'0.08em',
+                    borderBottom:'1px solid var(--border)'}}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {storico.slice(0,20).map((r,i)=>{
+                const isNew = r.tipo==='sostituito'
+                return(
+                  <tr key={i} style={{borderBottom:'1px solid var(--border)',
+                    background:i%2===0?'transparent':'rgba(0,0,0,0.01)'}}>
+                    <td style={{padding:'7px 12px',fontSize:11,fontFamily:'var(--font-mono)',
+                      color:'var(--text-dim)'}}>{r.ts?.slice(0,16).replace('T',' ')}</td>
+                    <td style={{padding:'7px 12px',fontSize:12,fontWeight:700,
+                      fontFamily:'var(--font-mono)',color:'var(--text-primary)'}}>{r.alias}</td>
+                    <td style={{padding:'7px 12px',fontSize:11,color:'var(--text-dim)'}}>{r.posizione||'—'}</td>
+                    <td style={{padding:'7px 12px',fontSize:11,color:'#dc2626'}}>{r.vita_prima}%</td>
+                    <td style={{padding:'7px 12px',fontSize:11,color:'#16a34a'}}>{r.vita_dopo}%</td>
+                    <td style={{padding:'7px 12px'}}>
+                      <span style={{fontSize:10,fontWeight:700,
+                        color: isNew?'#6d28d9':'#0369a1',
+                        background: isNew?'#f5f3ff':'#e0f2fe',
+                        padding:'2px 8px',borderRadius:4}}>
+                        {r.tipo}
+                      </span>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
       <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
     </div>
     </>

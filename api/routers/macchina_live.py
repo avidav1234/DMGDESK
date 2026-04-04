@@ -487,7 +487,8 @@ async def get_live_context():
                         try:
                             tm = json.loads(tm_path.read_text(encoding="utf-8"))
                             alias = pgm_match["utensile"].upper().strip()
-                            for t in tm.get("tools", {}).values():
+                            tools_dict = tm.get("tools", {})
+                            for t in tools_dict.values():
                                 if (t.get("name") or "").upper().strip() == alias:
                                     lp = t.get("life_percent")
                                     if not t.get("is_enabled", True) or t.get("is_worn"):
@@ -495,6 +496,12 @@ async def get_live_context():
                                     elif lp is not None and lp < 15:
                                         allerta = "fin_vita"
                                     break
+                            # Alert Telegram vita bassa durante lavorazione
+                            try:
+                                from api.routers.tool_history import check_low_life_alert
+                                check_low_life_alert(tools_dict, [alias], config)
+                            except Exception:
+                                pass
                         except Exception:
                             pass
 

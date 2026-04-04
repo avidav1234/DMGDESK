@@ -213,6 +213,15 @@ def _load_tools_db() -> tuple[dict, str | None, str]:
         _tools_db_cache["sync_time"] = data.get("sync_time")
         _tools_db_cache["format"]    = data.get("format_used", "")
         _tools_db_cache["mtime"]     = mtime
+
+        # Rileva sostituzioni utensile confrontando con snapshot precedente
+        try:
+            from api.routers.tool_history import on_tools_updated
+            config = carica_configurazione()
+            on_tools_updated(_tools_db_cache["data"], config)
+        except Exception:
+            pass
+
         return _tools_db_cache["data"], _tools_db_cache["sync_time"], _tools_db_cache["format"]
     except Exception:
         return {}, None, ""

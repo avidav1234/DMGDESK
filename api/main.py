@@ -73,6 +73,9 @@ app.include_router(main_sync_router.router)
 from api.routers import backup as backup_router
 app.include_router(backup_router.router)
 
+from api.routers import tool_history as tool_history_router
+app.include_router(tool_history_router.router)
+
 # ── NC Scanner ────────────────────────────────────────────────────────────────
 from api.routers import nc_scanner as nc_scanner_router
 app.include_router(nc_scanner_router.router)

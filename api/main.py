@@ -136,6 +136,23 @@ async def startup():
     _asyncio.create_task(_backup_loop())
     log.info("Backup giornaliero avviato")
 
+    # ── NC Scanner — ogni 10 minuti ───────────────────────────────────────
+    async def _nc_scanner_loop():
+        from api.routers.nc_scanner import job_nc_scanner
+        import asyncio as _aio
+        _log = __import__('logging').getLogger("nc_scanner")
+        _log.info("NC Scanner avviato (ogni 10 min)")
+        await _aio.sleep(45)  # attendi avvio completo
+        while True:
+            try:
+                await job_nc_scanner()
+            except Exception as _e:
+                _log.warning(f"NC Scanner error: {_e}")
+            await _aio.sleep(600)  # 10 minuti
+
+    _asyncio.create_task(_nc_scanner_loop())
+    log.info("NC Scanner avviato (scansione directory NC ogni 10 min)")
+
     # Pulizia file .tmp orfani da atomic write interrotti (crash/spegnimento)
     from pathlib import Path as _P
     from database.db_handler import carica_configurazione as _cfg

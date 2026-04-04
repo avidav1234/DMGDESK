@@ -1,0 +1,372 @@
+"""
+api/routers/nc_scanner.py
+=========================
+Scansione automatica della directory NC e associazione programmi ai progetti.
+
+Struttura attesa:
+  percorso_nc_base/
+  └── {commessa}/          ex. 4298
+      └── {posizione}/     ex. 0005, p0005, P0005, 0221
+          └── {fase}/      ex. Fase-1, fase-1, fase_1, Fase 1
+              └── *.MPF
+
+Ogni 10 minuti (configurabile):
+  - Scansiona ricorsivamente tutti i .MPF
+  - Normalizza commessa+posizione → nome progetto (es. 4298_0005)
+  - Cerca il progetto in DMGDesk
+  - Cerca il task Fresatura della fase corrispondente
+  - Aggiunge i programmi nuovi con stato da_fare
+  - Aggiorna metadati (tempoStimato, utensile) se cambiati
+  - Non tocca mai stato di programmi in_main/completato/in_lavorazione
+"""
+
+import re
+import json
+import logging
+from datetime import datetime
+from pathlib import Path
+
+from fastapi import APIRouter
+from database.db_handler import carica_configurazione
+from api.routers.progetti import _load_progetti, _save_progetti, _write_lock, _invalidate_analisi_cache
+
+log = logging.getLogger("nc_scanner")
+router = APIRouter(prefix="/api/nc-scanner", tags=["NC Scanner"])
+
+
+# ── Normalizzazione ────────────────────────────────────────────────────────────
+
+def _norm_posizione(raw: str) -> str:
+    """
+    Normalizza la posizione a 4 cifre numeriche.
+    P0005 → 0005, p609 → 0609, 0221 → 0221, P7221 → 7221
+    """
+    s = raw.strip().upper().lstrip("P")
+    if s.isdigit():
+        return s.zfill(4)
+    return s  # non numerico (es. P1003) — restituisce as-is senza P
+
+def _nome_progetto(commessa: str, posizione_raw: str) -> str:
+    """
+    Costruisce il nome progetto normalizzato.
+    4298 + 0005 → 4298_0005
+    4298 + P0005 → 4298_0005
+    """
+    return f"{commessa.strip()}_{_norm_posizione(posizione_raw)}"
+
+def _norm_fase(raw: str) -> str:
+    """
+    Normalizza il nome fase per il confronto.
+    Fase-1 / fase-1 / fase_1 / Fase 1 → fase1
+    """
+    return re.sub(r"[\s\-_]+", "", raw.lower())
+
+
+def _parse_mpf_metadati(path: Path) -> dict:
+    """
+    Legge i metadati essenziali da un file MPF:
+    - utensile (primo T="..." prima di M6)
+    - tempoStimato (somma tutti i TEMPO: HH:MM:SS sulle righe M6)
+    - tipoGruppo (ipm se filename contiene _IPM_)
+    """
+    try:
+        content = path.read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        return {}
+
+    lines = content.splitlines()
+
+    # utensile: risale da primo M6
+    utensile = ""
+    m6_idx = next((i for i, l in enumerate(lines) if re.search(r"\bM6\b", l)), -1)
+    if m6_idx > 0:
+        for i in range(m6_idx - 1, max(0, m6_idx - 6), -1):
+            m = re.search(r'T\s*=\s*"([^"]+)"', lines[i])
+            if m:
+                utensile = m.group(1).strip()
+                break
+
+    # tempoStimato: somma tutti M6 con TEMPO:
+    def parse_tempo(raw):
+        if not raw:
+            return 0
+        if ":" in raw:
+            p = raw.split(":")
+            if len(p) == 3:
+                return int(p[0]) * 60 + int(p[1]) + round(int(p[2]) / 60)
+            if len(p) == 2:
+                return int(p[0]) + round(int(p[1]) / 60)
+        try:
+            return int(raw)
+        except Exception:
+            return 0
+
+    tempo_tot = 0
+    for l in lines:
+        if re.search(r"\bM6\b", l) and re.search(r"TEMPO\s*:", l, re.IGNORECASE):
+            m = re.search(r"TEMPO\s*:\s*([\d:]+)", l, re.IGNORECASE)
+            if m:
+                tempo_tot += parse_tempo(m.group(1))
+
+    # tipoGruppo
+    fname_upper = path.name.upper()
+    tipo = "ipm" if "_IPM_" in fname_upper else "fresatura"
+
+    # numPgm: ultimo token numerico del filename
+    base = path.stem.upper()
+    tokens = base.split("_")
+    num_pgm = tokens[-1] if tokens else ""
+
+    # fase dal path (cartella nonno rispetto al file)
+    fase = ""
+    parts = path.parts
+    if len(parts) >= 2:
+        fase = parts[-2]  # cartella immediata del file
+
+    return {
+        "filename":     path.name,
+        "utensile":     utensile,
+        "tempoStimato": tempo_tot or None,
+        "tipoGruppo":   tipo,
+        "numPgm":       num_pgm,
+        "fase_cartella": fase,
+    }
+
+
+# ── Scanner principale ─────────────────────────────────────────────────────────
+
+def _trova_o_crea_task_fresatura(project: dict, fase_label: str) -> dict | None:
+    """
+    Cerca il task 'Fresatura' nella fase corrispondente.
+    Se la fase non esiste, non la crea (conservativo).
+    Ritorna il task dict (reference mutabile) o None.
+    """
+    fase_norm = _norm_fase(fase_label)
+    for step in project.get("steps", []):
+        step_norm = _norm_fase(step.get("title", ""))
+        if fase_norm and step_norm != fase_norm:
+            continue  # fase specificata ma non corrisponde
+        for task in step.get("tasks", []):
+            if task.get("text", "").strip().lower() == "fresatura":
+                return task
+    return None
+
+
+def _uid():
+    import uuid
+    return str(uuid.uuid4())[:8]
+
+
+def scansiona_directory(config: dict) -> dict:
+    """
+    Scansiona percorso_nc_base e sincronizza i programmi con i progetti DMGDesk.
+    Ritorna un dizionario con le statistiche dell'operazione.
+    """
+    nc_base = (config.get("percorso_nc_base") or "").strip()
+    if not nc_base:
+        return {"ok": False, "errore": "percorso_nc_base non configurato"}
+
+    base = Path(nc_base)
+    if not base.exists():
+        return {"ok": False, "errore": f"Percorso non trovato: {nc_base}"}
+
+    proj_data = _load_progetti(config)
+    projects  = proj_data.get("projects", [])
+
+    # Indice progetti per nome normalizzato
+    proj_index: dict[str, dict] = {}
+    for p in projects:
+        nome = (p.get("name") or "").strip()
+        proj_index[nome.upper()] = p
+
+    stats = {
+        "scansionati": 0,
+        "aggiunti":    0,
+        "aggiornati":  0,
+        "orfani":      0,   # MPF senza progetto corrispondente
+        "ignorati":    0,   # già presenti, stato avanzato
+        "errori":      [],
+    }
+    dirty = False
+
+    # Cartelle da ignorare
+    IGNORE_DIRS = {
+        "allegati", "attrezzatura_interna", "db_toolmanager", "dnc",
+        "ipm.wpd", "machine server", "mcis", "oem", "opc", "tabella_utensili",
+        "test", "tool_sync", "vbs", "wzv.dir", "xp_scripts_dmgdesk",
+    }
+
+    # Scansione: commessa/posizione/fase/*.MPF
+    for mpf_path in base.rglob("*.MPF"):
+        stats["scansionati"] += 1
+
+        parts = mpf_path.relative_to(base).parts
+        # Struttura attesa: commessa / posizione / [fase /] file.MPF
+        # o:                commessa / posizione / file.MPF (senza fase)
+        if len(parts) < 3:
+            stats["orfani"] += 1
+            continue
+
+        cartella_top = parts[0].lower()
+        if cartella_top in IGNORE_DIRS or cartella_top.startswith("."):
+            continue
+
+        commessa   = parts[0]   # es. 4298
+        posizione  = parts[1]   # es. 0005, P0005
+        nome_proj  = _nome_progetto(commessa, posizione)
+
+        # Fase: la cartella immediata del file (se non è la posizione stessa)
+        fase_cartella = parts[-2] if len(parts) >= 3 else ""
+
+        # Cerca progetto
+        project = proj_index.get(nome_proj.upper())
+        if not project:
+            stats["orfani"] += 1
+            continue
+
+        # Leggi metadati MPF
+        try:
+            meta = _parse_mpf_metadati(mpf_path)
+        except Exception as e:
+            stats["errori"].append(f"{mpf_path.name}: {e}")
+            continue
+
+        fase_label = meta.get("fase_cartella") or fase_cartella
+
+        # Trova task Fresatura
+        task = _trova_o_crea_task_fresatura(project, fase_label)
+        if not task:
+            # Nessun task Fresatura trovato in questa fase — cerca in qualsiasi fase
+            task = _trova_o_crea_task_fresatura(project, "")
+        if not task:
+            stats["orfani"] += 1
+            continue
+
+        programs = task.setdefault("programs", [])
+        filename = meta["filename"]
+
+        # Cerca programma esistente
+        existing = next((p for p in programs if p.get("filename", "").upper() == filename.upper()), None)
+
+        if existing:
+            stato = existing.get("stato", "da_fare")
+            if stato in ("in_main", "in_lavorazione", "completato", "in_macchina"):
+                stats["ignorati"] += 1
+                continue
+            # Aggiorna metadati se cambiati
+            changed = False
+            if meta["utensile"] and existing.get("utensile") != meta["utensile"]:
+                existing["utensile"] = meta["utensile"]
+                changed = True
+            if meta["tempoStimato"] and existing.get("tempoStimato") != meta["tempoStimato"]:
+                existing["tempoStimato"] = meta["tempoStimato"]
+                changed = True
+            if changed:
+                stats["aggiornati"] += 1
+                dirty = True
+        else:
+            # Nuovo programma — aggiunge con stato da_fare
+            now = datetime.now().isoformat(timespec="seconds")
+            programs.append({
+                "id":           _uid(),
+                "filename":     filename,
+                "utensile":     meta["utensile"],
+                "tempoStimato": meta["tempoStimato"],
+                "tipoGruppo":   meta["tipoGruppo"],
+                "numPgm":       meta["numPgm"],
+                "stato":        "da_fare",
+                "operatore":    "",
+                "tempoInizio":  None,
+                "tempoFine":    None,
+                "rilevato_da":  "nc_scanner",
+                "rilevato_il":  now,
+            })
+            stats["aggiunti"] += 1
+            dirty = True
+            log.info(f"nc_scanner: aggiunto {filename} → {nome_proj} ({fase_label})")
+
+    if dirty:
+        _save_progetti(config, proj_data)
+        _invalidate_analisi_cache()
+        log.info(f"nc_scanner: salvato — +{stats['aggiunti']} aggiunti, {stats['aggiornati']} aggiornati")
+
+    stats["ok"] = True
+    return stats
+
+
+# ── Job periodico ──────────────────────────────────────────────────────────────
+
+async def job_nc_scanner():
+    """Chiamato ogni 10 minuti dallo scheduler in main.py."""
+    config = carica_configurazione()
+    try:
+        async with _write_lock:
+            result = scansiona_directory(config)
+        if result.get("aggiunti") or result.get("aggiornati"):
+            log.info(
+                f"nc_scanner: {result['scansionati']} file, "
+                f"+{result['aggiunti']} nuovi, "
+                f"~{result['aggiornati']} aggiornati, "
+                f"{result['orfani']} orfani"
+            )
+    except Exception as e:
+        log.warning(f"nc_scanner job error: {e}")
+
+
+# ── Endpoint manuali ───────────────────────────────────────────────────────────
+
+@router.post("/scansiona")
+async def scansiona_ora():
+    """Esegue la scansione immediatamente (senza attendere lo scheduler)."""
+    config = carica_configurazione()
+    async with _write_lock:
+        result = scansiona_directory(config)
+    return result
+
+
+@router.get("/anteprima")
+async def anteprima_scansione():
+    """
+    Mostra cosa troverebbe la scansione senza modificare nulla.
+    Utile per verificare prima di attivare il job automatico.
+    """
+    config = carica_configurazione()
+    nc_base = (config.get("percorso_nc_base") or "").strip()
+    if not nc_base:
+        return {"ok": False, "errore": "percorso_nc_base non configurato"}
+
+    base = Path(nc_base)
+    if not base.exists():
+        return {"ok": False, "errore": f"Percorso non trovato: {nc_base}"}
+
+    proj_data = _load_progetti(config)
+    projects  = proj_data.get("projects", [])
+    proj_index = {(p.get("name") or "").strip().upper(): p for p in projects}
+
+    IGNORE_DIRS = {
+        "allegati", "attrezzatura_interna", "db_toolmanager", "dnc",
+        "ipm.wpd", "machine server", "mcis", "oem", "opc", "tabella_utensili",
+        "test", "tool_sync", "vbs", "wzv.dir", "xp_scripts_dmgdesk",
+    }
+
+    trovati, orfani = [], []
+    for mpf_path in base.rglob("*.MPF"):
+        parts = mpf_path.relative_to(base).parts
+        if len(parts) < 3:
+            continue
+        if parts[0].lower() in IGNORE_DIRS:
+            continue
+        nome_proj = _nome_progetto(parts[0], parts[1])
+        project   = proj_index.get(nome_proj.upper())
+        if project:
+            trovati.append({"file": mpf_path.name, "progetto": nome_proj, "fase": parts[-2] if len(parts) >= 3 else ""})
+        else:
+            orfani.append({"file": mpf_path.name, "path": str(mpf_path.relative_to(base)), "progetto_atteso": nome_proj})
+
+    return {
+        "ok":      True,
+        "trovati": len(trovati),
+        "orfani":  len(orfani),
+        "campione_trovati": trovati[:20],
+        "campione_orfani":  orfani[:20],
+    }

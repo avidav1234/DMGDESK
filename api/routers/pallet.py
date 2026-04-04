@@ -266,6 +266,29 @@ async def set_stato_pallet(numero: int, body: SetStatoBody):
 
     _save(config, state)
 
+    # ── Storico cicli ──────────────────────────────────────────────────────
+    if progetto_id:
+        try:
+            from api.routers.pallet_history import on_pallet_stato_changed
+            from api.routers.progetti import _load_progetti
+            proj_data = _load_progetti(config)
+            proj = next((p for p in proj_data.get("projects", [])
+                         if p.get("id") == progetto_id), None)
+            n_pgm = sum(
+                1 for s in (proj or {}).get("steps", [])
+                for t in s.get("tasks", [])
+                if t.get("text", "").lower() == "fresatura"
+                for pg in t.get("programs", [])
+                if pg.get("tipoGruppo") != "ipm"
+            ) if proj else 0
+            on_pallet_stato_changed(
+                numero, body.stato,
+                progetto_id, pallet_found.get("progetto_nome"),
+                n_pgm, config
+            )
+        except Exception:
+            pass
+
     # ── Sincronizzazione stato pallet → progetto ───────────────────────────
     progetto_id = pallet_found.get("progetto_id")
     if progetto_id:

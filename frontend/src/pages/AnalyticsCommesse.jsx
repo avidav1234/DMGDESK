@@ -306,6 +306,7 @@ function HeatmapUtilizzo({ data }) {
 export default function AnalyticsCommesse() {
   const [data, setData] = useState(null)
   const [heatmap, setHeatmap] = useState(null)
+  const [palletStats, setPalletStats] = useState(null)
   const [loading, setLoading] = useState(true)
   const navigate = useNavigate()
 
@@ -313,9 +314,11 @@ export default function AnalyticsCommesse() {
     Promise.all([
       fetch('/api/report/analytics-commesse').then(r => r.ok ? r.json() : null),
       fetch('/api/report/heatmap-utilizzo').then(r => r.ok ? r.json() : null),
-    ]).then(([analytics, hm]) => {
+      fetch('/api/pallet-history/statistiche').then(r => r.ok ? r.json() : null),
+    ]).then(([analytics, hm, ph]) => {
       setData(analytics)
       setHeatmap(hm)
+      setPalletStats(ph)
       setLoading(false)
     }).catch(() => setLoading(false))
   }, [])
@@ -477,6 +480,128 @@ export default function AnalyticsCommesse() {
             ))
           )}
         </div>
+
+        {/* ── Gantt pallet ─────────────────────────────────────────── */}
+        {(() => {
+          const righe = (progetti||[]).filter(p => p.pallet_numero)
+          if (!righe.length) return null
+          const maxOre = Math.max(...righe.map(p => (p.ore_rimanenti||0)), 1)
+          const fmtOre = sec => {
+            if (!sec) return '—'
+            const h = Math.floor(sec/3600), m = Math.round((sec%3600)/60)
+            return m > 0 ? `${h}h ${m}m` : `${h}h`
+          }
+          return (
+            <div style={{background:'#fff',borderRadius:12,padding:'16px 20px',
+              boxShadow:'0 1px 3px rgba(0,0,0,0.06)',marginBottom:16}}>
+              <div style={{fontSize:11,fontWeight:700,letterSpacing:'0.08em',
+                color:'#64748b',textTransform:'uppercase',marginBottom:12}}>
+                Gantt pallet — ore rimanenti
+              </div>
+              <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                {righe.sort((a,b)=>(a.pallet_numero||9)-(b.pallet_numero||9)).map(p => {
+                  const ore = p.ore_rimanenti || 0
+                  const pct = Math.min(Math.round(ore / maxOre * 100), 100)
+                  const color = p.is_live ? '#1D5FAD' : '#64748b'
+                  const bg    = p.is_live ? '#dbeafe' : '#f1f5f9'
+                  return (
+                    <div key={p.id} onClick={()=>navigate(`/rendiconto/${p.id}`)}
+                      style={{display:'grid',gridTemplateColumns:'32px 120px 1fr 72px',
+                        alignItems:'center',gap:10,cursor:'pointer'}}>
+                      <div style={{fontSize:11,fontWeight:800,color:color,
+                        background:bg,borderRadius:4,padding:'2px 4px',
+                        textAlign:'center'}}>P{p.pallet_numero}</div>
+                      <div style={{fontSize:11,fontWeight:600,color:'#1e293b',
+                        overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                        {p.nome}
+                      </div>
+                      <div style={{height:18,background:'#f1f5f9',borderRadius:4,
+                        overflow:'hidden',position:'relative'}}>
+                        <div style={{height:'100%',width:`${pct}%`,
+                          background: p.is_live
+                            ? 'linear-gradient(90deg,#1D5FAD,#3b82f6)'
+                            : 'linear-gradient(90deg,#94a3b8,#cbd5e1)',
+                          borderRadius:4,transition:'width .3s'}}/>
+                        {p.data_fine_stimata && (
+                          <span style={{position:'absolute',right:6,top:'50%',
+                            transform:'translateY(-50%)',fontSize:9,
+                            color:'#64748b',fontWeight:600}}>
+                            {new Date(p.data_fine_stimata).toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit'})}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{fontSize:11,fontFamily:'monospace',
+                        fontWeight:700,color:color,textAlign:'right'}}>
+                        {fmtOre(ore*3600)}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )
+        })()}
+
+        {/* ── Statistiche cicli pallet ─────────────────────────────── */}
+        {palletStats?.statistiche?.length > 0 && (
+          <div style={{background:'#fff',borderRadius:12,padding:'16px 20px',
+            boxShadow:'0 1px 3px rgba(0,0,0,0.06)',marginBottom:16}}>
+            <div style={{fontSize:11,fontWeight:700,letterSpacing:'0.08em',
+              color:'#64748b',textTransform:'uppercase',marginBottom:12}}>
+              Cicli pallet — storico
+            </div>
+            <div style={{display:'grid',
+              gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))',gap:10}}>
+              {palletStats.statistiche.map(s => {
+                const aff = s.affidabilita_pct
+                const affColor = aff >= 90 ? '#16a34a' : aff >= 70 ? '#d97706' : '#dc2626'
+                const fmtDurata = sec => {
+                  if (!sec) return '—'
+                  const h = Math.floor(sec/3600)
+                  const m = Math.round((sec%3600)/60)
+                  return h > 0 ? `${h}h ${m}m` : `${m}m`
+                }
+                return (
+                  <div key={s.pallet} style={{border:'1px solid #e2e8f0',
+                    borderRadius:10,padding:'12px 14px'}}>
+                    <div style={{display:'flex',alignItems:'center',
+                      justifyContent:'space-between',marginBottom:8}}>
+                      <span style={{fontSize:14,fontWeight:800,color:'#0d2d5e'}}>
+                        P{s.pallet}
+                      </span>
+                      {aff !== null && (
+                        <span style={{fontSize:11,fontWeight:700,color:affColor,
+                          background:`${affColor}18`,padding:'2px 7px',borderRadius:6}}>
+                          {aff}%
+                        </span>
+                      )}
+                    </div>
+                    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',
+                      gap:4,fontSize:11}}>
+                      <div style={{color:'#64748b'}}>Completati</div>
+                      <div style={{fontWeight:700,color:'#16a34a',textAlign:'right'}}>
+                        {s.n_completati}
+                      </div>
+                      <div style={{color:'#64748b'}}>Guasti</div>
+                      <div style={{fontWeight:700,color:'#dc2626',textAlign:'right'}}>
+                        {s.n_guasti}
+                      </div>
+                      <div style={{color:'#64748b'}}>Interruzioni</div>
+                      <div style={{fontWeight:700,color:'#d97706',textAlign:'right'}}>
+                        {s.n_interruzioni}
+                      </div>
+                      <div style={{color:'#64748b'}}>Durata media</div>
+                      <div style={{fontWeight:600,color:'#334155',textAlign:'right',
+                        fontFamily:'monospace',fontSize:10}}>
+                        {fmtDurata(s.durata_media_sec)}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Footer info */}
         <div style={{padding:'12px 4px', fontSize:11, color:'#94a3b8',

@@ -2167,6 +2167,21 @@ async def get_analytics_commesse():
     deliveries = _load_deliveries(config)
     progetti = proj_data.get("projects", [])
 
+    # ── Pallet state per Gantt ──────────────────────────────────────────────
+    pallet_map: dict[str, dict] = {}  # progetto_id → {numero, stato}
+    try:
+        from api.routers.pallet import _load as _load_pallet, _pallet_path
+        ps = _load_pallet(config)
+        for pal in ps.get("pallet", []):
+            pid = pal.get("progetto_id")
+            if pid:
+                pallet_map[pid] = {
+                    "numero": pal.get("numero"),
+                    "stato":  pal.get("stato", ""),
+                }
+    except Exception:
+        pass
+
     # ── Ore macchina per commessa (da log sessioni) ──────────────────────────
     ore_mac: dict[str, float] = {}
     for s in log_data.get("sessioni", []):
@@ -2368,6 +2383,9 @@ async def get_analytics_commesse():
                 "scadenza":            scadenza,
                 "consegnato":          consegnato,
                 "alert":               alert,
+                "pallet_numero":       pallet_map.get(pid, {}).get("numero"),
+                "is_live":             pallet_map.get(pid, {}).get("stato") == "in_lavorazione",
+                "ore_rimanenti":       round((stima_rimanente_corretta_sec or stima_rimanente_sec or 0) / 3600, 2),
             })
 
     # Ordina: alert prima, poi per ore macchina decrescenti

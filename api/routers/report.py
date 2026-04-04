@@ -228,22 +228,63 @@ def aggiorna_da_log(
         GRACE_SEC = 900  # 15 minuti
         if stato_pgm in (0, 5):
             # ── Accumulo tempo fermo giornaliero (sempre, con o senza sessione) ──
-            # Ogni tick è ~4s (frequenza log OpcUa). Usiamo il delta reale
-            # tra now e ultimo_tick_fermo per evitare drift su tick irregolari.
             ultimo_fermo = sc.get("ultimo_tick_fermo")
+            today = now[:10]
+
+            if not ultimo_fermo or ultimo_fermo[:10] != today:
+                # Primo tick fermo della giornata — la macchina potrebbe essere
+                # ferma dall'inizio del turno (o da prima). Recupera il fermo
+                # dall'inizio del turno corrente a ora.
+                try:
+                    ts_now = datetime.fromisoformat(now)
+                    # Inizio del turno corrente: usa l'orario di snapshot turno (07:30)
+                    # come proxy. Se è prima delle 07:30, usa inizio giornata 00:00.
+                    ora_h = ts_now.hour
+                    if ora_h >= 7:
+                        inizio_turno = datetime.fromisoformat(today + "T07:30:00")
+                    else:
+                        inizio_turno = datetime.fromisoformat(today + "T00:00:00")
+                    fermo_recuperato = max(0, int((ts_now - inizio_turno).total_seconds()))
+                    if sc.get("fermo_data") != today:
+                        sc["fermo_sec_giornaliero"] = 0
+                        sc["fermo_data"] = today
+                    # Aggiunge solo se non già contato (evita duplicati)
+                    if sc.get("fermo_sec_giornaliero", 0) < fermo_recuperato:
+                        sc["fermo_sec_giornaliero"] = fermo_recuperato
+                    dirty = True
+                except Exception:
+                    pass
             if ultimo_fermo:
                 try:
                     delta_fermo = int((datetime.fromisoformat(now) -
                                        datetime.fromisoformat(ultimo_fermo)).total_seconds())
-                    # Filtra gap anomali (>120s = backend era giù, non fermo macchina)
                     if 0 < delta_fermo <= 120:
-                        today = now[:10]
-                        # Resetta il contatore se cambia giorno
+                        # Tick normale — accumula delta
                         if sc.get("fermo_data") != today:
                             sc["fermo_sec_giornaliero"] = 0
                             sc["fermo_data"] = today
                         sc["fermo_sec_giornaliero"] = sc.get("fermo_sec_giornaliero", 0) + delta_fermo
                         dirty = True
+                    elif delta_fermo > 120:
+                        # Gap lungo (backend era giù o tick mancato).
+                        # La macchina era già ferma (stato 0/5) prima del gap
+                        # → recupera il fermo reale limitato alla giornata corrente.
+                        # Non contiamo fermo di ieri nel contatore di oggi.
+                        try:
+                            ts_ultimo = datetime.fromisoformat(ultimo_fermo)
+                            ts_now    = datetime.fromisoformat(now)
+                            # Inizio della giornata corrente
+                            inizio_oggi = datetime.fromisoformat(today + "T00:00:00")
+                            # Il fermo recuperabile è solo da mezzanotte a ora
+                            ts_da = max(ts_ultimo, inizio_oggi)
+                            fermo_recuperato = max(0, int((ts_now - ts_da).total_seconds()))
+                            if sc.get("fermo_data") != today:
+                                sc["fermo_sec_giornaliero"] = 0
+                                sc["fermo_data"] = today
+                            sc["fermo_sec_giornaliero"] = sc.get("fermo_sec_giornaliero", 0) + fermo_recuperato
+                            dirty = True
+                        except Exception:
+                            pass
                 except Exception:
                     pass
             sc["ultimo_tick_fermo"] = now

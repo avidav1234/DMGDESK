@@ -720,9 +720,54 @@ class CAMTracker:
                 self._gui("add_log",
                           f"{proj['commessa']}_{proj['operazione']} — {'attivo' if active else 'in foreground'}",
                           "ok" if active else "info")
+
+                # ── Auto-analisi STEP in background ───────────────────────────
+                full_path = proj.get("full_path")
+                if full_path:
+                    threading.Thread(
+                        target=self._analizza_step_background,
+                        args=(proj_id, full_path),
+                        daemon=True
+                    ).start()
             else:
                 log.debug("[Tracker] Nessun progetto Cimatron")
                 self._gui("set_progetto", "—", False)
+
+    def _analizza_step_background(self, project_id: str, full_path: str):
+        """
+        Cerca un file .stp/.step nella cartella del progetto Cimatron
+        e lo manda allo STEP Analyzer in background.
+        Chiamato in un thread separato — non blocca il tracker.
+        """
+        try:
+            import requests as _req
+            cartella = Path(full_path).parent
+            # Cerca il primo .stp o .step trovato
+            stp = None
+            for ext in ("*.stp", "*.STP", "*.step", "*.STEP"):
+                trovati = list(cartella.glob(ext))
+                if trovati:
+                    stp = trovati[0]
+                    break
+            if not stp:
+                log.debug(f"[STEP] Nessun file .stp in {cartella}")
+                return
+
+            log.info(f"[STEP] Trovato {stp.name} per {project_id} — invio a STEP Analyzer")
+            url = f"{self.cfg['dmgdesk']['url'].rstrip('/')}/api/step/analizza-upload"
+            with open(stp, "rb") as f:
+                resp = _req.post(url, files={"file": (stp.name, f, "application/octet-stream")},
+                                 data={"commessa": project_id}, timeout=180)
+            if resp.ok:
+                d = resp.json()
+                log.info(f"[STEP] {project_id} analizzato — "
+                         f"{d.get('features',{}).get('n_facce')} facce, "
+                         f"{d.get('features',{}).get('n_cilindri')} cilindri "
+                         f"({'cache' if d.get('cached') else 'nuovo'})")
+            else:
+                log.warning(f"[STEP] Errore analisi {project_id}: {resp.status_code}")
+        except Exception as e:
+            log.debug(f"[STEP] Analisi background fallita per {project_id}: {e}")
 
     def flush(self):
         """Chiude la sessione corrente e invia a DMGDesk."""

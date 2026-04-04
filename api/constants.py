@@ -4,7 +4,7 @@ Centralizza tutti i valori hardcoded per facilitare la configurazione.
 """
 
 # ── Turno di lavoro ───────────────────────────────────────────────────────────
-ORE_TURNO_SEC = 28800          # 8 ore in secondi (turno standard)
+ORE_TURNO_SEC = 86400          # 24 ore in secondi (turno continuo)
 INIZIO_TURNO_ORA  = 7          # turno inizia alle 07:30
 INIZIO_TURNO_MIN  = 30
 FINE_TURNO_ORA    = 16         # turno finisce alle 16:30

@@ -232,23 +232,14 @@ def aggiorna_da_log(
             today = now[:10]
 
             if not ultimo_fermo or ultimo_fermo[:10] != today:
-                # Primo tick fermo della giornata — la macchina potrebbe essere
-                # ferma dall'inizio del turno (o da prima). Recupera il fermo
-                # dall'inizio del turno corrente a ora.
+                # Primo tick fermo della giornata — turno 24h, recupera da mezzanotte a ora
                 try:
-                    ts_now = datetime.fromisoformat(now)
-                    # Inizio del turno corrente: usa l'orario di snapshot turno (07:30)
-                    # come proxy. Se è prima delle 07:30, usa inizio giornata 00:00.
-                    ora_h = ts_now.hour
-                    if ora_h >= 7:
-                        inizio_turno = datetime.fromisoformat(today + "T07:30:00")
-                    else:
-                        inizio_turno = datetime.fromisoformat(today + "T00:00:00")
-                    fermo_recuperato = max(0, int((ts_now - inizio_turno).total_seconds()))
+                    ts_now    = datetime.fromisoformat(now)
+                    mezzanotte = datetime.fromisoformat(today + "T00:00:00")
+                    fermo_recuperato = max(0, int((ts_now - mezzanotte).total_seconds()))
                     if sc.get("fermo_data") != today:
                         sc["fermo_sec_giornaliero"] = 0
                         sc["fermo_data"] = today
-                    # Aggiunge solo se non già contato (evita duplicati)
                     if sc.get("fermo_sec_giornaliero", 0) < fermo_recuperato:
                         sc["fermo_sec_giornaliero"] = fermo_recuperato
                     dirty = True
@@ -779,7 +770,7 @@ async def get_report_giornaliero(data: str = Query(default=None)):
         gap_totale = gap_sessioni + fermo_extra
 
     # ── OEE — Overall Equipment Effectiveness ─────────────────────────────────
-    # Turno standard 8h = 28800s.
+    # Turno 24h = 86400s.
     OEE_TURNO_SEC = ORE_TURNO_SEC
     tempo_turno = max(ore_totali + gap_totale, OEE_TURNO_SEC)
 
@@ -972,7 +963,7 @@ async def get_storico(giorni: int = Query(default=7, ge=1, le=365)):
         fermo_extra = max(0, fermo_sc - gap_sess)
         gap = gap_sess + fermo_extra if sess else fermo_sc
 
-        ORE_TURNO = 28800
+        ORE_TURNO = 86400
         tempo_turno   = max(ore + gap, ORE_TURNO)
         disponibilita = ore / tempo_turno if tempo_turno > 0 else 0
         oee_valore    = round(disponibilita * 1.0 * 0.98 * 100, 1)
@@ -2251,7 +2242,7 @@ async def get_analytics_commesse():
 
     # ── OEE ultimi 30 giorni ─────────────────────────────────────────────────
     # Disponibilità = ore macchina attiva / ore turno (ipotesi 8h/giorno)
-    ORE_TURNO_SEC = 8 * 3600
+    ORE_TURNO_SEC = 24 * 3600
     oggi = date.today()
     oee_giorni = []
     sessioni_all = log_data.get("sessioni", [])

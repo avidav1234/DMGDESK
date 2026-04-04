@@ -13,7 +13,7 @@ GET  /api/step/storico
 
 import logging
 import httpx
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
 from typing import Optional
 
@@ -60,6 +60,34 @@ async def stato():
 @router.post("/analizza")
 async def analizza(req: AnalizzaRequest):
     return await _call("post", "/analizza", json=req.dict())
+
+
+@router.post("/analizza-upload")
+async def analizza_upload(
+    file: UploadFile = File(...),
+    commessa: str = Form(...),
+    ore_macchina: str = Form(""),
+    lead_time_giorni: str = Form(""),
+    note: str = Form(""),
+):
+    """Proxy upload file STEP verso il microservizio."""
+    content = await file.read()
+    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+        try:
+            r = await client.post(
+                f"{STEP_ANALYZER_URL}/analizza-upload",
+                files={"file": (file.filename, content, "application/octet-stream")},
+                data={
+                    "commessa":         commessa,
+                    "ore_macchina":     ore_macchina or "",
+                    "lead_time_giorni": lead_time_giorni or "",
+                    "note":             note or "",
+                }
+            )
+            r.raise_for_status()
+            return r.json()
+        except httpx.ConnectError:
+            raise HTTPException(503, "STEP Analyzer non raggiungibile")
 
 
 @router.get("/simili/{commessa}")

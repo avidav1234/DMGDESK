@@ -25,7 +25,7 @@ export default function StepAnalyzer() {
 
   // Form analisi
   const [commessa, setCommessa] = useState('')
-  const [pathStep, setPathStep] = useState('')
+  const [fileStep, setFileStep] = useState(null)
   const [oreMacchina, setOreMacchina] = useState('')
   const [leadTime, setLeadTime] = useState('')
   const [note, setNote]         = useState('')
@@ -49,27 +49,24 @@ export default function StepAnalyzer() {
   useEffect(() => { loadAll() }, [])
 
   const handleAnalizza = async () => {
-    if (!commessa.trim() || !pathStep.trim()) {
-      setError('Inserisci commessa e path file STEP')
+    if (!commessa.trim() || !fileStep) {
+      setError('Inserisci commessa e seleziona il file STEP')
       return
     }
     setAnalyzing(true); setError(null); setSuccess(null)
     try {
-      const r = await fetch('/api/step/analizza', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          commessa: commessa.trim(),
-          path_step: pathStep.trim(),
-          ore_macchina: oreMacchina ? parseFloat(oreMacchina) : null,
-          lead_time_giorni: leadTime ? parseInt(leadTime) : null,
-          note: note.trim() || null,
-        })
-      })
+      const fd = new FormData()
+      fd.append('file', fileStep)
+      fd.append('commessa', commessa.trim())
+      if (oreMacchina) fd.append('ore_macchina', oreMacchina)
+      if (leadTime)    fd.append('lead_time_giorni', leadTime)
+      if (note)        fd.append('note', note)
+
+      const r = await fetch('/api/step/analizza-upload', { method: 'POST', body: fd })
       const d = await r.json()
       if (!r.ok) throw new Error(d.detail || 'Errore analisi')
-      setSuccess(`✓ ${commessa} analizzato — ${d.features?.n_facce} facce, ${d.features?.n_cilindri} cilindri`)
-      setCommessa(''); setPathStep(''); setOreMacchina(''); setLeadTime(''); setNote('')
+      setSuccess(`✓ ${commessa} analizzato — ${d.features?.n_facce} facce, ${d.features?.n_cilindri} cilindri (${d.features?._elapsed_sec}s)`)
+      setCommessa(''); setFileStep(null); setOreMacchina(''); setLeadTime(''); setNote('')
       loadAll()
     } catch (e) { setError(e.message) }
     setAnalyzing(false)
@@ -144,13 +141,18 @@ export default function StepAnalyzer() {
             </div>
             <div>
               <label style={{fontSize:11,color:'#64748b',fontWeight:600}}>
-                Path file STEP *
+                File STEP *
               </label>
-              <input value={pathStep} onChange={e=>setPathStep(e.target.value)}
-                placeholder="es. P:\DMG_DMC_160U\4298\0005\pezzo.stp"
-                style={{width:'100%',marginTop:3,padding:'7px 10px',borderRadius:6,
-                  border:'1px solid #e2e8f0',fontSize:11,fontFamily:'monospace',
-                  boxSizing:'border-box'}}/>
+              <input type="file" accept=".stp,.step,.STP,.STEP"
+                onChange={e=>setFileStep(e.target.files[0]||null)}
+                style={{width:'100%',marginTop:3,padding:'6px 10px',borderRadius:6,
+                  border:'1px solid #e2e8f0',fontSize:12,boxSizing:'border-box',
+                  cursor:'pointer'}}/>
+              {fileStep && (
+                <div style={{fontSize:10,color:'#16a34a',marginTop:3}}>
+                  ✓ {fileStep.name} ({(fileStep.size/1024/1024).toFixed(1)} MB)
+                </div>
+              )}
             </div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
               <div>

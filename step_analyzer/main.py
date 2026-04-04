@@ -18,7 +18,7 @@ from pathlib import Path
 from datetime import datetime
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -287,8 +287,52 @@ def simili(commessa: str, top: int = 5, soglia: float = 60.0):
     }
 
 
-@app.get("/storico")
-def storico():
+@app.post("/analizza-upload")
+async def analizza_upload(
+    file: UploadFile = File(...),
+    commessa: str = "",
+    ore_macchina: float = None,
+    lead_time_giorni: int = None,
+    note: str = None,
+):
+    """Riceve il file STEP via upload invece di path."""
+    import tempfile, shutil
+
+    suffix = Path(file.filename).suffix or ".stp"
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        shutil.copyfileobj(file.file, tmp)
+        tmp_path = tmp.name
+
+    try:
+        file_hash = hashlib.md5(Path(tmp_path).read_bytes()).hexdigest()
+        db = _load_features()
+        existing = db.get(commessa, {})
+
+        if existing.get("file_hash") == file_hash and existing.get("features"):
+            features = existing["features"]
+            cached = True
+        else:
+            log.info(f"Analisi STEP upload: {commessa} — {file.filename}")
+            features = estrai_features(tmp_path)
+            cached = False
+
+        record = {
+            "commessa":          commessa,
+            "path_step":         file.filename,
+            "file_hash":         file_hash,
+            "analizzato":        datetime.now().isoformat(timespec="seconds"),
+            "features":          features,
+            "ore_macchina":      ore_macchina      or existing.get("ore_macchina"),
+            "lead_time_giorni":  lead_time_giorni  or existing.get("lead_time_giorni"),
+            "data_inizio":       existing.get("data_inizio"),
+            "data_consegna":     existing.get("data_consegna"),
+            "note":              note              or existing.get("note"),
+        }
+        db[commessa] = record
+        _save_features(db)
+        return {"ok": True, "commessa": commessa, "features": features, "cached": cached}
+    finally:
+        Path(tmp_path).unlink(missing_ok=True)
     """Lista tutte le commesse analizzate con features e dati lavorazione."""
     db = _load_features()
     return {

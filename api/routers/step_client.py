@@ -30,13 +30,16 @@ async def _call(method: str, path: str, **kwargs):
             r = await getattr(client, method)(f"{STEP_ANALYZER_URL}{path}", **kwargs)
             r.raise_for_status()
             return r.json()
-    except httpx.ConnectError:
+    except httpx.ConnectError as e:
+        log.error(f"step_client ConnectError: {e}")
         raise HTTPException(503,
             "STEP Analyzer non raggiungibile — avvia step_analyzer/start.bat")
     except httpx.HTTPStatusError as e:
+        log.error(f"step_client HTTP {e.response.status_code}: {e.response.text}")
         raise HTTPException(e.response.status_code, e.response.text)
     except Exception as e:
-        raise HTTPException(500, str(e))
+        log.error(f"step_client errore: {type(e).__name__}: {e}")
+        raise HTTPException(500, f"{type(e).__name__}: {e}")
 
 
 class AnalizzaRequest(BaseModel):

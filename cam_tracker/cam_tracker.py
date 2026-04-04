@@ -572,6 +572,8 @@ class CAMTracker:
         # Accumulatore: {project_id: secondi_totali_oggi}
         self.accumulated: dict[str, float] = {}
         self.project_meta: dict[str, dict] = {}
+        # STEP già analizzati in questa sessione (evita invii doppi)
+        self._step_analizzati: set = set()
 
         # Backend
         self.client = DMGDeskClient(
@@ -723,7 +725,7 @@ class CAMTracker:
 
                 # ── Auto-analisi STEP in background ───────────────────────────
                 full_path = proj.get("full_path")
-                if full_path:
+                if full_path and proj_id not in self._step_analizzati:
                     threading.Thread(
                         target=self._analizza_step_background,
                         args=(proj_id, full_path),
@@ -742,7 +744,6 @@ class CAMTracker:
         try:
             import requests as _req
             cartella = Path(full_path).parent
-            # Cerca il primo .stp o .step trovato
             stp = None
             for ext in ("*.stp", "*.STP", "*.step", "*.STEP"):
                 trovati = list(cartella.glob(ext))
@@ -764,8 +765,12 @@ class CAMTracker:
                          f"{d.get('features',{}).get('n_facce')} facce, "
                          f"{d.get('features',{}).get('n_cilindri')} cilindri "
                          f"({'cache' if d.get('cached') else 'nuovo'})")
+                # Segna come analizzato per non riprovare
+                self._step_analizzati.add(project_id)
             else:
-                log.warning(f"[STEP] Errore analisi {project_id}: {resp.status_code}")
+                log.warning(f"[STEP] Errore analisi {project_id}: {resp.status_code} — {resp.text[:200]}")
+        except Exception as e:
+            log.debug(f"[STEP] Analisi background fallita per {project_id}: {e}")
         except Exception as e:
             log.debug(f"[STEP] Analisi background fallita per {project_id}: {e}")
 
@@ -864,6 +869,20 @@ class CAMTracker:
             self._gui("set_dmgdesk", True)
             self._gui("add_log", f"DMGDesk raggiungibile", "ok")
             self._retry_pending()
+
+            # Analizza STEP del progetto già aperto in Cimatron all'avvio
+            try:
+                proj = self.cimatron.get_active_project()
+                if proj and proj.get("full_path"):
+                    pid = proj.get("project_id", "")
+                    log.info(f"[STEP] Analisi all'avvio per progetto già aperto: {pid}")
+                    threading.Thread(
+                        target=self._analizza_step_background,
+                        args=(pid, proj["full_path"]),
+                        daemon=True
+                    ).start()
+            except Exception as e:
+                log.debug(f"[STEP] Analisi avvio fallita: {e}")
         else:
             log.warning(f"[CAMTracker] DMGDesk non raggiungibile — modalità offline, retry ogni {RECONNECT_INTERVAL}s")
             self._gui("set_dmgdesk", False)

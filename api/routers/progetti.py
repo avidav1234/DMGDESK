@@ -243,9 +243,60 @@ async def save_deliveries(body: Any = Body(...)):
                 )
             log.info(f"STEP Analyzer aggiornato: {nome} → {ore_macchina}h macchina, {lead_time}gg lead time")
         except Exception as e:
-            log.debug(f"STEP update skip {pid}: {e}")
+            log.warning(f"STEP update fallito per {pid} ({nome}): {type(e).__name__}: {e}")
 
     return {"ok": True, "count": len(deliveries)}
+
+
+async def _sync_step_analyzer(nome: str, config: dict) -> dict:
+    """Legge ore dal log e aggiorna STEP Analyzer per una commessa."""
+    from api.routers.report import _load_log
+    from datetime import date as _date
+    import httpx as _hx
+
+    log_data = _load_log(config)
+    ore_sec = sum(
+        s.get("durata_sec") or 0
+        for s in log_data.get("sessioni", [])
+        if (s.get("progetto") or "").strip() == nome
+    )
+    if ore_sec < 60:
+        return {"ok": False, "motivo": f"Ore insufficienti: {ore_sec}s"}
+
+    ore_macchina = round(ore_sec / 3600, 2)
+    sessioni_p = [s for s in log_data.get("sessioni", [])
+                  if (s.get("progetto") or "").strip() == nome and s.get("inizio")]
+    lead_time = None
+    if sessioni_p:
+        prima = min(s["inizio"][:10] for s in sessioni_p)
+        lead_time = (_date.today() - _date.fromisoformat(prima)).days
+
+    async with _hx.AsyncClient(timeout=10) as client:
+        r = await client.patch(
+            f"http://127.0.0.1:8002/commessa/{nome}",
+            json={"ore_macchina": ore_macchina,
+                  "lead_time_giorni": lead_time,
+                  "data_consegna": _date.today().isoformat()}
+        )
+    return {"ok": r.is_success, "ore_macchina": ore_macchina,
+            "lead_time_giorni": lead_time, "status": r.status_code}
+
+
+@router.post("/{project_id}/sync-step")
+async def sync_step(project_id: str):
+    """Forza la sincronizzazione delle ore reali verso STEP Analyzer."""
+    config = carica_configurazione()
+    data = _load_progetti(config)
+    proj = next((p for p in data.get("projects", []) if p.get("id") == project_id), None)
+    if not proj:
+        raise HTTPException(404, f"Progetto {project_id} non trovato")
+    nome = proj.get("name", "")
+    try:
+        result = await _sync_step_analyzer(nome, config)
+        log.info(f"sync-step manuale: {nome} → {result}")
+        return result
+    except Exception as e:
+        raise HTTPException(500, str(e))
 
 
 @router.get("/export")

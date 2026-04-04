@@ -10,13 +10,10 @@ Struttura attesa:
           └── {fase}/      ex. Fase-1, fase-1, fase_1, Fase 1
               └── *.MPF
 
-Ogni 10 minuti (configurabile):
+Ogni minuto:
   - Scansiona ricorsivamente tutti i .MPF
-  - Normalizza commessa+posizione → nome progetto (es. 4298_0005)
-  - Cerca il progetto in DMGDesk
-  - Cerca il task Fresatura della fase corrispondente
-  - Aggiunge i programmi nuovi con stato da_fare
-  - Aggiorna metadati (tempoStimato, utensile) se cambiati
+  - Salta i file il cui mtime non è cambiato dall'ultima scansione (cache)
+  - Per i file nuovi o modificati: normalizza, cerca progetto, aggiorna programmi
   - Non tocca mai stato di programmi in_main/completato/in_lavorazione
 """
 
@@ -32,6 +29,10 @@ from api.routers.progetti import _load_progetti, _save_progetti, _write_lock, _i
 
 log = logging.getLogger("nc_scanner")
 router = APIRouter(prefix="/api/nc-scanner", tags=["NC Scanner"])
+
+# Cache mtime: path_str → mtime float
+# Permette di saltare file non modificati dall'ultima scansione
+_mtime_cache: dict[str, float] = {}
 
 
 # ── Normalizzazione ────────────────────────────────────────────────────────────
@@ -206,8 +207,9 @@ def scansiona_directory(config: dict) -> dict:
         "scansionati": 0,
         "aggiunti":    0,
         "aggiornati":  0,
-        "orfani":      0,   # MPF senza progetto corrispondente
-        "ignorati":    0,   # già presenti, stato avanzato
+        "orfani":      0,
+        "ignorati":    0,   # già presenti con stato avanzato
+        "saltati":     0,   # non modificati (mtime cache)
         "errori":      [],
     }
     dirty = False
@@ -225,6 +227,16 @@ def scansiona_directory(config: dict) -> dict:
 
         # Ignora i file MAIN generati da DMGDesk
         if mpf_path.name.upper().startswith("0_MAIN_"):
+            continue
+
+        # Salta file non modificati dall'ultima scansione (cache mtime)
+        path_key = str(mpf_path)
+        try:
+            mtime = mpf_path.stat().st_mtime
+        except OSError:
+            continue
+        if _mtime_cache.get(path_key) == mtime:
+            stats["saltati"] += 1
             continue
 
         parts = mpf_path.relative_to(base).parts
@@ -320,6 +332,9 @@ def scansiona_directory(config: dict) -> dict:
             stats["aggiunti"] += 1
             dirty = True
             log.info(f"nc_scanner: aggiunto {filename} → {nome_proj} ({fase_label})")
+
+        # Aggiorna cache mtime — file processato correttamente
+        _mtime_cache[path_key] = mtime
 
     if dirty:
         _save_progetti(config, proj_data)

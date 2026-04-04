@@ -152,7 +152,7 @@ async def startup():
                 await job_nc_scanner()
             except Exception as _e:
                 _log.warning(f"NC Scanner error: {_e}")
-            await _aio.sleep(600)  # 10 minuti
+            await _aio.sleep(60)  # 1 minuto
 
     _asyncio.create_task(_nc_scanner_loop())
     log.info("NC Scanner avviato (scansione directory NC ogni 10 min)")

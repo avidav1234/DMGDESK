@@ -20,7 +20,7 @@ from typing import Optional
 log = logging.getLogger("step_client")
 router = APIRouter(prefix="/api/step", tags=["STEP Analyzer"])
 
-STEP_ANALYZER_URL = "http://localhost:8001"
+STEP_ANALYZER_URL = "http://localhost:8002"
 TIMEOUT = 60  # secondi — l'analisi STEP può richiedere 5-10s
 
 

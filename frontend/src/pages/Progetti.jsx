@@ -1536,6 +1536,17 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
   const[confirm,setConfirm]=useState(null)
   const[showSaveTemplate,setShowSaveTemplate]=useState(false)
   const[showMoreMenu,setShowMoreMenu]=useState(false)
+  const[schedaPredittiva,setSchedaPredittiva]=useState(null)
+
+  useEffect(()=>{
+    // Carica scheda predittiva da STEP Analyzer (se disponibile)
+    const nome = project.name?.toUpperCase()
+    if(!nome) return
+    fetch(`/api/step/simili/${encodeURIComponent(nome)}?top=3&soglia=60`)
+      .then(r=>r.ok?r.json():null)
+      .then(d=>{ if(d?.simili?.length>0) setSchedaPredittiva(d) })
+      .catch(()=>{})
+  },[project.name])
   const logRef=useRef(null)
   const next=getNextTask(project)
   const progress=getProgress(project)
@@ -1734,6 +1745,86 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
             </div>
           )
         })()}
+
+        {/* Scheda predittiva STEP */}
+        {schedaPredittiva && (
+          <div style={{background:'#f5f3ff',border:'1px solid #c4b5fd',borderRadius:10,
+            padding:'10px 14px',marginBottom:10,fontSize:12}}>
+            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+              <span style={{fontSize:10,fontWeight:800,letterSpacing:'0.08em',
+                color:'#6d28d9',textTransform:'uppercase'}}>Predizione da geometria</span>
+              <span style={{fontSize:10,color:'#a78bfa'}}>
+                {schedaPredittiva.n_totale} pezz{schedaPredittiva.n_totale===1?'o':'i'} simil{schedaPredittiva.n_totale===1?'e':'i'} trovati
+              </span>
+            </div>
+            <div style={{display:'flex',gap:16,flexWrap:'wrap'}}>
+              {schedaPredittiva.simili.map((s,i)=>{
+                const fmtOre = h => h ? `${Math.floor(h)}h ${Math.round((h%1)*60)}m` : null
+                return (
+                  <div key={i} style={{flex:'1 1 160px',background:'#fff',borderRadius:8,
+                    padding:'8px 10px',border:'1px solid #e9d5ff'}}>
+                    <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:4}}>
+                      <span style={{fontSize:11,fontWeight:800,color:'#6d28d9',fontFamily:'monospace'}}>
+                        {s.commessa}
+                      </span>
+                      <span style={{fontSize:10,fontWeight:700,color:'#7c3aed',
+                        background:'#ede9fe',padding:'1px 6px',borderRadius:4}}>
+                        {s.similarita_pct}%
+                      </span>
+                    </div>
+                    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:3,fontSize:10}}>
+                      {s.ore_macchina && (
+                        <>
+                          <span style={{color:'#94a3b8'}}>Ore macchina</span>
+                          <span style={{fontWeight:700,color:'#3b0764',fontFamily:'monospace'}}>
+                            {fmtOre(s.ore_macchina)}
+                          </span>
+                        </>
+                      )}
+                      {s.lead_time_giorni && (
+                        <>
+                          <span style={{color:'#94a3b8'}}>Lead time</span>
+                          <span style={{fontWeight:700,color:'#3b0764'}}>
+                            {s.lead_time_giorni}gg
+                          </span>
+                        </>
+                      )}
+                      <span style={{color:'#94a3b8'}}>Geometria</span>
+                      <span style={{color:'#64748b'}}>{s.n_facce}F / {s.n_cilindri}C</span>
+                    </div>
+                    {s.note && (
+                      <div style={{marginTop:4,fontSize:10,color:'#94a3b8',fontStyle:'italic'}}>
+                        {s.note}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+              {/* Stima media se ci sono ore macchina */}
+              {schedaPredittiva.simili.some(s=>s.ore_macchina) && (()=>{
+                const conOre = schedaPredittiva.simili.filter(s=>s.ore_macchina)
+                const media = conOre.reduce((a,s)=>a+s.ore_macchina,0)/conOre.length
+                const std   = Math.sqrt(conOre.reduce((a,s)=>a+(s.ore_macchina-media)**2,0)/conOre.length)
+                const fmtH  = h => `${Math.floor(h)}h ${Math.round((h%1)*60)}m`
+                return (
+                  <div style={{flex:'1 1 160px',background:'#4c1d95',borderRadius:8,
+                    padding:'8px 10px',color:'#fff'}}>
+                    <div style={{fontSize:10,fontWeight:800,letterSpacing:'0.06em',
+                      opacity:.7,marginBottom:6}}>STIMA</div>
+                    <div style={{fontSize:18,fontWeight:900,fontFamily:'monospace'}}>
+                      ~{fmtH(media)}
+                    </div>
+                    {std>0 && (
+                      <div style={{fontSize:10,opacity:.7,marginTop:2}}>
+                        ±{fmtH(std)} · {conOre.length} campioni
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
+            </div>
+          </div>
+        )}
 
         {/* Tab */}
         <div style={{display:'flex',gap:0}}>

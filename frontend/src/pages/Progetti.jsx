@@ -1537,6 +1537,14 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
   const[showSaveTemplate,setShowSaveTemplate]=useState(false)
   const[showMoreMenu,setShowMoreMenu]=useState(false)
   const[schedaPredittiva,setSchedaPredittiva]=useState(null)
+  const[rendiconto,setRendiconto]=useState(null)
+
+  useEffect(()=>{
+    fetch(`/api/report/rendiconto-progetto?project_id=${project.id}`)
+      .then(r=>r.ok?r.json():null)
+      .then(d=>setRendiconto(d))
+      .catch(()=>{})
+  },[project.id])
 
   useEffect(()=>{
     const nome = project.name?.toUpperCase()
@@ -1834,6 +1842,162 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
             </div>
           </div>
         )}
+
+        {/* ── RACE — batti il record ───────────────────────────────── */}
+        {(()=>{
+          // Record da battere: ore_macchina del simile migliore con dati reali
+          const similiConOre = schedaPredittiva?.simili?.filter(s=>s.ore_macchina) || []
+          if(!similiConOre.length || !rendiconto) return null
+
+          const record_h   = Math.min(...similiConOre.map(s=>s.ore_macchina))
+          const record_src = similiConOre.find(s=>s.ore_macchina===record_h)?.commessa
+          const record_sec = record_h * 3600
+
+          // Stato attuale
+          const ore_fatte_sec = rendiconto?.kpi?.ore_macchina_sec || 0
+          const pgm_completati = rendiconto?.kpi?.n_programmi_completati || 0
+          const pgm_totali     = mpfList.filter(p=>p.tipoGruppo!=='ipm').length
+          const pgm_rimanenti  = pgm_totali - pgm_completati
+
+          if(pgm_totali === 0) return null
+
+          // Velocità media: sec per programma finora
+          const vel_media_sec = pgm_completati > 0 ? ore_fatte_sec / pgm_completati : null
+
+          // Proiezione finish
+          const proiezione_sec = vel_media_sec
+            ? ore_fatte_sec + vel_media_sec * pgm_rimanenti
+            : null
+
+          // Delta vs record
+          const delta_sec    = proiezione_sec ? record_sec - proiezione_sec : null
+          const in_anticipo  = delta_sec > 0
+          const delta_abs    = delta_sec ? Math.abs(delta_sec) : null
+
+          // Percentuale completata
+          const pct_pgm = Math.round(pgm_completati / pgm_totali * 100)
+
+          // Ritmo relativo al record
+          const ritmo_pct = vel_media_sec && record_sec > 0
+            ? Math.round((1 - proiezione_sec / record_sec) * 100)
+            : null
+
+          const fmtH = sec => {
+            if(!sec) return '—'
+            const h=Math.floor(sec/3600), m=Math.round((sec%3600)/60)
+            return m>0?`${h}h ${m}m`:`${h}h`
+          }
+
+          // Colori
+          const isActive = pgm_completati > 0
+          const barColor = !isActive ? '#6d28d9'
+            : in_anticipo ? '#16a34a' : '#dc2626'
+          const bgColor  = !isActive ? '#f5f3ff'
+            : in_anticipo ? '#f0fdf4' : '#fef2f2'
+          const borderColor = !isActive ? '#c4b5fd'
+            : in_anticipo ? '#86efac' : '#fca5a5'
+
+          return (
+            <div style={{background:bgColor,border:`1.5px solid ${borderColor}`,
+              borderRadius:10,padding:'12px 16px',marginBottom:10}}>
+
+              {/* Header */}
+              <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:10}}>
+                <span style={{fontSize:16}}>🏆</span>
+                <div style={{flex:1}}>
+                  <span style={{fontSize:11,fontWeight:800,letterSpacing:'0.08em',
+                    color:barColor,textTransform:'uppercase'}}>
+                    {!isActive ? 'Record da battere' : in_anticipo ? 'In anticipo sul record!' : 'In ritardo sul record'}
+                  </span>
+                  <span style={{fontSize:11,color:'#64748b',marginLeft:8}}>
+                    vs {record_src} — {fmtH(record_sec)}
+                  </span>
+                </div>
+                {ritmo_pct !== null && isActive && (
+                  <div style={{fontSize:13,fontWeight:800,
+                    color: in_anticipo?'#16a34a':'#dc2626',
+                    background:'#fff',padding:'3px 10px',borderRadius:6,
+                    border:`1px solid ${borderColor}`}}>
+                    {in_anticipo?'+':''}{ritmo_pct}%
+                  </div>
+                )}
+              </div>
+
+              {/* Barra progresso doppia */}
+              <div style={{marginBottom:10}}>
+                <div style={{display:'flex',justifyContent:'space-between',
+                  fontSize:10,color:'#64748b',marginBottom:4}}>
+                  <span>{pgm_completati}/{pgm_totali} programmi</span>
+                  <span>{pct_pgm}%</span>
+                </div>
+                {/* Barra programmi */}
+                <div style={{height:8,background:'#e2e8f0',borderRadius:4,
+                  overflow:'hidden',marginBottom:6}}>
+                  <div style={{height:'100%',width:`${pct_pgm}%`,
+                    background:barColor,borderRadius:4,
+                    transition:'width .5s'}}/>
+                </div>
+                {/* Barra ore vs record */}
+                {isActive && proiezione_sec && (
+                  <div style={{position:'relative',height:6,
+                    background:'#e2e8f0',borderRadius:4,overflow:'visible'}}>
+                    {/* Ore fatte */}
+                    <div style={{position:'absolute',left:0,top:0,height:'100%',
+                      width:`${Math.min(ore_fatte_sec/record_sec*100,100)}%`,
+                      background:barColor,borderRadius:4,opacity:.6}}/>
+                    {/* Proiezione */}
+                    <div style={{position:'absolute',left:0,top:0,height:'100%',
+                      width:`${Math.min(proiezione_sec/record_sec*100,100)}%`,
+                      background:barColor,borderRadius:4,opacity:.2}}/>
+                    {/* Linea record */}
+                    <div style={{position:'absolute',left:'100%',top:-3,
+                      width:2,height:12,background:barColor,borderRadius:1}}/>
+                  </div>
+                )}
+              </div>
+
+              {/* Stats */}
+              <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8}}>
+                <div style={{textAlign:'center'}}>
+                  <div style={{fontSize:10,color:'#64748b'}}>Fatto</div>
+                  <div style={{fontSize:13,fontWeight:800,fontFamily:'monospace',
+                    color:'#0d2d5e'}}>{fmtH(ore_fatte_sec)}</div>
+                </div>
+                <div style={{textAlign:'center'}}>
+                  <div style={{fontSize:10,color:'#64748b'}}>Proiezione</div>
+                  <div style={{fontSize:13,fontWeight:800,fontFamily:'monospace',
+                    color:barColor}}>{fmtH(proiezione_sec)}</div>
+                </div>
+                <div style={{textAlign:'center'}}>
+                  <div style={{fontSize:10,color:'#64748b'}}>Record</div>
+                  <div style={{fontSize:13,fontWeight:800,fontFamily:'monospace',
+                    color:'#6d28d9'}}>{fmtH(record_sec)}</div>
+                </div>
+                <div style={{textAlign:'center'}}>
+                  <div style={{fontSize:10,color:'#64748b'}}>
+                    {in_anticipo?'Vantaggio':'Ritardo'}
+                  </div>
+                  <div style={{fontSize:13,fontWeight:800,fontFamily:'monospace',
+                    color:barColor}}>
+                    {isActive && delta_abs ? fmtH(delta_abs) : '—'}
+                  </div>
+                </div>
+              </div>
+
+              {/* Messaggio motivazionale */}
+              {isActive && (
+                <div style={{marginTop:8,fontSize:11,color:barColor,
+                  fontWeight:600,textAlign:'center'}}>
+                  {!proiezione_sec ? '⏳ Accumula dati...' :
+                   in_anticipo && ritmo_pct > 10 ? `🚀 Ottimo ritmo! Proietti ${fmtH(delta_abs)} sotto il record` :
+                   in_anticipo ? `💪 Continua così — sei in vantaggio di ${fmtH(delta_abs)}` :
+                   ritmo_pct < -20 ? `⚠ Ritardo significativo — controlla utensili e setup` :
+                   `📊 Recupera ${fmtH(delta_abs)} per battere il record`}
+                </div>
+              )}
+            </div>
+          )
+        })()}
 
         {/* Tab */}
         <div style={{display:'flex',gap:0}}>

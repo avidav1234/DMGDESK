@@ -54,25 +54,6 @@ echo cd /d "%ROOT%cam_tracker" >> "%ROOT%_run_cam.cmd"
 echo echo  === CAM Tracker === >> "%ROOT%_run_cam.cmd"
 echo python cam_tracker.py >> "%ROOT%_run_cam.cmd"
 
-REM -- Crea script launcher (comandi R/S/U) come pannello separato
-echo @echo off > "%ROOT%_run_launcher.cmd"
-echo chcp 65001 ^>nul >> "%ROOT%_run_launcher.cmd"
-echo cd /d "%ROOT%" >> "%ROOT%_run_launcher.cmd"
-echo echo  === DMGDesk Launcher === >> "%ROOT%_run_launcher.cmd"
-echo echo. >> "%ROOT%_run_launcher.cmd"
-echo echo  Browser: http://localhost:8000 >> "%ROOT%_run_launcher.cmd"
-echo echo. >> "%ROOT%_run_launcher.cmd"
-echo echo  R = git pull + riavvio tutto >> "%ROOT%_run_launcher.cmd"
-echo echo  S = riavvio solo server >> "%ROOT%_run_launcher.cmd"
-echo echo  U = git pull + riavvio backend >> "%ROOT%_run_launcher.cmd"
-echo echo. >> "%ROOT%_run_launcher.cmd"
-echo :loop >> "%ROOT%_run_launcher.cmd"
-echo set /p CMD="Comando (R/S/U): " >> "%ROOT%_run_launcher.cmd"
-echo if /i "%%CMD%%"=="r" ( git pull origin main ^&^& call "%ROOT%AVVIA_DMGDESK.bat" ^& exit /b ) >> "%ROOT%_run_launcher.cmd"
-echo if /i "%%CMD%%"=="s" ( call "%ROOT%AVVIA_DMGDESK.bat" ^& exit /b ) >> "%ROOT%_run_launcher.cmd"
-echo if /i "%%CMD%%"=="u" ( git pull origin main ^&^& for /f "tokens=5" %%%%p in ('netstat -ano 2^^^>nul ^^^| findstr ":8000 "') do taskkill /F /PID %%%%p ^>nul 2^^^>^&1 ^&^& uvicorn api.main:app --host 0.0.0.0 --port 8000 ) >> "%ROOT%_run_launcher.cmd"
-echo goto loop >> "%ROOT%_run_launcher.cmd"
-
 REM -- Avvia Windows Terminal con 4 pannelli
 REM   Layout: Backend (sinistra) | STEP Analyzer (destra alta)
 REM                               | CAM Tracker   (destra bassa)

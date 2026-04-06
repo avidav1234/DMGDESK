@@ -95,35 +95,74 @@ def on_tools_updated(tools_new: dict, config: dict):
     now      = datetime.now().isoformat(timespec="seconds")
     nuovi    = []
 
-    for key, new in snap_new.items():
-        old = snap_old.get(key)
-        if not old:
-            continue  # nuovo duplo aggiunto — non è una sostituzione
-
-        tipo = None
-        lp_old = old.get("life_percent") or 0
-        lp_new = new.get("life_percent") or 0
-
-        if (not old.get("is_enabled") or old.get("is_worn")) and new.get("is_enabled") and not new.get("is_worn"):
-            tipo = "riabilitato"
-        elif lp_new - lp_old >= SOGLIA_SOSTITUZIONE:
-            tipo = "sostituito"
-
-        if tipo:
+    # ── Rilevamento rimozioni (utensile presente prima, assente dopo) ──────────
+    for key, old_t in snap_old.items():
+        if key not in snap_new:
+            # Utensile sparito dal TOA — rimosso senza rimpiazzo
             record = {
-                "ts":          now,
-                "alias":       new["alias"],
-                "posizione":   new.get("position"),
-                "magazine":    new.get("magazine"),
-                "vita_prima":  round(lp_old, 1),
-                "vita_dopo":   round(lp_new, 1),
-                "tipo":        tipo,
-                "causa":       None,   # null = non classificato; rottura|usura|liberare_spazio
+                "ts":              now,
+                "alias":           old_t.get("alias", key),
+                "posizione":       old_t.get("position"),
+                "magazine":        old_t.get("magazine"),
+                "vita_prima":      round(old_t.get("life_percent") or 0, 1),
+                "vita_dopo":       None,
+                "tipo":            "rimosso",
+                "causa":           None,   # null = non classificato; liberare_spazio|rottura
                 "classificato_ts": None,
             }
             nuovi.append(record)
             log.info(
-                f"tool_history: {tipo} — {new['alias']} "
+                f"tool_history: rimosso — {old_t.get('alias',key)} "
+                f"pos.{old_t.get('position')} vita {old_t.get('life_percent',0):.0f}%"
+            )
+
+    # ── Rilevamento sostituzioni e allungamenti vita ─────────────────────────
+    for key, new in snap_new.items():
+        old = snap_old.get(key)
+        if not old:
+            continue  # nuovo utensile aggiunto — non è una sostituzione
+
+        lp_old = old.get("life_percent") or 0
+        lp_new = new.get("life_percent") or 0
+        delta  = lp_new - lp_old
+
+        if delta >= 70:
+            # Sostituzione fisica — utensile nuovo montato
+            record = {
+                "ts":              now,
+                "alias":           new["alias"],
+                "posizione":       new.get("position"),
+                "magazine":        new.get("magazine"),
+                "vita_prima":      round(lp_old, 1),
+                "vita_dopo":       round(lp_new, 1),
+                "tipo":            "sostituito",
+                "causa":           None,   # null = non classificato; rottura|usura_normale
+                "classificato_ts": None,
+            }
+            nuovi.append(record)
+            log.info(
+                f"tool_history: sostituito — {new['alias']} "
+                f"pos.{new.get('position')} "
+                f"{lp_old:.0f}% → {lp_new:.0f}%"
+            )
+
+        elif 20 <= delta < 70:
+            # Allungamento vita — operatore ha modificato il valore vita manualmente
+            # Registrato automaticamente senza popup — dato ML prezioso
+            record = {
+                "ts":              now,
+                "alias":           new["alias"],
+                "posizione":       new.get("position"),
+                "magazine":        new.get("magazine"),
+                "vita_prima":      round(lp_old, 1),
+                "vita_dopo":       round(lp_new, 1),
+                "tipo":            "allungamento_vita",
+                "causa":           "manuale",   # classificato automaticamente
+                "classificato_ts": now,
+            }
+            nuovi.append(record)
+            log.info(
+                f"tool_history: allungamento_vita — {new['alias']} "
                 f"pos.{new.get('position')} "
                 f"{lp_old:.0f}% → {lp_new:.0f}%"
             )
@@ -236,7 +275,9 @@ async def classifica_sostituzione(ts: str, body: dict):
     config  = _cfg()
     records = _load_history(config)
     causa   = (body.get("causa") or "").strip()
-    CAUSE_VALIDE = {"rottura", "usura", "liberare_spazio"}
+    # sostituito → rottura | usura_normale
+    # rimosso    → liberare_spazio | rottura
+    CAUSE_VALIDE = {"rottura", "usura_normale", "liberare_spazio"}
     if causa not in CAUSE_VALIDE:
         from fastapi import HTTPException
         raise HTTPException(400, f"causa non valida: {causa}. Valide: {CAUSE_VALIDE}")
@@ -260,7 +301,7 @@ async def get_sostituzioni_non_classificate():
     from database.db_handler import carica_configurazione as _cfg
     config  = _cfg()
     records = _load_history(config)
-    non_class = [r for r in records if r.get("causa") is None and r.get("tipo") == "sostituito"]
+    non_class = [r for r in records if r.get("causa") is None and r.get("tipo") in ("sostituito", "rimosso")]
     return {"sostituzioni": list(reversed(non_class))[:10]}
 
 

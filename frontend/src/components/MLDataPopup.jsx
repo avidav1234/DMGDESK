@@ -2,10 +2,16 @@
 // Popup per raccolta dati classificazione — causa sostituzione utensile e causa fermo
 import { useState, useEffect } from 'react'
 
+// Cause per sostituzione fisica (vita >70%) — utensile nuovo montato
 const CAUSE_SOSTITUZIONE = [
-  { id: 'usura',          label: 'Usura',           desc: 'Utensile consumato normalmente',       color: '#d97706', bg: '#fffbeb', border: '#fcd34d' },
-  { id: 'rottura',        label: 'Rottura',          desc: 'Utensile rotto durante lavorazione',   color: '#dc2626', bg: '#fef2f2', border: '#fca5a5' },
-  { id: 'liberare_spazio',label: 'Libera spazio',    desc: 'Rimosso per holder o spazio magazzino',color: '#7c3aed', bg: '#f5f3ff', border: '#c4b5fd' },
+  { id: 'usura_normale',  label: 'Usura normale',   desc: 'Utensile consumato, fine vita prevista', color: '#d97706', bg: '#fffbeb', border: '#fcd34d' },
+  { id: 'rottura',        label: 'Rottura',          desc: 'Utensile rotto durante lavorazione',    color: '#dc2626', bg: '#fef2f2', border: '#fca5a5' },
+]
+
+// Cause per rimozione (utensile sparito dal TOA)
+const CAUSE_RIMOZIONE = [
+  { id: 'liberare_spazio',label: 'Libera spazio',    desc: 'Rimosso per holder o spazio magazzino', color: '#7c3aed', bg: '#f5f3ff', border: '#c4b5fd' },
+  { id: 'rottura',        label: 'Rottura',          desc: 'Rotto e rimosso senza rimpiazzo',        color: '#dc2626', bg: '#fef2f2', border: '#fca5a5' },
 ]
 
 const CAUSE_FERMO = [
@@ -49,9 +55,12 @@ export function PopupSostituzione({ sostituzione, onClassifica, onIgnora }) {
       }}>
         {/* Header */}
         <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:16}}>
-          <div style={{width:10,height:10,borderRadius:'50%',background:'#d97706',flexShrink:0}}/>
+          <div style={{width:10,height:10,borderRadius:'50%',
+            background:sostituzione.tipo==='rimosso'?'#7c3aed':'#d97706',flexShrink:0}}/>
           <div>
-            <div style={{fontSize:14,fontWeight:800,color:'#0d2d5e'}}>Utensile sostituito</div>
+            <div style={{fontSize:14,fontWeight:800,color:'#0d2d5e'}}>
+              {sostituzione.tipo === 'rimosso' ? 'Utensile rimosso' : 'Utensile sostituito'}
+            </div>
             <div style={{fontSize:11,color:'#64748b',fontFamily:'monospace'}}>{sostituzione.alias}</div>
           </div>
           <div style={{marginLeft:'auto',fontSize:11,color:'#94a3b8',textAlign:'right'}}>
@@ -62,12 +71,12 @@ export function PopupSostituzione({ sostituzione, onClassifica, onIgnora }) {
 
         <div style={{fontSize:12,fontWeight:700,color:'#64748b',marginBottom:10,
           textTransform:'uppercase',letterSpacing:'.07em'}}>
-          Perché è stato sostituito?
+          {sostituzione.tipo === 'rimosso' ? 'Perché è stato rimosso?' : 'Perché è stato sostituito?'}
         </div>
 
-        {/* Opzioni */}
+        {/* Opzioni — dipendono dal tipo evento */}
         <div style={{display:'flex',flexDirection:'column',gap:7,marginBottom:16}}>
-          {CAUSE_SOSTITUZIONE.map(c => (
+          {(sostituzione.tipo === 'rimosso' ? CAUSE_RIMOZIONE : CAUSE_SOSTITUZIONE).map(c => (
             <button key={c.id} onClick={()=>setSelected(c.id)} style={{
               background: selected===c.id ? c.bg : '#f8fafc',
               border: `1.5px solid ${selected===c.id ? c.border : '#e2e8f0'}`,

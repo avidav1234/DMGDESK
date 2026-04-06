@@ -464,11 +464,18 @@ async def get_live_context():
                     continue
 
                 # Trovato — calcola statistiche
+                # Progetto totale
                 totale     = len(all_pgm)
                 completati = sum(1 for p in all_pgm if p.get("stato") == "completato")
                 in_mac     = sum(1 for p in all_pgm if p.get("stato") == "in_lavorazione")
                 idx_corrente = all_pgm.index(pgm_match)
                 pct = round(completati / totale * 100, 1) if totale else 0
+
+                # Batch corrente (solo programmi in_main + completati — già caricati in macchina)
+                batch = [p for p in all_pgm if p.get("stato") in ("in_main", "completato", "in_lavorazione")]
+                batch_totale     = len(batch)
+                batch_completati = sum(1 for p in batch if p.get("stato") == "completato")
+                batch_pct        = round(batch_completati / batch_totale * 100, 1) if batch_totale else 0
 
                 # Prossimi programmi (da_fare o in_main dopo quello corrente)
                 prossimi = [
@@ -508,6 +515,10 @@ async def get_live_context():
                 match = {
                     "progetto_id":           project.get("id"),
                     "progetto_nome":         project.get("name"),
+                    # batch corrente
+                    "batch_completati":      batch_completati,
+                    "batch_totale":          batch_totale,
+                    "batch_pct":             batch_pct,
                     "progetto_colore":       project.get("color", "#D4700A"),
                     "programma_corrente":    mpf_filename,
                     "programma_idx":         idx_corrente + 1,

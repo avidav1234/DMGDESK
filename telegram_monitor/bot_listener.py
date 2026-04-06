@@ -110,15 +110,17 @@ class BotListener:
                 ctx = await self._get_live_context()
                 match = ctx.get("match")
                 if match:
-                    completati = match.get("programmi_completati", 0)
-                    totali     = match.get("programmi_totali", 0)
-                    pct        = match.get("pct_avanzamento", 0)
-                    nome       = match.get("progetto_nome", "")
-                    barra      = _barra(pct)
+                    nome            = match.get("progetto_nome", "")
+                    batch_comp      = match.get("batch_completati", 0)
+                    batch_tot       = match.get("batch_totale", 0)
+                    batch_pct       = match.get("batch_pct", 0.0)
+                    prog_comp       = match.get("programmi_completati", 0)
+                    prog_tot        = match.get("programmi_totali", 0)
+                    prog_pct        = match.get("pct_avanzamento", 0.0)
                     progresso_str = (
                         f"\n\n📁 Commessa: <b>{nome}</b>\n"
-                        f"📈 {barra} {pct}%\n"
-                        f"✅ {completati}/{totali} programmi completati"
+                        f"⚙️ Batch:    {_barra(batch_pct, 10)} {batch_pct}% ({batch_comp}/{batch_tot})\n"
+                        f"📦 Progetto: {_barra(prog_pct, 10)} {prog_pct}% ({prog_comp}/{prog_tot})"
                     )
             except Exception:
                 pass
@@ -177,7 +179,9 @@ class BotListener:
         pallet     = match.get("pallet")
         ora        = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
 
-        barra = _barra(pct, 12)
+        batch_comp  = match.get("batch_completati", 0)
+        batch_tot   = match.get("batch_totale", 0)
+        batch_pct   = match.get("batch_pct", 0.0)
 
         # Allerta utensile
         allerta_str = ""
@@ -201,9 +205,8 @@ class BotListener:
         await self._send(
             f"📁 <b>{nome}</b>{pallet_str}\n"
             f"🕐 {ora}\n\n"
-            f"📈 <b>{barra} {pct}%</b>\n"
-            f"✅ Completati: {completati}/{totali}\n"
-            f"⚙️ In macchina: {in_mac}\n\n"
+            f"⚙️ Batch:    <b>{_barra(batch_pct)} {batch_pct}%</b> ({batch_comp}/{batch_tot})\n"
+            f"📦 Progetto: <b>{_barra(pct)} {pct}%</b> ({completati}/{totali})\n\n"
             f"▶️ Corrente: <code>{prog_cor}</code>\n"
             f"🔧 Utensile: <code>{utensile}</code>"
             f"{allerta_str}"

@@ -3,18 +3,25 @@ telegram_monitor/bot_listener.py
 Polling comandi in entrata dal bot Telegram.
 
 Comandi supportati:
-  /stato   — snapshot live macchina
-  /summary — riepilogo giornaliero immediato
-  /help    — lista comandi
+  /stato    — snapshot live macchina + progresso programma corrente
+  /progetto — dettaglio commessa: avanzamento %, programmi completati/totali, prossimi
+  /summary  — riepilogo ultime 24h
+  /help     — lista comandi
 """
 
 import asyncio
 import logging
 import httpx
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Callable, Awaitable
 
 log = logging.getLogger("telegram_monitor.bot_listener")
+
+
+def _barra(pct: float, lunghezza: int = 10) -> str:
+    """Barra di avanzamento testuale: ████░░░░░░ 42%"""
+    piene = round(pct / 100 * lunghezza)
+    return "█" * piene + "░" * (lunghezza - piene)
 
 
 class BotListener:
@@ -22,17 +29,19 @@ class BotListener:
         self,
         token: str,
         chat_id: str,
-        get_stato_fn:  Callable[[], Awaitable[dict]],
-        get_report_fn: Callable[[], Awaitable[dict]] | None = None,
+        get_stato_fn:        Callable[[], Awaitable[dict]],
+        get_live_context_fn: Callable[[], Awaitable[dict]] | None = None,
+        get_report_fn:       Callable[[], Awaitable[dict]] | None = None,
         poll_interval: int = 5,
     ):
-        self._token        = token
-        self._chat_id      = str(chat_id)
-        self._get_stato    = get_stato_fn
-        self._get_report   = get_report_fn
-        self._poll         = poll_interval
-        self._base         = f"https://api.telegram.org/bot{token}"
-        self._offset: int  = 0
+        self._token             = token
+        self._chat_id           = str(chat_id)
+        self._get_stato         = get_stato_fn
+        self._get_live_context  = get_live_context_fn
+        self._get_report        = get_report_fn
+        self._poll              = poll_interval
+        self._base              = f"https://api.telegram.org/bot{token}"
+        self._offset: int       = 0
 
     # ── Telegram API helpers ───────────────────────────────────────────────
 
@@ -45,8 +54,7 @@ class BotListener:
                 )
                 if r.status_code != 200:
                     return []
-                data = r.json()
-                return data.get("result", [])
+                return r.json().get("result", [])
         except Exception as e:
             log.warning(f"getUpdates error: {e}")
             return []
@@ -71,34 +79,135 @@ class BotListener:
             return
 
         connessa   = stato.get("connessa", False)
+        if not connessa:
+            await self._send(
+                f"🔴 <b>Macchina non raggiungibile</b>\n"
+                f"🕐 {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}"
+            )
+            return
+
         stato_prog = int(stato.get("stato_programma") or 0)
         programma  = stato.get("programma_attivo") or "—"
         utensile   = stato.get("utensile_attivo") or "—"
         t_num      = stato.get("numero_utensile") or "—"
-        allarme    = stato.get("allarme") or "Nessuno"
+        allarme    = stato.get("allarme") or None
         log_age    = stato.get("log_age_sec")
         aggiorn    = stato.get("ultimo_aggiornamento") or "—"
         ora        = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
 
-        stati_label = {0: "⬛ FERMO", 1: "🟡 INTERROTTO", 2: "🟢 IN ATTESA", 3: "🟢 IN ESECUZIONE"}
+        stati_label = {
+            0: "⬛ FERMO",
+            1: "🟡 INTERROTTO",
+            2: "🟢 IN ATTESA",
+            3: "🟢 IN ESECUZIONE",
+        }
         stato_str = stati_label.get(stato_prog, str(stato_prog))
+
+        # Prova a recuperare il progresso dal live context
+        progresso_str = ""
+        if self._get_live_context and stato_prog in (2, 3):
+            try:
+                ctx = await self._get_live_context()
+                match = ctx.get("match")
+                if match:
+                    completati = match.get("programmi_completati", 0)
+                    totali     = match.get("programmi_totali", 0)
+                    pct        = match.get("pct_avanzamento", 0)
+                    nome       = match.get("progetto_nome", "")
+                    barra      = _barra(pct)
+                    progresso_str = (
+                        f"\n\n📁 Commessa: <b>{nome}</b>\n"
+                        f"📈 {barra} {pct}%\n"
+                        f"✅ {completati}/{totali} programmi completati"
+                    )
+            except Exception:
+                pass
 
         stale_warn = ""
         if log_age and log_age > 120:
             stale_warn = f"\n⚠️ Log fermo da {log_age // 60} min"
 
-        if not connessa:
-            await self._send(f"🔴 <b>Macchina non raggiungibile</b>\n🕐 {ora}")
-            return
+        allarme_str = f"\n🚨 Allarme: <code>{allarme}</code>" if allarme else ""
 
         await self._send(
             f"🏭 <b>DMG DMC 160U — Stato Live</b>\n"
             f"🕐 {ora}\n\n"
-            f"📊 Stato: {stato_str}\n"
+            f"📊 {stato_str}\n"
             f"📄 Programma: <code>{programma}</code>\n"
-            f"🔧 Utensile: <code>{utensile}</code> (T{t_num})\n"
-            f"🚨 Allarme: {allarme}\n"
-            f"🕓 Log: {aggiorn}{stale_warn}"
+            f"🔧 Utensile: <code>{utensile}</code> (T{t_num})"
+            f"{allarme_str}"
+            f"{progresso_str}"
+            f"{stale_warn}"
+        )
+
+    async def _cmd_progetto(self):
+        if not self._get_live_context:
+            await self._send("⚠️ Live context non disponibile")
+            return
+        try:
+            ctx = await self._get_live_context()
+        except Exception as e:
+            await self._send(f"❌ Errore: {e}")
+            return
+
+        stato_prog = int(ctx.get("stato_programma") or 0)
+        match = ctx.get("match")
+
+        if not match:
+            prog = ctx.get("programma_attivo") or "—"
+            if stato_prog == 0:
+                await self._send("⬛ <b>Macchina ferma</b> — nessun progetto in corso")
+            else:
+                await self._send(
+                    f"⚠️ <b>Programma attivo non associato a nessuna commessa</b>\n"
+                    f"📄 <code>{prog}</code>\n\n"
+                    f"Verifica che il programma sia registrato in WorkTrack."
+                )
+            return
+
+        nome       = match.get("progetto_nome", "—")
+        completati = match.get("programmi_completati", 0)
+        totali     = match.get("programmi_totali", 0)
+        in_mac     = match.get("programmi_in_macchina", 0)
+        pct        = match.get("pct_avanzamento", 0.0)
+        utensile   = match.get("utensile_corrente") or "—"
+        allerta    = match.get("allerta_utensile")
+        prossimi   = match.get("prossimi_programmi") or []
+        prog_cor   = match.get("programma_corrente") or "—"
+        pallet     = match.get("pallet")
+        ora        = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+
+        barra = _barra(pct, 12)
+
+        # Allerta utensile
+        allerta_str = ""
+        if allerta == "fin_vita":
+            allerta_str = "\n⚠️ <b>Utensile a fine vita!</b>"
+        elif allerta == "disabilitato":
+            allerta_str = "\n🚫 <b>Utensile disabilitato</b>"
+
+        # Prossimi programmi
+        if prossimi:
+            prossimi_lines = "\n".join(
+                f"  {i+1}. <code>{p.get('filename','?')}</code>"
+                for i, p in enumerate(prossimi[:4])
+            )
+            prossimi_str = f"\n\n📋 <b>Prossimi programmi:</b>\n{prossimi_lines}"
+        else:
+            prossimi_str = "\n\n✅ Ultimo programma in esecuzione"
+
+        pallet_str = f" · Pallet {pallet}" if pallet else ""
+
+        await self._send(
+            f"📁 <b>{nome}</b>{pallet_str}\n"
+            f"🕐 {ora}\n\n"
+            f"📈 <b>{barra} {pct}%</b>\n"
+            f"✅ Completati: {completati}/{totali}\n"
+            f"⚙️ In macchina: {in_mac}\n\n"
+            f"▶️ Corrente: <code>{prog_cor}</code>\n"
+            f"🔧 Utensile: <code>{utensile}</code>"
+            f"{allerta_str}"
+            f"{prossimi_str}"
         )
 
     async def _cmd_summary(self):
@@ -111,8 +220,6 @@ class BotListener:
             await self._send(f"❌ Errore lettura report: {e}")
             return
 
-        # Ultime 24h: da mezzanotte ieri a mezzanotte oggi
-        from datetime import timedelta
         oggi       = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
         ieri       = oggi - timedelta(days=1)
         label_ieri = ieri.strftime("%d/%m/%Y")
@@ -148,8 +255,9 @@ class BotListener:
     async def _cmd_help(self):
         await self._send(
             "🤖 <b>DMGDesk Bot — Comandi disponibili</b>\n\n"
-            "/stato — Snapshot live macchina\n"
-            "/summary — Riepilogo lavorazione\n"
+            "/stato — Stato live + progresso commessa\n"
+            "/progetto — Dettaglio avanzamento commessa\n"
+            "/summary — Riepilogo ultime 24h\n"
             "/help — Questo messaggio"
         )
 
@@ -157,7 +265,6 @@ class BotListener:
 
     async def _dispatch(self, update: dict):
         msg = update.get("message", {})
-        # Accetta solo messaggi dal chat_id autorizzato
         chat_id = str(msg.get("chat", {}).get("id", ""))
         if chat_id != self._chat_id:
             log.warning(f"Messaggio da chat_id non autorizzato: {chat_id}")
@@ -167,6 +274,8 @@ class BotListener:
 
         if text == "/stato":
             await self._cmd_stato()
+        elif text == "/progetto":
+            await self._cmd_progetto()
         elif text == "/summary":
             await self._cmd_summary()
         elif text in ("/help", "/start"):

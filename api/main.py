@@ -217,11 +217,14 @@ async def startup():
         )
         _tg_monitor_module._instance = _monitor   # rende accessibile da altri moduli
 
+        from api.routers.macchina_live import get_live_context as _get_live_context
+
         _listener = BotListener(
-            token         = tg_cfg["token"],
-            chat_id       = tg_cfg["chat_id"],
-            get_stato_fn  = _get_stato,
-            get_report_fn = _get_report,
+            token                = tg_cfg["token"],
+            chat_id              = tg_cfg["chat_id"],
+            get_stato_fn         = _get_stato,
+            get_live_context_fn  = _get_live_context,
+            get_report_fn        = _get_report,
         )
 
         _asyncio.create_task(_monitor.run())

@@ -41,29 +41,46 @@ if not exist "%~dp0frontend\dist\index.html" (
     echo Build completata.
 )
 
-REM -- Comandi per ogni pannello
-set ROOT=%~dp0
+REM -- Crea script temporanei per ogni servizio (evita problemi virgolette con wt)
+set TMP_DIR=%~dp0
 
-set CMD_BACKEND=cd /d "%ROOT%" ^&^& echo. ^&^& echo  === DMGDesk Backend === ^&^& echo. ^&^& uvicorn api.main:app --host 0.0.0.0 --port 8000
+echo @echo off > "%TMP_DIR%_run_backend.cmd"
+echo chcp 65001 ^>nul >> "%TMP_DIR%_run_backend.cmd"
+echo cd /d "%~dp0" >> "%TMP_DIR%_run_backend.cmd"
+echo echo. >> "%TMP_DIR%_run_backend.cmd"
+echo echo  === DMGDesk Backend :8000 === >> "%TMP_DIR%_run_backend.cmd"
+echo echo. >> "%TMP_DIR%_run_backend.cmd"
+echo uvicorn api.main:app --host 0.0.0.0 --port 8000 >> "%TMP_DIR%_run_backend.cmd"
 
-set CMD_STEP=cd /d "%ROOT%step_analyzer" ^&^& echo. ^&^& echo  === STEP Analyzer === ^&^& echo. ^&^& uvicorn main:app --host 127.0.0.1 --port 8002
+echo @echo off > "%TMP_DIR%_run_step.cmd"
+echo chcp 65001 ^>nul >> "%TMP_DIR%_run_step.cmd"
+echo cd /d "%~dp0step_analyzer" >> "%TMP_DIR%_run_step.cmd"
+echo echo. >> "%TMP_DIR%_run_step.cmd"
+echo echo  === STEP Analyzer :8002 === >> "%TMP_DIR%_run_step.cmd"
+echo echo. >> "%TMP_DIR%_run_step.cmd"
+echo uvicorn main:app --host 127.0.0.1 --port 8002 >> "%TMP_DIR%_run_step.cmd"
 
-set CMD_CAM=cd /d "%ROOT%cam_tracker" ^&^& echo. ^&^& echo  === CAM Tracker === ^&^& echo. ^&^& python cam_tracker.py
+echo @echo off > "%TMP_DIR%_run_cam.cmd"
+echo chcp 65001 ^>nul >> "%TMP_DIR%_run_cam.cmd"
+echo cd /d "%~dp0cam_tracker" >> "%TMP_DIR%_run_cam.cmd"
+echo echo. >> "%TMP_DIR%_run_cam.cmd"
+echo echo  === CAM Tracker === >> "%TMP_DIR%_run_cam.cmd"
+echo echo. >> "%TMP_DIR%_run_cam.cmd"
+echo python cam_tracker.py >> "%TMP_DIR%_run_cam.cmd"
 
-REM -- Apri Windows Terminal
-REM   Layout: Backend (sinistra grande) | STEP Analyzer (destra alta)
-REM                                     | CAM Tracker   (destra bassa)
+REM -- Avvia Windows Terminal con 3 pannelli usando gli script temporanei
 wt --maximized ^
-   new-tab --title "DMGDesk Backend" --tabColor "#0d2d5e" cmd /k "%CMD_BACKEND%" ^
-   ; split-pane --vertical --size 0.35 --title "STEP Analyzer" --tabColor "#1a4a2e" cmd /k "%CMD_STEP%" ^
-   ; split-pane --horizontal --title "CAM Tracker" --tabColor "#4a2e1a" cmd /k "%CMD_CAM%"
+   new-tab --title "DMGDesk Backend" --tabColor "#0d2d5e" cmd /k "%TMP_DIR%_run_backend.cmd" ^
+   ; split-pane --vertical --size 0.35 --title "STEP Analyzer" --tabColor "#1a4a2e" cmd /k "%TMP_DIR%_run_step.cmd" ^
+   ; split-pane --horizontal --title "CAM Tracker" --tabColor "#4a2e1a" cmd /k "%TMP_DIR%_run_cam.cmd"
 
 REM -- Apri browser dopo che i servizi sono partiti
 timeout /t 5 /nobreak >nul
 start "" http://localhost:8000
 
 echo.
-echo  Servizi avviati. Browser aperto su http://localhost:8000
+echo  Servizi avviati in Windows Terminal.
+echo  Browser: http://localhost:8000
 echo.
 echo  Comandi:
 echo    R + Invio  = git pull + riavvio tutto
@@ -93,9 +110,9 @@ if /i "!CMD!"=="u" (
     for /f "tokens=5" %%p in ('netstat -ano 2^>nul ^| findstr ":8002 "') do taskkill /F /PID %%p >nul 2>&1
     timeout /t 1 /nobreak >nul
     wt --maximized ^
-       new-tab --title "DMGDesk Backend" --tabColor "#0d2d5e" cmd /k "%CMD_BACKEND%" ^
-       ; split-pane --vertical --size 0.35 --title "STEP Analyzer" --tabColor "#1a4a2e" cmd /k "%CMD_STEP%" ^
-       ; split-pane --horizontal --title "CAM Tracker" --tabColor "#4a2e1a" cmd /k "%CMD_CAM%"
+       new-tab --title "DMGDesk Backend" --tabColor "#0d2d5e" cmd /k "%TMP_DIR%_run_backend.cmd" ^
+       ; split-pane --vertical --size 0.35 --title "STEP Analyzer" --tabColor "#1a4a2e" cmd /k "%TMP_DIR%_run_step.cmd" ^
+       ; split-pane --horizontal --title "CAM Tracker" --tabColor "#4a2e1a" cmd /k "%TMP_DIR%_run_cam.cmd"
     echo Backend riavviato.
     goto wait_input
 )

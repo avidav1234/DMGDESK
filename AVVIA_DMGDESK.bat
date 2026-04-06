@@ -33,36 +33,49 @@ if not exist "%~dp0frontend\dist\index.html" (
     echo Build completata.
 )
 
-REM -- Crea script temporanei per ogni servizio
-set ROOT=%~dp0
-
-echo @echo off > "%ROOT%_run_backend.cmd"
-echo chcp 65001 ^>nul >> "%ROOT%_run_backend.cmd"
-echo cd /d "%ROOT%" >> "%ROOT%_run_backend.cmd"
-echo echo  === DMGDesk Backend :8000 === >> "%ROOT%_run_backend.cmd"
-echo uvicorn api.main:app --host 0.0.0.0 --port 8000 >> "%ROOT%_run_backend.cmd"
-
-echo @echo off > "%ROOT%_run_step.cmd"
-echo chcp 65001 ^>nul >> "%ROOT%_run_step.cmd"
-echo cd /d "%ROOT%step_analyzer" >> "%ROOT%_run_step.cmd"
-echo echo  === STEP Analyzer :8002 === >> "%ROOT%_run_step.cmd"
-echo uvicorn main:app --host 127.0.0.1 --port 8002 >> "%ROOT%_run_step.cmd"
-
-echo @echo off > "%ROOT%_run_cam.cmd"
-echo chcp 65001 ^>nul >> "%ROOT%_run_cam.cmd"
-echo cd /d "%ROOT%cam_tracker" >> "%ROOT%_run_cam.cmd"
-echo echo  === CAM Tracker === >> "%ROOT%_run_cam.cmd"
-echo python cam_tracker.py >> "%ROOT%_run_cam.cmd"
-
-REM -- Avvia Windows Terminal con 4 pannelli
-REM   Layout: Backend (sinistra) | STEP Analyzer (destra alta)
-REM                               | CAM Tracker   (destra bassa)
-wt --maximized new-tab --title "DMGDesk" --tabColor "#0d2d5e" cmd /k "%ROOT%_run_backend.cmd" ^; split-pane --vertical --size 0.35 --title "STEP Analyzer" --tabColor "#1a4a2e" cmd /k "%ROOT%_run_step.cmd" ^; split-pane --horizontal --title "CAM Tracker" --tabColor "#4a2e1a" cmd /k "%ROOT%_run_cam.cmd" ^; split-pane --horizontal --title "Launcher" --tabColor "#2e1a4a" cmd /k "%ROOT%_run_launcher.cmd"
+REM -- Avvia 3 finestre separate
+echo Avvio servizi...
+start "DMGDesk Backend :8000" cmd /k "cd /d "%~dp0" && echo === DMGDesk Backend === && uvicorn api.main:app --host 0.0.0.0 --port 8000"
+timeout /t 2 /nobreak >nul
+start "STEP Analyzer :8002" cmd /k "cd /d "%~dp0step_analyzer" && echo === STEP Analyzer === && uvicorn main:app --host 127.0.0.1 --port 8002"
+start "CAM Tracker" cmd /k "cd /d "%~dp0cam_tracker" && echo === CAM Tracker === && python cam_tracker.py"
 
 REM -- Apri browser
-timeout /t 5 /nobreak >nul
+timeout /t 4 /nobreak >nul
 start "" http://localhost:8000
 
-REM -- Tieni viva questa finestra (il launcher R/S/U e' nel pannello wt)
-echo Servizi avviati. Questa finestra puo' essere chiusa.
-pause
+echo.
+echo  Servizi avviati.
+echo  Browser: http://localhost:8000
+echo.
+echo  R = git pull + riavvio tutto
+echo  S = riavvio solo server
+echo  U = git pull + riavvio solo backend
+echo.
+
+:wait_input
+set /p CMD="Comando (R/S/U): "
+
+if /i "!CMD!"=="r" (
+    echo Aggiornamento + riavvio...
+    git pull origin main
+    if errorlevel 1 ( echo [ERRORE] git pull fallito & goto wait_input )
+    goto start_services
+)
+
+if /i "!CMD!"=="s" (
+    echo Riavvio server...
+    goto start_services
+)
+
+if /i "!CMD!"=="u" (
+    echo Aggiornamento backend...
+    git pull origin main
+    for /f "tokens=5" %%p in ('netstat -ano 2^>nul ^| findstr ":8000 "') do taskkill /F /PID %%p >nul 2>&1
+    timeout /t 1 /nobreak >nul
+    start "DMGDesk Backend :8000" cmd /k "cd /d "%~dp0" && echo === DMGDesk Backend === && uvicorn api.main:app --host 0.0.0.0 --port 8000"
+    echo Backend riavviato.
+    goto wait_input
+)
+
+goto wait_input

@@ -118,6 +118,8 @@ def on_tools_updated(tools_new: dict, config: dict):
                 "vita_prima":  round(lp_old, 1),
                 "vita_dopo":   round(lp_new, 1),
                 "tipo":        tipo,
+                "causa":       None,   # null = non classificato; rottura|usura|liberare_spazio
+                "classificato_ts": None,
             }
             nuovi.append(record)
             log.info(
@@ -222,6 +224,45 @@ def check_low_life_alert(tools: dict, alias_attivi: list[str], config: dict):
 
 
 # ── Endpoint ──────────────────────────────────────────────────────────────────
+
+@router.post("/sostituzioni/{ts}/causa")
+async def classifica_sostituzione(ts: str, body: dict):
+    """
+    Classifica la causa di una sostituzione utensile.
+    causa: rottura | usura | liberare_spazio
+    ts: timestamp ISO della sostituzione
+    """
+    from database.db_handler import carica_configurazione as _cfg
+    config  = _cfg()
+    records = _load_history(config)
+    causa   = (body.get("causa") or "").strip()
+    CAUSE_VALIDE = {"rottura", "usura", "liberare_spazio"}
+    if causa not in CAUSE_VALIDE:
+        from fastapi import HTTPException
+        raise HTTPException(400, f"causa non valida: {causa}. Valide: {CAUSE_VALIDE}")
+    aggiornato = False
+    for r in records:
+        if r.get("ts") == ts:
+            r["causa"]            = causa
+            r["classificato_ts"]  = datetime.now().isoformat(timespec="seconds")
+            aggiornato = True
+            break
+    if not aggiornato:
+        from fastapi import HTTPException
+        raise HTTPException(404, "sostituzione non trovata")
+    _save_history(config, records)
+    return {"ok": True, "ts": ts, "causa": causa}
+
+
+@router.get("/sostituzioni/non-classificate")
+async def get_sostituzioni_non_classificate():
+    """Restituisce sostituzioni senza causa classificata (per popup frontend)."""
+    from database.db_handler import carica_configurazione as _cfg
+    config  = _cfg()
+    records = _load_history(config)
+    non_class = [r for r in records if r.get("causa") is None and r.get("tipo") == "sostituito"]
+    return {"sostituzioni": list(reversed(non_class))[:10]}
+
 
 @router.get("/sostituzioni")
 async def get_sostituzioni(limit: int = 100):

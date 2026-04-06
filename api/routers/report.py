@@ -684,6 +684,34 @@ def _chiudi_sessione(data: dict, sc: dict, now: str):
 
 # ── Endpoint: dati giornalieri ────────────────────────────────────────────────
 
+@router.post("/fermi/classifica")
+async def classifica_fermo(body: dict):
+    """
+    Classifica la causa di un fermo macchina.
+    Salva in lavorazioni_log.json nel campo fermi_classificati.
+    causa: setup | allarme | pausa_operatore | altro
+    ts_inizio: timestamp ISO inizio fermo
+    durata_sec: durata fermo in secondi
+    """
+    config  = carica_configurazione()
+    data    = _load_log(config)
+    causa   = (body.get("causa") or "").strip()
+    CAUSE_VALIDE = {"setup", "allarme", "pausa_operatore", "altro"}
+    if causa not in CAUSE_VALIDE:
+        from fastapi import HTTPException
+        raise HTTPException(400, f"causa non valida. Valide: {CAUSE_VALIDE}")
+
+    fermi = data.setdefault("fermi_classificati", [])
+    fermi.append({
+        "ts":         datetime.now().isoformat(timespec="seconds"),
+        "ts_inizio":  body.get("ts_inizio"),
+        "durata_sec": body.get("durata_sec"),
+        "causa":      causa,
+    })
+    _save_log(config, data)
+    return {"ok": True, "causa": causa}
+
+
 @router.get("/confronto-ieri")
 async def get_confronto_ieri():
     """

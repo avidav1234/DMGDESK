@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react'
 import React from 'react'
 import { useNavigate } from 'react-router-dom'
+import { PopupSostituzione, PopupFermo } from '../components/MLDataPopup'
 
 function daysUntil(dateStr){
   if(!dateStr) return null
@@ -32,6 +33,10 @@ export default function Home(){
   const [oreProgetto, setOreProgetto] = useState(null)  // ore storiche progetto corrente
   const [macchinaLive, setMacchinaLive] = useState(null)  // dati OPC UA diretti
   const [confrontoIeri, setConfrontoIeri] = useState(null)  // completati oggi vs ieri
+  const [popupSost, setPopupSost]     = useState(null)   // sostituzione da classificare
+  const [popupFermo, setPopupFermo]   = useState(null)   // fermo da classificare
+  const [fermoInizio, setFermoInizio] = useState(null)   // ts inizio fermo corrente
+  const [fermoSec, setFermoSec]       = useState(0)      // durata fermo corrente
 
   useEffect(()=>{
     const ac = new AbortController()
@@ -72,6 +77,15 @@ export default function Home(){
     fetchConfrontoIeri()
     const t7=setInterval(fetchConfrontoIeri,300000)
 
+    // Popup sostituzione: controlla ogni 5 min se ci sono sostituzioni non classificate
+    const checkSostituzioni=()=>
+      fetch('/api/tools/sostituzioni/non-classificate').then(r=>r.ok?r.json():null)
+        .then(d=>{
+          if(!sig.aborted&&d?.sostituzioni?.length>0) setPopupSost(d.sostituzioni[0])
+        }).catch(()=>{})
+    checkSostituzioni()
+    const t8=setInterval(checkSostituzioni,300000)
+
     // Timer UI per countdown ETA
     const t3=setInterval(()=>setTickSec(s=>s+1),1000)
 
@@ -96,7 +110,7 @@ export default function Home(){
 
     return()=>{
       ac.abort()
-      clearInterval(t2); clearInterval(t3); clearInterval(t4); clearInterval(t5); clearInterval(t6); clearInterval(t7)
+      clearInterval(t2); clearInterval(t3); clearInterval(t4); clearInterval(t5); clearInterval(t6); clearInterval(t7); clearInterval(t8)
       window.removeEventListener('dmgdesk:stati-aggiornati', onStati)
     }
   },[])
@@ -121,6 +135,25 @@ export default function Home(){
       .then(d=>{ if(d) setOreProgetto(d) })
       .catch(()=>{})
   },[pallet, projects])
+
+  // Rileva fermo >10 min e mostra popup al riavvio
+  useEffect(()=>{
+    const SOGLIA_FERMO_SEC = 600 // 10 minuti
+    const eraMacchinaFerma = !sessLive?.attiva || sessLive?.in_pausa
+    if(eraMacchinaFerma){
+      if(!fermoInizio) setFermoInizio(new Date().toISOString())
+    } else {
+      // Macchina ripartita — calcola durata fermo
+      if(fermoInizio){
+        const durSec = Math.floor((Date.now() - new Date(fermoInizio).getTime())/1000)
+        if(durSec >= SOGLIA_FERMO_SEC && !popupFermo){
+          setFermoSec(durSec)
+          setPopupFermo(true)
+        }
+        setFermoInizio(null)
+      }
+    }
+  },[sessLive?.attiva, sessLive?.in_pausa])
 
   const now    = new Date()
   const DAYS   = ['Domenica','Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato']
@@ -398,6 +431,24 @@ export default function Home(){
   )
 
   return(
+    <>
+    {/* Popup classificazione sostituzione utensile */}
+    {popupSost&&(
+      <PopupSostituzione
+        sostituzione={popupSost}
+        onClassifica={(ts,causa)=>{ setPopupSost(null) }}
+        onIgnora={()=>setPopupSost(null)}
+      />
+    )}
+    {/* Popup classificazione fermo */}
+    {popupFermo&&(
+      <PopupFermo
+        fermoSec={fermoSec}
+        tsInizio={fermoInizio}
+        onClassifica={(causa)=>setPopupFermo(null)}
+        onIgnora={()=>setPopupFermo(null)}
+      />
+    )}
     <div style={{flex:1,overflow:'hidden',background:'#f0f4f8',fontFamily:'var(--font-display)',display:'flex',flexDirection:'column',height:'100%'}}>
 
       {/* ── TOPBAR ─────────────────────────────────────────────────────── */}
@@ -1194,5 +1245,6 @@ export default function Home(){
 
       </div>
     </div>
+  </>
   )
 }

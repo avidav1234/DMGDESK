@@ -775,7 +775,7 @@ export default function Macchina() {
           <table style={{width:'100%',borderCollapse:'collapse'}}>
             <thead>
               <tr style={{background:'#f8fafc'}}>
-                {['Data','Alias','Pos','Vita prima','Vita dopo','Tipo'].map(h=>(
+                {['Data','Alias','Pos','Vita prima','Vita dopo','Tipo','Causa'].map(h=>(
                   <th key={h} style={{padding:'8px 12px',textAlign:'left',fontSize:10,
                     fontFamily:'var(--font-mono)',color:'var(--text-dim)',fontWeight:700,
                     textTransform:'uppercase',letterSpacing:'0.08em',
@@ -804,6 +804,19 @@ export default function Macchina() {
                         {r.tipo}
                       </span>
                     </td>
+                    <td style={{padding:'7px 12px'}}>
+                      {r.causa?(
+                        <span style={{fontSize:10,fontWeight:700,color:'#16a34a',
+                          background:'#dcfce7',padding:'2px 8px',borderRadius:4}}>
+                          {r.causa.replace('_',' ')}
+                        </span>
+                      ):(
+                        <button onClick={()=>setPopupSost(r)} style={{
+                          fontSize:10,color:'#d97706',background:'#fffbeb',
+                          border:'1px solid #fcd34d',borderRadius:4,padding:'2px 8px',cursor:'pointer'
+                        }}>classifica</button>
+                      )}
+                    </td>
                   </tr>
                 )
               })}
@@ -812,6 +825,16 @@ export default function Macchina() {
         )}
       </div>
 
+      {popupSost&&(
+        <PopupSostituzione
+          sostituzione={popupSost}
+          onClassifica={(ts,causa)=>{
+            setStotico(prev=>prev.map(r=>r.ts===ts?{...r,causa}:r))
+            setPopupSost(null)
+          }}
+          onIgnora={()=>setPopupSost(null)}
+        />
+      )}
       <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
     </div>
     </>

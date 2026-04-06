@@ -21,10 +21,32 @@ if not exist "%~dp0frontend\dist\index.html" (
     if not exist "%~dp0frontend\dist\index.html" ( echo [ERRORE] Build fallita & pause & exit /b 1 )
 )
 
-REM -- Scrive i 3 script di servizio usando PowerShell (evita problemi con echo e path con spazi)
-powershell -NoProfile -Command "$r='%~dp0'; [IO.File]::WriteAllText($r+'_run_backend.cmd', \"@echo off`r`ncd /d \`\"$r\`\"`r`necho === DMGDesk Backend ===\"+\"`r`nuvicorn api.main:app --host 0.0.0.0 --port 8000`r`n\"); [IO.File]::WriteAllText($r+'_run_step.cmd', \"@echo off`r`ncd /d \`\"$($r)step_analyzer\`\"`r`necho === STEP Analyzer ===\"+\"`r`nuvicorn main:app --host 127.0.0.1 --port 8002`r`n\"); [IO.File]::WriteAllText($r+'_run_cam.cmd', \"@echo off`r`ncd /d \`\"$($r)cam_tracker\`\"`r`necho === CAM Tracker ===\"+\"`r`npython cam_tracker.py`r`n\")"
+REM -- Scrive script backend usando set per il path
+set PROJ=%~dp0
+set PROJ=%PROJ:~0,-1%
 
-echo Avvio servizi in Windows Terminal...
+(
+    echo @echo off
+    echo cd /d "%PROJ%"
+    echo echo === DMGDesk Backend ===
+    echo uvicorn api.main:app --host 0.0.0.0 --port 8000
+) > "%~dp0_run_backend.cmd"
+
+(
+    echo @echo off
+    echo cd /d "%PROJ%\step_analyzer"
+    echo echo === STEP Analyzer ===
+    echo uvicorn main:app --host 127.0.0.1 --port 8002
+) > "%~dp0_run_step.cmd"
+
+(
+    echo @echo off
+    echo cd /d "%PROJ%\cam_tracker"
+    echo echo === CAM Tracker ===
+    echo python cam_tracker.py
+) > "%~dp0_run_cam.cmd"
+
+echo Avvio servizi...
 wt --maximized new-tab --title "Backend" --tabColor "#0d2d5e" cmd /k "%~dp0_run_backend.cmd" ^; new-tab --title "STEP" --tabColor "#1a4a2e" cmd /k "%~dp0_run_step.cmd" ^; new-tab --title "CAM" --tabColor "#4a2e1a" cmd /k "%~dp0_run_cam.cmd" ^; new-tab --title "Launcher" --tabColor "#2e1a4a" cmd /k "%~dp0_run_launcher.cmd"
 
 timeout /t 4 /nobreak >nul

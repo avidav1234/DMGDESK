@@ -31,6 +31,7 @@ export default function Home(){
   const [loading,    setLoading]    = useState(true)
   const [oreProgetto, setOreProgetto] = useState(null)  // ore storiche progetto corrente
   const [macchinaLive, setMacchinaLive] = useState(null)  // dati OPC UA diretti
+  const [confrontoIeri, setConfrontoIeri] = useState(null)  // completati oggi vs ieri
 
   useEffect(()=>{
     const ac = new AbortController()
@@ -64,6 +65,13 @@ export default function Home(){
     fetchMacchinaLive()
     const t6=setInterval(fetchMacchinaLive,10000)
 
+    // Confronto ieri: fetch iniziale + refresh ogni 5 min
+    const fetchConfrontoIeri=()=>
+      fetch('/api/report/confronto-ieri').then(r=>r.ok?r.json():null)
+        .then(d=>{ if(!sig.aborted) setConfrontoIeri(d) }).catch(()=>{})
+    fetchConfrontoIeri()
+    const t7=setInterval(fetchConfrontoIeri,300000)
+
     // Timer UI per countdown ETA
     const t3=setInterval(()=>setTickSec(s=>s+1),1000)
 
@@ -88,7 +96,7 @@ export default function Home(){
 
     return()=>{
       ac.abort()
-      clearInterval(t2); clearInterval(t3); clearInterval(t4); clearInterval(t5); clearInterval(t6)
+      clearInterval(t2); clearInterval(t3); clearInterval(t4); clearInterval(t5); clearInterval(t6); clearInterval(t7)
       window.removeEventListener('dmgdesk:stati-aggiornati', onStati)
     }
   },[])
@@ -409,6 +417,14 @@ export default function Home(){
             </span>
           </div>
         )}
+        {/* Log age indicator — sempre visibile */}
+        {macchinaLive?.connessa&&macchinaLive?.log_age_sec!=null&&!(macchinaLive?.log_stale)&&(
+          <div style={{marginLeft: sessLive?.attiva&&sessLive?.programma_corrente?8:'auto',
+            display:'flex',alignItems:'center',gap:5,fontSize:11,color:'#64748b'}}>
+            <span style={{width:6,height:6,borderRadius:'50%',background:'#16a34a',display:'inline-block'}}/>
+            <span>log {macchinaLive.log_age_sec < 60 ? `${macchinaLive.log_age_sec}s fa` : `${Math.floor(macchinaLive.log_age_sec/60)}m fa`}</span>
+          </div>
+        )}
         {!sessLive?.attiva&&(sessLive?.fermo_sec_giornaliero||0)>0&&(
           <div style={{marginLeft:'auto',background:'#fef2f2',border:'1px solid #fca5a5',
             borderRadius:8,padding:'5px 14px',display:'flex',alignItems:'center',gap:8}}>
@@ -455,6 +471,39 @@ export default function Home(){
                   Pallet {palletLav.numero}
                 </span>
               </div>
+
+              {/* Utensile prominente — T number e vita sempre visibile */}
+              {(macchinaLive?.utensile_attivo||macchinaLive?.numero_utensile)&&(
+                <div style={{background:'#eff6ff',border:'1px solid #bfdbfe',borderRadius:8,
+                  padding:'7px 12px',display:'flex',alignItems:'center',gap:12,marginBottom:10}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:13,fontWeight:800,color:'#0d2d5e',whiteSpace:'nowrap',
+                      overflow:'hidden',textOverflow:'ellipsis'}}>
+                      {macchinaLive.utensile_attivo||'—'}
+                    </div>
+                    <div style={{fontSize:11,color:'#1D5FAD'}}>
+                      {macchinaLive.numero_utensile?`T${macchinaLive.numero_utensile} · `:''}utensile attivo
+                    </div>
+                  </div>
+                  {(()=>{
+                    // Cerca vita dell'utensile attivo nei dati setup
+                    const alias = (macchinaLive.utensile_attivo||'').toUpperCase().trim()
+                    const utSetup = (setup.fin_vita||[]).find(u=>(u.alias||'').toUpperCase()===alias)
+                    if(!utSetup||utSetup.life_percent==null) return null
+                    const pct = Math.round(utSetup.life_percent)
+                    const col = pct < 20 ? '#dc2626' : pct < 40 ? '#d97706' : '#16a34a'
+                    return (
+                      <div style={{textAlign:'right',flexShrink:0}}>
+                        <div style={{fontSize:16,fontWeight:800,color:col}}>{pct}%</div>
+                        <div style={{height:4,width:54,background:'#bfdbfe',borderRadius:2,marginTop:3,overflow:'hidden'}}>
+                          <div style={{height:'100%',width:`${pct}%`,background:col,borderRadius:2}}/>
+                        </div>
+                        <div style={{fontSize:9,color:'#64748b',marginTop:2}}>vita residua</div>
+                      </div>
+                    )
+                  })()}
+                </div>
+              )}
 
               {/* Timer principale — PROGRAMMA CORRENTE, grande al centro */}
               <div style={{textAlign:'center',padding:'8px 0 10px',borderBottom:'1px solid #bfdbfe',marginBottom:10}}>
@@ -583,6 +632,40 @@ export default function Home(){
                   </div>
                 </div>
               )}
+
+              {/* Timeline sessione oggi */}
+              {sessLive?.attiva&&sessLive?.inizio_sessione&&(()=>{
+                const inizioSess = new Date(sessLive.inizio_sessione)
+                const ora = new Date()
+                const mezzanotte = new Date(ora); mezzanotte.setHours(0,0,0,0)
+                const totMin = (ora - mezzanotte) / 60000
+                const inizioMin = (inizioSess - mezzanotte) / 60000
+                const fermoSec = sessLive?.fermo_sec_giornaliero || 0
+                const runMin = Math.max(0, (ora - inizioSess)/60000 - fermoSec/60)
+                const fermoMin = fermoSec / 60
+                const beforePct = Math.min(100, (inizioMin / totMin) * 100)
+                const runPct = Math.min(100 - beforePct, (runMin / totMin) * 100)
+                const fermoPct = Math.min(100 - beforePct - runPct, (fermoMin / totMin) * 100)
+                const nowPct = Math.max(2, 100 - beforePct - runPct - fermoPct)
+                const fmtT = (d) => `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
+                return (
+                  <div style={{marginBottom:10}}>
+                    <div style={{fontSize:9,fontWeight:700,color:'#1D5FAD',letterSpacing:'.07em',
+                      textTransform:'uppercase',marginBottom:5}}>Sessione oggi</div>
+                    <div style={{height:10,background:'#e2e8f0',borderRadius:5,display:'flex',gap:1,overflow:'hidden'}}>
+                      <div style={{width:`${beforePct}%`,background:'#e2e8f0'}}/>
+                      <div style={{width:`${runPct}%`,background:'#1D5FAD',borderRadius:2}}/>
+                      {fermoPct>1&&<div style={{width:`${fermoPct}%`,background:'#e2e8f0'}}/>}
+                      <div style={{width:`${nowPct}%`,background:'#93c5fd',opacity:.8,borderRadius:2}}/>
+                    </div>
+                    <div style={{display:'flex',justifyContent:'space-between',marginTop:3}}>
+                      <span style={{fontSize:9,color:'#94a3b8'}}>00:00</span>
+                      <span style={{fontSize:9,color:'#1D5FAD'}}>{fmtT(inizioSess)}</span>
+                      <span style={{fontSize:9,color:'#94a3b8'}}>{fmtT(ora)}</span>
+                    </div>
+                  </div>
+                )
+              })()}
 
               {/* Timer secondari — compatti in 2 colonne */}
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:10}}>
@@ -732,6 +815,34 @@ export default function Home(){
             </div>
           </div>
 
+          {/* Prossimo cambio utensile */}
+          {(()=>{
+            const critici = (setup.fin_vita||[])
+              .filter(u=>u.life_percent!=null&&u.life_percent<30)
+              .sort((a,b)=>a.life_percent-b.life_percent)
+            if(!critici.length) return null
+            const primo = critici[0]
+            const col = primo.life_percent < 15 ? '#dc2626' : '#c2410c'
+            const bg  = primo.life_percent < 15 ? '#fef2f2' : '#fff7ed'
+            const bdr = primo.life_percent < 15 ? '#fca5a5' : '#fdba74'
+            return (
+              <div style={{background:bg,border:`1px solid ${bdr}`,borderRadius:7,
+                padding:'6px 12px',display:'flex',alignItems:'center',gap:10}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:9,fontWeight:800,color:col,letterSpacing:'.05em',
+                    textTransform:'uppercase',marginBottom:2}}>Prossimo cambio utensile</div>
+                  <div style={{fontSize:12,fontWeight:700,color:col,fontFamily:'monospace',
+                    overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                    {primo.alias}{primo.posizione?` · pos.${primo.posizione}`:''}
+                  </div>
+                </div>
+                <div style={{fontSize:14,fontWeight:800,color:col,flexShrink:0}}>
+                  {Math.round(primo.life_percent)}%
+                </div>
+              </div>
+            )
+          })()}
+
           {/* ── PROGRAMMI + UTENSILI affiancati ───────────────── */}
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
           {/* ── PROGRAMMI ATTIVI DEL PROGETTO IN LAVORAZIONE ─────────── */}
@@ -868,6 +979,16 @@ export default function Home(){
                   </div>
                 </div>
                 {/* Fermo giornaliero inline */}
+                {/* Confronto ieri stessa ora */}
+                {confrontoIeri&&(confrontoIeri.oggi>0||confrontoIeri.ieri>0)&&(
+                  <div style={{display:'flex',justifyContent:'space-between',
+                    fontSize:11,color:'#64748b',marginBottom:8}}>
+                    <span>ieri stessa ora: <b style={{color:'#0d2d5e'}}>{confrontoIeri.ieri}</b></span>
+                    <span>oggi: <b style={{
+                      color: confrontoIeri.delta>0?'#16a34a':confrontoIeri.delta<0?'#dc2626':'#64748b'
+                    }}>{confrontoIeri.oggi} {confrontoIeri.delta>0?'↑':confrontoIeri.delta<0?'↓':'='}</b></span>
+                  </div>
+                )}
                 {sessLive&&(()=>{
                   const fermoSec = sessLive?.fermo_sec_giornaliero||0
                   if(fermoSec===0&&sessLive?.attiva&&!sessLive?.in_pausa) return null

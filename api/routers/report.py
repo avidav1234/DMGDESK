@@ -684,6 +684,41 @@ def _chiudi_sessione(data: dict, sc: dict, now: str):
 
 # ── Endpoint: dati giornalieri ────────────────────────────────────────────────
 
+@router.get("/confronto-ieri")
+async def get_confronto_ieri():
+    """
+    Ritorna confronto completati oggi vs ieri alla stessa ora.
+    Usato dalla Home per il badge ↑/↓.
+    """
+    from datetime import timedelta
+    config  = carica_configurazione()
+    log     = _load_log(config)
+    ora_ora = datetime.now()
+    oggi    = ora_ora.strftime("%Y-%m-%d")
+    ieri    = (ora_ora - timedelta(days=1)).strftime("%Y-%m-%d")
+    ora_hm  = ora_ora.strftime("%H:%M")
+
+    def _completati_entro(data_str: str, entro_hm: str) -> int:
+        n = 0
+        for s in log.get("sessioni", []):
+            if s.get("data") != data_str:
+                continue
+            for p in s.get("programmi", []):
+                fine = (p.get("fine") or "")
+                if fine and fine[11:16] <= entro_hm:
+                    n += 1
+        return n
+
+    oggi_n = _completati_entro(oggi, ora_hm)
+    ieri_n = _completati_entro(ieri, ora_hm)
+    return {
+        "oggi": oggi_n,
+        "ieri": ieri_n,
+        "delta": oggi_n - ieri_n,
+        "trend": "su" if oggi_n > ieri_n else "giu" if oggi_n < ieri_n else "pari",
+    }
+
+
 @router.get("/giornaliero")
 async def get_report_giornaliero(data: str = Query(default=None)):
     """

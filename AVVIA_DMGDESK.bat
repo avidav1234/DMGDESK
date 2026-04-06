@@ -60,8 +60,9 @@ start "" http://localhost:8000
 echo.
 echo  Servizi avviati.
 echo  Browser: http://localhost:8000
-echo.
-echo  R = git pull + riavvio tutto
+
+REM -- Chiudi questa finestra, il launcher e' nel tab wt
+exit
 echo  S = riavvio solo server
 echo  U = git pull + riavvio solo backend
 echo.

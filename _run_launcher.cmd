@@ -20,31 +20,25 @@ if /i "!CMD!"=="r" (
     echo Aggiornamento + riavvio...
     git pull origin main
     if errorlevel 1 ( echo [ERRORE] git pull fallito & goto loop )
-    for /f "tokens=5" %%p in ('netstat -ano 2^>nul ^| findstr ":8000 "') do taskkill /F /PID %%p >nul 2>&1
-    for /f "tokens=5" %%p in ('netstat -ano 2^>nul ^| findstr ":8002 "') do taskkill /F /PID %%p >nul 2>&1
-    timeout /t 1 /nobreak >nul
-    start "STEP Analyzer" /min cmd /k "%~dp0..\step_analyzer\_run_step.cmd"
-    start "CAM Tracker" /min cmd /k "%~dp0..\cam_tracker\_run_cam.cmd"
-    start "" cmd /k "%~dp0.._run_backend.cmd"
-    echo Riavviato.
-    goto loop
+    echo Riavvio servizi...
+    start "" cmd /c "%~dp0AVVIA_DMGDESK.bat"
+    exit
 )
 
 if /i "!CMD!"=="s" (
     echo Riavvio server...
-    for /f "tokens=5" %%p in ('netstat -ano 2^>nul ^| findstr ":8000 "') do taskkill /F /PID %%p >nul 2>&1
-    for /f "tokens=5" %%p in ('netstat -ano 2^>nul ^| findstr ":8002 "') do taskkill /F /PID %%p >nul 2>&1
-    timeout /t 1 /nobreak >nul
-    echo Usa il pannello Backend per riavviare uvicorn manualmente.
-    goto loop
+    start "" cmd /c "%~dp0AVVIA_DMGDESK.bat"
+    exit
 )
 
 if /i "!CMD!"=="u" (
     echo Aggiornamento backend...
     git pull origin main
+    if errorlevel 1 ( echo [ERRORE] git pull fallito & goto loop )
     for /f "tokens=5" %%p in ('netstat -ano 2^>nul ^| findstr ":8000 "') do taskkill /F /PID %%p >nul 2>&1
     timeout /t 1 /nobreak >nul
-    echo Premi su nel pannello Backend e dai Invio per riavviare uvicorn.
+    start "DMGDesk Backend" cmd /k "%~dp0_run_backend.cmd"
+    echo Backend riavviato.
     goto loop
 )
 

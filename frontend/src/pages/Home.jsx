@@ -407,7 +407,7 @@ export default function Home(){
         <span style={{fontSize:12,color:'#94a3b8'}}>{dayLabel}</span>
         {/* Banner stato macchina */}
         {sessLive?.attiva&&sessLive?.programma_corrente&&(
-          <div style={{marginLeft:'auto',background:'#dbeafe',border:'1px solid #1D5FAD',
+          <div style={{marginLeft:12,background:'#dbeafe',border:'1px solid #1D5FAD',
             borderRadius:8,padding:'5px 14px',display:'flex',alignItems:'center',gap:8}}>
             <span style={{width:8,height:8,borderRadius:'50%',background:'#1D5FAD',
               flexShrink:0,display:'inline-block',animation:'pulse-dot 1.5s ease-in-out infinite'}}/>
@@ -417,16 +417,19 @@ export default function Home(){
             </span>
           </div>
         )}
-        {/* Log age indicator — sempre visibile */}
-        {macchinaLive?.connessa&&macchinaLive?.log_age_sec!=null&&!(macchinaLive?.log_stale)&&(
-          <div style={{marginLeft: sessLive?.attiva&&sessLive?.programma_corrente?8:'auto',
-            display:'flex',alignItems:'center',gap:5,fontSize:11,color:'#64748b'}}>
-            <span style={{width:6,height:6,borderRadius:'50%',background:'#16a34a',display:'inline-block'}}/>
-            <span>log {macchinaLive.log_age_sec < 60 ? `${macchinaLive.log_age_sec}s fa` : `${Math.floor(macchinaLive.log_age_sec/60)}m fa`}</span>
+        {/* Log age indicator — sempre a destra */}
+        {macchinaLive?.connessa&&macchinaLive?.log_age_sec!=null&&(
+          <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:5,fontSize:11,color:'#64748b'}}>
+            <span style={{width:6,height:6,borderRadius:'50%',
+              background:macchinaLive.log_stale?'#f59e0b':'#16a34a',display:'inline-block'}}/>
+            <span>log {macchinaLive.log_age_sec < 60
+              ? `${macchinaLive.log_age_sec}s fa`
+              : `${Math.floor(macchinaLive.log_age_sec/60)}m fa`}
+            </span>
           </div>
         )}
         {!sessLive?.attiva&&(sessLive?.fermo_sec_giornaliero||0)>0&&(
-          <div style={{marginLeft:'auto',background:'#fef2f2',border:'1px solid #fca5a5',
+          <div style={{marginLeft:12,background:'#fef2f2',border:'1px solid #fca5a5',
             borderRadius:8,padding:'5px 14px',display:'flex',alignItems:'center',gap:8}}>
             <span style={{width:8,height:8,borderRadius:'50%',background:'#ef4444',flexShrink:0,display:'inline-block'}}/>
             <span style={{fontSize:11,fontWeight:800,color:'#dc2626',letterSpacing:'0.05em'}}>MACCHINA FERMA</span>
@@ -742,8 +745,27 @@ export default function Home(){
             </div>
           ):(
             <div style={{background:'#fff',border:'1px solid #e2e8f0',borderRadius:12,
-              padding:'24px',textAlign:'center',color:'#94a3b8',fontSize:13}}>
-              Nessun pallet in lavorazione
+              padding:'16px 20px',flexShrink:0}}>
+              <div style={{display:'flex',alignItems:'center',gap:12}}>
+                <div style={{width:10,height:10,borderRadius:'50%',background:'#ef4444',flexShrink:0}}/>
+                <span style={{fontSize:14,fontWeight:800,color:'#64748b'}}>Macchina ferma</span>
+                {sessLive?.fermo_sec_giornaliero>0&&(()=>{
+                  const h=Math.floor(sessLive.fermo_sec_giornaliero/3600)
+                  const m=Math.floor((sessLive.fermo_sec_giornaliero%3600)/60)
+                  return <span style={{fontSize:12,color:'#94a3b8',marginLeft:8}}>
+                    fermo da {h>0?`${h}h `:''}${m}m oggi
+                  </span>
+                })()}
+                {macchinaLive?.allarme&&macchinaLive?.allarme_tipo==='allarme'&&(
+                  <span style={{fontSize:11,fontFamily:'monospace',color:'#dc2626',
+                    background:'#fef2f2',padding:'2px 8px',borderRadius:4,border:'1px solid #fca5a5'}}>
+                    {macchinaLive.allarme}
+                  </span>
+                )}
+              </div>
+              <div style={{marginTop:10,fontSize:12,color:'#94a3b8'}}>
+                Seleziona un pallet per avviare la lavorazione
+              </div>
             </div>
           )}
 
@@ -978,8 +1000,7 @@ export default function Home(){
                     <div style={{fontSize:10,color:'#64748b'}}>{completatiTot}/{totale} pgm</div>
                   </div>
                 </div>
-                {/* Fermo giornaliero inline */}
-                {/* Confronto ieri stessa ora */}
+                {/* Confronto ieri stessa ora + Fermo giornaliero */}
                 {confrontoIeri&&(confrontoIeri.oggi>0||confrontoIeri.ieri>0)&&(
                   <div style={{display:'flex',justifyContent:'space-between',
                     fontSize:11,color:'#64748b',marginBottom:8}}>

@@ -218,10 +218,21 @@ export default function Macchina() {
   const [setupLoading, setSetupLoading] = useState(false)
   const [storico, setStotico]         = useState([])
   const [popupSost, setPopupSost]     = useState(null)
+  const [vitaOtt, setVitaOtt]         = useState([])  // suggerimenti vita ottimale ML
 
   useEffect(() => {
     fetch('/api/tool-history/sostituzioni?limit=50')
       .then(r=>r.json()).then(d=>setStotico(d.sostituzioni||[])).catch(()=>{})
+    // Controlla sostituzioni non classificate
+    fetch('/api/tool-history/sostituzioni/non-classificate')
+      .then(r=>r.ok?r.json():null)
+      .then(d=>{ if(d?.sostituzioni?.length>0) setPopupSost(d.sostituzioni[0]) })
+      .catch(()=>{})
+    // Suggerimenti vita ottimale ML
+    fetch('/api/tool-history/vita-ottimale')
+      .then(r=>r.ok?r.json():null)
+      .then(d=>{ if(d?.suggerimenti) setVitaOtt(d.suggerimenti) })
+      .catch(()=>{})
   }, [])
 
   // ── Popup Analisi Setup (componente interno) ──────────────────────────────
@@ -825,6 +836,69 @@ export default function Macchina() {
           </table>
         )}
       </div>
+
+      {/* ── Suggerimenti Vita Ottimale ML ───────────────────────────── */}
+      {vitaOtt.length>0&&(
+        <div style={{background:'#fff',border:'1px solid #e2e8f0',borderRadius:12,
+          padding:'14px 18px',marginTop:10}}>
+          <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12}}>
+            <span style={{fontSize:10,fontWeight:800,letterSpacing:'.1em',color:'#64748b',
+              textTransform:'uppercase'}}>Vita ottimale — suggerimenti ML</span>
+            <span style={{fontSize:10,fontWeight:700,color:'#0891b2',background:'#e0f2fe',
+              padding:'2px 8px',borderRadius:8}}>{vitaOtt.length} utensili</span>
+          </div>
+          <div style={{display:'flex',flexDirection:'column',gap:6}}>
+            {vitaOtt.map((s,i)=>{
+              const confCol = s.confidenza==='alta' ? '#16a34a' : '#d97706'
+              const confBg  = s.confidenza==='alta' ? '#dcfce7' : '#fffbeb'
+              const confBdr = s.confidenza==='alta' ? '#86efac' : '#fcd34d'
+              return(
+                <div key={i} style={{background:'#f8fafc',border:'1px solid #e2e8f0',
+                  borderRadius:8,padding:'10px 14px'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:6}}>
+                    <span style={{fontSize:12,fontWeight:800,color:'#0d2d5e',
+                      fontFamily:'monospace',flex:1}}>{s.alias}</span>
+                    <span style={{fontSize:10,fontWeight:700,color:confCol,
+                      background:confBg,border:`1px solid ${confBdr}`,
+                      padding:'2px 8px',borderRadius:4}}>
+                      {s.confidenza === 'alta' ? '✓ Alta' : '~ Bassa'}
+                    </span>
+                    <span style={{fontSize:10,color:'#94a3b8'}}>{s.n_campioni} campioni</span>
+                  </div>
+                  {/* Barra vita ottimale */}
+                  <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:6}}>
+                    <span style={{fontSize:11,color:'#64748b',minWidth:90}}>Vita ottimale</span>
+                    <div style={{flex:1,height:6,background:'#e2e8f0',borderRadius:3,overflow:'hidden'}}>
+                      <div style={{height:'100%',width:`${s.vita_ottimale}%`,
+                        background: s.vita_ottimale < 50 ? '#dc2626' : s.vita_ottimale < 75 ? '#d97706' : '#16a34a',
+                        borderRadius:3}}/>
+                    </div>
+                    <span style={{fontSize:14,fontWeight:800,color:'#0d2d5e',
+                      minWidth:42,textAlign:'right'}}>{s.vita_ottimale}%</span>
+                  </div>
+                  {/* Range */}
+                  <div style={{fontSize:10,color:'#94a3b8',marginBottom:4}}>
+                    Range sicuro: {s.range_min}% — {s.range_max}%
+                    {s.n_rotture>0&&(
+                      <span style={{color:'#dc2626',marginLeft:8}}>
+                        · {s.pct_rotture}% rotture ({s.n_rotture})
+                      </span>
+                    )}
+                  </div>
+                  {/* Messaggio */}
+                  <div style={{fontSize:11,color:'#475569',fontStyle:'italic',
+                    borderTop:'1px solid #e2e8f0',paddingTop:6,marginTop:4}}>
+                    {s.messaggio}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+          <div style={{fontSize:10,color:'#94a3b8',marginTop:10,textAlign:'center'}}>
+            Basato su storico sostituzioni classificate · si aggiorna ad ogni sync TOA
+          </div>
+        </div>
+      )}
 
       {popupSost&&(
         <PopupSostituzione

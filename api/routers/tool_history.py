@@ -317,6 +317,35 @@ async def get_sostituzioni(limit: int = 100):
     }
 
 
+@router.get("/vita-ottimale/{alias}")
+async def get_vita_ottimale(alias: str):
+    """
+    Suggerimento vita ottimale per un utensile specifico.
+    Ritorna None se dati insufficienti (<10 campioni).
+    """
+    from database.db_handler import carica_configurazione as _cfg
+    from ml.vita_ottimale import calcola_vita_ottimale
+    config  = _cfg()
+    records = _load_history(config)
+    ris     = calcola_vita_ottimale(alias, records)
+    if not ris:
+        return {"suggerimento": None, "motivo": "dati insufficienti"}
+    return {"suggerimento": ris}
+
+
+@router.get("/vita-ottimale")
+async def get_vita_ottimale_magazine():
+    """
+    Suggerimenti vita ottimale per tutti gli utensili con abbastanza dati.
+    """
+    from database.db_handler import carica_configurazione as _cfg
+    from ml.vita_ottimale import suggerimenti_magazine
+    config  = _cfg()
+    records = _load_history(config)
+    ris     = suggerimenti_magazine(records)
+    return {"suggerimenti": ris, "n_utensili": len(ris)}
+
+
 @router.get("/stato-snapshot")
 async def get_stato_snapshot():
     """Stato interno: dimensione snapshot precedente e ultimo alert per alias."""

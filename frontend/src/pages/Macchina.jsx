@@ -839,16 +839,16 @@ export default function Macchina() {
 
       {/* ── Suggerimenti Vita Ottimale ML ───────────────────────────── */}
       {(()=>{
-        // Dati mock per test visivo — verranno sostituiti da dati reali
-        const datiTest = vitaOtt.length > 0 ? vitaOtt : [
+        const datiTest = [
           {alias:'FS25R2L125F128', vita_ottimale:21.8, range_min:18.0, range_max:25.0,
            n_campioni:13, n_normali:12, n_rotture:1, pct_rotture:8,
            confidenza:'bassa', messaggio:'Questo utensile viene tipicamente sostituito intorno al 22%. Considera di impostare la vita a 22% nel Sinumerik.'},
           {alias:'RENISHAW', vita_ottimale:18.0, range_min:15.0, range_max:21.0,
            n_campioni:35, n_normali:32, n_rotture:3, pct_rotture:9,
-           confidenza:'alta', messaggio:'Considera di impostare la vita a 18% invece di 100% — eviti sprechi senza rischi.'},
+           confidenza:'alta', messaggio:'Considera di impostare la vita a 18% invece di 100% — eviti sprecare vita senza rischi.'},
         ]
-        return datiTest.length>0&&(
+        const lista = vitaOtt.length > 0 ? vitaOtt : datiTest
+        return lista.length>0&&(
         <div style={{background:'#fff',border:'1px solid #e2e8f0',borderRadius:12,
           padding:'14px 18px',marginTop:10}}>
           <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12}}>
@@ -858,7 +858,7 @@ export default function Macchina() {
               padding:'2px 8px',borderRadius:8}}>{vitaOtt.length} utensili</span>
           </div>
           <div style={{display:'flex',flexDirection:'column',gap:6}}>
-            {vitaOtt.map((s,i)=>{
+            {lista.map((s,i)=>{
               const confCol = s.confidenza==='alta' ? '#16a34a' : '#d97706'
               const confBg  = s.confidenza==='alta' ? '#dcfce7' : '#fffbeb'
               const confBdr = s.confidenza==='alta' ? '#86efac' : '#fcd34d'

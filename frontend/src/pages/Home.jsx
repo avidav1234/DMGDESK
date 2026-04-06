@@ -30,6 +30,7 @@ export default function Home(){
   const [tickSec,    setTickSec]    = useState(0)
   const [loading,    setLoading]    = useState(true)
   const [oreProgetto, setOreProgetto] = useState(null)  // ore storiche progetto corrente
+  const [macchinaLive, setMacchinaLive] = useState(null)  // dati OPC UA diretti
 
   useEffect(()=>{
     const ac = new AbortController()
@@ -56,6 +57,13 @@ export default function Home(){
     fetchSessLive()
     const t2=setInterval(fetchSessLive,10000)
 
+    // Stato macchina live OPC UA: fetch iniziale + polling 10s
+    const fetchMacchinaLive=()=>
+      fetch('/api/macchina-live/stato').then(r=>r.ok?r.json():null)
+        .then(d=>{ if(!sig.aborted) setMacchinaLive(d) }).catch(()=>{})
+    fetchMacchinaLive()
+    const t6=setInterval(fetchMacchinaLive,10000)
+
     // Timer UI per countdown ETA
     const t3=setInterval(()=>setTickSec(s=>s+1),1000)
 
@@ -80,7 +88,7 @@ export default function Home(){
 
     return()=>{
       ac.abort()
-      clearInterval(t2); clearInterval(t3); clearInterval(t4); clearInterval(t5)
+      clearInterval(t2); clearInterval(t3); clearInterval(t4); clearInterval(t5); clearInterval(t6)
       window.removeEventListener('dmgdesk:stati-aggiornati', onStati)
     }
   },[])
@@ -406,6 +414,19 @@ export default function Home(){
             borderRadius:8,padding:'5px 14px',display:'flex',alignItems:'center',gap:8}}>
             <span style={{width:8,height:8,borderRadius:'50%',background:'#ef4444',flexShrink:0,display:'inline-block'}}/>
             <span style={{fontSize:11,fontWeight:800,color:'#dc2626',letterSpacing:'0.05em'}}>MACCHINA FERMA</span>
+            {macchinaLive?.allarme&&macchinaLive?.allarme_tipo==='allarme'&&(
+              <span style={{fontSize:11,fontFamily:'monospace',color:'#991b1b',marginLeft:4,
+                maxWidth:200,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                — {macchinaLive.allarme}
+              </span>
+            )}
+          </div>
+        )}
+        {macchinaLive?.log_stale&&(macchinaLive?.log_age_sec||0)>120&&sessLive?.attiva&&(
+          <div style={{marginLeft:'auto',background:'#fffbeb',border:'1px solid #fcd34d',
+            borderRadius:8,padding:'5px 14px',display:'flex',alignItems:'center',gap:8}}>
+            <span style={{fontSize:12}}>⚠️</span>
+            <span style={{fontSize:11,fontWeight:700,color:'#92400e'}}>Log fermo da {Math.floor((macchinaLive.log_age_sec||0)/60)} min</span>
           </div>
         )}
       </div>
@@ -475,6 +496,59 @@ export default function Home(){
                   </div>
                 )}
               </div>
+
+              {/* ── INFO LIVE OPC UA: allarme, log stale, T number ── */}
+              {macchinaLive?.connessa&&(()=>{
+                const allarme    = macchinaLive.allarme
+                const allarmeT   = macchinaLive.allarme_tipo
+                const logStale   = macchinaLive.log_stale
+                const logAge     = macchinaLive.log_age_sec
+                const tNum       = macchinaLive.numero_utensile
+                const showAlarm  = allarme && allarmeT === 'allarme'
+                const showStale  = logStale && logAge > 120
+                const showTNum   = tNum && tNum > 0
+                if(!showAlarm && !showStale && !showTNum) return null
+                return (
+                  <div style={{display:'flex',flexDirection:'column',gap:5,marginBottom:10}}>
+                    {/* Allarme critico */}
+                    {showAlarm&&(
+                      <div style={{background:'#fef2f2',border:'1px solid #fca5a5',borderRadius:7,
+                        padding:'6px 10px',display:'flex',alignItems:'center',gap:8}}>
+                        <span style={{fontSize:16}}>🚨</span>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:9,fontWeight:800,color:'#dc2626',letterSpacing:'0.07em',textTransform:'uppercase'}}>Allarme attivo</div>
+                          <div style={{fontSize:11,fontWeight:700,color:'#991b1b',fontFamily:'monospace',
+                            overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{allarme}</div>
+                        </div>
+                      </div>
+                    )}
+                    {/* Log stale */}
+                    {showStale&&(
+                      <div style={{background:'#fffbeb',border:'1px solid #fcd34d',borderRadius:7,
+                        padding:'6px 10px',display:'flex',alignItems:'center',gap:8}}>
+                        <span style={{fontSize:14}}>⚠️</span>
+                        <div>
+                          <div style={{fontSize:9,fontWeight:800,color:'#92400e',letterSpacing:'0.07em',textTransform:'uppercase'}}>Log non aggiornato</div>
+                          <div style={{fontSize:11,color:'#78350f'}}>Fermo da {Math.floor(logAge/60)} min — verifica MchnSrv</div>
+                        </div>
+                      </div>
+                    )}
+                    {/* T number utensile */}
+                    {showTNum&&!showAlarm&&(
+                      <div style={{background:'#f0fdf4',border:'1px solid #bbf7d0',borderRadius:7,
+                        padding:'5px 10px',display:'flex',alignItems:'center',gap:8}}>
+                        <span style={{fontSize:12}}>🔧</span>
+                        <span style={{fontSize:11,color:'#15803d'}}>
+                          Utensile attivo: <b style={{fontFamily:'monospace'}}>T{tNum}</b>
+                          {macchinaLive.utensile_attivo&&(
+                            <span style={{marginLeft:6,fontFamily:'monospace',color:'#166534'}}>{macchinaLive.utensile_attivo}</span>
+                          )}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
 
               {/* ETA — prominente */}
               {etaCalc&&(

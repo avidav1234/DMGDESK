@@ -217,6 +217,7 @@ export default function Macchina() {
   const [setupData,  setSetupData]    = useState(null)
   const [setupLoading, setSetupLoading] = useState(false)
   const [storico, setStotico]         = useState([])
+  const [popupSost, setPopupSost]     = useState(null)
 
   useEffect(() => {
     fetch('/api/tool-history/sostituzioni?limit=50')

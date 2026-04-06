@@ -32,7 +32,7 @@ if not exist "%~dp0step_analyzer\main.py" (
     echo        ATTENZIONE: step_analyzer\main.py non trovato — servizio saltato
     echo        Esegui: git pull origin main
 ) else (
-    start "STEP Analyzer :8002" /min cmd /c "cd /d "%~dp0step_analyzer" && uvicorn main:app --host 127.0.0.1 --port 8002 2>&1 | tee step_analyzer.log"
+    start "STEP Analyzer :8002" /min cmd /c "cd /d "%~dp0step_analyzer" && uvicorn main:app --host 127.0.0.1 --port 8002 >> "%~dp0step_analyzer.log" 2>&1"
     timeout /t 3 /nobreak >nul
     REM Verifica che sia partito
     curl -s http://127.0.0.1:8002/stato >nul 2>&1
@@ -62,7 +62,7 @@ if not exist "%~dp0frontend\dist\index.html" (
 
 REM ── 3. Backend DMGDesk (porta 8000) ──────────────────────────────────────────
 echo [3/4] Avvio backend DMGDesk (porta 8000)...
-start "DMGDesk Backend :8000" /min cmd /c "cd /d "%~dp0" && uvicorn api.main:app --host 0.0.0.0 --port 8000 2>&1 | tee dmgdesk_server.log & echo DONE"
+start "DMGDesk Backend :8000" /min cmd /c "cd /d "%~dp0" && uvicorn api.main:app --host 0.0.0.0 --port 8000 >> "%~dp0dmgdesk_server.log" 2>&1"
 timeout /t 3 /nobreak >nul
 echo        OK — http://localhost:8000
 

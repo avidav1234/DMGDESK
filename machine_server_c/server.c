@@ -21,6 +21,8 @@
 #define DEFAULT_OPCUA_LOG  "F:\\oem\\opcualegacy\\OpcUaLegacy.log"
 #define DEFAULT_SHARE_DIR  "Z:\\DMG_DMC_160U\\"
 #define DEFAULT_EXPORT_INT 60000   /* ms tra una copia e l'altra */
+#define DEFAULT_TOA_SRC    "F:\\dh\\wks.dir\\_TOOLSYNC.WPD\\TOOL_SYNC.TOA"
+#define DEFAULT_TMA_SRC    "F:\\dh\\wks.dir\\_TOOLSYNC.WPD\\TOOL_SYNC.TMA"
 #define BUF_SIZE           65536
 #define MAX_PATH_LEN       512
 
@@ -62,6 +64,12 @@ static void get_share_dir(char *out, int n) {
 }
 static int get_export_interval(void) {
     return (int)GetPrivateProfileIntA("server", "export_interval_ms", DEFAULT_EXPORT_INT, CFG_FILE);
+}
+static void get_toa_src(char *out, int n) {
+    GetPrivateProfileStringA("server", "toa_src", DEFAULT_TOA_SRC, out, n, CFG_FILE);
+}
+static void get_tma_src(char *out, int n) {
+    GetPrivateProfileStringA("server", "tma_src", DEFAULT_TMA_SRC, out, n, CFG_FILE);
 }
 
 /* ── Mutex globale — serializza chiamate VBS (F6) ────────────────────────── */
@@ -596,9 +604,19 @@ static DWORD WINAPI export_thread(LPVOID unused) {
     char share_dir[MAX_PATH_LEN];
     int  interval_ms;
 
+    char toa_src[MAX_PATH_LEN];
+    char tma_src[MAX_PATH_LEN];
+    FILETIME toa_last_ft = {0};  /* ultima mtime TOA copiato */
+    FILETIME tma_last_ft = {0};  /* ultima mtime TMA copiato */
+
     get_opcua_log(opcua_log, sizeof(opcua_log));
     get_share_dir(share_dir, sizeof(share_dir));
+    get_toa_src(toa_src, sizeof(toa_src));
+    get_tma_src(tma_src, sizeof(tma_src));
     interval_ms = get_export_interval();
+
+    printf("[EXPORT] TOA src: %s\n", toa_src);
+    printf("[EXPORT] TMA src: %s\n", tma_src);
 
     /* Assicura che share_dir termini con \ */
     int slen = strlen(share_dir);
@@ -687,7 +705,87 @@ static DWORD WINAPI export_thread(LPVOID unused) {
 
         ciclo++;
 
-        /* 2. Heartbeat — xp_heartbeat.txt
+        /* 2. Copia TOA sulla share se modificato */
+        {
+            WIN32_FILE_ATTRIBUTE_DATA fad_toa;
+            if (GetFileAttributesExA(toa_src, GetFileExInfoStandard, &fad_toa)) {
+                /* Copia solo se mtime cambiato dall'ultima copia */
+                if (CompareFileTime(&fad_toa.ftLastWriteTime, &toa_last_ft) != 0) {
+                    char toa_dest[MAX_PATH_LEN];
+                    snprintf(toa_dest, sizeof(toa_dest), "%sTOOL_SYNC.TOA", share_dir);
+
+                    HANDLE hSrc = CreateFileA(toa_src,
+                        GENERIC_READ,
+                        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                        NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+
+                    if (hSrc != INVALID_HANDLE_VALUE) {
+                        HANDLE hDst = CreateFileA(toa_dest,
+                            GENERIC_WRITE, FILE_SHARE_READ, NULL,
+                            CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+
+                        if (hDst != INVALID_HANDLE_VALUE) {
+                            char buf[4096]; DWORD nr, nw; int toa_ok = 1;
+                            while (ReadFile(hSrc, buf, sizeof(buf), &nr, NULL) && nr > 0) {
+                                if (!WriteFile(hDst, buf, nr, &nw, NULL) || nw != nr) {
+                                    toa_ok = 0; break;
+                                }
+                            }
+                            CloseHandle(hDst);
+                            if (toa_ok) {
+                                toa_last_ft = fad_toa.ftLastWriteTime;
+                                printf("[TOA] %s copiato su share\n", ts);
+                            } else {
+                                printf("[TOA] %s WARN errore scrittura dest\n", ts);
+                            }
+                        } else {
+                            printf("[TOA] %s WARN apertura dest errore %lu\n",
+                                   ts, GetLastError());
+                        }
+                        CloseHandle(hSrc);
+                    } else {
+                        /* File TOA non ancora disponibile — normale finche non eseguito sync */
+                    }
+                }
+            }
+
+            /* Copia TMA se modificato */
+            WIN32_FILE_ATTRIBUTE_DATA fad_tma;
+            if (GetFileAttributesExA(tma_src, GetFileExInfoStandard, &fad_tma)) {
+                if (CompareFileTime(&fad_tma.ftLastWriteTime, &tma_last_ft) != 0) {
+                    char tma_dest[MAX_PATH_LEN];
+                    snprintf(tma_dest, sizeof(tma_dest), "%sTOOL_SYNC.TMA", share_dir);
+
+                    HANDLE hSrc = CreateFileA(tma_src,
+                        GENERIC_READ,
+                        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                        NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+
+                    if (hSrc != INVALID_HANDLE_VALUE) {
+                        HANDLE hDst = CreateFileA(tma_dest,
+                            GENERIC_WRITE, FILE_SHARE_READ, NULL,
+                            CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+
+                        if (hDst != INVALID_HANDLE_VALUE) {
+                            char buf[4096]; DWORD nr, nw; int tma_ok = 1;
+                            while (ReadFile(hSrc, buf, sizeof(buf), &nr, NULL) && nr > 0) {
+                                if (!WriteFile(hDst, buf, nr, &nw, NULL) || nw != nr) {
+                                    tma_ok = 0; break;
+                                }
+                            }
+                            CloseHandle(hDst);
+                            if (tma_ok) {
+                                tma_last_ft = fad_tma.ftLastWriteTime;
+                                printf("[TMA] %s copiato su share\n", ts);
+                            }
+                        }
+                        CloseHandle(hSrc);
+                    }
+                }
+            }
+        }
+
+        /* 3. Heartbeat — xp_heartbeat.txt
               FIX: usa CreateFileA invece di fopen — gestisce meglio la rete */
         char hb_path[MAX_PATH_LEN];
         snprintf(hb_path, sizeof(hb_path), "%sxp_heartbeat.txt", share_dir);
@@ -709,7 +807,7 @@ static DWORD WINAPI export_thread(LPVOID unused) {
             CloseHandle(hHb);
         }
 
-        /* 3. Log esecuzione — esporta_log.txt
+        /* 4. Log esecuzione — esporta_log.txt
               FIX: rotazione automatica ogni 500 righe (~8 ore a 60s)
               Usa CreateFileA per append robusto sulla rete */
         char log_path[MAX_PATH_LEN];

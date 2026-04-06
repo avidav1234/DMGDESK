@@ -11,14 +11,6 @@ if errorlevel 1 (
     pause & exit /b 1
 )
 
-REM -- Verifica Windows Terminal
-wt --version >nul 2>&1
-if errorlevel 1 (
-    echo [ERRORE] Windows Terminal non trovato.
-    echo Installalo da: https://aka.ms/terminal
-    pause & exit /b 1
-)
-
 :start_services
 
 REM -- Kill servizi gia in esecuzione
@@ -41,51 +33,43 @@ if not exist "%~dp0frontend\dist\index.html" (
     echo Build completata.
 )
 
-REM -- Crea script temporanei per ogni servizio (evita problemi virgolette con wt)
-set TMP_DIR=%~dp0
+REM -- Crea script temporanei per ogni servizio
+set ROOT=%~dp0
 
-echo @echo off > "%TMP_DIR%_run_backend.cmd"
-echo chcp 65001 ^>nul >> "%TMP_DIR%_run_backend.cmd"
-echo cd /d "%~dp0" >> "%TMP_DIR%_run_backend.cmd"
-echo echo. >> "%TMP_DIR%_run_backend.cmd"
-echo echo  === DMGDesk Backend :8000 === >> "%TMP_DIR%_run_backend.cmd"
-echo echo. >> "%TMP_DIR%_run_backend.cmd"
-echo uvicorn api.main:app --host 0.0.0.0 --port 8000 >> "%TMP_DIR%_run_backend.cmd"
+echo @echo off > "%ROOT%_run_backend.cmd"
+echo chcp 65001 ^>nul >> "%ROOT%_run_backend.cmd"
+echo cd /d "%ROOT%" >> "%ROOT%_run_backend.cmd"
+echo echo  === DMGDesk Backend :8000 === >> "%ROOT%_run_backend.cmd"
+echo uvicorn api.main:app --host 0.0.0.0 --port 8000 >> "%ROOT%_run_backend.cmd"
 
-echo @echo off > "%TMP_DIR%_run_step.cmd"
-echo chcp 65001 ^>nul >> "%TMP_DIR%_run_step.cmd"
-echo cd /d "%~dp0step_analyzer" >> "%TMP_DIR%_run_step.cmd"
-echo echo. >> "%TMP_DIR%_run_step.cmd"
-echo echo  === STEP Analyzer :8002 === >> "%TMP_DIR%_run_step.cmd"
-echo echo. >> "%TMP_DIR%_run_step.cmd"
-echo uvicorn main:app --host 127.0.0.1 --port 8002 >> "%TMP_DIR%_run_step.cmd"
+echo @echo off > "%ROOT%_run_step.cmd"
+echo chcp 65001 ^>nul >> "%ROOT%_run_step.cmd"
+echo cd /d "%ROOT%step_analyzer" >> "%ROOT%_run_step.cmd"
+echo echo  === STEP Analyzer :8002 === >> "%ROOT%_run_step.cmd"
+echo uvicorn main:app --host 127.0.0.1 --port 8002 >> "%ROOT%_run_step.cmd"
 
-echo @echo off > "%TMP_DIR%_run_cam.cmd"
-echo chcp 65001 ^>nul >> "%TMP_DIR%_run_cam.cmd"
-echo cd /d "%~dp0cam_tracker" >> "%TMP_DIR%_run_cam.cmd"
-echo echo. >> "%TMP_DIR%_run_cam.cmd"
-echo echo  === CAM Tracker === >> "%TMP_DIR%_run_cam.cmd"
-echo echo. >> "%TMP_DIR%_run_cam.cmd"
-echo python cam_tracker.py >> "%TMP_DIR%_run_cam.cmd"
+echo @echo off > "%ROOT%_run_cam.cmd"
+echo chcp 65001 ^>nul >> "%ROOT%_run_cam.cmd"
+echo cd /d "%ROOT%cam_tracker" >> "%ROOT%_run_cam.cmd"
+echo echo  === CAM Tracker === >> "%ROOT%_run_cam.cmd"
+echo python cam_tracker.py >> "%ROOT%_run_cam.cmd"
 
-REM -- Avvia Windows Terminal con 3 pannelli usando gli script temporanei
-wt --maximized ^
-   new-tab --title "DMGDesk Backend" --tabColor "#0d2d5e" cmd /k "%TMP_DIR%_run_backend.cmd" ^
-   ; split-pane --vertical --size 0.35 --title "STEP Analyzer" --tabColor "#1a4a2e" cmd /k "%TMP_DIR%_run_step.cmd" ^
-   ; split-pane --horizontal --title "CAM Tracker" --tabColor "#4a2e1a" cmd /k "%TMP_DIR%_run_cam.cmd"
+REM -- Avvia Windows Terminal con 3 pannelli
+REM   Layout: Backend (sinistra) | STEP Analyzer (destra alta)
+REM                               | CAM Tracker   (destra bassa)
+wt --maximized new-tab --title "DMGDesk" --tabColor "#0d2d5e" cmd /k "%ROOT%_run_backend.cmd" ^; split-pane --vertical --size 0.35 --title "STEP Analyzer" --tabColor "#1a4a2e" cmd /k "%ROOT%_run_step.cmd" ^; split-pane --horizontal --title "CAM Tracker" --tabColor "#4a2e1a" cmd /k "%ROOT%_run_cam.cmd"
 
-REM -- Apri browser dopo che i servizi sono partiti
+REM -- Apri browser
 timeout /t 5 /nobreak >nul
 start "" http://localhost:8000
 
 echo.
-echo  Servizi avviati in Windows Terminal.
-echo  Browser: http://localhost:8000
+echo  Servizi avviati. Browser: http://localhost:8000
 echo.
 echo  Comandi:
-echo    R + Invio  = git pull + riavvio tutto
-echo    S + Invio  = riavvio solo server
-echo    U + Invio  = git pull + riavvio solo backend
+echo    R = git pull + riavvio tutto
+echo    S = riavvio solo server
+echo    U = git pull + riavvio solo backend
 echo.
 
 :wait_input
@@ -109,10 +93,7 @@ if /i "!CMD!"=="u" (
     for /f "tokens=5" %%p in ('netstat -ano 2^>nul ^| findstr ":8000 "') do taskkill /F /PID %%p >nul 2>&1
     for /f "tokens=5" %%p in ('netstat -ano 2^>nul ^| findstr ":8002 "') do taskkill /F /PID %%p >nul 2>&1
     timeout /t 1 /nobreak >nul
-    wt --maximized ^
-       new-tab --title "DMGDesk Backend" --tabColor "#0d2d5e" cmd /k "%TMP_DIR%_run_backend.cmd" ^
-       ; split-pane --vertical --size 0.35 --title "STEP Analyzer" --tabColor "#1a4a2e" cmd /k "%TMP_DIR%_run_step.cmd" ^
-       ; split-pane --horizontal --title "CAM Tracker" --tabColor "#4a2e1a" cmd /k "%TMP_DIR%_run_cam.cmd"
+    wt --maximized new-tab --title "DMGDesk" --tabColor "#0d2d5e" cmd /k "%ROOT%_run_backend.cmd" ^; split-pane --vertical --size 0.35 --title "STEP Analyzer" --tabColor "#1a4a2e" cmd /k "%ROOT%_run_step.cmd" ^; split-pane --horizontal --title "CAM Tracker" --tabColor "#4a2e1a" cmd /k "%ROOT%_run_cam.cmd"
     echo Backend riavviato.
     goto wait_input
 )

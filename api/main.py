@@ -181,6 +181,16 @@ async def startup():
     except Exception:
         pass  # non bloccare lo startup se la config non è disponibile
 
+    # ── Check pallet completati ──────────────────────────────────────────────
+    try:
+        from api.routers.pallet import check_pallet_completati as _check_pallet
+        _cfg_pallet = _cfg()
+        _n = _check_pallet(_cfg_pallet)
+        if _n:
+            log.info(f"Startup: {_n} pallet portati a FINITO (tutti i programmi completati)")
+    except Exception as _e:
+        log.warning(f"Startup check pallet: {_e}")
+
     # ── Telegram Monitor ──────────────────────────────────────────────────
     import asyncio as _asyncio
     from telegram_monitor.config import load_telegram_config

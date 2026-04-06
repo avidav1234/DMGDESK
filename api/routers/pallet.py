@@ -193,6 +193,58 @@ class SetLavorazioneBody(BaseModel):
 # ── Endpoints ──────────────────────────────────────────────────────────────
 
 @router.get("")
+def check_pallet_completati(config: dict) -> int:
+    """
+    Controlla tutti i pallet in stato 'grezzo' o 'in_lavorazione':
+    se tutti i programmi fresatura sono completati, porta il pallet a 'finito'.
+    Ritorna il numero di pallet aggiornati.
+    Chiamata allo startup del backend.
+    """
+    from datetime import datetime as _dt
+    from utils.logger import get_logger as _gl
+    log = _gl("routers.pallet")
+
+    try:
+        state = _load(config)
+        from api.routers.progetti import _load_progetti
+        data  = _load_progetti(config)
+        now   = _dt.now().strftime("%d/%m/%Y %H:%M")
+        aggiornati = 0
+
+        for p in state["pallet"]:
+            stato = (p.get("stato") or "").lower().replace(" ", "_")
+            if stato not in ("grezzo", "in_lavorazione"):
+                continue
+            pid = p.get("progetto_id")
+            if not pid:
+                continue
+            proj = next((pr for pr in data.get("projects", []) if pr.get("id") == pid), None)
+            if not proj:
+                continue
+            all_pgm = [
+                pg for s in proj.get("steps", [])
+                for t in s.get("tasks", [])
+                if t.get("text", "").strip().lower() == "fresatura"
+                for pg in t.get("programs", [])
+                if pg.get("tipoGruppo") != "ipm"
+            ]
+            if all_pgm and all(pg.get("stato") == "completato" for pg in all_pgm):
+                log.info(f"Pallet {p['numero']} ({proj.get('name')}) — tutti completati, porto a FINITO")
+                p["stato"]     = "finito"
+                p["aggiornato"] = now
+                aggiornati += 1
+
+        if aggiornati:
+            _save(config, state)
+            log.info(f"check_pallet_completati: {aggiornati} pallet portati a FINITO")
+
+        return aggiornati
+    except Exception as e:
+        from utils.logger import get_logger as _gl2
+        _gl2("routers.pallet").error(f"check_pallet_completati errore: {e}")
+        return 0
+
+
 @router.get("/")
 async def get_pallet():
     """Restituisce lo stato attuale di tutti i pallet.

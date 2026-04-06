@@ -33,12 +33,25 @@ if not exist "%~dp0frontend\dist\index.html" (
     echo Build completata.
 )
 
-REM -- Avvia 3 finestre separate
+REM -- Crea script temporanei per ogni servizio
+echo @echo off > "%~dp0_run_backend.cmd"
+echo cd /d "%~dp0" >> "%~dp0_run_backend.cmd"
+echo echo === DMGDesk Backend === >> "%~dp0_run_backend.cmd"
+echo uvicorn api.main:app --host 0.0.0.0 --port 8000 >> "%~dp0_run_backend.cmd"
+
+echo @echo off > "%~dp0_run_step.cmd"
+echo cd /d "%~dp0step_analyzer" >> "%~dp0_run_step.cmd"
+echo echo === STEP Analyzer === >> "%~dp0_run_step.cmd"
+echo uvicorn main:app --host 127.0.0.1 --port 8002 >> "%~dp0_run_step.cmd"
+
+echo @echo off > "%~dp0_run_cam.cmd"
+echo cd /d "%~dp0cam_tracker" >> "%~dp0_run_cam.cmd"
+echo echo === CAM Tracker === >> "%~dp0_run_cam.cmd"
+echo python cam_tracker.py >> "%~dp0_run_cam.cmd"
+
+REM -- Avvia Windows Terminal con 4 tab
 echo Avvio servizi...
-start "DMGDesk Backend :8000" cmd /k "cd /d "%~dp0" && echo === DMGDesk Backend === && uvicorn api.main:app --host 0.0.0.0 --port 8000"
-timeout /t 2 /nobreak >nul
-start "STEP Analyzer :8002" cmd /k "cd /d "%~dp0step_analyzer" && echo === STEP Analyzer === && uvicorn main:app --host 127.0.0.1 --port 8002"
-start "CAM Tracker" cmd /k "cd /d "%~dp0cam_tracker" && echo === CAM Tracker === && python cam_tracker.py"
+wt --maximized new-tab --title "Backend" --tabColor "#0d2d5e" cmd /k "%~dp0_run_backend.cmd" ^; new-tab --title "STEP" --tabColor "#1a4a2e" cmd /k "%~dp0_run_step.cmd" ^; new-tab --title "CAM" --tabColor "#4a2e1a" cmd /k "%~dp0_run_cam.cmd" ^; new-tab --title "Launcher" --tabColor "#2e1a4a" cmd /k "%~dp0_run_launcher.cmd"
 
 REM -- Apri browser
 timeout /t 4 /nobreak >nul
@@ -73,7 +86,7 @@ if /i "!CMD!"=="u" (
     git pull origin main
     for /f "tokens=5" %%p in ('netstat -ano 2^>nul ^| findstr ":8000 "') do taskkill /F /PID %%p >nul 2>&1
     timeout /t 1 /nobreak >nul
-    start "DMGDesk Backend :8000" cmd /k "cd /d "%~dp0" && echo === DMGDesk Backend === && uvicorn api.main:app --host 0.0.0.0 --port 8000"
+    start "Backend" cmd /k "%~dp0_run_backend.cmd"
     echo Backend riavviato.
     goto wait_input
 )

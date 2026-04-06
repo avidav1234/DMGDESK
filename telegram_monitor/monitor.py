@@ -92,22 +92,40 @@ class MachineMonitor:
             log.error(f"Daily summary: errore lettura report: {e}")
             return
 
-        sessioni    = report.get("sessioni_ieri") or report.get("sessioni") or []
+        # Filtra sessioni delle 24h precedenti: da mezzanotte ieri a mezzanotte oggi
+        from datetime import timedelta
+        oggi       = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        ieri       = oggi - timedelta(days=1)
+        label_ieri = ieri.strftime("%d/%m/%Y")
+
+        sessioni_tutte = report.get("sessioni") or []
+        sessioni = []
+        for s in sessioni_tutte:
+            try:
+                inizio = datetime.fromisoformat(s["inizio"])
+                if ieri <= inizio < oggi:
+                    sessioni.append(s)
+            except Exception:
+                pass
+
         durata_tot  = sum(s.get("durata_sec", 0) for s in sessioni)
         n_programmi = sum(len(s.get("programmi", [])) for s in sessioni)
-        allarmi     = report.get("allarmi_ieri", 0)
         ore  = durata_tot // 3600
         mins = (durata_tot % 3600) // 60
 
-        await self._notifier.send(
-            f"\U0001f4ca <b>DMG DMC 160U \u2014 RIEPILOGO GIORNALIERO</b>\n"
-            f"\U0001f4c5 {datetime.now().strftime('%d/%m/%Y')} \u2014 turno precedente\n\n"
-            f"\u23f1 Lavorazione totale: <b>{ore}h {mins}m</b>\n"
-            f"\U0001f504 Sessioni: {len(sessioni)}\n"
-            f"\U0001f4c4 Programmi eseguiti: {n_programmi}\n"
-            f"\U0001f6a8 Allarmi: {allarmi or 0}"
-        )
-        log.info("Daily summary inviato")
+        if not sessioni:
+            await self._notifier.send(
+                f"\U0001f4ca <b>DMG DMC 160U \u2014 RIEPILOGO {label_ieri}</b>\n\n"
+                f"\u23f9 Nessuna lavorazione registrata"
+            )
+        else:
+            await self._notifier.send(
+                f"\U0001f4ca <b>DMG DMC 160U \u2014 RIEPILOGO {label_ieri}</b>\n\n"
+                f"\u23f1 Lavorazione totale: <b>{ore}h {mins}m</b>\n"
+                f"\U0001f504 Sessioni: {len(sessioni)}\n"
+                f"\U0001f4c4 Programmi eseguiti: {n_programmi}"
+            )
+        log.info(f"Daily summary inviato — {len(sessioni)} sessioni, {ore}h {mins}m")
 
     async def _check_daily_summary(self):
         now = datetime.now()

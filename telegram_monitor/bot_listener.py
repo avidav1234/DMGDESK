@@ -111,21 +111,39 @@ class BotListener:
             await self._send(f"❌ Errore lettura report: {e}")
             return
 
-        sessioni    = report.get("sessioni_ieri") or report.get("sessioni") or []
+        # Ultime 24h: da mezzanotte ieri a mezzanotte oggi
+        from datetime import timedelta
+        oggi       = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        ieri       = oggi - timedelta(days=1)
+        label_ieri = ieri.strftime("%d/%m/%Y")
+
+        sessioni_tutte = report.get("sessioni") or []
+        sessioni = []
+        for s in sessioni_tutte:
+            try:
+                inizio = datetime.fromisoformat(s["inizio"])
+                if ieri <= inizio < oggi:
+                    sessioni.append(s)
+            except Exception:
+                pass
+
         durata_tot  = sum(s.get("durata_sec", 0) for s in sessioni)
         n_programmi = sum(len(s.get("programmi", [])) for s in sessioni)
-        allarmi     = report.get("allarmi_ieri", 0)
         ore  = durata_tot // 3600
         mins = (durata_tot % 3600) // 60
-        now  = datetime.now().strftime("%d/%m/%Y %H:%M")
 
-        await self._send(
-            f"📊 <b>Riepilogo — {now}</b>\n\n"
-            f"⏱ Lavorazione totale: <b>{ore}h {mins}m</b>\n"
-            f"🔄 Sessioni: {len(sessioni)}\n"
-            f"📄 Programmi eseguiti: {n_programmi}\n"
-            f"🚨 Allarmi: {allarmi or 0}"
-        )
+        if not sessioni:
+            await self._send(
+                f"📊 <b>Riepilogo {label_ieri}</b>\n\n"
+                f"⏹ Nessuna lavorazione registrata"
+            )
+        else:
+            await self._send(
+                f"📊 <b>Riepilogo {label_ieri}</b>\n\n"
+                f"⏱ Lavorazione totale: <b>{ore}h {mins}m</b>\n"
+                f"🔄 Sessioni: {len(sessioni)}\n"
+                f"📄 Programmi eseguiti: {n_programmi}"
+            )
 
     async def _cmd_help(self):
         await self._send(

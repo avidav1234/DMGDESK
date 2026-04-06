@@ -81,3 +81,7 @@ wt --maximized new-tab --title "DMGDesk" --tabColor "#0d2d5e" cmd /k "%ROOT%_run
 REM -- Apri browser
 timeout /t 5 /nobreak >nul
 start "" http://localhost:8000
+
+REM -- Tieni viva questa finestra (il launcher R/S/U e' nel pannello wt)
+echo Servizi avviati. Questa finestra puo' essere chiusa.
+pause

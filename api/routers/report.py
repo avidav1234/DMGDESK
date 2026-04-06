@@ -424,18 +424,61 @@ def aggiorna_da_log(
                 # Avvia nuova sessione se non esiste
                 if not sc.get("sessione_id"):
                     sess_id = str(uuid.uuid4())[:8]
+
+                    # ── Contesto inizio sessione (per ML) ──────────────────
+                    # Snapshot della situazione al momento esatto dell'avvio
+                    contesto_avvio = {}
+                    try:
+                        from api.routers.tool_history import _load_history as _th_load
+                        from database.db_handler import carica_configurazione as _cfg_ctx
+                        from pathlib import Path as _Path
+                        import json as _json
+                        _cfg_ctx_data = _cfg_ctx()
+                        _tools_path = _Path(
+                            _cfg_ctx_data.get("tools_toa_folder") or "."
+                        ) / "tools_machine.json"
+                        if _tools_path.exists():
+                            _tm = _json.loads(_tools_path.read_text(encoding="utf-8"))
+                            _tools = list((_tm.get("tools") or {}).values())
+                            contesto_avvio["utensili_montati"]   = len(_tools)
+                            contesto_avvio["utensili_sotto_20"]  = sum(
+                                1 for t in _tools
+                                if t.get("life_percent") is not None and t["life_percent"] < 20
+                            )
+                            contesto_avvio["utensili_sotto_40"]  = sum(
+                                1 for t in _tools
+                                if t.get("life_percent") is not None and t["life_percent"] < 40
+                            )
+                            contesto_avvio["vita_media"]         = round(
+                                sum(t.get("life_percent") or 0 for t in _tools) / len(_tools), 1
+                            ) if _tools else None
+                        # Stato pallet adiacenti
+                        from api.routers.pallet import _load as _pal_load
+                        _pal_state = _pal_load(_cfg_ctx_data)
+                        _pallets = _pal_state.get("pallet", [])
+                        contesto_avvio["pallet_grezzi"]   = sum(1 for p in _pallets if p.get("stato") == "grezzo")
+                        contesto_avvio["pallet_finiti"]   = sum(1 for p in _pallets if p.get("stato") == "finito")
+                        contesto_avvio["pallet_vuoti"]    = sum(1 for p in _pallets if p.get("stato") == "vuoto")
+                        # Ora e giorno
+                        _dt_now = datetime.fromisoformat(now)
+                        contesto_avvio["ora_avvio"]       = _dt_now.hour
+                        contesto_avvio["giorno_settimana"]= _dt_now.weekday()  # 0=lun, 6=dom
+                    except Exception as _e:
+                        contesto_avvio["_errore"] = str(_e)
+
                     sessione = {
-                        "id":          sess_id,
-                        "data":        now[:10],
-                        "progetto":    progetto_nome or "—",
-                        "progetto_id": progetto_id or "",
-                        "pallet":      pallet_num,
-                        "inizio":    now,
-                        "fine":      None,
-                        "durata_sec": None,
-                        "programmi": [],
-                        "gap_sec":   0,
-                        "utensili":  {},
+                        "id":            sess_id,
+                        "data":          now[:10],
+                        "progetto":      progetto_nome or "—",
+                        "progetto_id":   progetto_id or "",
+                        "pallet":        pallet_num,
+                        "inizio":        now,
+                        "fine":          None,
+                        "durata_sec":    None,
+                        "programmi":     [],
+                        "gap_sec":       0,
+                        "utensili":      {},
+                        "contesto_avvio": contesto_avvio,  # snapshot ML
                     }
                     data["sessioni"].append(sessione)
                     sc["sessione_id"]  = sess_id

@@ -2,13 +2,7 @@
 setlocal enabledelayedexpansion
 cd /d "%~dp0"
 chcp 65001 >nul
-title DMGDesk - Avvio completo
-
-echo.
-echo  =========================================
-echo       DMGDesk - Avvio completo
-echo  =========================================
-echo.
+title DMGDesk - Launcher
 
 REM -- Verifica Python
 python --version >nul 2>&1
@@ -17,36 +11,25 @@ if errorlevel 1 (
     pause & exit /b 1
 )
 
+REM -- Verifica Windows Terminal
+wt --version >nul 2>&1
+if errorlevel 1 (
+    echo [ERRORE] Windows Terminal non trovato.
+    echo Installalo da: https://aka.ms/terminal
+    pause & exit /b 1
+)
+
+:start_services
+
 REM -- Kill servizi gia in esecuzione
-echo [0/4] Pulizia porte 8000 e 8002...
-for /f "tokens=5" %%p in ('netstat -ano 2^>nul ^| findstr ":8000 "') do (
-    taskkill /F /PID %%p >nul 2>&1
-)
-for /f "tokens=5" %%p in ('netstat -ano 2^>nul ^| findstr ":8002 "') do (
-    taskkill /F /PID %%p >nul 2>&1
-)
+echo Pulizia porte 8000 e 8002...
+for /f "tokens=5" %%p in ('netstat -ano 2^>nul ^| findstr ":8000 "') do taskkill /F /PID %%p >nul 2>&1
+for /f "tokens=5" %%p in ('netstat -ano 2^>nul ^| findstr ":8002 "') do taskkill /F /PID %%p >nul 2>&1
 timeout /t 1 /nobreak >nul
 
-REM -- 1. STEP Analyzer (porta 8002)
-echo [1/4] Avvio STEP Analyzer (porta 8002)...
-if not exist "%~dp0step_analyzer\main.py" (
-    echo        ATTENZIONE: step_analyzer\main.py non trovato - servizio saltato
-    echo        Esegui: git pull origin main
-) else (
-    start "STEP Analyzer :8002" /min cmd /c "cd /d "%~dp0step_analyzer" && uvicorn main:app --host 127.0.0.1 --port 8002 >> "%~dp0step_analyzer.log" 2>&1"
-    timeout /t 3 /nobreak >nul
-    curl -s http://127.0.0.1:8002/stato >nul 2>&1
-    if errorlevel 1 (
-        echo        ATTENZIONE: STEP Analyzer non risponde ancora
-    ) else (
-        echo        OK - http://127.0.0.1:8002
-    )
-)
-
-REM -- 2. Frontend build (se necessario)
-echo [2/4] Frontend...
+REM -- Frontend build se necessario
 if not exist "%~dp0frontend\dist\index.html" (
-    echo        Build necessaria...
+    echo Build frontend necessaria...
     if not exist "%~dp0frontend\node_modules" (
         cd "%~dp0frontend" && call npm install && cd "%~dp0"
     )
@@ -55,78 +38,65 @@ if not exist "%~dp0frontend\dist\index.html" (
         echo [ERRORE] Build frontend fallita
         pause & exit /b 1
     )
-    echo        OK - build completata
-) else (
-    echo        OK - dist gia presente
+    echo Build completata.
 )
 
-REM -- 3. Backend DMGDesk (porta 8000)
-echo [3/4] Avvio backend DMGDesk (porta 8000)...
-start "DMGDesk Backend :8000" /min cmd /c "cd /d "%~dp0" && uvicorn api.main:app --host 0.0.0.0 --port 8000 >> "%~dp0dmgdesk_server.log" 2>&1"
-timeout /t 3 /nobreak >nul
-echo        OK - http://localhost:8000
+REM -- Comandi per ogni pannello
+set ROOT=%~dp0
 
-REM -- 4. Apri browser
-echo [4/4] Apertura browser...
-timeout /t 2 /nobreak >nul
+set CMD_BACKEND=cd /d "%ROOT%" ^&^& echo. ^&^& echo  === DMGDesk Backend === ^&^& echo. ^&^& uvicorn api.main:app --host 0.0.0.0 --port 8000
+
+set CMD_STEP=cd /d "%ROOT%step_analyzer" ^&^& echo. ^&^& echo  === STEP Analyzer === ^&^& echo. ^&^& uvicorn main:app --host 127.0.0.1 --port 8002
+
+set CMD_CAM=cd /d "%ROOT%cam_tracker" ^&^& echo. ^&^& echo  === CAM Tracker === ^&^& echo. ^&^& python cam_tracker.py
+
+REM -- Apri Windows Terminal
+REM   Layout: Backend (sinistra grande) | STEP Analyzer (destra alta)
+REM                                     | CAM Tracker   (destra bassa)
+wt --maximized ^
+   new-tab --title "DMGDesk Backend" --tabColor "#0d2d5e" cmd /k "%CMD_BACKEND%" ^
+   ; split-pane --vertical --size 0.35 --title "STEP Analyzer" --tabColor "#1a4a2e" cmd /k "%CMD_STEP%" ^
+   ; split-pane --horizontal --title "CAM Tracker" --tabColor "#4a2e1a" cmd /k "%CMD_CAM%"
+
+REM -- Apri browser dopo che i servizi sono partiti
+timeout /t 5 /nobreak >nul
 start "" http://localhost:8000
 
-REM -- Info rete
 echo.
-echo  -----------------------------------------
-echo   Servizi attivi:
-echo     DMGDesk       - http://localhost:8000
-echo     STEP Analyzer - http://localhost:8002
-for /f "tokens=2 delims=:" %%a in ('ipconfig ^| findstr /i "IPv4"') do (
-    set IP=%%a
-    set IP=!IP: =!
-    if defined IP echo     Rete          - http://!IP!:8000
-)
-echo  -----------------------------------------
+echo  Servizi avviati. Browser aperto su http://localhost:8000
 echo.
 echo  Comandi:
-echo    R + Invio  = git pull + rebuild + riavvio tutto
-echo    S + Invio  = riavvio solo server (senza rebuild)
-echo    U + Invio  = aggiorna solo backend (senza rebuild frontend)
-echo    CTRL+C     = ferma tutto
+echo    R + Invio  = git pull + riavvio tutto
+echo    S + Invio  = riavvio solo server
+echo    U + Invio  = git pull + riavvio solo backend
 echo.
 
 :wait_input
-set /p CMD="Comando: "
+set /p CMD="Comando (R/S/U): "
 
 if /i "!CMD!"=="r" (
-    echo.
-    echo  Aggiornamento completo in corso...
+    echo Aggiornamento + riavvio...
     git pull origin main
-    if errorlevel 1 (
-        echo [ERRORE] git pull fallito
-        goto wait_input
-    )
-    echo  Riavvio servizi...
-    call "%~f0"
-    exit /b
+    if errorlevel 1 ( echo [ERRORE] git pull fallito & goto wait_input )
+    goto start_services
 )
 
 if /i "!CMD!"=="s" (
-    echo.
-    echo  Riavvio server...
-    for /f "tokens=5" %%p in ('netstat -ano 2^>nul ^| findstr ":8000 "') do taskkill /F /PID %%p >nul 2>&1
-    for /f "tokens=5" %%p in ('netstat -ano 2^>nul ^| findstr ":8002 "') do taskkill /F /PID %%p >nul 2>&1
-    timeout /t 1 /nobreak >nul
-    call "%~f0"
-    exit /b
+    echo Riavvio server...
+    goto start_services
 )
 
 if /i "!CMD!"=="u" (
-    echo.
-    echo  Aggiornamento backend...
+    echo Aggiornamento backend...
     git pull origin main
     for /f "tokens=5" %%p in ('netstat -ano 2^>nul ^| findstr ":8000 "') do taskkill /F /PID %%p >nul 2>&1
     for /f "tokens=5" %%p in ('netstat -ano 2^>nul ^| findstr ":8002 "') do taskkill /F /PID %%p >nul 2>&1
     timeout /t 1 /nobreak >nul
-    start "STEP Analyzer :8002" /min cmd /c "cd /d "%~dp0step_analyzer" && uvicorn main:app --host 127.0.0.1 --port 8002 >> "%~dp0step_analyzer.log" 2>&1"
-    start "DMGDesk Backend :8000" /min cmd /c "cd /d "%~dp0" && uvicorn api.main:app --host 0.0.0.0 --port 8000 >> "%~dp0dmgdesk_server.log" 2>&1"
-    echo  OK - backend riavviato
+    wt --maximized ^
+       new-tab --title "DMGDesk Backend" --tabColor "#0d2d5e" cmd /k "%CMD_BACKEND%" ^
+       ; split-pane --vertical --size 0.35 --title "STEP Analyzer" --tabColor "#1a4a2e" cmd /k "%CMD_STEP%" ^
+       ; split-pane --horizontal --title "CAM Tracker" --tabColor "#4a2e1a" cmd /k "%CMD_CAM%"
+    echo Backend riavviato.
     goto wait_input
 )
 

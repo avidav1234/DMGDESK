@@ -416,6 +416,19 @@ async def get_live_context():
     pallet       = data.get("pallet_attivo")
     stato_pgm    = data.get("stato_programma", 0)
 
+    # Fallback: se prog_raw è null ma la macchina è in esecuzione,
+    # usa il programma_corrente dallo stato_corrente del log sessioni
+    if not prog_raw and stato_pgm in (2, 3):
+        try:
+            from api.routers.report import _load_log as _rl, _log_path as _lp
+            _sc = _rl(config).get("stato_corrente", {})
+            _pc = _sc.get("programma_corrente")
+            if _pc:
+                # Costruisci un path fittizio compatibile con il parser
+                prog_raw = f"/_N_WKS_DIR/_N_FALLBACK_WPD/_N_{_pc.upper().replace('.MPF','')}_MPF"
+        except Exception:
+            pass
+
     try:
         mtime = os.path.getmtime(log_path)
         ts    = datetime.fromtimestamp(mtime).strftime("%d/%m/%Y %H:%M:%S")

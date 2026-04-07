@@ -281,7 +281,7 @@ async def classifica_sostituzione(ts: str, body: dict = Body(...)):
     causa   = (body.get("causa") or "").strip()
     # sostituito → rottura | usura_normale
     # rimosso    → liberare_spazio | rottura
-    CAUSE_VALIDE = {"rottura", "usura_normale", "liberare_spazio"}
+    CAUSE_VALIDE = {"rottura", "usura_normale", "cambio_inserti", "liberare_spazio"}
     if causa not in CAUSE_VALIDE:
         from fastapi import HTTPException
         raise HTTPException(400, f"causa non valida: {causa}. Valide: {CAUSE_VALIDE}")

@@ -4,8 +4,9 @@ import { useState, useEffect } from 'react'
 
 // Cause per sostituzione fisica (vita >70%) — utensile nuovo montato
 const CAUSE_SOSTITUZIONE = [
-  { id: 'usura_normale',  label: 'Usura normale',   desc: 'Utensile consumato, fine vita prevista', color: '#d97706', bg: '#fffbeb', border: '#fcd34d' },
-  { id: 'rottura',        label: 'Rottura',          desc: 'Utensile rotto durante lavorazione',    color: '#dc2626', bg: '#fef2f2', border: '#fca5a5' },
+  { id: 'usura_normale',  label: 'Usura normale',    desc: 'Utensile consumato, fine vita prevista',           color: '#d97706', bg: '#fffbeb', border: '#fcd34d' },
+  { id: 'cambio_inserti', label: 'Cambio inserti',   desc: 'Corpo rimasto, inserti sostituiti e vita resettata', color: '#0891b2', bg: '#e0f2fe', border: '#7dd3fc' },
+  { id: 'rottura',        label: 'Rottura',           desc: 'Utensile rotto durante lavorazione',               color: '#dc2626', bg: '#fef2f2', border: '#fca5a5' },
 ]
 
 // Cause per rimozione (utensile sparito dal TOA)
@@ -64,18 +65,20 @@ export function PopupSostituzione({ sostituzione, onClassifica, onIgnora }) {
             <div style={{fontSize:11,color:'#64748b',fontFamily:'monospace'}}>{sostituzione.alias}</div>
           </div>
           <div style={{marginLeft:'auto',fontSize:11,color:'#94a3b8',textAlign:'right'}}>
-            <div>
-              pos.{sostituzione.posizione||'—'}
-              {sostituzione.magazine&&<span style={{marginLeft:6,
-                background:'#f1f5f9',padding:'1px 5px',borderRadius:3,
-                fontSize:10,color:'#64748b'}}>
-                M{sostituzione.magazine}
-              </span>}
-              {sostituzione.duplo&&sostituzione.duplo>1&&<span style={{marginLeft:4,
-                background:'#fef9c3',padding:'1px 5px',borderRadius:3,
-                fontSize:10,color:'#854d0e',fontWeight:700}}>
-                #{sostituzione.duplo}
-              </span>}
+            <div style={{display:'flex',alignItems:'center',gap:4,justifyContent:'flex-end',flexWrap:'wrap'}}>
+              <span>pos.{sostituzione.posizione||'—'}</span>
+              {sostituzione.magazine&&(
+                <span style={{background:'#f1f5f9',padding:'1px 5px',borderRadius:3,
+                  fontSize:10,color:'#64748b'}}>
+                  M{sostituzione.magazine}
+                </span>
+              )}
+              {sostituzione.duplo>1&&(
+                <span style={{background:'#fef9c3',padding:'1px 5px',borderRadius:3,
+                  fontSize:10,color:'#854d0e',fontWeight:700,border:'1px solid #fcd34d'}}>
+                  duplo #{sostituzione.duplo}
+                </span>
+              )}
             </div>
             <div>
               {sostituzione.vita_prima!=null?`${sostituzione.vita_prima}%`:'—'}

@@ -336,7 +336,12 @@ async def get_sostituzioni_non_classificate():
     from database.db_handler import carica_configurazione as _cfg
     config  = _cfg()
     records = _load_history(config)
-    non_class = [r for r in records if r.get("causa") is None and r.get("tipo") in ("sostituito", "rimosso")]
+    non_class = [
+        r for r in records
+        if r.get("causa") is None
+        and r.get("tipo") in ("sostituito", "rimosso")
+        and str(r.get("magazine") or "") not in ("9998", "9999")
+    ]
     return {"sostituzioni": list(reversed(non_class))[:10]}
 
 
@@ -379,6 +384,29 @@ async def get_vita_ottimale_magazine():
     records = _load_history(config)
     ris     = suggerimenti_magazine(records)
     return {"suggerimenti": ris, "n_utensili": len(ris)}
+
+
+@router.post("/pulizia-m9998")
+async def pulizia_record_m9998():
+    """
+    Rimuove o marca come 'mandrino' i record con magazine 9998/9999
+    che sono stati registrati erroneamente come rimossi.
+    """
+    from database.db_handler import carica_configurazione as _cfg
+    config  = _cfg()
+    records = _load_history(config)
+    n_rimossi = 0
+    records_puliti = []
+    for r in records:
+        if (r.get("tipo") == "rimosso" and
+            str(r.get("magazine") or "") in ("9998", "9999")):
+            n_rimossi += 1
+            # Marca come 'mandrino' invece di rimuovere — preserva storico
+            r["causa"] = "mandrino"
+            r["classificato_ts"] = datetime.now().isoformat(timespec="seconds")
+        records_puliti.append(r)
+    _save_history(config, records_puliti)
+    return {"ok": True, "record_corretti": n_rimossi}
 
 
 @router.get("/stato-snapshot")

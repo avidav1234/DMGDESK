@@ -26,7 +26,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Body
 
 from database.db_handler import carica_configurazione
 from api.routers.progetti import _load_progetti, _save_progetti, _write_lock

@@ -16,7 +16,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, HTTPException, UploadFile, File, Body
 from pydantic import BaseModel
 
 from api.toa_parser import sync_from_share, detect_format, MachineTool, MagazinePosition

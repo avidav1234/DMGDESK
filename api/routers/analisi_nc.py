@@ -21,7 +21,7 @@ from datetime import datetime
 from typing import List, Optional
 
 import pandas as pd
-from fastapi import APIRouter, HTTPException, UploadFile, File, Query
+from fastapi import APIRouter, HTTPException, UploadFile, File, Query, Body
 from fastapi.responses import Response
 from pydantic import BaseModel
 

@@ -99,6 +99,19 @@ def on_tools_updated(tools_new: dict, config: dict):
     # ── Rilevamento rimozioni (utensile presente prima, assente dopo) ──────────
     for key, old_t in snap_old.items():
         if key not in snap_new:
+            # Salta utensili in M9998 (mandrino/navetta) — non è una rimozione reale
+            mag_old = old_t.get("magazine")
+            if mag_old is not None and str(mag_old) in ("9998", "9999"):
+                continue
+            # Controlla anche se l'utensile è apparso in M9998 nello snap nuovo
+            alias_up = (old_t.get("alias") or "").upper().strip()
+            in_mandrino = any(
+                (v.get("alias") or "").upper().strip() == alias_up and
+                str(v.get("magazine", "")) in ("9998", "9999")
+                for v in snap_new.values()
+            )
+            if in_mandrino:
+                continue
             # Utensile sparito dal TOA — rimosso senza rimpiazzo
             record = {
                 "ts":              now,

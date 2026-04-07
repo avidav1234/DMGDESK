@@ -888,33 +888,7 @@ export default function Home(){
             </div>
           </div>
 
-          {/* Prossimo cambio utensile */}
-          {(()=>{
-            const critici = (setup.fin_vita||[])
-              .filter(u=>u.life_percent!=null&&u.life_percent<30)
-              .sort((a,b)=>a.life_percent-b.life_percent)
-            if(!critici.length) return null
-            const primo = critici[0]
-            const col = primo.life_percent < 15 ? '#dc2626' : '#c2410c'
-            const bg  = primo.life_percent < 15 ? '#fef2f2' : '#fff7ed'
-            const bdr = primo.life_percent < 15 ? '#fca5a5' : '#fdba74'
-            return (
-              <div style={{background:bg,border:`1px solid ${bdr}`,borderRadius:7,
-                padding:'6px 12px',display:'flex',alignItems:'center',gap:10}}>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:9,fontWeight:800,color:col,letterSpacing:'.05em',
-                    textTransform:'uppercase',marginBottom:2}}>Prossimo cambio utensile</div>
-                  <div style={{fontSize:12,fontWeight:700,color:col,fontFamily:'monospace',
-                    overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
-                    {primo.alias}{primo.posizione?` · pos.${primo.posizione}`:''}
-                  </div>
-                </div>
-                <div style={{fontSize:14,fontWeight:800,color:col,flexShrink:0}}>
-                  {Math.round(primo.life_percent)}%
-                </div>
-              </div>
-            )
-          })()}
+
 
           {/* ── PROGRAMMI + UTENSILI affiancati ───────────────── */}
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>

@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { api } from '../api/client'
 import { Loader, SectionHeader } from '../components/UI'
+import { PopupSostituzione } from '../components/MLDataPopup'
 
 // ── Coda Esecuzione con drag&drop ────────────────────────────────────────────
 function CodaEsecuzione({ setupData, onOrdineChanged }) {

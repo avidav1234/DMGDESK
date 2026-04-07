@@ -70,6 +70,15 @@ def _parse_tool_file(path) -> dict:
             if not line or line.startswith(';'):
                 continue
 
+            m = re.match(r'^\$TC_TP1\[(\d+)\]=(.+)', line)
+            if m:
+                t = int(m.group(1))
+                if t not in tools:
+                    tools[t] = {'t_number': t}
+                try: tools[t]['duplo'] = int(float(m.group(2)))
+                except ValueError: pass
+                continue
+
             m = re.match(r'^\$TC_TP2\[(\d+)\]=(.+)', line)
             if m:
                 current_t = int(m.group(1))
@@ -104,12 +113,6 @@ def _parse_tool_file(path) -> dict:
                 except ValueError: pass
                 continue
 
-            m = re.match(r'^\$TC_TP4\[(\d+)\]=(.+)', line)
-            if m and int(m.group(1)) == current_t:
-                try: tools[current_t]['duplo'] = int(float(m.group(2)))
-                except ValueError: pass
-                continue
-
             m = re.match(r'^\$TC_TP8\[(\d+)\]=(.+)', line)
             if m and int(m.group(1)) == current_t:
                 try:
@@ -134,18 +137,7 @@ def _parse_tool_file(path) -> dict:
 
 def _finalize(raw: dict) -> dict:
     """Calcola life_percent, is_worn, duplo → dict {t_num: MachineTool}."""
-    # Calcola duplo: raggruppa per nome, ordina per t_number
-    # Il primo T-number con quel nome = duplo 1, il secondo = duplo 2, ecc.
-    from collections import defaultdict
-    nome_tnum = defaultdict(list)
-    for t_num, tool in raw.items():
-        if tool.get('name'):
-            nome_tnum[tool['name'].upper().strip()].append(t_num)
-    duplo_map = {}  # t_num → numero duplo
-    for t_nums in nome_tnum.values():
-        for i, t in enumerate(sorted(t_nums), start=1):
-            duplo_map[t] = i
-
+    # Duplo: letto direttamente da $TC_TP1 nel TOA
     result = {}
     for t_num, tool in raw.items():
         if not tool.get('name'):
@@ -168,7 +160,7 @@ def _finalize(raw: dict) -> dict:
             is_worn        = worn,
             is_enabled     = tool.get('is_enabled', True),
             status         = tool.get('status', 0),
-            duplo          = duplo_map.get(t_num, 1),
+            duplo          = tool.get('duplo', 1),
             magazine       = tool.get('magazine'),
             position       = tool.get('position'),
             pos_label      = tool.get('pos_label', ''),

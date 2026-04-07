@@ -461,13 +461,8 @@ export default function Macchina() {
         setSetupData(d)
         const haProblemi = d.da_montare.length > 0 || d.fin_vita.length > 0 || d.previsione_vita?.length > 0
         if (forceOpen) {
-          // Click manuale sul bottone — apri sempre
           setSetupPopup(true)
-        // NON apre automaticamente — l'utente lo apre cliccando Setup
-        // (lasciato commentato per riferimento futuro)
-        // } else if (haProblemi && d.sync_time !== setupChiusoTs) {
-        //   setSetupPopup(true)
-        // }
+        }
       }
     } catch {}
     finally { setSetupLoading(false) }

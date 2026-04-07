@@ -79,7 +79,7 @@ export default function Home(){
 
     // Popup sostituzione: controlla ogni 5 min se ci sono sostituzioni non classificate
     const checkSostituzioni=()=>
-      fetch('/api/tools/sostituzioni/non-classificate').then(r=>r.ok?r.json():null)
+      fetch('/api/tool-history/sostituzioni/non-classificate').then(r=>r.ok?r.json():null)
         .then(d=>{
           if(!sig.aborted&&d?.sostituzioni?.length>0) setPopupSost(d.sostituzioni[0])
         }).catch(()=>{})

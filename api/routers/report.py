@@ -2069,6 +2069,11 @@ async def get_rendiconto_progetto(project_id: str):
         sessioni_proj.append(s)
 
     # ── Aggregazione programmi ───────────────────────────────────────────────
+    # Prefissi validi per questa commessa — es. "4297" dalla commessa "4297_0006"
+    commessa_prefissi = set()
+    commessa_prefissi.add(nome.split("_")[0].upper())  # prefisso numerico principale
+    commessa_prefissi.add(nome.upper())                  # nome completo commessa
+
     pgm_agg: dict = {}
     for s in sessioni_proj:
         for p in s.get("programmi", []):
@@ -2079,6 +2084,13 @@ async def get_rendiconto_progetto(project_id: str):
             # es: /_N_WKS_DIR/_N_4350_0221_WPD/_N_4350_0221_01_020_MP (senza F)
             fn_upper = fn.upper()
             if fn_upper.startswith("/_N_") and not fn_upper.endswith("_MPF"):
+                continue
+            # Escludi programmi di altre commesse — il filename deve contenere
+            # almeno uno dei prefissi della commessa corrente
+            fn_base = fn_upper.replace(".MPF", "").split("/")[-1]
+            if fn_base.startswith("_N_"):
+                fn_base = fn_base[3:]
+            if not any(fn_base.startswith(pfx) for pfx in commessa_prefissi):
                 continue
             dur = p.get("durata_sec") or 0
             fn_key = fn.upper().replace(".MPF", "").split("/")[-1]

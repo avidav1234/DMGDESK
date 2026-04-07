@@ -446,6 +446,9 @@ export default function Macchina() {
     finally { setSyncing(false) }
   }
 
+  // Carica analisi setup all'apertura del tab
+  useEffect(() => { loadSetupAnalisi() }, []) // eslint-disable-line
+
   async function loadSetupAnalisi() {
     setSetupLoading(true)
     try {

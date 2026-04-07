@@ -127,7 +127,19 @@ def _parse_tool_file(path) -> dict:
 
 
 def _finalize(raw: dict) -> dict:
-    """Calcola life_percent, is_worn → dict {t_num: MachineTool}."""
+    """Calcola life_percent, is_worn, duplo → dict {t_num: MachineTool}."""
+    # Calcola duplo: raggruppa per nome, ordina per t_number
+    # Il primo T-number con quel nome = duplo 1, il secondo = duplo 2, ecc.
+    from collections import defaultdict
+    nome_tnum = defaultdict(list)
+    for t_num, tool in raw.items():
+        if tool.get('name'):
+            nome_tnum[tool['name'].upper().strip()].append(t_num)
+    duplo_map = {}  # t_num → numero duplo
+    for t_nums in nome_tnum.values():
+        for i, t in enumerate(sorted(t_nums), start=1):
+            duplo_map[t] = i
+
     result = {}
     for t_num, tool in raw.items():
         if not tool.get('name'):
@@ -150,7 +162,7 @@ def _finalize(raw: dict) -> dict:
             is_worn        = worn,
             is_enabled     = tool.get('is_enabled', True),
             status         = tool.get('status', 0),
-            duplo          = tool.get('duplo', 1),
+            duplo          = duplo_map.get(t_num, 1),
             magazine       = tool.get('magazine'),
             position       = tool.get('position'),
             pos_label      = tool.get('pos_label', ''),

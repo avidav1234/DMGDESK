@@ -712,7 +712,7 @@ async def sfoglia_cartella():
 # ── Analisi file da disco (lancio da progetto) ─────────────────────────────
 
 @router.post("/analizza-da-disco")
-async def analizza_da_disco(body: dict):
+async def analizza_da_disco(body: dict = Body(...)):
     """
     Analizza file MPF presenti su disco senza upload.
     Body: { filenames: ["4297_007_03_009.MPF", ...] }

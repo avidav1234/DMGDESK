@@ -45,7 +45,7 @@ import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
-from fastapi import APIRouter, Query
+from fastapi import Body, APIRouter, Query
 from fastapi.responses import FileResponse
 from database.db_handler import carica_configurazione
 
@@ -728,7 +728,7 @@ def _chiudi_sessione(data: dict, sc: dict, now: str):
 # ── Endpoint: dati giornalieri ────────────────────────────────────────────────
 
 @router.post("/fermi/classifica")
-async def classifica_fermo(body: dict):
+async def classifica_fermo(body: dict = Body(...)):
     """
     Classifica la causa di un fermo macchina.
     Salva in lavorazioni_log.json nel campo fermi_classificati.
@@ -2736,7 +2736,7 @@ async def get_notif_config():
     return cfg
 
 @router.post("/notifiche/config")
-async def save_notif_config(body: dict):
+async def save_notif_config(body: dict = Body(...)):
     cfg = _load_notif_config()
     # Merge preservando password se oscurata
     for sezione, valori in body.items():
@@ -2750,7 +2750,7 @@ async def save_notif_config(body: dict):
     return {"ok": True}
 
 @router.post("/notifiche/test")
-async def test_notifica(body: dict):
+async def test_notifica(body: dict = Body(...)):
     """Invia notifica di test via email o webhook."""
     cfg = _load_notif_config()
     tipo = body.get("tipo", "webhook")

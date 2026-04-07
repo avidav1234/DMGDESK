@@ -241,7 +241,7 @@ async def job_sync_main_log():
 # ── Endpoint: salva snapshot quando il MAIN viene generato ───────────────────
 
 @router.post("/snapshot")
-async def salva_main_snapshot(body: dict):
+async def salva_main_snapshot(body: dict = Body(...)):
     """
     Chiamato da salva_main (analisi_nc) dopo aver scritto il file su disco.
     Salva nel progetto il main_snapshot con path, hash e lista programmi.

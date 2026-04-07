@@ -441,7 +441,7 @@ async def check_tools(file: UploadFile = File(...)):
     response_model=CheckResult,
     summary="Controlla utensili da testo MPF passato come stringa",
 )
-async def check_tools_text(body: dict):
+async def check_tools_text(body: dict = Body(...)):
     """
     Alternativa a /check che accetta il testo MPF come JSON.
     Body: {"mpf_content": "...testo programma..."}
@@ -492,7 +492,7 @@ async def check_tools_text(body: dict):
 # ── Analisi previsione fine vita utensili ─────────────────────────────────────
 
 @router.post("/analisi-fine-vita")
-async def analisi_fine_vita(body: dict):
+async def analisi_fine_vita(body: dict = Body(...)):
     """
     Calcola se gli utensili reggeranno per i programmi selezionati.
 

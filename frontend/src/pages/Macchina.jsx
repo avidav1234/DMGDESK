@@ -463,11 +463,11 @@ export default function Macchina() {
         if (forceOpen) {
           // Click manuale sul bottone — apri sempre
           setSetupPopup(true)
-        } else if (haProblemi && d.sync_time !== setupChiusoTs) {
-          // Apertura automatica solo se sync_time è diverso dall'ultimo sync
-          // quando l'utente aveva chiuso il popup
-          setSetupPopup(true)
-        }
+        // NON apre automaticamente — l'utente lo apre cliccando Setup
+        // (lasciato commentato per riferimento futuro)
+        // } else if (haProblemi && d.sync_time !== setupChiusoTs) {
+        //   setSetupPopup(true)
+        // }
       }
     } catch {}
     finally { setSetupLoading(false) }

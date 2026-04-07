@@ -400,7 +400,7 @@ async def get_quick_tasks():
     return {"tasks": []}
 
 @router.put("/quick-tasks")
-async def put_quick_tasks(body: dict):
+async def put_quick_tasks(body: dict = Body(...)):
     config = carica_configurazione()
     p = _quick_tasks_path(config)
     _atomic_write(p, body)
@@ -1048,7 +1048,7 @@ async def avvia_tutti(project_id: str):
 
 
 @router.post("/{project_id}/segna-in-macchina")
-async def segna_in_macchina(project_id: str, body: dict):
+async def segna_in_macchina(project_id: str, body: dict = Body(...)):
     """
     Quando si genera il MAIN, i programmi inclusi passano a stato 'in_macchina'.
     Body: { filenames: ["file1.MPF", "file2.MPF", ...] }

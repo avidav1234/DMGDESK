@@ -12,7 +12,7 @@ import json
 import os
 from datetime import datetime
 from pathlib import Path
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Body
 from pydantic import BaseModel
 from database.db_handler import carica_configurazione
 from api.routers.progetti import (
@@ -553,7 +553,7 @@ async def get_programmi_in_macchina(numero: int):
 
 
 @router.patch("/{numero}/programmi-completa")
-async def completa_programmi(numero: int, body: dict):
+async def completa_programmi(numero: int, body: dict = Body(...)):
     """
     Segna una lista di programmi come 'completato'.
     Body: { "ids": ["abc123", "def456"] }
@@ -711,7 +711,7 @@ async def get_ordine_esecuzione():
 
 
 @router.put("/ordine-esecuzione")
-async def set_ordine_esecuzione(body: dict):
+async def set_ordine_esecuzione(body: dict = Body(...)):
     """
     Salva l'ordine di esecuzione pallet.
     Body: { "ordine": [3, 4, 5] }  — lista di numeri pallet in ordine

@@ -95,23 +95,41 @@ def on_tools_updated(tools_new: dict, config: dict):
     snap_new = _build_snapshot(tools_new)
     now      = datetime.now().isoformat(timespec="seconds")
     nuovi    = []
+    existing_records = _load_history(config)  # per check duplicati
+
+    # Indice snap_new per alias — per ricerche veloci
+    snap_new_by_alias = {}
+    for v in snap_new.values():
+        a = (v.get("alias") or "").upper().strip()
+        snap_new_by_alias.setdefault(a, []).append(v)
 
     # ── Rilevamento rimozioni (utensile presente prima, assente dopo) ──────────
     for key, old_t in snap_old.items():
         if key not in snap_new:
-            # Salta utensili in M9998 (mandrino/navetta) — non è una rimozione reale
-            mag_old = old_t.get("magazine")
-            if mag_old is not None and str(mag_old) in ("9998", "9999"):
-                continue
-            # Controlla anche se l'utensile è apparso in M9998 nello snap nuovo
             alias_up = (old_t.get("alias") or "").upper().strip()
-            in_mandrino = any(
-                (v.get("alias") or "").upper().strip() == alias_up and
-                str(v.get("magazine", "")) in ("9998", "9999")
-                for v in snap_new.values()
-            )
-            if in_mandrino:
+
+            # Salta se stava già in M9998/M9999 (era in transito)
+            mag_old = str(old_t.get("magazine") or "")
+            if mag_old in ("9998", "9999"):
                 continue
+
+            # Salta se adesso è in M9998/M9999 (ora è in mandrino/navetta)
+            in_transito = any(
+                str(v.get("magazine", "")) in ("9998", "9999")
+                for v in snap_new_by_alias.get(alias_up, [])
+            )
+            if in_transito:
+                continue
+
+            # Salta se già classificato in un record recente (evita duplicati)
+            gia_classificato = any(
+                (r.get("alias") or "").upper() == alias_up and
+                r.get("causa") is not None
+                for r in existing_records[-20:]  # controlla ultimi 20 record
+            )
+            if gia_classificato:
+                continue
+
             # Utensile sparito dal TOA — rimosso senza rimpiazzo
             record = {
                 "ts":              now,

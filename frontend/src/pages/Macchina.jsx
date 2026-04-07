@@ -656,7 +656,15 @@ export default function Macchina() {
         </div>
       )}
 
-      {setupPopup && <SetupPannel setupData={setupData} setupPopup={setupPopup} setSetupPopup={setSetupPopup} />}
+      {setupPopup && (
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',
+          zIndex:1000,display:'flex',alignItems:'flex-start',justifyContent:'center',
+          padding:'40px 16px',overflowY:'auto'}}>
+          <div style={{width:'100%',maxWidth:860,maxHeight:'85vh',overflowY:'auto'}}>
+            <SetupPannel setupData={setupData} setupPopup={setupPopup} setSetupPopup={setSetupPopup} />
+          </div>
+        </div>
+      )}
 
       {/* Tabella utensili */}
       {loading ? <Loader /> : tools.length === 0 ? null : (

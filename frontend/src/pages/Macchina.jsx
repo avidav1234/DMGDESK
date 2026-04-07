@@ -211,7 +211,8 @@ const COL = {
   worn:     { bg: 'rgba(109,40,217,0.10)', border: 'rgba(109,40,217,0.30)', text: '#6d28d9' },
 }
 
-function SetupPannel({ setupData, setupPopup, setSetupPopup }) {
+function SetupPannel({ setupData, setupPopup, setSetupPopup, onChiudi }) {
+  const chiudi = onChiudi || (()=>setSetupPopup&&setSetupPopup(false))
   if (!setupPopup || !setupData) return null
   const {non_utilizzati, da_montare, fin_vita, previsione_vita=[]} = setupData
   const [q, setQ] = useState('')
@@ -263,7 +264,7 @@ function SetupPannel({ setupData, setupPopup, setSetupPopup }) {
               color:'var(--text-primary)', fontSize:13, outline:'none',
               fontFamily:'var(--font-mono)'}}
           />
-          <button onClick={()=>setSetupPopup(false)}
+          <button onClick={chiudi}
             style={{background:'none',border:'1px solid #D8D5CC',borderRadius:8,
               color:'#5A5750',fontSize:13,padding:'5px 12px',cursor:'pointer',fontWeight:600}}>
             Chiudi
@@ -365,7 +366,7 @@ function SetupPannel({ setupData, setupPopup, setSetupPopup }) {
         <div style={{padding:'12px 24px',borderTop:'1px solid #D8D5CC',
           display:'flex',gap:10,justifyContent:'flex-end',
           background:'#F5F4F0',borderRadius:'0 0 14px 14px'}}>
-          <button onClick={()=>setSetupPopup(false)}
+          <button onClick={chiudi}
             style={{background:'#D4700A',border:'none',borderRadius:8,
               color:'#fff',fontWeight:700,fontSize:13,padding:'8px 20px',cursor:'pointer'}}>
             OK, ho capito
@@ -381,6 +382,7 @@ export default function Macchina() {
   const [syncStatus, setSyncStatus]   = useState(null)
   const [setupPopup, setSetupPopup]   = useState(false)
   const [setupData,  setSetupData]    = useState(null)
+  const [setupChiusoTs, setSetupChiusoTs] = useState(null)  // ts ultimo sync quando popup è stato chiuso
   const [setupLoading, setSetupLoading] = useState(false)
   const [storico, setStotico]         = useState([])
   const [popupSost, setPopupSost]     = useState(null)
@@ -450,15 +452,20 @@ export default function Macchina() {
   // Carica analisi setup all'apertura del tab
   useEffect(() => { loadSetupAnalisi() }, []) // eslint-disable-line
 
-  async function loadSetupAnalisi() {
+  async function loadSetupAnalisi(forceOpen = false) {
     setSetupLoading(true)
     try {
       const r = await fetch('/api/progetti/analisi-setup/non-utilizzati')
       if (r.ok) {
         const d = await r.json()
         setSetupData(d)
-        // Mostra popup solo se ci sono situazioni da gestire
-        if (d.non_utilizzati.length > 0 || d.da_montare.length > 0 || d.fin_vita.length > 0) {
+        const haProblemi = d.da_montare.length > 0 || d.fin_vita.length > 0 || d.previsione_vita?.length > 0
+        if (forceOpen) {
+          // Click manuale sul bottone — apri sempre
+          setSetupPopup(true)
+        } else if (haProblemi && d.sync_time !== setupChiusoTs) {
+          // Apertura automatica solo se sync_time è diverso dall'ultimo sync
+          // quando l'utente aveva chiuso il popup
           setSetupPopup(true)
         }
       }
@@ -536,7 +543,7 @@ export default function Macchina() {
               : 'Nessun sync'}
           </span>
           <button
-            onClick={()=>{ loadSetupAnalisi(); setSetupPopup(true) }}
+            onClick={()=>{ loadSetupAnalisi(true) }}
             style={{
               padding:'9px 18px', borderRadius:8, fontSize:13, cursor:'pointer',
               background: setupPopup
@@ -661,7 +668,8 @@ export default function Macchina() {
           zIndex:1000,display:'flex',alignItems:'flex-start',justifyContent:'center',
           padding:'40px 16px',overflowY:'auto'}}>
           <div style={{width:'100%',maxWidth:860,maxHeight:'85vh',overflowY:'auto'}}>
-            <SetupPannel setupData={setupData} setupPopup={setupPopup} setSetupPopup={setSetupPopup} />
+            <SetupPannel setupData={setupData} setupPopup={setupPopup}
+              onChiudi={()=>{ setSetupPopup(false); setSetupChiusoTs(setupData?.sync_time||null) }} />
           </div>
         </div>
       )}

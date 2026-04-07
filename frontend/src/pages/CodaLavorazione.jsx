@@ -127,7 +127,7 @@ export default function CodaLavorazione() {
   const fetchAll = useCallback(async () => {
     try {
       const [rPallets, rMacchina] = await Promise.all([
-        fetch("/api/pallet"),
+        fetch("/api/pallet/"),
         fetch("/api/macchina-live/stato"),
       ]);
 

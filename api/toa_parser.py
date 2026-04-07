@@ -104,6 +104,12 @@ def _parse_tool_file(path) -> dict:
                 except ValueError: pass
                 continue
 
+            m = re.match(r'^\$TC_TP4\[(\d+)\]=(.+)', line)
+            if m and int(m.group(1)) == current_t:
+                try: tools[current_t]['duplo'] = int(float(m.group(2)))
+                except ValueError: pass
+                continue
+
             m = re.match(r'^\$TC_TP8\[(\d+)\]=(.+)', line)
             if m and int(m.group(1)) == current_t:
                 try:

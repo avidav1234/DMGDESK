@@ -64,8 +64,24 @@ export function PopupSostituzione({ sostituzione, onClassifica, onIgnora }) {
             <div style={{fontSize:11,color:'#64748b',fontFamily:'monospace'}}>{sostituzione.alias}</div>
           </div>
           <div style={{marginLeft:'auto',fontSize:11,color:'#94a3b8',textAlign:'right'}}>
-            <div>pos.{sostituzione.posizione||'—'}</div>
-            <div>{sostituzione.vita_prima}% → {sostituzione.vita_dopo}%</div>
+            <div>
+              pos.{sostituzione.posizione||'—'}
+              {sostituzione.magazine&&<span style={{marginLeft:6,
+                background:'#f1f5f9',padding:'1px 5px',borderRadius:3,
+                fontSize:10,color:'#64748b'}}>
+                M{sostituzione.magazine}
+              </span>}
+              {sostituzione.duplo&&sostituzione.duplo>1&&<span style={{marginLeft:4,
+                background:'#fef9c3',padding:'1px 5px',borderRadius:3,
+                fontSize:10,color:'#854d0e',fontWeight:700}}>
+                #{sostituzione.duplo}
+              </span>}
+            </div>
+            <div>
+              {sostituzione.vita_prima!=null?`${sostituzione.vita_prima}%`:'—'}
+              {' → '}
+              {sostituzione.vita_dopo!=null?`${sostituzione.vita_dopo}%`:'rimosso'}
+            </div>
           </div>
         </div>
 

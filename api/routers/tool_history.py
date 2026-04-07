@@ -24,7 +24,8 @@ import logging
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Body
+from typing import Optional
 from database.db_handler import carica_configurazione
 
 log = logging.getLogger("tool_history")
@@ -104,6 +105,7 @@ def on_tools_updated(tools_new: dict, config: dict):
                 "alias":           old_t.get("alias", key),
                 "posizione":       old_t.get("position"),
                 "magazine":        old_t.get("magazine"),
+                "duplo":           old_t.get("duplo", 1),
                 "vita_prima":      round(old_t.get("life_percent") or 0, 1),
                 "vita_dopo":       None,
                 "tipo":            "rimosso",
@@ -133,6 +135,7 @@ def on_tools_updated(tools_new: dict, config: dict):
                 "alias":           new["alias"],
                 "posizione":       new.get("position"),
                 "magazine":        new.get("magazine"),
+                "duplo":           new.get("duplo", 1),
                 "vita_prima":      round(lp_old, 1),
                 "vita_dopo":       round(lp_new, 1),
                 "tipo":            "sostituito",
@@ -203,6 +206,7 @@ def _build_snapshot(tools: dict) -> dict:
             "is_enabled":   t.get("is_enabled", True),
             "position":     t.get("position"),
             "magazine":     t.get("magazine"),
+            "duplo":        t.get("duplo") or t.get("edge_count") or 1,
         }
     return snap
 
@@ -265,7 +269,7 @@ def check_low_life_alert(tools: dict, alias_attivi: list[str], config: dict):
 # ── Endpoint ──────────────────────────────────────────────────────────────────
 
 @router.post("/sostituzioni/{ts}/causa")
-async def classifica_sostituzione(ts: str, body: dict):
+async def classifica_sostituzione(ts: str, body: dict = Body(...)):
     """
     Classifica la causa di una sostituzione utensile.
     causa: rottura | usura | liberare_spazio

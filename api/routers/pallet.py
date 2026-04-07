@@ -192,7 +192,6 @@ class SetLavorazioneBody(BaseModel):
 
 # ── Endpoints ──────────────────────────────────────────────────────────────
 
-@router.get("")
 def check_pallet_completati(config: dict) -> int:
     """
     Controlla tutti i pallet in stato 'grezzo' o 'in_lavorazione':

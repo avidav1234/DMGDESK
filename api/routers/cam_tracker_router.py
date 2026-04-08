@@ -22,7 +22,7 @@ log = get_logger(__name__)
 router = APIRouter()
 
 # ── Storage ────────────────────────────────────────────────────────────────────
-_DATA_FILE = Path("cam_tracker_data.json")
+_DATA_FILE = Path(__file__).parent.parent.parent / "cam_tracker_data.json"
 
 
 def _load() -> list[dict]:

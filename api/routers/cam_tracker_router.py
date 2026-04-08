@@ -22,7 +22,19 @@ log = get_logger(__name__)
 router = APIRouter()
 
 # ── Storage ────────────────────────────────────────────────────────────────────
-_DATA_FILE = Path(__file__).parent.parent.parent / "cam_tracker_data.json"
+# Path dati CAM tracker — usa la directory della config se disponibile, altrimenti root progetto
+def _get_data_file() -> Path:
+    try:
+        from database.db_handler import carica_configurazione
+        cfg = carica_configurazione()
+        base = cfg.get("tools_toa_folder") or cfg.get("percorso_nc_base")
+        if base:
+            return Path(base) / "cam_tracker_data.json"
+    except Exception:
+        pass
+    return Path(__file__).parent.parent.parent / "cam_tracker_data.json"
+
+_DATA_FILE = _get_data_file()
 
 
 def _load() -> list[dict]:

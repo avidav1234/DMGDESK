@@ -160,9 +160,9 @@ def on_tools_updated(tools_new: dict, config: dict):
         lp_new = new.get("life_percent") or 0
         delta  = lp_new - lp_old
 
-        if delta >= 50:
-            # Sostituzione fisica o cambio inserti — vita salita >50%
-            # Soglia abbassata a 50% per catturare cambio inserti da vita media
+        if delta > 0 and lp_new >= 99.0:
+            # Vita tornata al 100% — sostituzione fisica o cambio inserti
+            # vita_dopo >= 99% è il segnale affidabile di reset manuale Sinumerik
             record = {
                 "ts":              now,
                 "alias":           new["alias"],
@@ -172,7 +172,7 @@ def on_tools_updated(tools_new: dict, config: dict):
                 "vita_prima":      round(lp_old, 1),
                 "vita_dopo":       round(lp_new, 1),
                 "tipo":            "sostituito",
-                "causa":           None,   # null = non classificato; rottura|usura_normale
+                "causa":           None,   # null = non classificato; rottura|usura_normale|cambio_inserti
                 "classificato_ts": None,
             }
             nuovi.append(record)
@@ -182,8 +182,9 @@ def on_tools_updated(tools_new: dict, config: dict):
                 f"{lp_old:.0f}% → {lp_new:.0f}%"
             )
 
-        elif 20 <= delta < 50:
-            # Allungamento vita — operatore ha modificato il valore vita manualmente
+        elif delta >= 20 and lp_new < 99.0:
+            # Allungamento vita parziale — operatore ha modificato il valore manualmente
+            # ma non ha resettato al 100% → non è una sostituzione
             # Registrato automaticamente senza popup — dato ML prezioso
             record = {
                 "ts":              now,

@@ -88,9 +88,6 @@ def calcola_vita_ottimale(
             if causa == "rottura":
                 # Rottura = outlier basso — includi separato
                 campioni_vita.append(("rottura", float(vita_prima)))
-            elif causa == "cambio_inserti":
-                # Cambio inserti = usura reale degli inserti — campione affidabile
-                campioni_vita.append(("usura", float(vita_prima)))
             else:
                 # Usura normale — campione affidabile
                 campioni_vita.append(("usura", float(vita_prima)))

@@ -2,11 +2,10 @@
 // Popup per raccolta dati classificazione — causa sostituzione utensile e causa fermo
 import { useState, useEffect } from 'react'
 
-// Cause per sostituzione fisica (vita >70%) — utensile nuovo montato
+// Cause per sostituzione fisica — utensile/inserti cambiati
 const CAUSE_SOSTITUZIONE = [
-  { id: 'usura_normale',  label: 'Usura normale',    desc: 'Utensile consumato, fine vita prevista',           color: '#d97706', bg: '#fffbeb', border: '#fcd34d' },
-  { id: 'cambio_inserti', label: 'Cambio inserti',   desc: 'Corpo rimasto, inserti sostituiti e vita resettata', color: '#0891b2', bg: '#e0f2fe', border: '#7dd3fc' },
-  { id: 'rottura',        label: 'Rottura',           desc: 'Utensile rotto durante lavorazione',               color: '#dc2626', bg: '#fef2f2', border: '#fca5a5' },
+  { id: 'usura_normale', label: 'Usura normale', desc: 'Degrado previsto, fine vita raggiunta',    color: '#d97706', bg: '#fffbeb', border: '#fcd34d' },
+  { id: 'rottura',       label: 'Rottura',       desc: 'Fresa rovinata in modo non atteso',        color: '#dc2626', bg: '#fef2f2', border: '#fca5a5' },
 ]
 
 // Cause per rimozione (utensile sparito dal TOA)

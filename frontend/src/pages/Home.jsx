@@ -138,6 +138,21 @@ export default function Home(){
       .catch(()=>{})
   },[pallet, projects])
 
+  // Auto-reset sessione orfana
+  useEffect(()=>{
+    if(!sessLive?.attiva) return
+    const palletLavNum = pallet.find(p=>(p.stato||'').toLowerCase().replace('_',' ')==='in lavorazione')?.numero
+    const isOrfana = sessLive.pallet !== palletLavNum
+    if(!isOrfana) return
+    // Sessione orfana — reset automatico dopo 10 secondi
+    // (delay per evitare falsi positivi durante caricamento iniziale)
+    const t = setTimeout(()=>{
+      fetch('/api/report/reset-sessione',{method:'POST'})
+        .then(()=>setTimeout(()=>window.location.reload(),1500))
+    }, 10000)
+    return ()=>clearTimeout(t)
+  },[sessLive?.attiva, sessLive?.pallet, pallet])
+
   // Traccia inizio fermo live (per contatore UI)
   useEffect(()=>{
     const eraMacchinaFerma = !sessLive?.attiva || sessLive?.in_pausa

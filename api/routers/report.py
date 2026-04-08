@@ -1585,36 +1585,63 @@ async def export_excel(data: str = Query(default=None)):
     t3.alignment = Alignment(horizontal="center", vertical="center")
     ws3.row_dimensions[1].height = 28
 
-    cols3 = [("Progetto",18),("Prog. prev.",20),("Prog. succ.",20),("Inizio fermo",18),("Durata fermo",14)]
+    cols3 = [("Inizio",18),("Fine",18),("Durata",14),("Causa",18),("Note",20)]
     for i,(lbl,w) in enumerate(cols3,1):
         hdr(ws3, 2, i, lbl, bg="92400E", size=10)
         ws3.column_dimensions[get_column_letter(i)].width = w
 
+    # Usa fermi_globali (più accurati) — include fermi tra sessioni
+    fermi_src = rpt.get("fermi_globali") or []
+
+    # Fallback: gap tra programmi se fermi_globali vuoti
+    if not fermi_src:
+        for sess in rpt["sessioni"]:
+            pgms = sess.get("programmi",[])
+            for i in range(1, len(pgms)):
+                prev = pgms[i-1]; curr = pgms[i]
+                if not (prev.get("fine") and curr.get("inizio")): continue
+                try:
+                    gap = int((datetime.fromisoformat(curr["inizio"]) -
+                               datetime.fromisoformat(prev["fine"])).total_seconds())
+                except: continue
+                if gap < 10: continue
+                fermi_src.append({
+                    "inizio": prev.get("fine"),
+                    "fine":   curr.get("inizio"),
+                    "durata_sec": gap,
+                    "causa": None,
+                })
+
+    fermi_src = sorted(fermi_src, key=lambda f: f.get("inizio") or "")
+
     r3 = 3
-    for sess in rpt["sessioni"]:
-        pgms = sess.get("programmi",[])
-        for i in range(1, len(pgms)):
-            prev = pgms[i-1]; curr = pgms[i]
-            if not (prev.get("fine") and curr.get("inizio")): continue
-            try:
-                gap = int((datetime.fromisoformat(curr["inizio"]) -
-                           datetime.fromisoformat(prev["fine"])).total_seconds())
-            except: continue
-            if gap < 10: continue
-            fill = PatternFill("solid", start_color="FEF3C7" if r3%2==0 else "FFFBEB")
-            vals = [
-                sess.get("progetto"),
-                prev.get("filename",""),
-                curr.get("filename",""),
-                prev.get("fine","")[:16].replace("T"," "),
-                _durata_str(gap),
-            ]
-            for col, val in enumerate(vals, 1):
-                c = ws3.cell(row=r3, column=col, value=val)
-                c.font = Font(name="Arial", size=10)
-                c.fill = fill; c.border = thin
-                c.alignment = Alignment(horizontal="center" if col>2 else "left", vertical="center")
-            r3 += 1
+    for f in fermi_src:
+        dur = f.get("durata_sec", 0)
+        if dur < 10: continue
+        inizio_str = (f.get("inizio") or "")[:16].replace("T"," ")
+        fine_str   = (f.get("fine")   or "")[:16].replace("T"," ")
+        causa      = (f.get("causa") or "—")
+        fill = PatternFill("solid", start_color="FEF3C7" if r3%2==0 else "FFFBEB")
+        # Colore causa
+        causa_color = {
+            "allarme":         "DC2626",
+            "setup":           "1D5FAD",
+            "pausa_operatore": "16A34A",
+            "altro":           "64748B",
+        }.get(causa, "374151")
+        vals = [inizio_str, fine_str, _durata_str(dur), causa.replace("_"," "), ""]
+        for col, val in enumerate(vals, 1):
+            c = ws3.cell(row=r3, column=col, value=val)
+            c.font = Font(name="Arial", size=10,
+                         bold=(col==4), color=causa_color if col==4 else "000000")
+            c.fill = fill; c.border = thin
+            c.alignment = Alignment(horizontal="center", vertical="center")
+        r3 += 1
+
+    if r3 == 3:
+        c = ws3.cell(row=3, column=1, value="Nessun fermo registrato per questa giornata")
+        c.font = Font(name="Arial", size=10, italic=True, color="94A3B8")
+        ws3.merge_cells("A3:E3")
 
     # Salva
     import tempfile

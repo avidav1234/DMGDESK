@@ -325,10 +325,7 @@ async def get_stato_macchina():
             "ultimo_aggiornamento": None,
         }
 
-    # Legge il file di rete in un thread separato per non bloccare l'event loop
-    import asyncio as _aio_exec
-    loop = _aio_exec.get_event_loop()
-    raw  = await loop.run_in_executor(None, _parse_log, log_path)
+    raw  = _parse_log(log_path)
     data = _normalizza(raw)
 
     # Timestamp e controllo stale

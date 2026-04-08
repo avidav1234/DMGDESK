@@ -213,7 +213,13 @@ def aggiorna_da_log(
             if sess_orfana and sess_orfana.get("fine") is None:
                 fine_orfana = sc.get("ultimo_tick") or now
                 _chiudi_sessione(data, sc, fine_orfana)
+                # Preserva fermo giornaliero prima di clear
+                _fermo_salvato = sc.get("fermo_sec_giornaliero", 0)
+                _fermo_data    = sc.get("fermo_data", "")
                 sc.clear()
+                if _fermo_salvato and _fermo_data == now[:10]:
+                    sc["fermo_sec_giornaliero"] = _fermo_salvato
+                    sc["fermo_data"]            = _fermo_data
                 dirty = True
 
         # ── Macchina FERMA ────────────────────────────────────────────────────────
@@ -334,7 +340,9 @@ def aggiorna_da_log(
                 if pausa_sec > GRACE_SEC:
                     # Grace scaduto → chiudi definitivamente
                     _chiudi_sessione(data, sc, sc.get("pausa_inizio") or now)
+                    _fs, _fd = sc.get("fermo_sec_giornaliero",0), sc.get("fermo_data","")
                     sc.clear()
+                    if _fs and _fd == now[:10]: sc["fermo_sec_giornaliero"]=_fs; sc["fermo_data"]=_fd
                     dirty = True
 
         # ── Macchina IN ESECUZIONE ────────────────────────────────────────────────
@@ -405,12 +413,16 @@ def aggiorna_da_log(
                 else:
                     # Grace scaduto prima della ripresa — chiudi e tratta come nuovo
                     _chiudi_sessione(data, sc, sc.get("pausa_inizio") or now)
+                    _fs, _fd = sc.get("fermo_sec_giornaliero",0), sc.get("fermo_data","")
                     sc.clear()
+                    if _fs and _fd == now[:10]: sc["fermo_sec_giornaliero"]=_fs; sc["fermo_data"]=_fd
                     prev_prog = None
             elif sc.get("in_pausa"):
                 # Programma diverso dopo pausa → chiudi la sessione precedente
                 _chiudi_sessione(data, sc, sc.get("pausa_inizio") or now)
+                _fs, _fd = sc.get("fermo_sec_giornaliero",0), sc.get("fermo_data","")
                 sc.clear()
+                if _fs and _fd == now[:10]: sc["fermo_sec_giornaliero"]=_fs; sc["fermo_data"]=_fd
                 prev_prog = None
 
             # ── Cambio data (mezzanotte): chiudi sessione del giorno precedente ──
@@ -419,7 +431,7 @@ def aggiorna_da_log(
                 # Chiudi la sessione di ieri con il timestamp di mezzanotte
                 mezzanotte = now[:10] + "T00:00:00"
                 _chiudi_sessione(data, sc, mezzanotte)
-                sc.clear()
+                sc.clear()  # A mezzanotte il fermo si azzera — nuovo giorno
                 prev_prog = None  # Forza apertura nuova sessione sotto
 
             # Prima volta o cambio programma

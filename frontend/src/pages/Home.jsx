@@ -310,11 +310,22 @@ export default function Home(){
       : allPgmLav
     ).filter(p => p.stato !== 'completato')
 
-    // Somma ETA successivi con gerarchia
+    // Separa in_main (già caricati) da da_fare
+    const pgmSuccInMain = pgmSuccessivi.filter(p =>
+      ['in_main','in_macchina','in_lavorazione'].includes(p.stato))
+    const pgmSuccDaFare = pgmSuccessivi.filter(p => p.stato === 'da_fare')
+
+    // Somma ETA successivi in_main (priorità)
+    const secSuccInMain = pgmSuccInMain.reduce((acc, p) =>
+      acc + stimaPgm(p, fallback || tempoCorrente), 0)
+    // Somma ETA tutti i successivi (in_main + da_fare)
     const secSuccessivi = pgmSuccessivi.reduce((acc, p) =>
       acc + stimaPgm(p, fallback || tempoCorrente), 0)
 
-    const totSec = rimPgm + secSuccessivi
+    // totSec primario = in_main only (corrente + successivi in_main)
+    // totSecTutto = corrente + tutti i successivi
+    const totSec = rimPgm + secSuccInMain   // in_main only
+    const totSecTutto = rimPgm + secSuccessivi  // tutto
 
     // Totale progetto/pallet — tutti i programmi (completati + in corso + da fare)
     // Serve per mostrare "X/Y" e la durata totale del pallet
@@ -347,13 +358,17 @@ export default function Home(){
     return {
       rimPgm,
       totSec,
+      totSecTutto,
       secTotalePallet,
       nTotali,
       nCompletati,
       nRimanenti,
-      etaFmtPgm:    fmtEta(rimPgm),
-      etaFmtPallet: fmtEta(totSec),
-      etaFmtTotale: fmtEta(secTotalePallet),
+      nInMain: pgmSuccInMain.length + 1,  // +1 per il corrente
+      nDaFare: pgmSuccDaFare.length,
+      etaFmtPgm:      fmtEta(rimPgm),
+      etaFmtPallet:   fmtEta(totSec),        // in_main only
+      etaFmtTutto:    fmtEta(totSecTutto),   // tutto incluso da_fare
+      etaFmtTotale:   fmtEta(secTotalePallet),
       nCampioni:    ciclo?.n || 0,
       fontePgm,
       deviazione:   ciclo?.std_sec || 0,
@@ -729,7 +744,7 @@ export default function Home(){
                   border:`1px solid ${etaCalc.anomalia?'#fca5a5':'#93c5fd'}`}}>
                   <div>
                     <div style={{fontSize:10,color:etaCalc.anomalia?'#dc2626':'#1D5FAD',marginBottom:1}}>
-                      fine pallet
+                      fine pallet {etaCalc.nInMain>0?`· ${etaCalc.nInMain} in main`:''}
                     </div>
                     <div style={{fontSize:20,fontWeight:900,fontFamily:'monospace',
                       color:etaCalc.anomalia?'#dc2626':'#0d2d5e',lineHeight:1}}>
@@ -743,13 +758,19 @@ export default function Home(){
                         )
                       })()}
                     </div>
+                    {etaCalc.nDaFare>0&&(
+                      <div style={{fontSize:10,color:'#64748b',marginTop:3}}>
+                        inclusi da fare: {etaCalc.etaFmtTutto}
+                        <span style={{marginLeft:6,opacity:0.7}}>+{etaCalc.nDaFare} pgm da caricare</span>
+                      </div>
+                    )}
                   </div>
                   <div style={{textAlign:'right'}}>
                     <div style={{fontSize:10,color:'#64748b'}}>
                       {etaCalc.nCampioni>=2?`da ${etaCalc.nCampioni} cicli reali`:'da tempi CAM'}
                     </div>
                     <div style={{fontSize:10,color:'#64748b',marginTop:1}}>
-                      {etaCalc.nRimanenti} pgm rimanenti
+                      {etaCalc.nInMain} pgm in main
                     </div>
                   </div>
                 </div>

@@ -144,7 +144,7 @@ export function PopupSostituzione({ sostituzione, onClassifica, onIgnora }) {
 }
 
 // ── Popup classificazione fermo ─────────────────────────────────────────────
-export function PopupFermo({ fermoSec, tsInizio, onClassifica, onIgnora }) {
+export function PopupFermo({ fermoSec, tsInizio, tsFine, onClassifica, onIgnora }) {
   const [selected, setSelected] = useState(null)
   const [loading, setLoading] = useState(false)
 
@@ -152,6 +152,15 @@ export function PopupFermo({ fermoSec, tsInizio, onClassifica, onIgnora }) {
     const h = Math.floor(sec/3600), m = Math.floor((sec%3600)/60)
     return h > 0 ? `${h}h ${m}m` : `${m} min`
   }
+
+  const fmtOra = (isoStr) => {
+    if (!isoStr) return '—'
+    const d = new Date(isoStr)
+    return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
+  }
+
+  const oraInizio = fmtOra(tsInizio)
+  const oraFine   = fmtOra(tsFine || new Date().toISOString())
 
   const handleSalva = async () => {
     if (!selected) return
@@ -185,7 +194,17 @@ export function PopupFermo({ fermoSec, tsInizio, onClassifica, onIgnora }) {
           <div style={{width:10,height:10,borderRadius:'50%',background:'#ef4444',flexShrink:0}}/>
           <div>
             <div style={{fontSize:14,fontWeight:800,color:'#0d2d5e'}}>Fermo registrato</div>
-            <div style={{fontSize:11,color:'#64748b'}}>Durata: {fmtDurata(fermoSec)}</div>
+            <div style={{fontSize:11,color:'#64748b'}}>
+              {tsInizio ? (
+                <>
+                  {new Date(tsInizio).toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit'})}
+                  {' · '}
+                  {oraInizio} → {oraFine}
+                  {' · '}
+                  <b>{fmtDurata(fermoSec)}</b>
+                </>
+              ) : fmtDurata(fermoSec)}
+            </div>
           </div>
         </div>
 

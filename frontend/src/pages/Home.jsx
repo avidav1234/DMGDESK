@@ -36,6 +36,8 @@ export default function Home(){
   const [popupSost, setPopupSost]     = useState(null)   // sostituzione da classificare
   const [popupFermo, setPopupFermo]   = useState(null)   // fermo da classificare
   const [fermoInizio, setFermoInizio] = useState(null)   // ts inizio fermo corrente
+  const [fermoFine, setFermoFine]     = useState(null)   // ts fine fermo (riavvio)
+  const [fermoInizioSalvato, setFermoInizioSalvato] = useState(null) // ts inizio salvato per popup
   const [fermoSec, setFermoSec]       = useState(0)      // durata fermo corrente
 
   useEffect(()=>{
@@ -148,6 +150,8 @@ export default function Home(){
         const durSec = Math.floor((Date.now() - new Date(fermoInizio).getTime())/1000)
         if(durSec >= SOGLIA_FERMO_SEC && !popupFermo){
           setFermoSec(durSec)
+          setFermoInizioSalvato(fermoInizio)  // salva prima del reset
+          setFermoFine(new Date().toISOString())
           setPopupFermo(true)
         }
         setFermoInizio(null)
@@ -444,7 +448,8 @@ export default function Home(){
     {popupFermo&&(
       <PopupFermo
         fermoSec={fermoSec}
-        tsInizio={fermoInizio}
+        tsInizio={fermoInizioSalvato}
+        tsFine={fermoFine}
         onClassifica={(causa)=>setPopupFermo(null)}
         onIgnora={()=>setPopupFermo(null)}
       />

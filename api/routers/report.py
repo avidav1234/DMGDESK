@@ -232,19 +232,27 @@ def aggiorna_da_log(
             today = now[:10]
 
             if not ultimo_fermo or ultimo_fermo[:10] != today:
-                # Primo tick fermo della giornata — turno 24h, recupera da mezzanotte a ora
-                try:
-                    ts_now    = datetime.fromisoformat(now)
-                    mezzanotte = datetime.fromisoformat(today + "T00:00:00")
-                    fermo_recuperato = max(0, int((ts_now - mezzanotte).total_seconds()))
-                    if sc.get("fermo_data") != today:
-                        sc["fermo_sec_giornaliero"] = 0
-                        sc["fermo_data"] = today
-                    if sc.get("fermo_sec_giornaliero", 0) < fermo_recuperato:
-                        sc["fermo_sec_giornaliero"] = fermo_recuperato
+                # Primo tick fermo della giornata corrente.
+                # Se ultimo_tick_fermo era ieri → backend era su ieri e macchina
+                # era ferma dalla mezzanotte: recupera fermo da mezzanotte a ora.
+                # Se ultimo_tick_fermo è null → backend appena avviato: non recuperare,
+                # non sappiamo da quando è ferma.
+                if sc.get("fermo_data") != today:
+                    sc["fermo_sec_giornaliero"] = 0
+                    sc["fermo_data"] = today
                     dirty = True
-                except Exception:
-                    pass
+                if ultimo_fermo and ultimo_fermo[:10] < today:
+                    # Era ferma ieri — recupera da mezzanotte a ora
+                    try:
+                        ts_now     = datetime.fromisoformat(now)
+                        mezzanotte = datetime.fromisoformat(today + "T00:00:00")
+                        fermo_recuperato = max(0, int((ts_now - mezzanotte).total_seconds()))
+                        if sc.get("fermo_sec_giornaliero", 0) < fermo_recuperato:
+                            sc["fermo_sec_giornaliero"] = fermo_recuperato
+                        dirty = True
+                    except Exception:
+                        pass
+                # Se ultimo_fermo è null: primo avvio backend, non recuperiamo nulla
             if ultimo_fermo:
                 try:
                     delta_fermo = int((datetime.fromisoformat(now) -

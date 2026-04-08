@@ -220,7 +220,10 @@ export default function Home(){
     const days=del?.dueDate&&!del.delivered?daysUntil(del.dueDate):null
     const isScaduto=days!==null&&days<=0
     if(stato==='in lavorazione') return {bg:'#dbeafe',fg:'#0d2d5e',border:'#1D5FAD',label:'LIVE',accent:'#1D5FAD',scaduto:isScaduto}
-    if(info?.pct>=100||stato==='finito') return {bg:'#dcfce7',fg:'#14532d',border:'#16a34a',label:'FINITO',accent:'#16a34a',scaduto:isScaduto}
+    // FINITO: pct 100%, stato backend finito, OPPURE nessun programma in_main/in_macchina/in_lavorazione
+    const hasPgmAttivi = info?.inMac > 0
+    const isFinito = info?.pct>=100 || stato==='finito' || (info && !hasPgmAttivi && info.done > 0)
+    if(isFinito) return {bg:'#dcfce7',fg:'#14532d',border:'#16a34a',label:'FINITO',accent:'#16a34a',scaduto:isScaduto}
     if(info) return {bg:'#fefce8',fg:'#854d0e',border:'#eab308',label:'GREZZO',accent:'#eab308',scaduto:isScaduto}
     return {bg:'#f8fafc',fg:'#94a3b8',border:'#e2e8f0',label:'VUOTO',accent:null,scaduto:isScaduto}
   }

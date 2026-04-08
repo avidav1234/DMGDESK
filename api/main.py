@@ -105,9 +105,12 @@ async def startup():
         import asyncio as _aio
         _log = __import__('logging').getLogger("machine_poller")
         _log.info("Machine poller interno avviato (ogni 5s)")
+        await _aio.sleep(2)  # attendi startup completo prima del primo tick
         while True:
             try:
-                await _aggiorna()
+                await _aio.wait_for(_aggiorna(), timeout=10)
+            except _aio.TimeoutError:
+                _log.warning("Machine poller: timeout 10s sul tick")
             except Exception as _e:
                 _log.debug(f"Machine poller: {_e}")
             await _aio.sleep(5)

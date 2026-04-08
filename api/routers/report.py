@@ -783,6 +783,46 @@ def _chiudi_sessione(data: dict, sc: dict, now: str):
 
 # ── Endpoint: dati giornalieri ────────────────────────────────────────────────
 
+@router.get("/fermi/non-classificati")
+async def get_fermi_non_classificati():
+    """
+    Ritorna i fermi globali non ancora classificati dall'operatore.
+    Usato dal frontend per mostrare il popup ML al momento giusto.
+    Solo fermi >= 10 minuti, completati (hanno fine), non classificati.
+    """
+    config = carica_configurazione()
+    data   = _load_log(config)
+    soglia_sec = 600  # 10 minuti
+
+    non_class = [
+        f for f in data.get("fermi_globali", [])
+        if f.get("fine")                        # fermo completato
+        and f.get("durata_sec", 0) >= soglia_sec  # >= 10 minuti
+        and not f.get("causa")                  # non ancora classificato
+        and not f.get("ignorato")               # non ignorato
+    ]
+    # Solo gli ultimi 3 non classificati — evita flood popup
+    return {"fermi": non_class[-3:]}
+
+
+@router.post("/fermi/ignora")
+async def ignora_fermo(body: dict = Body(...)):
+    """Marca un fermo come ignorato (operatore non vuole classificarlo)."""
+    config   = carica_configurazione()
+    data     = _load_log(config)
+    ts_inizio = body.get("ts_inizio")
+    if not ts_inizio:
+        from fastapi import HTTPException
+        raise HTTPException(400, "ts_inizio richiesto")
+    for f in data.get("fermi_globali", []):
+        if f.get("inizio") == ts_inizio:
+            f["ignorato"] = True
+            f["ignorato_ts"] = datetime.now().isoformat(timespec="seconds")
+            break
+    _save_log(config, data)
+    return {"ok": True}
+
+
 @router.post("/fermi/classifica")
 async def classifica_fermo(body: dict = Body(...)):
     """

@@ -165,12 +165,7 @@ export function PopupFermo({ fermoSec, tsInizio, tsFine, onClassifica, onIgnora 
     if (!selected) return
     setLoading(true)
     try {
-      await fetch('/api/report/fermi/classifica', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ causa: selected, ts_inizio: tsInizio, durata_sec: fermoSec }),
-      })
-      onClassifica(selected)
+      await onClassifica(selected)
     } catch (e) {
       console.error(e)
     } finally {

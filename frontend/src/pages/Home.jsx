@@ -34,11 +34,11 @@ export default function Home(){
   const [macchinaLive, setMacchinaLive] = useState(null)  // dati OPC UA diretti
   const [confrontoIeri, setConfrontoIeri] = useState(null)  // completati oggi vs ieri
   const [popupSost, setPopupSost]     = useState(null)   // sostituzione da classificare
-  const [popupFermo, setPopupFermo]   = useState(null)   // fermo da classificare
-  const [fermoInizio, setFermoInizio] = useState(null)   // ts inizio fermo corrente
-  const [fermoFine, setFermoFine]     = useState(null)   // ts fine fermo (riavvio)
-  const [fermoInizioSalvato, setFermoInizioSalvato] = useState(null) // ts inizio salvato per popup
-  const [fermoSec, setFermoSec]       = useState(0)      // durata fermo corrente
+  const [popupFermo, setPopupFermo]     = useState(null)   // fermo da classificare {inizio,fine,durata_sec}
+  const [fermoInizio, setFermoInizio]   = useState(null)   // ts inizio fermo corrente (per contatore live)
+  const [fermoFine, setFermoFine]       = useState(null)   // ts fine fermo
+  const [fermoInizioSalvato, setFermoInizioSalvato] = useState(null)
+  const [fermoSec, setFermoSec]         = useState(0)
 
   useEffect(()=>{
     const ac = new AbortController()
@@ -138,26 +138,39 @@ export default function Home(){
       .catch(()=>{})
   },[pallet, projects])
 
-  // Rileva fermo >10 min e mostra popup al riavvio
+  // Traccia inizio fermo live (per contatore UI)
   useEffect(()=>{
-    const SOGLIA_FERMO_SEC = 600 // 10 minuti
     const eraMacchinaFerma = !sessLive?.attiva || sessLive?.in_pausa
     if(eraMacchinaFerma){
       if(!fermoInizio) setFermoInizio(new Date().toISOString())
     } else {
-      // Macchina ripartita — calcola durata fermo
-      if(fermoInizio){
-        const durSec = Math.floor((Date.now() - new Date(fermoInizio).getTime())/1000)
-        if(durSec >= SOGLIA_FERMO_SEC && !popupFermo){
-          setFermoSec(durSec)
-          setFermoInizioSalvato(fermoInizio)  // salva prima del reset
-          setFermoFine(new Date().toISOString())
-          setPopupFermo(true)
-        }
-        setFermoInizio(null)
-      }
+      setFermoInizio(null)
     }
   },[sessLive?.attiva, sessLive?.in_pausa])
+
+  // Polling backend — fermi non classificati (ogni 30s)
+  useEffect(()=>{
+    let cancelled = false
+    const check = async () => {
+      if(cancelled) return
+      try {
+        const r = await fetch('/api/report/fermi/non-classificati')
+        if(!r.ok || cancelled) return
+        const d = await r.json()
+        const fermi = d.fermi || []
+        if(fermi.length > 0 && !popupFermo){
+          const f = fermi[0]
+          setFermoSec(f.durata_sec || 0)
+          setFermoInizioSalvato(f.inizio)
+          setFermoFine(f.fine)
+          setPopupFermo(f)  // salva l'intero record
+        }
+      } catch {}
+    }
+    check()
+    const t = setInterval(check, 30000)
+    return () => { cancelled = true; clearInterval(t) }
+  }, [popupFermo])
 
   const now    = new Date()
   const DAYS   = ['Domenica','Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato']
@@ -468,8 +481,23 @@ export default function Home(){
         fermoSec={fermoSec}
         tsInizio={fermoInizioSalvato}
         tsFine={fermoFine}
-        onClassifica={(causa)=>setPopupFermo(null)}
-        onIgnora={()=>setPopupFermo(null)}
+        onClassifica={async (causa)=>{
+          // Classifica sul backend
+          await fetch('/api/report/fermi/classifica', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ causa, ts_inizio: fermoInizioSalvato, durata_sec: fermoSec })
+          })
+          setPopupFermo(null)
+        }}
+        onIgnora={async ()=>{
+          if(fermoInizioSalvato){
+            await fetch('/api/report/fermi/ignora', {
+              method:'POST', headers:{'Content-Type':'application/json'},
+              body: JSON.stringify({ ts_inizio: fermoInizioSalvato })
+            })
+          }
+          setPopupFermo(null)
+        }}
       />
     )}
     <div style={{flex:1,overflow:'hidden',background:'#f0f4f8',fontFamily:'var(--font-display)',display:'flex',flexDirection:'column',height:'100%'}}>

@@ -1617,20 +1617,33 @@ async def export_excel(data: str = Query(default=None)):
             r3 += 1
 
     # Salva
-    out = Path("/home/claude/report_temp.xlsx")
+    import tempfile
+    tmp = tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False)
+    tmp.close()
+    out = Path(tmp.name)
     wb.save(str(out))
     return out
 
 @router.get("/export-excel-download")
 async def export_excel_download(data: str = Query(default=None)):
+    from fastapi.responses import StreamingResponse
+    import io
     target = data or datetime.now().strftime("%Y-%m-%d")
     out    = await export_excel(data)
     fname  = f"report_lavorazione_{target}.xlsx"
-    import shutil
-    dest = Path(f"/mnt/user-data/outputs/{fname}")
-    shutil.copy(str(out), str(dest))
-    return FileResponse(str(dest), filename=fname,
-                        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    # Leggi il file in memoria e restituisci come stream — funziona su qualsiasi OS
+    with open(str(out), "rb") as f:
+        content_bytes = f.read()
+    # Pulizia file temp
+    try:
+        out.unlink()
+    except Exception:
+        pass
+    return StreamingResponse(
+        io.BytesIO(content_bytes),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'}
+    )
 
 
 # ── Tempi ciclo reali per ETA ─────────────────────────────────────────────────

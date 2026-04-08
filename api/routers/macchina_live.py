@@ -418,14 +418,15 @@ async def get_live_context():
 
     # Fallback: se prog_raw è null ma la macchina è in esecuzione,
     # usa il programma_corrente dallo stato_corrente del log sessioni
+    _fallback_filename = None
     if not prog_raw and stato_pgm in (2, 3):
         try:
-            from api.routers.report import _load_log as _rl, _log_path as _lp
+            from api.routers.report import _load_log as _rl
             _sc = _rl(config).get("stato_corrente", {})
             _pc = _sc.get("programma_corrente")
             if _pc:
-                # Costruisci un path fittizio compatibile con il parser
-                prog_raw = f"/_N_WKS_DIR/_N_FALLBACK_WPD/_N_{_pc.upper().replace('.MPF','')}_MPF"
+                # Imposta direttamente il filename — bypassa il parsing del path
+                _fallback_filename = _pc if _pc.upper().endswith(".MPF") else _pc + ".MPF"
         except Exception:
             pass
 
@@ -451,6 +452,10 @@ async def get_live_context():
         mw = _re.search(r'_N_([^/]+)_WPD', prog_raw, _re.IGNORECASE)
         if mw:
             cartella_wpd = mw.group(1)  # es. "4349_0221"
+
+    # Usa fallback se mpf_filename non estratto dal path
+    if not mpf_filename and _fallback_filename:
+        mpf_filename = _fallback_filename
 
     # Matching con progetti WorkTrack
     match = None

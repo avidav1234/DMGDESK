@@ -325,7 +325,9 @@ async def get_stato_macchina():
             "ultimo_aggiornamento": None,
         }
 
-    raw  = _parse_log(log_path)
+    # Legge il file di rete in un thread separato per non bloccare l'event loop
+    loop = _asyncio.get_event_loop()
+    raw  = await loop.run_in_executor(None, _parse_log, log_path)
     data = _normalizza(raw)
 
     # Timestamp e controllo stale
@@ -756,6 +758,7 @@ async def aggiorna_stati_da_log():
     3. Programma precedente → completato (cambio programma)
     4. Pallet → grezzo/finito quando macchina si ferma
     """
+    import asyncio as _asyncio
     from datetime import datetime as _dt
 
     config   = carica_configurazione()

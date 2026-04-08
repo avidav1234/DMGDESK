@@ -406,6 +406,12 @@ export default function Home(){
       const tutti = Object.values(tempiCiclo).filter(c=>c.n>=2)
       return tutti.length ? Math.round(tutti.reduce((a,c)=>a+c.media_sec,0)/tutti.length) : null
     })()
+    // Media locale della commessa — fallback più accurato della media globale
+    const mediaLocale = (()=>{
+      const stimati = pgms.filter(p=>p.tempoStimato && parseInt(p.tempoStimato)>0)
+      if(!stimati.length) return null
+      return Math.round(stimati.reduce((a,p)=>a+parseInt(p.tempoStimato)*60, 0) / stimati.length)
+    })()
     const fmtEta=(sec)=>{
       if(sec<60) return '<1 min'
       if(sec<3600) return `~${Math.round(sec/60)} min`
@@ -419,6 +425,7 @@ export default function Home(){
         const tc=tempiCiclo[fn]
         if(tc?.n>=2){ sec+=tc.media_sec; haStima=true }
         else if(p.tempoStimato){ sec+=parseInt(p.tempoStimato)*60; haStima=true }
+        else if(mediaLocale){ sec+=mediaLocale; haStima=true }
         else if(mediaGlobale){ sec+=mediaGlobale }
       }
       return { sec, haStima }

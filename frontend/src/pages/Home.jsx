@@ -264,8 +264,14 @@ export default function Home(){
       return fallbackSec || 0                                    // 3. fallback
     }
 
-    // Fallback globale: media del programma corrente (se disponibile)
-    const fallback = ciclo?.n >= 2 ? ciclo.media_sec : null
+    // Fallback globale: media di TUTTI i cicli reali noti (non del programma corrente)
+    // Evita che un programma pesante (es. 174 min) gonfi la stima di tutti i programmi senza tempoStimato
+    const mediaGlobaleCicli = (() => {
+      const tuttiCicli = Object.values(tempiCiclo).filter(c => c.n >= 2)
+      if (!tuttiCicli.length) return null
+      return Math.round(tuttiCicli.reduce((a, c) => a + c.media_sec, 0) / tuttiCicli.length)
+    })()
+    const fallback = mediaGlobaleCicli
 
     // Tempo del programma corrente: ciclo reale > tempoStimato CAM > media globale cicli
     const tempoCorrente = ciclo?.n >= 2

@@ -111,7 +111,10 @@ def receive_sessions(batch: CamSessionBatch):
             })
             created += 1
 
-    _save(data)
+    try:
+        _save(data)
+    except Exception as _e:
+        log.warning(f"[CAMTracker] _save fallita (non critico): {_e}")
     log.info(
         f"[CAMTracker] Sessioni ricevute da {batch.workstation} — "
         f"create={created} aggiornate={updated}"

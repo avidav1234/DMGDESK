@@ -326,7 +326,8 @@ async def get_stato_macchina():
         }
 
     # Legge il file di rete in un thread separato per non bloccare l'event loop
-    loop = _asyncio.get_event_loop()
+    import asyncio as _aio_exec
+    loop = _aio_exec.get_event_loop()
     raw  = await loop.run_in_executor(None, _parse_log, log_path)
     data = _normalizza(raw)
 

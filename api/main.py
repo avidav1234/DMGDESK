@@ -115,7 +115,7 @@ async def startup():
                 _log.debug(f"Machine poller: {_e}")
             await _aio.sleep(5)
 
-    _asyncio.create_task(_machine_poller_loop())
+    # _asyncio.create_task(_machine_poller_loop())  # TEMP DISABLED FOR DEBUG
     log.info("Machine poller interno avviato — frontend non deve più chiamare aggiorna-stati-da-log")
 
     # ── Main sync job — ogni 5 minuti ─────────────────────────────────────

@@ -22,19 +22,8 @@ log = get_logger(__name__)
 router = APIRouter()
 
 # ── Storage ────────────────────────────────────────────────────────────────────
-# Path dati CAM tracker — usa la directory della config se disponibile, altrimenti root progetto
-def _get_data_file() -> Path:
-    try:
-        from database.db_handler import carica_configurazione
-        cfg = carica_configurazione()
-        base = cfg.get("tools_toa_folder") or cfg.get("percorso_nc_base")
-        if base:
-            return Path(base) / "cam_tracker_data.json"
-    except Exception:
-        pass
-    return Path(__file__).parent.parent.parent / "cam_tracker_data.json"
-
-_DATA_FILE = _get_data_file()
+# Path dati CAM tracker — nella root del progetto (stesso livello di api/)
+_DATA_FILE = Path(__file__).resolve().parent.parent.parent / "cam_tracker_data.json"
 
 
 def _load() -> list[dict]:
@@ -85,7 +74,7 @@ class CamRecord(BaseModel):
 
 # ── POST /sessions — riceve dati da CAM35 ────────────────────────────────────
 @router.post("/sessions", summary="Ricevi sessioni CAM da CAM35")
-def receive_sessions(batch: CamSessionBatch):
+async def receive_sessions(batch: CamSessionBatch):
     data = _load()
 
     updated = 0

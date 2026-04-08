@@ -85,11 +85,12 @@ def calcola_vita_ottimale(
 
         if tipo == "sostituito" and vita_prima is not None:
             # Vita al momento della sostituzione = quanto consumava prima del cambio
-            # Se causa = rottura, la vita_prima non è rappresentativa della vita reale
-            # (l'utensile si è rotto prima del previsto) — la includiamo ma con peso minore
             if causa == "rottura":
-                # Rottura = outlier basso — includi ma tienilo separato
+                # Rottura = outlier basso — includi separato
                 campioni_vita.append(("rottura", float(vita_prima)))
+            elif causa == "cambio_inserti":
+                # Cambio inserti = usura reale degli inserti — campione affidabile
+                campioni_vita.append(("usura", float(vita_prima)))
             else:
                 # Usura normale — campione affidabile
                 campioni_vita.append(("usura", float(vita_prima)))

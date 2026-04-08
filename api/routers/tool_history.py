@@ -121,13 +121,14 @@ def on_tools_updated(tools_new: dict, config: dict):
             if in_transito:
                 continue
 
-            # Salta se già classificato in un record recente (evita duplicati)
-            gia_classificato = any(
+            # Salta se già registrato nelle ultime 2 ore (evita duplicati dello stesso evento)
+            due_ore_fa = (datetime.now() - timedelta(hours=2)).isoformat(timespec="seconds")
+            gia_registrato = any(
                 (r.get("alias") or "").upper() == alias_up and
-                r.get("causa") is not None
-                for r in existing_records[-20:]  # controlla ultimi 20 record
+                (r.get("ts") or "") >= due_ore_fa
+                for r in existing_records[-50:]
             )
-            if gia_classificato:
+            if gia_registrato:
                 continue
 
             # Utensile sparito dal TOA — rimosso senza rimpiazzo
@@ -159,8 +160,9 @@ def on_tools_updated(tools_new: dict, config: dict):
         lp_new = new.get("life_percent") or 0
         delta  = lp_new - lp_old
 
-        if delta >= 70:
-            # Sostituzione fisica — utensile nuovo montato
+        if delta >= 50:
+            # Sostituzione fisica o cambio inserti — vita salita >50%
+            # Soglia abbassata a 50% per catturare cambio inserti da vita media
             record = {
                 "ts":              now,
                 "alias":           new["alias"],
@@ -180,7 +182,7 @@ def on_tools_updated(tools_new: dict, config: dict):
                 f"{lp_old:.0f}% → {lp_new:.0f}%"
             )
 
-        elif 20 <= delta < 70:
+        elif 20 <= delta < 50:
             # Allungamento vita — operatore ha modificato il valore vita manualmente
             # Registrato automaticamente senza popup — dato ML prezioso
             record = {
@@ -211,10 +213,15 @@ def on_tools_updated(tools_new: dict, config: dict):
             import asyncio
             for r in nuovi:
                 emoji   = "🔄" if r["tipo"] == "sostituito" else "✅"
+                vita_str = (
+                    f"{r['vita_prima']}% → {r['vita_dopo']}%"
+                    if r['vita_dopo'] is not None
+                    else f"{r['vita_prima']}% → rimosso"
+                )
                 msg     = (
                     f"{emoji} *Utensile {r['tipo'].upper()}*\n"
                     f"`{r['alias']}` pos.{r['posizione'] or '?'}\n"
-                    f"Vita: {r['vita_prima']}% → {r['vita_dopo']}%"
+                    f"Vita: {vita_str}"
                 )
                 asyncio.create_task(send_message(msg))
         except Exception:

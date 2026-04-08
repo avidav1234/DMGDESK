@@ -440,8 +440,26 @@ export default function Home(){
     {popupSost&&(
       <PopupSostituzione
         sostituzione={popupSost}
-        onClassifica={(ts,causa)=>{ setPopupSost(null) }}
-        onIgnora={()=>setPopupSost(null)}
+        onClassifica={(ts,causa)=>{
+          setPopupSost(null)
+          // Ricarica subito — potrebbe esserci un'altra sostituzione in coda
+          setTimeout(()=>{
+            fetch('/api/tool-history/sostituzioni/non-classificate').then(r=>r.ok?r.json():null)
+              .then(d=>{ if(d?.sostituzioni?.length>0) setPopupSost(d.sostituzioni[0]) })
+              .catch(()=>{})
+          }, 500)
+        }}
+        onIgnora={()=>{
+          setPopupSost(null)
+          // Passa alla prossima sostituzione non classificata
+          setTimeout(()=>{
+            fetch('/api/tool-history/sostituzioni/non-classificate').then(r=>r.ok?r.json():null)
+              .then(d=>{
+                const prossima = d?.sostituzioni?.find(s=>s.ts !== popupSost?.ts)
+                if(prossima) setPopupSost(prossima)
+              }).catch(()=>{})
+          }, 500)
+        }}
       />
     )}
     {/* Popup classificazione fermo */}

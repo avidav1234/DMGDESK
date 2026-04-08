@@ -94,7 +94,7 @@ async def startup():
     # ── Scheduler snapshot turno ───────────────────────────────────────────
     import asyncio as _asyncio
     from api.turno_snapshot import _scheduler_loop
-    _asyncio.create_task(_scheduler_loop())
+    # _asyncio.create_task(_scheduler_loop())  # TEMP DISABLED
     log.info("Scheduler snapshot turno avviato (07:30 notte / 16:30 giorno)")
 
     # ── Poller macchina interno ────────────────────────────────────────────
@@ -132,7 +132,7 @@ async def startup():
                 _log.warning(f"Main sync error: {_e}")
             await _aio.sleep(300)  # 5 minuti
 
-    _asyncio.create_task(_main_sync_loop())
+    # _asyncio.create_task(_main_sync_loop())  # TEMP DISABLED
     log.info("Main sync job avviato (MAIN+LOG → stati programmi, ogni 5 min)")
 
     # ── Backup giornaliero ────────────────────────────────────────────────
@@ -149,7 +149,7 @@ async def startup():
                 _log.warning(f"Backup error: {_e}")
             await _aio.sleep(86400)  # 24 ore
 
-    _asyncio.create_task(_backup_loop())
+    # _asyncio.create_task(_backup_loop())  # TEMP DISABLED
     log.info("Backup giornaliero avviato")
 
     # ── NC Scanner — ogni 10 minuti ───────────────────────────────────────
@@ -166,7 +166,7 @@ async def startup():
                 _log.warning(f"NC Scanner error: {_e}")
             await _aio.sleep(60)  # 1 minuto
 
-    _asyncio.create_task(_nc_scanner_loop())
+    # _asyncio.create_task(_nc_scanner_loop())  # TEMP DISABLED
     log.info("NC Scanner avviato (scansione directory NC ogni 1 min, solo file modificati)")
 
     # Pulizia file .tmp orfani da atomic write interrotti (crash/spegnimento)
@@ -240,8 +240,8 @@ async def startup():
             get_report_fn        = _get_report,
         )
 
-        _asyncio.create_task(_monitor.run())
-        _asyncio.create_task(_listener.run())
+        # _asyncio.create_task(_monitor.run())  # TEMP DISABLED
+        # _asyncio.create_task(_listener.run())  # TEMP DISABLED
         log.info(f"Telegram Monitor + BotListener avviati — check ogni {tg_cfg['interval_sec']}s")
     else:
         log.warning(

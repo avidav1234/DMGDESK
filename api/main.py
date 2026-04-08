@@ -212,7 +212,9 @@ async def startup():
             raw = {}
         return raw
 
+    print("DEBUG: carico telegram config...", flush=True)
     tg_cfg = load_telegram_config()
+    print(f"DEBUG: telegram config loaded: {bool(tg_cfg)}", flush=True)
     if tg_cfg:
         _notifier = TelegramNotifier(token=tg_cfg["token"], chat_id=tg_cfg["chat_id"])
 
@@ -237,14 +239,18 @@ async def startup():
             get_report_fn        = _get_report,
         )
 
+        print("DEBUG: creating telegram tasks...", flush=True)
         _asyncio.create_task(_monitor.run())
         _asyncio.create_task(_listener.run())
+        print("DEBUG: telegram tasks created", flush=True)
         log.info(f"Telegram Monitor + BotListener avviati — check ogni {tg_cfg['interval_sec']}s")
+    print("DEBUG: startup completato", flush=True)
     else:
         log.warning(
             "Telegram Monitor disabilitato — "
             "aggiungi TELEGRAM_BOT_TOKEN e TELEGRAM_CHAT_ID nel file .env"
         )
+        print("DEBUG: startup completato (no telegram)", flush=True)
 
 
 # ── Exception handler globale ─────────────────────────────────────────────────

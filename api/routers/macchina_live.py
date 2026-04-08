@@ -518,8 +518,16 @@ async def get_live_context():
                                     lp = t.get("life_percent")
                                     if not t.get("is_enabled", True) or t.get("is_worn"):
                                         allerta = "disabilitato"
-                                    elif lp is not None and lp < 15:
-                                        allerta = "fin_vita"
+                                    elif lp is not None:
+                                        # Soglia dinamica ML, fallback a 15%
+                                        try:
+                                            from ml.vita_ottimale import soglia_fin_vita as _sfv
+                                            from api.routers.tool_history import _load_history as _th_load
+                                            _sfv_val = _sfv(alias, _th_load(config))
+                                        except Exception:
+                                            _sfv_val = 15.0
+                                        if lp < _sfv_val:
+                                            allerta = "fin_vita"
                                     break
                             # Alert Telegram vita bassa durante lavorazione
                             try:

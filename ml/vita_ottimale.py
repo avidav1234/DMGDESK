@@ -182,3 +182,43 @@ def suggerimenti_magazine(records: list[dict]) -> list[dict]:
             risultati.append(ris)
 
     return sorted(risultati, key=lambda x: x["n_campioni"], reverse=True)
+
+# ── Soglie dinamiche per alert e fin_vita ─────────────────────────────────────
+# Usate da report.py e macchina_live.py per determinare quando notificare
+# l'operatore che un utensile sta per esaurirsi.
+
+SOGLIA_ALERT_DEFAULT = 20.0   # % vita rimanente sotto cui scatta l'alert
+SOGLIA_FIN_VITA_DEFAULT = 10.0  # % vita rimanente sotto cui l'utensile è a fine vita
+
+
+def soglia_alert(alias: str, records: list[dict]) -> float:
+    """
+    Restituisce la soglia di alert per un utensile.
+    Se abbiamo dati ML sufficienti, usa il 20% della vita ottimale.
+    Altrimenti usa il default (20% vita rimanente).
+    """
+    ris = calcola_vita_ottimale(alias, records)
+    if ris and ris.get("confidenza") in ("alta", "bassa"):
+        # Soglia = 20% della vita ottimale ML (minimo 10, massimo 30)
+        vita_ott = ris["vita_ottimale"]
+        return max(10.0, min(30.0, round(vita_ott * 0.20, 1)))
+    return SOGLIA_ALERT_DEFAULT
+
+
+def soglia_fin_vita(alias: str, records: list[dict]) -> float:
+    """
+    Restituisce la soglia di fine vita per un utensile.
+    Usa il 10% della vita ottimale ML, altrimenti il default.
+    """
+    ris = calcola_vita_ottimale(alias, records)
+    if ris and ris.get("confidenza") in ("alta", "bassa"):
+        vita_ott = ris["vita_ottimale"]
+        return max(5.0, min(15.0, round(vita_ott * 0.10, 1)))
+    return SOGLIA_FIN_VITA_DEFAULT
+
+
+def invalida_cache(alias: str = None) -> None:
+    """
+    Placeholder per compatibilità — in questa versione non c'è cache da invalidare.
+    """
+    pass

@@ -1,47 +1,38 @@
 """
 ml/vita_ottimale.py
-===================
-CERVELLO UNICO per la gestione della vita utensile in DMGDesk.
-
-Tutti i moduli del sistema che riguardano la vita utensile passano da qui:
-  - tool_history.py  → check_low_life_alert usa soglia_alert()
-  - progetti.py      → fin_vita usa soglia_fin_vita()
-  - progetti_utensili.py → classify_tool_state usa soglia_fin_vita()
-  - macchina_live.py → allerta_utensile usa soglia_fin_vita()
-  - report.py        → contesto_avvio usa soglia_alert()
-
-Gerarchia soglie (per utensile specifico):
-  1. ML alta confidenza  → range_min calcolato dallo storico
-  2. ML bassa confidenza → range_min con margine di sicurezza +5%
-  3. Nessun dato ML      → SOGLIA_DEFAULT (20%)
+Suggerisce la vita ottimale da impostare per un utensile nel Sinumerik.
 
 Algoritmo progressivo basato su dati storici:
-  - 0-9  campioni → nessun output ML
+  - 0-9  campioni → nessun output
   - 10-29 campioni → suggerimento con confidenza BASSA
   - 30+   campioni → suggerimento con confidenza ALTA
 
+Fonti dati usate:
+  1. tool_replacements.json — sostituzioni (vita al momento del cambio)
+  2. tool_replacements.json — allungamenti vita (vita_prima → vita_dopo)
+  3. lavorazioni_log.json  — sessioni con contesto_avvio (futuro)
+
+Logica:
+  Per ogni utensile calcola la "vita reale di consumo" — il punto percentuale
+  a cui è stato effettivamente sostituito o allungato. Questo è il dato chiave:
+  se un operatore allungava sistematicamente un utensile da 20% a 60%, significa
+  che il contatore Sinumerik era troppo aggressivo e la vita reale è maggiore.
+
   vita_ottimale = percentile_80(vita_effettiva_campioni)
+  → Il Sinumerik dovrebbe essere impostato a questo valore, non a 100%.
 """
 
 import math
 from datetime import datetime
 from typing import Optional
 
-# ── Soglie di sistema (fallback quando ML non ha dati) ────────────────────────
-SOGLIA_ALERT_DEFAULT   = 20   # % — alert Telegram e contesto_avvio
-SOGLIA_FIN_VITA_DEFAULT = 15  # % — badge fin_vita nel setup analisi
-SOGLIA_CONTESTO_BASSA  = 20   # % — conta utensili_sotto_20 nel contesto avvio
-SOGLIA_CONTESTO_MEDIA  = 40   # % — conta utensili_sotto_40 nel contesto avvio
-
-# ── Soglie confidenza ML ──────────────────────────────────────────────────────
-MIN_CAMPIONI_BASSA = 10
-MIN_CAMPIONI_ALTA  = 30
-
-# ── Cache soglie in memoria (si svuota al riavvio backend) ────────────────────
-_cache_soglie: dict = {}   # alias_upper → {soglia_alert, soglia_fin_vita, ts}
+# Soglie confidenza
+MIN_CAMPIONI_BASSA  = 10
+MIN_CAMPIONI_ALTA   = 30
 
 
-def _percentile(data: list, p: float) -> float:
+def _percentile(data: list[float], p: float) -> float:
+    """Percentile semplice senza numpy."""
     if not data:
         return 0.0
     s = sorted(data)
@@ -51,11 +42,11 @@ def _percentile(data: list, p: float) -> float:
     return s[lo] + (s[hi] - s[lo]) * (idx - lo)
 
 
-def _media(data: list) -> float:
+def _media(data: list[float]) -> float:
     return sum(data) / len(data) if data else 0.0
 
 
-def _std(data: list) -> float:
+def _std(data: list[float]) -> float:
     if len(data) < 2:
         return 0.0
     m = _media(data)
@@ -64,48 +55,70 @@ def _std(data: list) -> float:
 
 def calcola_vita_ottimale(
     alias: str,
-    records: list,
+    records: list[dict],
     commessa: Optional[str] = None,
 ) -> Optional[dict]:
     """
-    Calcola la vita ottimale per un utensile basandosi sullo storico classificato.
-    Ritorna None se dati insufficienti (< MIN_CAMPIONI_BASSA).
+    Calcola la vita ottimale per un utensile basandosi sullo storico.
+
+    Args:
+        alias:    nome utensile (case-insensitive)
+        records:  lista record da tool_replacements.json
+        commessa: se fornita, filtra per commessa (futuro — quando avremo abbastanza dati)
+
+    Returns:
+        dict con suggerimento oppure None se dati insufficienti
     """
     alias_up = alias.upper().strip()
-    campioni_vita = []
+
+    # ── Filtra record rilevanti per questo utensile ────────────────────────
+    campioni_vita = []   # vita al momento della sostituzione/allungamento
 
     for r in records:
         if (r.get("alias") or "").upper().strip() != alias_up:
             continue
+
         tipo       = r.get("tipo", "")
         vita_prima = r.get("vita_prima")
         vita_dopo  = r.get("vita_dopo")
         causa      = r.get("causa")
 
         if tipo == "sostituito" and vita_prima is not None:
+            # Vita al momento della sostituzione = quanto consumava prima del cambio
             if causa == "rottura":
+                # Rottura = outlier basso — includi separato
                 campioni_vita.append(("rottura", float(vita_prima)))
             else:
+                # Usura normale — campione affidabile
                 campioni_vita.append(("usura", float(vita_prima)))
+
         elif tipo == "allungamento_vita" and vita_prima is not None and vita_dopo is not None:
+            # L'operatore ha allungato da vita_prima a vita_dopo
+            # Questo ci dice che vita_prima era troppo bassa → vita_dopo è più corretta
             campioni_vita.append(("allungamento", float(vita_dopo)))
 
     if not campioni_vita:
         return None
 
-    n_totale  = len(campioni_vita)
-    n_rotture = sum(1 for t, _ in campioni_vita if t == "rottura")
-    n_normali = sum(1 for t, _ in campioni_vita if t in ("usura", "allungamento"))
+    n_totale   = len(campioni_vita)
+    n_rotture  = sum(1 for t, _ in campioni_vita if t == "rottura")
+    n_normali  = sum(1 for t, _ in campioni_vita if t in ("usura", "allungamento"))
 
+    # Confidenza
     if n_totale < MIN_CAMPIONI_BASSA:
-        return None
+        return None   # troppo pochi dati
+    elif n_totale < MIN_CAMPIONI_ALTA:
+        confidenza = "bassa"
+    else:
+        confidenza = "alta"
 
-    confidenza = "alta" if n_totale >= MIN_CAMPIONI_ALTA else "bassa"
-
+    # Calcolo vita ottimale
+    # Usa solo campioni normali (non rotture) per la stima principale
     valori_normali = [v for t, v in campioni_vita if t in ("usura", "allungamento")]
     valori_tutti   = [v for _, v in campioni_vita]
 
     if valori_normali:
+        # Percentile 80 dei campioni normali = vita sicura senza sprechi
         vita_ott = _percentile(valori_normali, 80)
         media    = _media(valori_normali)
         std      = _std(valori_normali)
@@ -114,19 +127,14 @@ def calcola_vita_ottimale(
         media    = _media(valori_tutti)
         std      = _std(valori_tutti)
 
-    vita_ott  = round(vita_ott, 1)
-    media     = round(media, 1)
+    vita_ott = round(vita_ott, 1)
+    media    = round(media, 1)
+
+    # Range sicuro (± std, clampato 5-100)
     range_min = max(5.0,   round(vita_ott - std, 1))
     range_max = min(100.0, round(vita_ott + std, 1))
 
-    # Soglie derivate dal ML
-    # soglia_alert: il punto in cui avvisare l'operatore
-    #   Alta confidenza  → range_min (statisticamente affidabile)
-    #   Bassa confidenza → range_min + 5% (margine di sicurezza)
-    margine = 0 if confidenza == "alta" else 5.0
-    soglia_alert    = round(min(range_min + margine, vita_ott), 1)
-    soglia_fin_vita = round(max(range_min - 5.0, 5.0), 1)  # soglia critica
-
+    # Messaggio
     if vita_ott >= 90:
         msg = f"Il Sinumerik è già impostato in modo ottimale — l'utensile dura fino al {vita_ott:.0f}%."
     elif vita_ott >= 70:
@@ -144,8 +152,6 @@ def calcola_vita_ottimale(
         "vita_ottimale":   vita_ott,
         "range_min":       range_min,
         "range_max":       range_max,
-        "soglia_alert":    soglia_alert,    # ← NUOVO: soglia alert derivata ML
-        "soglia_fin_vita": soglia_fin_vita, # ← NUOVO: soglia critica derivata ML
         "media":           media,
         "n_campioni":      n_totale,
         "n_normali":       n_normali,
@@ -157,60 +163,22 @@ def calcola_vita_ottimale(
     }
 
 
-def soglia_alert(alias: str, records: list) -> float:
+def suggerimenti_magazine(records: list[dict]) -> list[dict]:
     """
-    Ritorna la soglia di alert per questo utensile.
-    Se ML ha dati sufficienti → soglia derivata dallo storico.
-    Altrimenti → SOGLIA_ALERT_DEFAULT (20%).
-    
-    Usato da: check_low_life_alert, contesto_avvio
+    Calcola suggerimenti vita ottimale per tutti gli utensili con abbastanza dati.
+    Ritorna lista ordinata per numero campioni decrescente.
     """
-    alias_up = alias.upper().strip()
-    cached = _cache_soglie.get(alias_up)
-    if cached:
-        return cached["soglia_alert"]
+    # Trova tutti gli alias unici
+    aliases = set()
+    for r in records:
+        a = (r.get("alias") or "").strip()
+        if a:
+            aliases.add(a.upper())
 
-    ris = calcola_vita_ottimale(alias, records)
-    if ris:
-        _cache_soglie[alias_up] = ris
-        return ris["soglia_alert"]
-    return float(SOGLIA_ALERT_DEFAULT)
+    risultati = []
+    for alias in aliases:
+        ris = calcola_vita_ottimale(alias, records)
+        if ris:
+            risultati.append(ris)
 
-
-def soglia_fin_vita(alias: str, records: list) -> float:
-    """
-    Ritorna la soglia critica (fin_vita) per questo utensile.
-    Se ML ha dati sufficienti → soglia derivata dallo storico.
-    Altrimenti → SOGLIA_FIN_VITA_DEFAULT (15%).
-    
-    Usato da: classify_tool_state, analisi setup, macchina_live allerta
-    """
-    alias_up = alias.upper().strip()
-    cached = _cache_soglie.get(alias_up)
-    if cached:
-        return cached["soglia_fin_vita"]
-
-    ris = calcola_vita_ottimale(alias, records)
-    if ris:
-        _cache_soglie[alias_up] = ris
-        return ris["soglia_fin_vita"]
-    return float(SOGLIA_FIN_VITA_DEFAULT)
-
-
-def invalida_cache(alias: Optional[str] = None):
-    """
-    Invalida la cache soglie. Chiamare dopo ogni nuova classificazione.
-    Se alias è None, svuota tutta la cache.
-    """
-    global _cache_soglie
-    if alias is None:
-        _cache_soglie = {}
-    else:
-        _cache_soglie.pop(alias.upper().strip(), None)
-
-
-def suggerimenti_magazine(records: list) -> list:
-    """Calcola suggerimenti vita ottimale per tutti gli utensili con dati."""
-    aliases = {(r.get("alias") or "").upper().strip() for r in records if r.get("alias")}
-    risultati = [r for a in aliases if (r := calcola_vita_ottimale(a, records))]
     return sorted(risultati, key=lambda x: x["n_campioni"], reverse=True)

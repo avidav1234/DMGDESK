@@ -134,7 +134,7 @@ function StoricoBars({ storico, selectedData, onSelect }) {
   )
 }
 
-function TimelineGiornaliera({ sessioni }) {
+function TimelineGiornaliera({ sessioni, fermiGlobali }) {
   if (!sessioni?.length) return (
     <div style={{ color:'var(--text-dim)', fontSize:12, textAlign:'center', padding:20 }}>Nessuna sessione</div>
   )
@@ -175,6 +175,26 @@ function TimelineGiornaliera({ sessioni }) {
       if (gap < 10) continue
       const h = t0.getHours()
       if (ore[h]) ore[h].fermo += gap
+    }
+  }
+
+  // Aggiunge fermi globali se disponibili (più accurati dei gap tra programmi)
+  if (fermiGlobali && fermiGlobali.length > 0) {
+    ore.forEach(o => { o.fermo = 0 })
+    for (const f of fermiGlobali) {
+      if (!f.inizio) continue
+      const t0 = parseLocal(f.inizio)
+      if (!t0) continue
+      let cur = new Date(t0)
+      const t1 = f.fine ? parseLocal(f.fine) : new Date(t0.getTime() + (f.durata_sec||0)*1000)
+      while (t1 && cur < t1) {
+        const h = cur.getHours()
+        const slotFine = new Date(cur); slotFine.setHours(h+1,0,0,0)
+        const fine = slotFine < t1 ? slotFine : t1
+        const sec = Math.max(0, (fine - cur) / 1000)
+        if (ore[h]) ore[h].fermo += sec
+        cur = slotFine
+      }
     }
   }
 
@@ -347,24 +367,42 @@ function UtensiliDonut({ utensili }) {
   )
 }
 
-function HeatmapFermi({ sessioni }) {
+function HeatmapFermi({ sessioni, fermiGlobali }) {
   const GIORNI = ['Lun','Mar','Mer','Gio','Ven','Sab','Dom']
   const ORE = [6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22]
   const matrix = {}
   GIORNI.forEach(g => { matrix[g] = {}; ORE.forEach(h => { matrix[g][h] = 0 }) })
-  for (const sess of (sessioni || [])) {
-    if (!sess.data) continue
-    const dow = new Date(sess.data+'T00:00').getDay()
-    const label = GIORNI[dow === 0 ? 6 : dow - 1]
-    for (let i = 1; i < (sess.programmi||[]).length; i++) {
-      const prev = sess.programmi[i-1], curr = sess.programmi[i]
-      if (!prev.fine || !curr.inizio) continue
-      const t0 = parseLocal(prev.fine), t1 = parseLocal(curr.inizio)
-      if (!t0 || !t1) continue
-      const gap = Math.max(0, (t1 - t0) / 1000)
-      if (gap < 30) continue
+
+  // Usa fermi_globali se disponibili (più accurati)
+  const fermiSrc = fermiGlobali && fermiGlobali.length > 0 ? fermiGlobali : null
+
+  if (fermiSrc) {
+    for (const f of fermiSrc) {
+      if (!f.inizio) continue
+      const t0 = parseLocal(f.inizio)
+      if (!t0) continue
+      const dow = t0.getDay()
+      const label = GIORNI[dow === 0 ? 6 : dow - 1]
       const h = t0.getHours()
-      if (matrix[label] && matrix[label][h] !== undefined) matrix[label][h] += gap
+      if (matrix[label] && matrix[label][h] !== undefined)
+        matrix[label][h] += f.durata_sec || 0
+    }
+  } else {
+    // Fallback: gap tra programmi dentro le sessioni
+    for (const sess of (sessioni || [])) {
+      if (!sess.data) continue
+      const dow = new Date(sess.data+'T00:00').getDay()
+      const label = GIORNI[dow === 0 ? 6 : dow - 1]
+      for (let i = 1; i < (sess.programmi||[]).length; i++) {
+        const prev = sess.programmi[i-1], curr = sess.programmi[i]
+        if (!prev.fine || !curr.inizio) continue
+        const t0 = parseLocal(prev.fine), t1 = parseLocal(curr.inizio)
+        if (!t0 || !t1) continue
+        const gap = Math.max(0, (t1 - t0) / 1000)
+        if (gap < 30) continue
+        const h = t0.getHours()
+        if (matrix[label] && matrix[label][h] !== undefined) matrix[label][h] += gap
+      }
     }
   }
   const maxVal = Math.max(...GIORNI.flatMap(g => ORE.map(h => matrix[g][h])), 1)
@@ -404,20 +442,30 @@ function HeatmapFermi({ sessioni }) {
   )
 }
 
-function TabellaFermi({ sessioni }) {
-  const fermi = (sessioni || []).flatMap(s => {
-    const gaps = []
-    for (let i = 1; i < (s.programmi||[]).length; i++) {
-      const prev = s.programmi[i-1], curr = s.programmi[i]
-      if (!prev.fine || !curr.inizio) continue
-      const t0 = parseLocal(prev.fine), t1 = parseLocal(curr.inizio)
-      if (!t0 || !t1) continue
-      const gap = Math.round((t1 - t0) / 1000)
-      if (gap < 10) continue
-      gaps.push({ prog: s.progetto, da: prev.filename, a: curr.filename, inizio: prev.fine, gap })
-    }
-    return gaps
-  }).sort((a,b) => b.gap - a.gap)
+function TabellaFermi({ sessioni, fermiGlobali }) {
+  let fermi = []
+  if (fermiGlobali && fermiGlobali.length > 0) {
+    // Usa fermi_globali — più accurati, includono fermi tra sessioni
+    fermi = fermiGlobali
+      .filter(f => (f.durata_sec || 0) >= 10)
+      .map(f => ({ inizio: f.inizio, gap: f.durata_sec, prog: '—', da: null, a: null }))
+      .sort((a,b) => b.gap - a.gap)
+  } else {
+    // Fallback: gap tra programmi dentro le sessioni
+    fermi = (sessioni || []).flatMap(s => {
+      const gaps = []
+      for (let i = 1; i < (s.programmi||[]).length; i++) {
+        const prev = s.programmi[i-1], curr = s.programmi[i]
+        if (!prev.fine || !curr.inizio) continue
+        const t0 = parseLocal(prev.fine), t1 = parseLocal(curr.inizio)
+        if (!t0 || !t1) continue
+        const gap = Math.round((t1 - t0) / 1000)
+        if (gap < 10) continue
+        gaps.push({ prog: s.progetto, da: prev.filename, a: curr.filename, inizio: prev.fine, gap })
+      }
+      return gaps
+    }).sort((a,b) => b.gap - a.gap)
+  }
   if (!fermi.length) return (
     <div style={{ color:'var(--text-dim)', fontSize:12, textAlign:'center', padding:20 }}>Nessun fermo rilevato</div>
   )
@@ -1257,7 +1305,7 @@ export default function Report() {
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:18 }}>
             <Card style={{ padding:'20px 24px' }}>
               <SectionTitle>Timeline giornaliera (per ora)</SectionTitle>
-              <TimelineGiornaliera sessioni={rpt.sessioni} />
+              <TimelineGiornaliera sessioni={rpt.sessioni} fermiGlobali={rpt.fermi_globali} />
             </Card>
             <Card style={{ padding:'20px 24px' }}>
               <SectionTitle>Commesse lavorate</SectionTitle>
@@ -1348,11 +1396,11 @@ export default function Report() {
           <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
             <Card style={{ padding:'20px 24px' }}>
               <SectionTitle>Pattern fermi per ora del giorno</SectionTitle>
-              <HeatmapFermi sessioni={rpt.sessioni} />
+              <HeatmapFermi sessioni={rpt.sessioni} fermiGlobali={rpt.fermi_globali} />
             </Card>
             <Card style={{ padding:'20px 24px', overflow:'auto' }}>
               <SectionTitle>Dettaglio fermi — {data}</SectionTitle>
-              <TabellaFermi sessioni={rpt.sessioni} />
+              <TabellaFermi sessioni={rpt.sessioni} fermiGlobali={rpt.fermi_globali} />
             </Card>
           </div>
         )}

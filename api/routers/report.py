@@ -293,6 +293,9 @@ def aggiorna_da_log(
                 except Exception:
                     pass
             sc["ultimo_tick_fermo"] = now
+            # Traccia inizio fermo globale (per heatmap/tabella fermi)
+            if not sc.get("fermo_globale_inizio"):
+                sc["fermo_globale_inizio"] = now
             dirty = True
 
             if sc.get("in_esecuzione"):
@@ -389,6 +392,25 @@ def aggiorna_da_log(
                     programma_attivo = prev_prog  # usa il nome già registrato
 
             # Quando la macchina riparte, azzera il tracker del fermo
+            # Registra l'intervallo di fermo globale (per heatmap/tabella)
+            fermo_glob_inizio = sc.pop("fermo_globale_inizio", None)
+            if fermo_glob_inizio:
+                try:
+                    _dur = int((datetime.fromisoformat(now) -
+                                datetime.fromisoformat(fermo_glob_inizio)).total_seconds())
+                    if _dur >= 60:  # solo fermi > 1 minuto
+                        data.setdefault("fermi_globali", []).append({
+                            "inizio": fermo_glob_inizio,
+                            "fine":   now,
+                            "durata_sec": _dur,
+                            "data":   now[:10],
+                        })
+                        # Mantieni solo ultimi 500 fermi globali
+                        if len(data["fermi_globali"]) > 500:
+                            data["fermi_globali"] = data["fermi_globali"][-500:]
+                        dirty = True
+                except Exception:
+                    pass
             sc.pop("ultimo_tick_fermo", None)
 
             # ── Ripresa dopo grace period (stesso programma) ──────────────────────
@@ -1051,6 +1073,7 @@ async def get_report_giornaliero(data: str = Query(default=None)):
         "utensili":         {k: {"sec": v, "ore": _durata_str(v)}
                               for k, v in sorted(utensili_agg.items(), key=lambda x: -x[1])},
         "sessioni":         sessioni_output,
+        "fermi_globali":    [f for f in log.get("fermi_globali", []) if f.get("data") == target],
     }
 
 @router.get("/storico")

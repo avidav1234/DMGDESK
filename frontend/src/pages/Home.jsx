@@ -219,11 +219,10 @@ export default function Home(){
     const del=proj?deliveries.find(d=>d.projectId===proj.id):null
     const days=del?.dueDate&&!del.delivered?daysUntil(del.dueDate):null
     const isScaduto=days!==null&&days<=0
-    if(stato==='in lavorazione') return {bg:'#dbeafe',fg:'#0d2d5e',border:'#1D5FAD',label:'LIVE',accent:'#1D5FAD'}
-    if(info?.pct>=100||stato==='finito') return {bg:'#dcfce7',fg:'#14532d',border:'#16a34a',label:'FINITO',accent:'#16a34a'}
-    if(isScaduto) return {bg:'#fef2f2',fg:'#991b1b',border:'#ef4444',label:'SCADUTO',accent:'#ef4444'}
-    if(info) return {bg:'#fefce8',fg:'#854d0e',border:'#eab308',label:'GREZZO',accent:'#eab308'}
-    return {bg:'#f8fafc',fg:'#94a3b8',border:'#e2e8f0',label:'VUOTO',accent:null}
+    if(stato==='in lavorazione') return {bg:'#dbeafe',fg:'#0d2d5e',border:'#1D5FAD',label:'LIVE',accent:'#1D5FAD',scaduto:isScaduto}
+    if(info?.pct>=100||stato==='finito') return {bg:'#dcfce7',fg:'#14532d',border:'#16a34a',label:'FINITO',accent:'#16a34a',scaduto:isScaduto}
+    if(info) return {bg:'#fefce8',fg:'#854d0e',border:'#eab308',label:'GREZZO',accent:'#eab308',scaduto:isScaduto}
+    return {bg:'#f8fafc',fg:'#94a3b8',border:'#e2e8f0',label:'VUOTO',accent:null,scaduto:isScaduto}
   }
 
   // ── Timer live ───────────────────────────────────────────────────────────
@@ -909,13 +908,22 @@ export default function Home(){
                     {/* Numero + badge stato */}
                     <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
                       <span style={{fontSize:30,fontWeight:900,color:c.fg,lineHeight:1}}>P{n}</span>
-                      {!isVuoto&&(
-                        <span style={{fontSize:9,fontWeight:800,color:c.accent||c.fg,
-                          background:'#fff',padding:'2px 6px',borderRadius:4,
-                          border:`1px solid ${c.border}`,letterSpacing:'0.05em',lineHeight:1.4}}>
-                          {c.label}
-                        </span>
-                      )}
+                      <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:3}}>
+                        {!isVuoto&&(
+                          <span style={{fontSize:9,fontWeight:800,color:c.accent||c.fg,
+                            background:'#fff',padding:'2px 6px',borderRadius:4,
+                            border:`1px solid ${c.border}`,letterSpacing:'0.05em',lineHeight:1.4}}>
+                            {c.label}
+                          </span>
+                        )}
+                        {c.scaduto&&(
+                          <span style={{fontSize:9,fontWeight:800,color:'#c2410c',
+                            background:'#fff7ed',padding:'2px 6px',borderRadius:4,
+                            border:'1px solid #c2410c',letterSpacing:'0.05em',lineHeight:1.4}}>
+                            SCADUTO
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     {info?(

@@ -786,13 +786,35 @@ async def classifica_fermo(body: dict = Body(...)):
         from fastapi import HTTPException
         raise HTTPException(400, f"causa non valida. Valide: {CAUSE_VALIDE}")
 
+    ts_inizio  = body.get("ts_inizio")
+    durata_sec = body.get("durata_sec")
+
+    # Salva in fermi_classificati (storico ML)
     fermi = data.setdefault("fermi_classificati", [])
     fermi.append({
         "ts":         datetime.now().isoformat(timespec="seconds"),
-        "ts_inizio":  body.get("ts_inizio"),
-        "durata_sec": body.get("durata_sec"),
+        "ts_inizio":  ts_inizio,
+        "durata_sec": durata_sec,
         "causa":      causa,
     })
+
+    # Aggiorna anche il record corrispondente in fermi_globali
+    # Cerca il fermo globale con ts_inizio più vicino (entro 2 minuti)
+    if ts_inizio:
+        try:
+            ts_ref = datetime.fromisoformat(ts_inizio)
+            for fg in data.get("fermi_globali", []):
+                if not fg.get("inizio"):
+                    continue
+                ts_fg = datetime.fromisoformat(fg["inizio"])
+                delta = abs((ts_fg - ts_ref).total_seconds())
+                if delta <= 120:  # entro 2 minuti
+                    fg["causa"] = causa
+                    fg["classificato_ts"] = datetime.now().isoformat(timespec="seconds")
+                    break
+        except Exception:
+            pass
+
     _save_log(config, data)
     return {"ok": True, "causa": causa}
 

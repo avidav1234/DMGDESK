@@ -473,7 +473,7 @@ function TabellaFermi({ sessioni, fermiGlobali }) {
     <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
       <thead>
         <tr style={{ background:'var(--bg-hover)' }}>
-          {['Durata','Ora','Commessa','Da','A'].map(h => (
+          {['Durata','Ora','Causa','Commessa','Da','A'].map(h => (
             <th key={h} style={{ padding:'9px 12px', textAlign:'left', fontSize:11, color:'var(--text-dim)',
                                  fontWeight:700, letterSpacing:'0.04em', borderBottom:'1px solid var(--border)' }}>{h}</th>
           ))}
@@ -487,7 +487,16 @@ function TabellaFermi({ sessioni, fermiGlobali }) {
               {fmt(f.gap)}
             </td>
             <td style={{ padding:'9px 12px', color:'var(--text-dim)', whiteSpace:'nowrap', fontSize:12 }}>{fmtDate(f.inizio)}</td>
-            <td style={{ padding:'9px 12px', fontFamily:'monospace', fontWeight:600, color:colorForProject(f.prog), fontSize:12 }}>{f.prog}</td>
+            <td style={{ padding:'9px 12px', fontSize:11 }}>
+              {f.causa ? (
+                <span style={{ padding:'2px 7px', borderRadius:10, fontSize:10, fontWeight:700,
+                  background: f.causa==='allarme'?'#fef2f2': f.causa==='setup'?'#eff6ff': f.causa==='pausa_operatore'?'#f0fdf4':'#fafafa',
+                  color: f.causa==='allarme'?'#dc2626': f.causa==='setup'?'#1d4ed8': f.causa==='pausa_operatore'?'#16a34a':'#64748b' }}>
+                  {f.causa.replace('_',' ')}
+                </span>
+              ) : <span style={{color:'var(--text-dim)',fontSize:10}}>—</span>}
+            </td>
+            <td style={{ padding:'9px 12px', fontFamily:'monospace', fontWeight:600, color:colorForProject(f.prog), fontSize:12 }}>{f.prog||'—'}</td>
             <td style={{ padding:'9px 12px', fontFamily:'monospace', fontSize:11, color:'var(--text-dim)' }}>{(f.da||'').replace('.MPF','')}</td>
             <td style={{ padding:'9px 12px', fontFamily:'monospace', fontSize:11, color:'var(--text-secondary)' }}>{(f.a||'').replace('.MPF','')}</td>
           </tr>

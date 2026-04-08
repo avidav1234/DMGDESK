@@ -256,18 +256,21 @@ def check_low_life_alert(tools: dict, alias_attivi: list[str], config: dict):
     """
     Chiamato dal tick di macchina_live con gli alias degli utensili
     attivi nel programma corrente.
-    Manda alert Telegram se vita < SOGLIA_VITA_BASSA e non già inviato
+    Manda alert Telegram se vita < soglia ML (o SOGLIA_ALERT_DEFAULT) e non già inviato
     negli ultimi THROTTLE_MINUTES minuti.
     """
     if not alias_attivi or not tools:
         return
+
+    # Carica storico per soglie ML
+    from ml.vita_ottimale import soglia_alert as _soglia_alert
+    records = _load_history(config)
 
     now = datetime.now()
     da_notificare = []
 
     for alias in alias_attivi:
         alias_up = alias.upper().strip()
-        # Cerca il duplo con vita più bassa tra quelli abilitati
         candidati = [
             t for t in tools.values()
             if (t.get("name") or "").upper().strip() == alias_up
@@ -278,7 +281,8 @@ def check_low_life_alert(tools: dict, alias_attivi: list[str], config: dict):
             continue
 
         lp_min = min((t.get("life_percent") or 100) for t in candidati)
-        if lp_min > SOGLIA_VITA_BASSA:
+        soglia = _soglia_alert(alias_up, records)  # ML o default 20%
+        if lp_min > soglia:
             continue
 
         # Throttle: non inviare se già inviato di recente
@@ -335,6 +339,8 @@ async def classifica_sostituzione(ts: str, body: dict = Body(...)):
         from fastapi import HTTPException
         raise HTTPException(404, "sostituzione non trovata")
     _save_history(config, records)
+    from ml.vita_ottimale import invalida_cache as _inv
+    _inv(alias_up if 'alias_up' in dir() else None)
     return {"ok": True, "ts": ts, "causa": causa}
 
 
@@ -414,6 +420,8 @@ async def pulizia_record_m9998():
             r["classificato_ts"] = datetime.now().isoformat(timespec="seconds")
         records_puliti.append(r)
     _save_history(config, records_puliti)
+    from ml.vita_ottimale import invalida_cache as _inv
+    _inv()  # ricalcola soglie dopo pulizia
     return {"ok": True, "record_corretti": n_rimossi}
 
 

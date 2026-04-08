@@ -648,8 +648,10 @@ async def check_utensili_progetto(project_id: str):
             lp = tool.get("life_percent")
             if not tool.get("is_enabled", True) or tool.get("is_worn", False):
                 stato = "disabilitato"
-            elif lp is not None and lp < 15:
-                stato = "fin_vita"
+            elif lp is not None:
+                from ml.vita_ottimale import soglia_fin_vita as _sfv
+                if lp < _sfv(n, records_ml):
+                    stato = "fin_vita"
             else:
                 stato = "ok"
         elif alias in scaffale_alias:
@@ -949,6 +951,13 @@ async def get_analisi_setup():
 
     non_utilizzati = []
     fin_vita        = []
+    # Carica storico sostituzioni per soglie ML dinamiche
+    try:
+        from api.routers.tool_history import _load_history as _lh_ml, _history_path as _hp_ml
+        _hp = _hp_ml(config)
+        records_ml = _lh_ml(config) if _hp and _hp.exists() else []
+    except Exception:
+        records_ml = []
     for n, t in alias_in_macchina_unici.items():
         stato = _ct(n, tools_db)  # usa tools_db con tutti i gemelli, non in_macchina
         lp_best = None

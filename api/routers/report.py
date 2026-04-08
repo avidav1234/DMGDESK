@@ -483,6 +483,20 @@ def aggiorna_da_log(
                             _tm = _json.loads(_tools_path.read_text(encoding="utf-8"))
                             _tools = list((_tm.get("tools") or {}).values())
                             contesto_avvio["utensili_montati"]   = len(_tools)
+                            # Usa soglie ML per utensili critici
+                            from ml.vita_ottimale import soglia_alert as _sa, soglia_fin_vita as _sfv
+                            _records_ctx = _th_load(_cfg_ctx_data)
+                            contesto_avvio["utensili_sotto_soglia_alert"] = sum(
+                                1 for t in _tools
+                                if t.get("life_percent") is not None and
+                                t["life_percent"] < _sa((t.get("name") or ""), _records_ctx)
+                            )
+                            contesto_avvio["utensili_sotto_fin_vita"] = sum(
+                                1 for t in _tools
+                                if t.get("life_percent") is not None and
+                                t["life_percent"] < _sfv((t.get("name") or ""), _records_ctx)
+                            )
+                            # Mantieni anche le soglie fisse per backward compatibility
                             contesto_avvio["utensili_sotto_20"]  = sum(
                                 1 for t in _tools
                                 if t.get("life_percent") is not None and t["life_percent"] < 20

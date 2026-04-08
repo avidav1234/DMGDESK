@@ -518,8 +518,10 @@ async def get_live_context():
                                     lp = t.get("life_percent")
                                     if not t.get("is_enabled", True) or t.get("is_worn"):
                                         allerta = "disabilitato"
-                                    elif lp is not None and lp < 15:
-                                        allerta = "fin_vita"
+                                    elif lp is not None:
+                                        from ml.vita_ottimale import soglia_fin_vita as _sfv
+                                        if lp < _sfv(alias, []):
+                                            allerta = "fin_vita"
                                     break
                             # Alert Telegram vita bassa durante lavorazione
                             try:

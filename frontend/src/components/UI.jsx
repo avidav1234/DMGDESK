@@ -1,3 +1,4 @@
+import { useState } from "react"
 // UI.jsx — DMG Desk shared components
 
 export function Loader() {
@@ -127,8 +128,6 @@ export function PalletBadge({ numero, stato, programma, onClick, selected }) {
 }
 
 // ── Tooltip informativo ───────────────────────────────────────────────────────
-import { useState } from "react"
-
 export function InfoTooltip({ text, position = "top" }) {
   const [visible, setVisible] = useState(false)
 

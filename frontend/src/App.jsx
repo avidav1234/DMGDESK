@@ -18,6 +18,7 @@ import AnalyticsCommesse from './pages/AnalyticsCommesse'
 import AlertUtensili from './pages/AlertUtensili'
 import RiepilogoTurno from './pages/RiepilogoTurno'
 import StepAnalyzer  from './pages/StepAnalyzer'
+import ChatAssistente from './components/ChatAssistente'
 
 // ── Error Boundary globale ──────────────────────────────────────────────────
 // Previene schermo bianco su eccezioni non gestite nei componenti React.
@@ -134,6 +135,7 @@ export default function App() {
           <Sidebar />
           <MainContent />
         </div>
+        <ChatAssistente />
       </BrowserRouter>
     </ErrorBoundary>
   )

@@ -14,6 +14,7 @@ from api.routers import (
     cam_tracker_router,
 )
 from api.routers import telegram_router
+from api.routers import assistente
 from utils.logger import get_logger
 
 log = get_logger(__name__)
@@ -57,6 +58,9 @@ app.include_router(allegati.router)
 
 # ── CAM Tracker ───────────────────────────────────────────────────────────────
 app.include_router(cam_tracker_router.router, prefix="/api/cam-tracker", tags=["CAM Tracker"])
+
+# ── Assistente AI ─────────────────────────────────────────────────────────────
+app.include_router(assistente.router, tags=["Assistente AI"])
 
 # ── Turno snapshot ─────────────────────────────────────────────────────────────
 from api.routers import turno as turno_router

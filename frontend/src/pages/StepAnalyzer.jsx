@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { InfoTooltip } from '../components/UI'
 
 const API = (path) => fetch(`/api/step${path}`)
 const T = { surface: 'var(--bg-surface)', border: 'var(--border)', text: 'var(--text-primary)', dim: 'var(--text-secondary)' }
@@ -92,8 +93,9 @@ export default function StepAnalyzer() {
       <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:16}}>
         <div>
           <div style={{fontSize:16,fontWeight:800,color:'#0d2d5e'}}>STEP Analyzer</div>
-          <div style={{fontSize:11,color:'#94a3b8'}}>
+          <div style={{fontSize:11,color:'#94a3b8',display:'flex',alignItems:'center',gap:4}}>
             Similarità geometrica tra commesse · microservizio porta 8002
+            <InfoTooltip text={"Analisi geometrica STEP: confronta le commesse in base a forma, topologia e volume.\n\nPesi del punteggio di similarità:\n• Topologia 40% — numero di facce, cilindri, bordi\n• Forma 35% — rapporti geometrici e proporzioni\n• Volume/Area 25% — dimensioni assolute\n\nSoglia minima: 50% per comparire nei risultati.\nUtile per stimare tempi di lavorazione di nuove commesse simili a quelle già eseguite."} />
           </div>
         </div>
         {stato && (
@@ -222,7 +224,7 @@ export default function StepAnalyzer() {
                       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',
                         gap:6,fontSize:11}}>
                         <div>
-                          <div style={{color:'#94a3b8'}}>Ore macchina</div>
+                          <div style={{color:'#94a3b8',display:'flex',alignItems:'center',gap:3}}>Ore macchina <InfoTooltip text={"Ore reali di macchina registrate per questa commessa simile.\nCalcolate dalla somma delle sessioni di lavorazione effettiva." } /></div>
                           <div style={{fontWeight:700,fontFamily:'monospace',
                             color:'#0d2d5e'}}>{fmtOre(s.ore_macchina)}</div>
                         </div>

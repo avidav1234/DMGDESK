@@ -1,5 +1,6 @@
 // RendicontoProgetto.jsx — Rendiconto commessa (v2)
 import { useState, useEffect, useRef } from 'react'
+import { InfoTooltip } from '../components/UI'
 import { useParams, useNavigate } from 'react-router-dom'
 
 function fmtOre(sec) {
@@ -133,14 +134,16 @@ function TimelineCommessa({ tl, scadenza, colore }) {
   )
 }
 
-function KpiCard({ label, value, sub, accent='#0d2d5e', icon }) {
+function KpiCard({ label, value, sub, accent='#0d2d5e', icon, tooltip }) {
   return (
     <div style={{background:'#fff',border:'1px solid #e2e8f0',borderRadius:14,
       padding:'20px 22px',display:'flex',flexDirection:'column',gap:6,
       borderTop:`3px solid ${accent}`}}>
       <div style={{fontSize:10,fontWeight:800,color:'#94a3b8',
-        letterSpacing:'0.1em',textTransform:'uppercase'}}>
+        letterSpacing:'0.1em',textTransform:'uppercase',
+        display:'flex',alignItems:'center',gap:4}}>
         {icon&&<span style={{marginRight:5}}>{icon}</span>}{label}
+        {tooltip&&<InfoTooltip text={tooltip} />}
       </div>
       <div style={{fontSize:32,fontWeight:900,color:accent,
         fontFamily:'monospace',lineHeight:1}}>{value}</div>
@@ -284,16 +287,20 @@ export default function RendicontoProgetto() {
       {/* 2. KPI */}
       <div className="kpi-grid" style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12,marginBottom:20}}>
         <KpiCard label="Ore macchina" value={kpi.ore_macchina_str}
-          sub={`${kpi.n_sessioni} sessioni`} accent={colore} icon="⚙"/>
+          sub={`${kpi.n_sessioni} sessioni`} accent={colore} icon="⚙"
+          tooltip="Ore totali in cui la macchina ha lavorato per questa commessa.\nSomma delle durate di tutte le sessioni registrate dal LOG macchina."/>
         <KpiCard label="Ore CAM" value={kpi.ore_cam_str || '0h'}
           sub={kpi.ore_cam_per_op?.length > 0 ? `${kpi.ore_cam_per_op.length} operazioni` : 'nessun dato'}
-          accent="#0f766e" icon="🖥"/>
+          accent="#0f766e" icon="🖥"
+          tooltip="Ore di programmazione Cimatron registrate dal CAM Tracker su CAM35.\nMisura il tempo di preparazione NC prima della lavorazione."/>
         <KpiCard label="Programmi NC" value={`${kpi.n_programmi_completati??0}/${kpi.n_programmi_totali??0}`}
-          sub={`${kpi.n_programmi_eseguiti} distinti eseguiti`} accent="#1D5FAD" icon="📋"/>
+          sub={`${kpi.n_programmi_eseguiti} distinti eseguiti`} accent="#1D5FAD" icon="📋"
+          tooltip="Programmi completati / totali per questa commessa.\nIl totale include tutti i file MPF nelle fasi di fresatura."/>
         <KpiCard label="Utensili usati" value={kpi.n_utensili}
           sub={`${kpi.n_fasi} fas${kpi.n_fasi===1?'e':'i'} di lavorazione`} accent="#0f766e" icon="🔧"/>
         <KpiCard label="Giorni commessa" value={timeline.giorni_totali??'—'}
-          sub={`${timeline.giorni_macchina??'—'} giorni in macchina`} accent="#7c3aed" icon="📅"/>
+          sub={`${timeline.giorni_macchina??'—'} giorni in macchina`} accent="#7c3aed" icon="📅"
+          tooltip="Giorni totali dalla creazione della commessa alla consegna.\n'Giorni in macchina' = giorni con almeno una sessione di lavorazione attiva."/>
       </div>
 
       {/* Ore CAM per operazione */}

@@ -1,5 +1,6 @@
 // pages/Report.jsx — Analytics lavorazioni CNC
 import { useState, useEffect, useCallback, useRef, Fragment } from 'react'
+import { InfoTooltip } from '../components/UI'
 
 const API = (path) => `/api/report${path}`
 
@@ -47,10 +48,13 @@ const SectionTitle = ({ children }) => (
   <div style={{ fontSize:11, fontWeight:700, letterSpacing:'0.08em', color:'var(--text-dim)',
                 textTransform:'uppercase', marginBottom:14 }}>{children}</div>
 )
-const KpiCard = ({ label, value, sub, color = 'var(--text-primary)', trend }) => (
+const KpiCard = ({ label, value, sub, color = 'var(--text-primary)', trend, tooltip }) => (
   <Card style={{ padding:'18px 20px', textAlign:'center' }}>
     <div style={{ fontSize:11, fontWeight:700, letterSpacing:'0.07em', color:'var(--text-dim)',
-                  marginBottom:8, textTransform:'uppercase' }}>{label}</div>
+                  marginBottom:8, textTransform:'uppercase', display:'flex', alignItems:'center', justifyContent:'center', gap:4 }}>
+      {label}
+      {tooltip && <InfoTooltip text={tooltip} />}
+    </div>
     <div style={{ fontSize:28, fontWeight:800, color, fontVariantNumeric:'tabular-nums', lineHeight:1 }}>{value}</div>
     {sub && <div style={{ fontSize:12, color:'var(--text-dim)', marginTop:6 }}>{sub}</div>}
     {trend !== undefined && (
@@ -528,17 +532,17 @@ function ConfrontoSettimane({ storico }) {
   const deltaFermo = (a, b) => b === 0 ? 0 : -((a - b) / b * 100)
   return (
     <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr 1fr', gap:14 }}>
-      <KpiCard label="Ore questa settimana" value={fmtH(totCurr)} sub={`Sett. prec.: ${fmtH(totPrev)}`}
+      <KpiCard tooltip="Ore totali in cui la macchina ha eseguito programmi NC questa settimana (lun-dom). Esclude i fermi." label="Ore questa settimana" value={fmtH(totCurr)} sub={`Sett. prec.: ${fmtH(totPrev)}`}
                color="#3b82f6" trend={delta(totCurr, totPrev)} />
-      <KpiCard label="Fermo questa sett." value={fmtH(fermoCurr)} sub={`Sett. prec.: ${fmtH(fermoPrev)}`}
+      <KpiCard tooltip="Tempo totale di fermo macchina questa settimana.\nInclude fermi tra sessioni, pause, guasti e fine lavorazione." label="Fermo questa sett." value={fmtH(fermoCurr)} sub={`Sett. prec.: ${fmtH(fermoPrev)}`}
                color={fermoCurr < fermoPrev ? '#22c55e' : '#f59e0b'}
                trend={deltaFermo(fermoCurr, fermoPrev)} />
-      <KpiCard label="Efficienza media" value={`${effCurr.toFixed(1)}%`} sub={`Sett. prec.: ${effPrev.toFixed(1)}%`}
+      <KpiCard tooltip="Ore lavorate / (Ore lavorate + Ore fermo) × 100.\nMisura quanto tempo la macchina è effettivamente in produzione sul totale disponibile." label="Efficienza media" value={`${effCurr.toFixed(1)}%`} sub={`Sett. prec.: ${effPrev.toFixed(1)}%`}
                color={effCurr > 70 ? '#22c55e' : '#f59e0b'} trend={delta(effCurr, effPrev)} />
-      <KpiCard label="Programmi eseguiti" value={pgmCurr} sub={`Sett. prec.: ${pgmPrev}`}
+      <KpiCard tooltip="Numero totale di programmi NC completati questa settimana, su tutti i pallet e commesse." label="Programmi eseguiti" value={pgmCurr} sub={`Sett. prec.: ${pgmPrev}`}
                color="#8b5cf6" trend={delta(pgmCurr, pgmPrev)} />
       {oeeCurr != null
-        ? <KpiCard label="OEE medio" value={`${oeeCurr.toFixed(1)}%`}
+        ? <KpiCard tooltip="Overall Equipment Effectiveness — indice globale di efficienza macchina.\nOEE = Disponibilità × Performance × Qualità.\n≥ 85% eccellente · ≥ 65% buono · < 40% critico.\nCalcolato su turno continuo 24h." label="OEE medio" value={`${oeeCurr.toFixed(1)}%`}
             sub={oeePrev != null ? `Sett. prec.: ${oeePrev.toFixed(1)}%` : 'Prima settimana'}
             color={oeeCurr >= 75 ? '#22c55e' : oeeCurr >= 50 ? '#f59e0b' : '#ef4444'}
             trend={oeePrev != null ? delta(oeeCurr, oeePrev) : null} />
@@ -752,7 +756,10 @@ function TabPerdite({ rpt }) {
 
       {/* Waterfall OEE */}
       <Card style={{ padding:'20px 24px' }}>
-        <SectionTitle>Waterfall OEE — decomposizione perdite</SectionTitle>
+        <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:12}}>
+          <SectionTitle style={{margin:0}}>Waterfall OEE — decomposizione perdite</SectionTitle>
+          <InfoTooltip text={"OEE = Disponibilità × Performance × Qualità\n\n• Disponibilità: % turno in cui la macchina era in esecuzione (esclude fermi pianificati e guasti)\n• Performance: velocità reale vs teorica (programmi completati vs attesi)\n• Qualità: programmi andati a buon fine vs totali (attualmente 98% fisso)\n\nIndisponibilità = 100% - Disponibilità\nPerdita velocità = Disponibilità - Performance\n\nTurno: 24h continuo con recupero retroattivo fermi dalla mezzanotte."} />
+        </div>
         <div style={{ display:'flex', alignItems:'flex-end', gap:8, height:140, marginBottom:12 }}>
           {[
             { label:'Turno',       val:100,                         col:'#1D5FAD' },
@@ -1257,11 +1264,11 @@ export default function Report() {
       {/* KPI giornalieri */}
       {rpt && (
         <div style={{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:14, marginBottom:18 }}>
-          <KpiCard label="Ore lavorate"  value={rpt.ore_lavorate}  color="#22c55e" />
-          <KpiCard label="Tempo fermo"   value={rpt.tempo_fermo}   color="#f59e0b" />
-          <KpiCard label="Efficienza"    value={`${rpt.efficienza_pct}%`}
+          <KpiCard tooltip="Ore in cui la macchina ha eseguito programmi NC in questo giorno.\nCalcolate sommando le durate di tutte le sessioni attive." label="Ore lavorate"  value={rpt.ore_lavorate}  color="#22c55e" />
+          <KpiCard tooltip="Tempo totale di fermo macchina in questo giorno.\nInclude i gap tra sessioni e i fermi classificati." label="Tempo fermo"   value={rpt.tempo_fermo}   color="#f59e0b" />
+          <KpiCard tooltip="Ore lavorate / (Ore lavorate + Ore fermo) × 100 per questo giorno." label="Efficienza"    value={`${rpt.efficienza_pct}%`}
                    color={rpt.efficienza_pct > 70 ? '#22c55e' : rpt.efficienza_pct > 40 ? '#f59e0b' : '#ef4444'} />
-          <KpiCard label="Programmi"     value={rpt.n_programmi}   color="#3b82f6" />
+          <KpiCard tooltip="Numero di programmi NC completati in questo giorno." label="Programmi"     value={rpt.n_programmi}   color="#3b82f6" />
           {/* OEE — se disponibile, sostituisce Sessioni */}
           {rpt.oee
             ? <KpiCard label="OEE"

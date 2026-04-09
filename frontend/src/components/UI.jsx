@@ -125,3 +125,53 @@ export function PalletBadge({ numero, stato, programma, onClick, selected }) {
     </div>
   )
 }
+
+// ── Tooltip informativo ───────────────────────────────────────────────────────
+import { useState } from "react"
+
+export function InfoTooltip({ text, position = "top" }) {
+  const [visible, setVisible] = useState(false)
+
+  const posStyle = position === "top"
+    ? { bottom: "calc(100% + 6px)", left: "50%", transform: "translateX(-50%)" }
+    : position === "bottom"
+    ? { top: "calc(100% + 6px)", left: "50%", transform: "translateX(-50%)" }
+    : position === "right"
+    ? { left: "calc(100% + 6px)", top: "50%", transform: "translateY(-50%)" }
+    : { right: "calc(100% + 6px)", top: "50%", transform: "translateY(-50%)" }
+
+  return (
+    <span
+      style={{ position: "relative", display: "inline-flex", alignItems: "center" }}
+      onMouseEnter={() => setVisible(true)}
+      onMouseLeave={() => setVisible(false)}
+    >
+      <span style={{
+        display: "inline-flex", alignItems: "center", justifyContent: "center",
+        width: 14, height: 14, borderRadius: "50%",
+        background: "#e2e8f0", color: "#64748b",
+        fontSize: 9, fontWeight: 800, cursor: "help",
+        lineHeight: 1, userSelect: "none", flexShrink: 0,
+      }}>?</span>
+      {visible && (
+        <span style={{
+          position: "absolute",
+          ...posStyle,
+          background: "#1e293b",
+          color: "#f1f5f9",
+          fontSize: 11,
+          lineHeight: 1.5,
+          padding: "7px 10px",
+          borderRadius: 6,
+          whiteSpace: "pre-wrap",
+          maxWidth: 260,
+          zIndex: 9999,
+          boxShadow: "0 4px 16px rgba(0,0,0,.25)",
+          pointerEvents: "none",
+        }}>
+          {text}
+        </span>
+      )}
+    </span>
+  )
+}

@@ -1,5 +1,6 @@
 // AnalyticsCommesse.jsx — OEE · Ratio CAM/Macchina · Stima fine lavori
 import { useState, useEffect } from 'react'
+import { InfoTooltip } from '../components/UI'
 import { useNavigate } from 'react-router-dom'
 
 function fmtH(sec) {
@@ -81,6 +82,10 @@ function RatioBar({ cam, mac }) {
   const camPct = (cam / tot) * 100
   return (
     <div>
+      <div style={{display:'flex', alignItems:'center', gap:4, marginBottom:3}}>
+        <span style={{fontSize:10, color:'#94a3b8', fontWeight:600}}>CAM vs Macchina</span>
+        <InfoTooltip text={"Confronto tra ore stimate dal CAM (verde) e ore reali di macchina.\nLa barra verde mostra la proporzione del tempo CAM sul totale.\nSe la barra è piccola → la macchina ha impiegato molto più del previsto."} />
+      </div>
       <div style={{height:8, borderRadius:4, background:'#e2e8f0', overflow:'hidden', marginBottom:4}}>
         <div style={{height:'100%', width:`${camPct}%`, background:'#0f766e',
           borderRadius:4, transition:'width 0.4s'}}/>
@@ -378,8 +383,10 @@ export default function AnalyticsCommesse() {
           <div style={{display:'flex', alignItems:'center', gap:16, flexWrap:'wrap'}}>
             <div>
               <div style={{fontSize:11, color:'#94a3b8', marginBottom:4,
-                textTransform:'uppercase', letterSpacing:'0.06em', fontWeight:700}}>
+                textTransform:'uppercase', letterSpacing:'0.06em', fontWeight:700,
+                display:'flex', alignItems:'center', gap:4}}>
                 Fattore calibrazione K
+                <InfoTooltip text={"Rapporto tra ore reali di macchina e ore stimate dal CAM.\nK = ore_macchina / ore_cam\nK > 1 → la macchina impiega più tempo del CAM\nK < 1 → la macchina è più veloce del CAM\nCalcolato su commesse consegnate con almeno 30min di dati CAM.\nUsato per correggere le stime di fine lavorazione future."} />
               </div>
               <div style={{display:'flex', alignItems:'baseline', gap:8}}>
                 <span style={{fontSize:28, fontWeight:700, fontFamily:'var(--font-mono)',
@@ -389,8 +396,9 @@ export default function AnalyticsCommesse() {
                 {calibrazione?.confidenza && (
                   <span style={{fontSize:11, fontWeight:700, padding:'2px 8px',
                     borderRadius:4, background: confidenzaColor+'20',
-                    color: confidenzaColor}}>
+                    color: confidenzaColor, display:'inline-flex', alignItems:'center', gap:3}}>
                     {calibrazione.confidenza}
+                    <InfoTooltip text={"Confidenza del fattore K:\n• alta: ≥5 commesse complete, deviazione bassa\n• media: 2-4 commesse o deviazione elevata\n• bassa: dati insufficienti per una stima affidabile"} />
                   </span>
                 )}
               </div>

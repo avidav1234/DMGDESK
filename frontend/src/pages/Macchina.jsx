@@ -1,5 +1,6 @@
 // pages/Macchina.jsx — V16: solo Sync TOA/TMA + Confronto MPF
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { InfoTooltip } from '../components/UI'
 import { api } from '../api/client'
 import { Loader, SectionHeader } from '../components/UI'
 import { PopupSostituzione } from '../components/MLDataPopup'
@@ -859,7 +860,10 @@ export default function Macchina() {
           padding:'14px 18px',marginTop:10}}>
           <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12}}>
             <span style={{fontSize:10,fontWeight:800,letterSpacing:'.1em',color:'#64748b',
-              textTransform:'uppercase'}}>Vita ottimale — suggerimenti ML</span>
+              textTransform:'uppercase',display:'flex',alignItems:'center',gap:4}}>
+              Vita ottimale — suggerimenti ML
+              <InfoTooltip text={"Suggerimenti calcolati dall'algoritmo ML basati sullo storico reale delle sostituzioni utensile.\n\nVita ottimale: percentile 80 delle vite registrate — il punto in cui l\'utensile era tipicamente consumato senza rotture.\n\nRange sicuro: ±1 deviazione standard attorno alla vita ottimale.\n\nConfidenza:\n• Alta: ≥5 campioni, bassa variabilità\n• Bassa: 2-4 campioni o alta variabilità\n\nSuggerisce il valore di vita da impostare nel Sinumerik per ottimizzare i cambi utensile."} />
+            </span>
             <span style={{fontSize:10,fontWeight:700,color:'#0891b2',background:'#e0f2fe',
               padding:'2px 8px',borderRadius:8}}>{vitaOtt.length} utensili</span>
           </div>
@@ -879,11 +883,11 @@ export default function Macchina() {
                       padding:'2px 8px',borderRadius:4}}>
                       {s.confidenza === 'alta' ? '✓ Alta' : '~ Bassa'}
                     </span>
-                    <span style={{fontSize:10,color:'#94a3b8'}}>{s.n_campioni} campioni</span>
+                    <span style={{fontSize:10,color:'#94a3b8',display:'flex',alignItems:'center',gap:3}}>{s.n_campioni} campioni <InfoTooltip text={"Numero di sostituzioni registrate usate per calcolare la vita ottimale.\nOgni sostituzione classificata come usura normale contribuisce al calcolo."} /></span>
                   </div>
                   {/* Barra vita ottimale */}
                   <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:6}}>
-                    <span style={{fontSize:11,color:'#64748b',minWidth:90}}>Vita ottimale</span>
+                    <span style={{fontSize:11,color:'#64748b',minWidth:90,display:'flex',alignItems:'center',gap:3}}>Vita ottimale <InfoTooltip text={"Percentuale di vita suggerita da impostare nel Sinumerik.\nCalcolata come percentile 80 delle vite registrate all'atto della sostituzione normale (esclude rotture)."} /></span>
                     <div style={{flex:1,height:6,background:'#e2e8f0',borderRadius:3,overflow:'hidden'}}>
                       <div style={{height:'100%',width:`${s.vita_ottimale}%`,
                         background: s.vita_ottimale < 50 ? '#dc2626' : s.vita_ottimale < 75 ? '#d97706' : '#16a34a',

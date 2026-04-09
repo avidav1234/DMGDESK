@@ -2,6 +2,7 @@
 // Modulo DMGDesk — dati da Cimatron via CAMTracker agent su CAM35
 
 import { useState, useEffect, useCallback } from 'react'
+import { InfoTooltip } from '../components/UI'
 
 const API = '/api/cam-tracker'
 
@@ -454,7 +455,10 @@ export default function CamTracker() {
       {/* ── Footer ─────────────────────────────────────────────────────── */}
       <div style={{ padding: '10px 24px', flexShrink: 0 }}>
         <div style={{ fontSize: 11, color: '#94a3b8', fontFamily: 'var(--font-mono)' }}>
-          Agent attivo su CAM35 — polling Cimatron ogni 10s — flush ogni 5min
+          <span style={{display:'flex',alignItems:'center',gap:4}}>
+            Agent attivo su CAM35 — polling Cimatron ogni 10s — flush ogni 5min
+            <InfoTooltip text={"CAM Tracker monitora il tempo di programmazione attivo su Cimatron (CAM35).\n\nPollling: ogni 10s rileva se Cimatron è in foreground e la finestra attiva.\nFlush: ogni 5min invia le sessioni accumulate al backend DMGDesk.\n\nLe ore CAM vengono associate alla commessa attiva nel titolo della finestra Cimatron e usate per calcolare il fattore K (rapporto CAM/macchina)."} position='top' />
+          </span>
         </div>
       </div>
     </div>

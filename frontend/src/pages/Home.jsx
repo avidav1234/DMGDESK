@@ -1112,21 +1112,21 @@ export default function Home(){
                       <div style={{fontSize:12,fontWeight:700,color:'#1D5FAD'}}>~{ritmo}/h</div>
                     )}
                   </div>
-                  <div style={{fontSize:11,fontWeight:700,color:'#1D5FAD',marginTop:2}}>completati oggi</div>
+                  <div style={{fontSize:11,fontWeight:700,color:'#1D5FAD',marginTop:2,display:'flex',alignItems:'center',gap:4}}>completati oggi <InfoTooltip text="Programmi NC completati dall'inizio del turno corrente (ore 07:30).&#10;Conteggio basato sui cambi di stato registrati dal LOG macchina." /></div>
                 </div>
                 {/* Secondari: griglia 2x2 */}
                 <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginBottom:8}}>
                   <div style={{background:'#f8fafc',borderRadius:7,padding:'8px 10px'}}>
                     <div style={{fontSize:22,fontWeight:900,color:'#1D5FAD',lineHeight:1}}>{inMacTot}</div>
-                    <div style={{fontSize:10,color:'#64748b',marginTop:2}}>in macchina</div>
+                    <div style={{fontSize:10,color:'#64748b',marginTop:2,display:'flex',alignItems:'center',gap:3}}>in macchina <InfoTooltip text="Programmi con stato in_main o in_lavorazione.&#10;Sono i programmi caricati nel MAIN della macchina e pronti per essere eseguiti." /></div>
                   </div>
                   <div style={{background:'#f8fafc',borderRadius:7,padding:'8px 10px'}}>
                     <div style={{fontSize:22,fontWeight:900,color:'#0d2d5e',lineHeight:1}}>{daFareTot}</div>
-                    <div style={{fontSize:10,color:'#64748b',marginTop:2}}>da fare</div>
+                    <div style={{fontSize:10,color:'#64748b',marginTop:2,display:'flex',alignItems:'center',gap:3}}>da fare <InfoTooltip text="Programmi non ancora caricati nel MAIN della macchina.&#10;Richiedono un nuovo ciclo di generazione MAIN prima di poter essere eseguiti." /></div>
                   </div>
                   <div style={{background:critici>0?'#fef2f2':'#f8fafc',borderRadius:7,padding:'8px 10px'}}>
                     <div style={{fontSize:22,fontWeight:900,color:critici>0?'#dc2626':'#64748b',lineHeight:1}}>{critici}</div>
-                    <div style={{fontSize:10,color:critici>0?'#dc2626':'#64748b',marginTop:2}}>critici</div>
+                    <div style={{fontSize:10,color:critici>0?'#dc2626':'#64748b',marginTop:2,display:'flex',alignItems:'center',gap:3}}>critici <InfoTooltip text="Commesse con data di consegna scaduta o imminente.&#10;Vengono evidenziate in rosso quando la data di consegna è già passata." /></div>
                   </div>
                   <div style={{background:'#f8fafc',borderRadius:7,padding:'8px 10px'}}>
                     <div style={{fontSize:13,fontWeight:800,color:'#0d2d5e',lineHeight:1}}>{pctTot}%</div>
@@ -1140,7 +1140,7 @@ export default function Home(){
                 {confrontoIeri&&(confrontoIeri.oggi>0||confrontoIeri.ieri>0)&&(
                   <div style={{display:'flex',justifyContent:'space-between',
                     fontSize:11,color:'#64748b',marginBottom:8}}>
-                    <span>ieri stessa ora: <b style={{color:'#0d2d5e'}}>{confrontoIeri.ieri}</b></span>
+                    <span style={{display:'flex',alignItems:'center',gap:3}}>ieri stessa ora: <b style={{color:'#0d2d5e'}}>{confrontoIeri.ieri}</b> <InfoTooltip text="Programmi completati ieri alla stessa ora del giorno.&#10;Permette di confrontare il ritmo produttivo con il giorno precedente." /></span>
                     <span>oggi: <b style={{
                       color: confrontoIeri.delta>0?'#16a34a':confrontoIeri.delta<0?'#dc2626':'#64748b'
                     }}>{confrontoIeri.oggi} {confrontoIeri.delta>0?'↑':confrontoIeri.delta<0?'↓':'='}</b></span>
@@ -1159,8 +1159,8 @@ export default function Home(){
                       padding:'8px 10px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                       <div>
                         <div style={{fontSize:16,fontWeight:900,color:fermoColor,fontFamily:'monospace',lineHeight:1}}>{fermoFmt}</div>
-                        <div style={{fontSize:10,color:fermoColor,marginTop:2}}>
-                          {isFermo?'macchina ferma':'fermo oggi'}
+                        <div style={{fontSize:10,color:fermoColor,marginTop:2,display:'flex',alignItems:'center',gap:3}}>
+                          {isFermo?'macchina ferma':'fermo oggi'} <InfoTooltip text="Tempo totale di fermo della macchina nel turno corrente.&#10;Rosso > 1h · Arancio > 30min.&#10;Cliccabile per classificare la causa del fermo." position="left" />
                         </div>
                       </div>
                       {isFermo&&(

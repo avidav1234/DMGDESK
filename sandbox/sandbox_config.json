@@ -1,0 +1,25 @@
+{
+  "SANDBOX_MODE": true,
+  "SANDBOX_VERSION": "2.0-dev",
+
+  "percorso_nc_base": "./sandbox/data",
+  "radice": "./sandbox/data",
+  "tools_toa_folder": "./sandbox/data",
+
+  "db_principale": "./sandbox/data/DMGDesk_principale.csv",
+  "db_smontati": "./sandbox/data/DMGDesk_smontati.csv",
+  "db_holder": "./sandbox/data/DMGDesk_holder.csv",
+
+  "opcua_log_path": "./sandbox/data/OpcUaLegacy.log",
+
+  "lavorazioni_log": "./sandbox/data/lavorazioni_log.json",
+  "worktrack_projects": "./sandbox/data/worktrack_projects.json",
+  "pallet_state": "./sandbox/data/pallet_state.json",
+  "tool_replacements": "./sandbox/data/tool_replacements.json",
+  "step_features": "./sandbox/data/step_features.json",
+
+  "TELEGRAM_BOT_TOKEN": "SANDBOX_MOCK",
+  "TELEGRAM_CHAT_ID": "SANDBOX_MOCK",
+
+  "note": "Sandbox V2 — tutti i path puntano a ./sandbox/data, Telegram mockato in console"
+}

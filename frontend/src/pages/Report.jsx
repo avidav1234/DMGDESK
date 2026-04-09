@@ -741,13 +741,20 @@ function TabPerdite({ rpt }) {
     libero:           '#94a3b8',
   }
   const voci = [
-    { k: 'produzione_netta', label: 'Produzione netta',              sec: p.produzione_netta_sec },
-    { k: 'velocita_ridotta', label: 'Velocità ridotta (override<90%)', sec: p.velocita_ridotta_sec },
-    { k: 'microfermi',       label: 'Microfermi inter-programma',    sec: p.microfermi_sec },
-    { k: 'setup',            label: 'Setup / cambio pallet',         sec: p.setup_sec },
-    { k: 'guasti',           label: 'Fermi anomali (reset)',         sec: p.guasti_sec },
-    { k: 'fermo_extra',      label: 'Fermo fuori produzione',        sec: p.fermo_extra_sec },
-    { k: 'libero',           label: 'Tempo non programmato',         sec: p.libero_sec },
+    { k: 'produzione_netta', label: 'Produzione netta',              sec: p.produzione_netta_sec,
+      tooltip: 'Ore effettive di taglio — macchina in esecuzione programma NC.\nÈ il tempo valorizzato direttamente in produzione.' },
+    { k: 'velocita_ridotta', label: 'Velocità ridotta (override<90%)', sec: p.velocita_ridotta_sec,
+      tooltip: 'Tempo in cui feed o mandrino erano sotto il 90% del valore programmato.\nIndicatore di usura utensile, problemi di staffaggio o scelte operative conservative.' },
+    { k: 'microfermi',       label: 'Microfermi inter-programma',    sec: p.microfermi_sec,
+      tooltip: 'Pause brevi (< soglia setup) tra un programma e il successivo nella stessa sessione.\nTipicamente: cambio utensile, misura, riposizionamento.' },
+    { k: 'setup',            label: 'Setup / cambio pallet',         sec: p.setup_sec,
+      tooltip: 'Tempo tra la fine di una sessione e l'inizio della successiva.\nInclude: cambio pallet, serraggio grezzo, misura zero pezzo, caricamento MAIN.' },
+    { k: 'guasti',           label: 'Fermi anomali (reset)',         sec: p.guasti_sec,
+      tooltip: 'Fermi non pianificati classificati come anomalia — reset macchina, allarmi bloccanti, spegnimenti imprevisti.\nIndicatore di affidabilità macchina.' },
+    { k: 'fermo_extra',      label: 'Fermo fuori produzione',        sec: p.fermo_extra_sec,
+      tooltip: 'Fermo registrato fuori dalle sessioni di lavorazione — pausa pranzo, fine turno, attesa materiale.\nCalcolato da fermi_globali non ignorati.' },
+    { k: 'libero',           label: 'Tempo non programmato',         sec: p.libero_sec,
+      tooltip: 'Residuo del turno 24h non coperto da lavorazione né da fermo classificato.\nNotte non produttiva o dati mancanti.' },
   ].filter(v => v.sec > 0)
   const totale = voci.reduce((a, v) => a + v.sec, 0) || 1
 
@@ -808,7 +815,7 @@ function TabPerdite({ rpt }) {
               return (
                 <div key={v.k} style={{ display:'flex', alignItems:'center', gap:10 }}>
                   <div style={{ width:10, height:10, borderRadius:2, background:colori[v.k], flexShrink:0 }}/>
-                  <div style={{ flex:1, fontSize:12, color:'var(--text-secondary)' }}>{v.label}</div>
+                  <div style={{ flex:1, fontSize:12, color:'var(--text-secondary)', display:'flex', alignItems:'center', gap:4 }}>{v.label}{v.tooltip && <InfoTooltip text={v.tooltip} position='right' />}</div>
                   <div style={{ width:60, height:6, background:'var(--border)', borderRadius:3, overflow:'hidden', flexShrink:0 }}>
                     <div style={{ width:`${Math.min(100,pct)}%`, height:'100%', background:colori[v.k], borderRadius:3 }}/>
                   </div>
@@ -828,22 +835,29 @@ function TabPerdite({ rpt }) {
             {[
               { label:'OEE', value:`${oee?.valore||'—'}%`,
                 color:(oee?.valore||0)>=75?'#22c55e':(oee?.valore||0)>=50?'#f59e0b':'#ef4444',
-                sub:`Target industriale stampi: 65-75%` },
+                sub:`Target industriale stampi: 65-75%`,
+                tooltip:'OEE = Disponibilità × Performance × Qualità.\n≥85% classe mondiale · ≥65% buono · <40% critico.\nTarget lavorazione stampi: 65-75%.' },
               { label:'Setup medio / cambio pallet', value: p.n_setup > 0 ? fmt(p.media_setup_sec) : '—',
-                color:'#8b5cf6', sub:`${p.n_setup} cambi rilevati oggi` },
+                color:'#8b5cf6', sub:`${p.n_setup} cambi rilevati oggi`,
+                tooltip:'Tempo medio tra fine di una sessione e inizio della successiva.\nInclude cambio pallet, serraggio, zero pezzo e caricamento MAIN.\nRidurre il setup aumenta direttamente l'OEE.' },
               { label:'Fermi anomali', value: p.n_guasti,
                 color: p.n_guasti > 2 ? '#ef4444' : p.n_guasti > 0 ? '#f59e0b' : '#22c55e',
-                sub: p.n_guasti === 0 ? 'Nessun reset anomalo ✓' : 'Reset/spegnimenti imprevisti' },
+                sub: p.n_guasti === 0 ? 'Nessun reset anomalo ✓' : 'Reset/spegnimenti imprevisti',
+                tooltip:'Numero di fermi classificati come anomalia — allarmi bloccanti, reset Sinumerik, spegnimenti imprevisti.\n0 = ottimale · >2 = analizzare causa radice.' },
               { label:'Tempo con override ridotto', value: p.velocita_ridotta_sec > 0 ? fmt(p.velocita_ridotta_sec) : '—',
                 color: p.velocita_ridotta_sec > 1800 ? '#f59e0b' : '#22c55e',
                 sub: p.velocita_ridotta_sec > 0
                   ? `${rpt.override_ridotto?.pct_tempo||0}% del tempo di taglio`
-                  : 'Feed/mandrino sempre al 100%' },
+                  : 'Feed/mandrino sempre al 100%',
+                tooltip:'Tempo in cui l'override feed o mandrino era sotto il 90%.\nSegnala lavorazioni conservative o problemi utensile.\nRilevato dal valore OPC UA dell'override macchina.' },
             ].map((kpi, i) => (
               <div key={i} style={{ padding:'10px 14px', background:'var(--bg-hover)',
                 borderRadius:8, borderLeft:`3px solid ${kpi.color}` }}>
                 <div style={{ fontSize:10, fontWeight:700, color:'var(--text-dim)',
-                  letterSpacing:'0.07em', textTransform:'uppercase', marginBottom:3 }}>{kpi.label}</div>
+                  letterSpacing:'0.07em', textTransform:'uppercase', marginBottom:3,
+                  display:'flex', alignItems:'center', gap:4 }}>
+                  {kpi.label}{kpi.tooltip && <InfoTooltip text={kpi.tooltip} position='right' />}
+                </div>
                 <div style={{ fontSize:22, fontWeight:800, color:kpi.color, lineHeight:1 }}>{kpi.value}</div>
                 <div style={{ fontSize:11, color:'var(--text-dim)', marginTop:3 }}>{kpi.sub}</div>
               </div>
@@ -957,20 +971,28 @@ function TabCicli() {
               <SectionTitle>{det.filename?.replace('.MPF','')} — indici statistici</SectionTitle>
               <div style={{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:10 }}>
                 {[
-                  { label:'Media', value:fmt(s.media), color:'#1D5FAD' },
-                  { label:'Dev. std (σ)', value:fmt(s.std), color:'#7C3AED' },
+                  { label:'Media', value:fmt(s.media), color:'#1D5FAD',
+                    tooltip:'Durata media del ciclo su tutti i campioni disponibili.\nBase di riferimento per il confronto con nuovi cicli.' },
+                  { label:'Dev. std (σ)', value:fmt(s.std), color:'#7C3AED',
+                    tooltip:'Deviazione standard della durata ciclo.\nMisura la variabilità — valori alti indicano cicli irregolari (usura utensile, variazioni materiale, collisioni parziali).' },
                   { label:'CV%', value:`${s.cv_pct}%`,
                     color:cvColor(s.cv_pct),
-                    sub: s.cv_pct<10?'Stabile ✓':s.cv_pct<20?'Attenzione':'Instabile ⚠' },
-                  { label:'P95 (worst case)', value:fmt(s.p95), color:'#f59e0b' },
+                    sub: s.cv_pct<10?'Stabile ✓':s.cv_pct<20?'Attenzione':'Instabile ⚠',
+                    tooltip:'Coefficiente di variazione = σ/media × 100.\nNormalizza la variabilità rispetto alla durata media.\n<10% stabile · 10-20% attenzione · >20% instabile — indagare causa.' },
+                  { label:'P95 (worst case)', value:fmt(s.p95), color:'#f59e0b',
+                    tooltip:'Percentile 95 — il 95% dei cicli è più breve di questo valore.\nUsar come stima pessimistica per la pianificazione (evita sorprese).' },
                   { label:'Trend', value:slopeLabel(s.slope),
                     color:slopeColor(s.slope),
-                    sub:`${Math.abs(s.slope).toFixed(1)}s/ciclo` },
+                    sub:`${Math.abs(s.slope).toFixed(1)}s/ciclo`,
+                    tooltip:'Variazione media della durata ciclo per esecuzione successiva.\nPositivo = cicli sempre più lenti (usura utensile) · Negativo = cicli più veloci (riscaldamento, ottimizzazione) · Stabile = nessuna deriva.' },
                 ].map((k,i) => (
                   <div key={i} style={{ padding:'10px 12px', background:'var(--bg-hover)',
                     borderRadius:8, textAlign:'center' }}>
                     <div style={{ fontSize:10, fontWeight:700, color:'var(--text-dim)',
-                      textTransform:'uppercase', letterSpacing:'0.07em', marginBottom:4 }}>{k.label}</div>
+                      textTransform:'uppercase', letterSpacing:'0.07em', marginBottom:4,
+                      display:'flex', alignItems:'center', justifyContent:'center', gap:3 }}>
+                      {k.label}{k.tooltip && <InfoTooltip text={k.tooltip} position='top' />}
+                    </div>
                     <div style={{ fontSize:18, fontWeight:800, color:k.color, lineHeight:1 }}>{k.value}</div>
                     {k.sub && <div style={{ fontSize:10, color:k.color, marginTop:3 }}>{k.sub}</div>}
                   </div>
@@ -1115,7 +1137,10 @@ function TabTakt({ sessioni }) {
   return (
     <Card style={{ overflow:'auto' }}>
       <div style={{ padding:'16px 20px', borderBottom:'1px solid var(--border)' }}>
-        <SectionTitle>Takt time — teorico CAM vs reale macchina</SectionTitle>
+        <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:4}}>
+          <SectionTitle style={{margin:0}}>Takt time — teorico CAM vs reale macchina</SectionTitle>
+          <InfoTooltip text={"Takt time: tempo ciclico di produzione di ogni programma NC.\n\nTeorico CAM: tempoStimato inserito in Cimatron durante la programmazione.\nReale macchina: durata media misurata dal LOG macchina su tutti i cicli eseguiti.\n\nRapporto > 1 → la macchina è più lenta del CAM (usura, setup, attese).\nRapporto < 1 → la macchina è più veloce del CAM (ottimizzazione paths)."} />
+        </div>
         {!hasTeorico && (
           <div style={{ fontSize:11, color:'#f59e0b', marginTop:4 }}>
             ⚠ Nessun tempoStimato trovato nei progetti — inserire i tempi CAM per il confronto completo
@@ -1320,7 +1345,10 @@ export default function Report() {
         {tab === 'overview' && (
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:18 }}>
             <Card style={{ padding:'20px 24px' }}>
-              <SectionTitle>Timeline giornaliera (per ora)</SectionTitle>
+              <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:6}}>
+                <SectionTitle style={{margin:0}}>Timeline giornaliera (per ora)</SectionTitle>
+                <InfoTooltip text={"Distribuzione oraria di lavorazione (blu) e fermo (arancio).\nOgni colonna rappresenta un'ora del giorno — altezza proporzionale al tempo.\nPermette di identificare le ore più produttive e i pattern di fermo ricorrenti."} />
+              </div>
               <TimelineGiornaliera sessioni={rpt.sessioni} fermiGlobali={rpt.fermi_globali} />
             </Card>
             <Card style={{ padding:'20px 24px' }}>
@@ -1349,7 +1377,10 @@ export default function Report() {
               )}
             </Card>
             <Card style={{ padding:'20px 24px' }}>
-              <SectionTitle>Utilizzo utensili</SectionTitle>
+              <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:6}}>
+                <SectionTitle style={{margin:0}}>Utilizzo utensili</SectionTitle>
+                <InfoTooltip text={"Ore di utilizzo per ogni utensile in questo giorno.\nCalcolate sommando il tempo attivo dal cambio utensile al successivo nelle sessioni di lavorazione.\nUtile per identificare gli utensili più sollecitati e pianificare i cambi."} />
+              </div>
               <UtensiliDonut utensili={rpt.utensili} />
             </Card>
             <Card style={{ padding:'20px 24px', gridColumn:'1 / -1' }}>

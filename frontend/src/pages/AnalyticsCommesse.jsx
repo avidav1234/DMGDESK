@@ -169,12 +169,13 @@ function RigaProgetto({ p, onClick }) {
       <div style={{textAlign:'center'}}>
         {p.data_fine_stimata ? (
           <div>
-            <div style={{fontSize:12, fontWeight:600, color:'#475569'}}>
+            <div style={{fontSize:12, fontWeight:600, color:'#475569', display:'flex', alignItems:'center', justifyContent:'center', gap:3}}>
               {fmtDate(p.data_fine_stimata)}
             </div>
-            <div style={{fontSize:10, color:'#94a3b8'}}>
+            <div style={{fontSize:10, color:'#94a3b8', display:'flex', alignItems:'center', justifyContent:'center', gap:3}}>
               {p.giorni_rimanenti}gg
               {p.k_applicato ? ` · K=${p.k_applicato}` : ' · grezzo'}
+              <InfoTooltip text={p.k_applicato ? `Stima corretta con fattore K=${p.k_applicato}\nOre rimanenti (programmi in_main) × K = ore macchina previste` : 'Stima grezza — nessun fattore K disponibile.\nCompletare la prima commessa per attivare la calibrazione automatica.'} />
             </div>
             {p.confidenza_giorni && (
               <div style={{fontSize:10, fontWeight:600,
@@ -370,7 +371,10 @@ export default function AnalyticsCommesse() {
         {n_alert > 0 && (
           <div style={{background:'#dc2626', color:'#fff', fontSize:11,
             fontWeight:700, padding:'4px 10px', borderRadius:6}}>
-            {n_alert} alert scadenza
+            <span style={{display:'flex',alignItems:'center',gap:4}}>
+              {n_alert} alert scadenza
+              <InfoTooltip text={"Commesse con scadenza superata o entro 3 giorni.\nRichiede attenzione immediata — verificare stato lavorazione e comunicare con il cliente."} position='bottom' />
+            </span>
           </div>
         )}
       </div>
@@ -474,9 +478,18 @@ export default function AnalyticsCommesse() {
             gap:12, padding:'10px 16px',
             background:'#f8fafc', borderBottom:'1px solid #e2e8f0',
           }}>
-            {['Commessa', 'Ripartizione ore', 'Ratio CAM:Mac', 'Fine stimata', 'Scadenza'].map(h => (
+            {[
+              { h:'Commessa', t: null },
+              { h:'Ripartizione ore', t:'Proporzione tra ore CAM (programmazione Cimatron) e ore macchina reali.\nLa barra verde mostra la quota CAM sul totale — se piccola la macchina ha impiegato molto più del previsto.' },
+              { h:'Ratio CAM:Mac', t:'Rapporto diretto ore_cam / ore_macchina.\n1.0 = il CAM ha stimato esattamente · >1 = CAM sovrastima · <1 = CAM sottostima (macchina più veloce).' },
+              { h:'Fine stimata', t:'Data di fine stimata basata sulle ore rimanenti (programmi in_main) corrette dal fattore K.\n±gg = intervallo di confidenza basato sulla variabilità storica del fattore K.' },
+              { h:'Scadenza', t:'Data di consegna impostata nel progetto.\nRosso = scadenza già superata · Arancio = scadenza entro 3 giorni · Verde = nei tempi.' },
+            ].map(({h, t}) => (
               <div key={h} style={{fontSize:10, fontWeight:700, color:'#94a3b8',
-                textTransform:'uppercase', letterSpacing:'0.06em'}}>{h}</div>
+                textTransform:'uppercase', letterSpacing:'0.06em',
+                display:'flex', alignItems:'center', gap:3}}>
+                {h}{t && <InfoTooltip text={t} position='bottom' />}
+              </div>
             ))}
           </div>
 
@@ -510,8 +523,10 @@ export default function AnalyticsCommesse() {
             <div style={{background:'#fff',borderRadius:12,padding:'16px 20px',
               boxShadow:'0 1px 3px rgba(0,0,0,0.06)',marginBottom:16}}>
               <div style={{fontSize:11,fontWeight:700,letterSpacing:'0.08em',
-                color:'#64748b',textTransform:'uppercase',marginBottom:4}}>
+                color:'#64748b',textTransform:'uppercase',marginBottom:4,
+                display:'flex',alignItems:'center',gap:4}}>
                 Gantt pallet — ore in_main
+                <InfoTooltip text={"Stima delle ore di lavorazione rimanenti per ogni pallet.\n\nCalcolato sommando i tempoStimato dei programmi con stato in_main, corretti dal fattore K.\nLa barra mostra la proporzione rispetto al pallet con più ore.\nIl pallet con barra blu è quello attualmente in lavorazione."} />
               </div>
               <div style={{fontSize:10,color:'#94a3b8',marginBottom:12}}>
                 Solo programmi pianificati nel MAIN

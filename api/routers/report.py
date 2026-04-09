@@ -1188,11 +1188,17 @@ async def get_storico(giorni: int = Query(default=7, ge=1, le=365)):
         ore = sum(_dur(s) for s in sess)
         gap_sess = sum(s.get("gap_sec") or 0 for s in sess)
 
-        # Per oggi: usa fermo_sc se più grande del gap delle sessioni
-        # (copre il caso macchina ferma senza sessione aperta)
+        # Per oggi: usa fermo_sc tick-per-tick
+        # Per giorni precedenti: usa fermi_globali (persistenti)
         fermo_sc = 0
         if d == today and sc_oggi.get("fermo_data") == today:
             fermo_sc = sc_oggi.get("fermo_sec_giornaliero", 0)
+        if fermo_sc == 0:
+            fermi_del_giorno = [
+                f for f in log.get("fermi_globali", [])
+                if f.get("data") == d and not f.get("ignorato")
+            ]
+            fermo_sc = sum(f.get("durata_sec", 0) for f in fermi_del_giorno)
         # Somma corretta: gap dentro sessioni + fermo fuori sessioni
         fermo_extra = max(0, fermo_sc - gap_sess)
         gap = gap_sess + fermo_extra if sess else fermo_sc

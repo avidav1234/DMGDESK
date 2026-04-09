@@ -987,6 +987,15 @@ async def get_report_giornaliero(data: str = Query(default=None)):
     if sc_oggi.get("fermo_data") == target:
         fermo_sc = sc_oggi.get("fermo_sec_giornaliero", 0)
 
+    # Per i giorni precedenti (fermo_sc==0) usa fermi_globali come fonte primaria.
+    # I fermi_globali sono persistenti e coprono tutti i fermi tra sessioni.
+    if fermo_sc == 0:
+        fermi_del_giorno = [
+            f for f in log.get("fermi_globali", [])
+            if f.get("data") == target and not f.get("ignorato")
+        ]
+        fermo_sc = sum(f.get("durata_sec", 0) for f in fermi_del_giorno)
+
     fermo_extra = max(0, fermo_sc - gap_sessioni)  # fermo fuori sessioni
     if not sessioni_giorno:
         gap_totale = fermo_sc

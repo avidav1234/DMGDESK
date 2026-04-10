@@ -4,6 +4,7 @@
 // 3. Invia tutto / Solo MAIN
 
 import { useState, useRef, useCallback, useEffect } from 'react'
+import { InfoTooltip } from '../components/UI'
 import { api } from '../api/client'
 import { useNavigate } from 'react-router-dom'
 
@@ -561,8 +562,10 @@ export default function AnalisiNC() {
           background: 'rgba(29,95,173,0.08)', border: '1.5px solid rgba(29,95,173,0.25)',
           display: 'flex', alignItems: 'center', gap: 12 }}>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#0d2d5e', marginBottom: 2 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#0d2d5e', marginBottom: 2,
+              display:'flex', alignItems:'center', gap:4 }}>
               MAIN generato — passo successivo
+              <InfoTooltip text={"Il file MAIN è stato scritto su disco in P:\\DMG_DMC_160U\\[commessa]\\Fase-X\\.\nIl passo successivo è inviarlo alla NCU Sinumerik tramite DNC per poterlo eseguire dalla macchina.\nIl MAIN chiama in sequenza tutti i programmi NC con EXTCALL — la macchina li esegue uno per uno automaticamente."} />
             </div>
             <div style={{ fontSize: 11, color: '#1D5FAD' }}>
               Verifica la connessione e invia i file alla macchina
@@ -637,7 +640,11 @@ export default function AnalisiNC() {
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
               padding: '6px 12px', background: 'var(--bg-surface)', borderBottom: '1px solid var(--border)' }}>
               <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-dim)',
-                fontFamily: 'var(--font-mono)', letterSpacing: '0.08em' }}>UTENSILI</span>
+                fontFamily: 'var(--font-mono)', letterSpacing: '0.08em',
+                display:'inline-flex', alignItems:'center', gap:4 }}>
+                UTENSILI
+                <InfoTooltip text={"Confronto tra gli utensili richiesti dai file NC e quelli presenti nel magazine Sinumerik.\n\n✓ OK — utensile presente e abilitato nel TOA\n✕ Mancante — non trovato nel magazine, da aggiungere a scaffale\n⚠ Disabilitato — presente ma marcato come disabled nel Sinumerik"} position='bottom' />
+              </span>
               {done.length > 0 && !analyzing && (
                 <span style={{ fontSize: 11, fontWeight: 700,
                   color: tuttoOk ? '#15803d' : '#dc2626' }}>
@@ -657,6 +664,13 @@ export default function AnalisiNC() {
                 </div>
               )}
               {/* Mancanti — con bottone esplicito */}
+              {allMancanti.length > 0 && (
+                <div style={{padding:'4px 12px 4px', fontSize:10, color:'#94a3b8',
+                  display:'flex', alignItems:'center', gap:3, borderBottom:'1px solid var(--border)'}}>
+                  Utensili non trovati nel magazine
+                  <InfoTooltip text={"Questi utensili sono richiesti dai programmi NC ma non sono presenti nel TOA Sinumerik.\nCliccando '+ Scaffale' l'alias viene aggiunto allo scaffale virtuale DMGDesk per il tracciamento.\nL'operatore deve fisicamente montarli in macchina prima di avviare la lavorazione."} />
+                </div>
+              )}
               {allMancanti.map(alias => (
                 <div key={alias}
                   style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px',

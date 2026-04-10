@@ -1,5 +1,6 @@
 // RiepilogoTurno.jsx — Riepilogo turno giornaliero
 import { useState, useEffect, useCallback } from 'react'
+import { InfoTooltip } from '../components/UI'
 import { useNavigate } from 'react-router-dom'
 
 function fmtData(iso) {
@@ -92,9 +93,12 @@ function CardSnapshot({ snap, titolo, colore, icon, onRigenera, caricando }) {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)',
             gap: 12, marginBottom: 20 }}>
             {[
-              { label: 'Ore macchina', value: snap.ore_macchina_str || '0h', color: colore },
-              { label: 'Programmi', value: snap.n_programmi || 0 },
-              { label: 'Commesse', value: snap.n_commesse || 0 },
+              { label: 'Ore macchina', value: snap.ore_macchina_str || '0h', color: colore,
+                tooltip: 'Ore totali in cui la macchina ha eseguito programmi NC nella finestra selezionata (turno/giorno/settimana).' },
+              { label: 'Programmi', value: snap.n_programmi || 0,
+                tooltip: 'Numero di programmi NC completati nella finestra selezionata, su tutte le commesse.' },
+              { label: 'Commesse', value: snap.n_commesse || 0,
+                tooltip: 'Numero di commesse distinte lavorate nella finestra selezionata.' },
             ].map(k => (
               <div key={k.label} style={{ textAlign: 'center',
                 background: 'var(--color-background-secondary)',
@@ -103,7 +107,9 @@ function CardSnapshot({ snap, titolo, colore, icon, onRigenera, caricando }) {
                   color: k.color || 'var(--color-text-primary)',
                   fontFamily: 'var(--font-mono)' }}>{k.value}</div>
                 <div style={{ fontSize: 10, color: 'var(--color-text-secondary)',
-                  marginTop: 2 }}>{k.label}</div>
+                  marginTop: 2, display:'flex', alignItems:'center', justifyContent:'center', gap:3 }}>
+                  {k.label}{k.tooltip && <InfoTooltip text={k.tooltip} />}
+                </div>
               </div>
             ))}
           </div>
@@ -115,8 +121,9 @@ function CardSnapshot({ snap, titolo, colore, icon, onRigenera, caricando }) {
               display: 'flex', alignItems: 'center', gap: 12 }}>
               <div style={{ fontSize: 18, fontWeight: 700, color: '#085041',
                 fontFamily: 'var(--font-mono)' }}>{snap.ore_cam_str}</div>
-              <div style={{ fontSize: 12, color: '#0F6E56' }}>
+              <div style={{ fontSize: 12, color: '#0F6E56', display:'flex', alignItems:'center', gap:4 }}>
                 ore CAM · {snap.distribuzione?.filter(d => d.ore_cam_sec > 0).length || 0} commesse
+                <InfoTooltip text={"Ore di programmazione Cimatron registrate dal CAM Tracker su CAM35 oggi.\nMostrate solo per la finestra giornaliera — non disponibile per turno/settimana."} />
               </div>
             </div>
           )}
@@ -127,7 +134,10 @@ function CardSnapshot({ snap, titolo, colore, icon, onRigenera, caricando }) {
               <div style={{ fontSize: 10, fontWeight: 700,
                 color: 'var(--color-text-secondary)',
                 textTransform: 'uppercase', letterSpacing: '0.06em',
-                marginBottom: 12 }}>Distribuzione ore macchina</div>
+                marginBottom: 12, display:'flex', alignItems:'center', gap:4 }}>
+                Distribuzione ore macchina
+                <InfoTooltip text={"Ripartizione delle ore di lavorazione per commessa nella finestra selezionata.\nLa barra mostra la proporzione di ogni commessa sul totale ore macchina."} />
+              </div>
               {snap.distribuzione.map(d => (
                 <div key={d.commessa}>
                   <BarraCommessa item={d} maxSec={maxSec} colore={colore}/>

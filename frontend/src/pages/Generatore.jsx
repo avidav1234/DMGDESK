@@ -1,5 +1,6 @@
 // pages/Generatore.jsx — Generatore codici utensili CNC
 import { useState, useEffect } from 'react'
+import { InfoTooltip } from '../components/UI'
 import { api } from '../api/client'
 import { Loader, ErrorBanner, SectionHeader } from '../components/UI'
 
@@ -151,8 +152,10 @@ export default function Generatore() {
           {result ? (
             <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {[
-                { label: 'NOME CAM',          value: result.nome,     key: 'nome' },
-                { label: 'NOME CNC (ALIAS)',   value: result.commento, key: 'commento' },
+                { label: 'NOME CAM', value: result.nome, key: 'nome',
+                  tooltip: 'Nome file usato in Cimatron per il post-processing.\nConvention: TipoFresaDiamRLungFHz[GruppoPasso]\nEs: FS25R2L85 = Fresa sferica Ø25mm R2 L85mm' },
+                { label: 'NOME CNC (ALIAS)', value: result.commento, key: 'commento',
+                  tooltip: 'Alias utensile da inserire nel TOA Sinumerik (campo Kommentar).\nUsato da DMGDesk per abbinare il consumo utensile ai cicli lavorazione rilevati dal LOG macchina.' },
               ].map(({ label, value, key }) => (
                 <div key={key} className="card" style={{ padding: 20 }}>
                   <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 10 }}>{label}</div>

@@ -78,23 +78,23 @@ export default function Generatore() {
         {/* Form sinistra */}
         <div className="card" style={{ flex: '0 0 340px', padding: 20, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 14 }}>
 
-          <Field label="Tipologia Utensile">
+          <Field label="Tipologia Utensile" tooltip="Tipo di fresa:\nFF = Fresa di Finitura (sferica, per passate finali)\nFS = Fresa di Sgrossatura (torica, per asportazione rapida)\nFFPI = Fresa a inserti di finitura\nP = Punta/Maschio">
             <select className="input" value={form.tipo_utensile} onChange={e => f('tipo_utensile', e.target.value)}>
               {tipologie.map(t => <option key={t.chiave} value={t.chiave}>{t.nome}</option>)}
             </select>
           </Field>
 
-          <Field label="Diametro (mm)">
+          <Field label="Diametro (mm)" tooltip="Diametro nominale dell'utensile in mm.\nUsato per costruire il nome convenzionale e come riferimento nel TOA Sinumerik.">
             <input className="input" type="number" step="0.1" min="0" value={form.diametro} onChange={e => f('diametro', e.target.value)} placeholder="es. 12" />
           </Field>
 
           {tipoAttivo?.ha_r2 && (
-            <Field label="R2 / Raggio (mm)">
+            <Field label="R2 / Raggio (mm)" tooltip="Raggio al naso dell'utensile in mm.\nPer frese sferiche = D/2 · Per frese toriche = raggio dell'inserti al bordo.">
               <input className="input" type="number" step="0.1" value={form.r2_x} onChange={e => f('r2_x', e.target.value)} placeholder="es. 2" />
             </Field>
           )}
           {tipoAttivo?.ha_l && (
-            <Field label="Lunghezza L (mm)">
+            <Field label="Lunghezza L (mm)" tooltip="Lunghezza utile dell'utensile in mm.\nUsata nel nome e come riferimento per il montaggio in mandrino.">
               <input className="input" type="number" value={form.l} onChange={e => f('l', e.target.value)} placeholder="es. 80" />
             </Field>
           )}
@@ -109,11 +109,11 @@ export default function Generatore() {
             </Field>
           )}
 
-          <Field label="FP (Frequenza Passate)">
+          <Field label="FP (Frequenza Passate)" tooltip="Frequenza delle passate — usata nella convenzione di denominazione per frese con caratteristiche di passo speciali.">
             <input className="input" type="number" value={form.fp} onChange={e => f('fp', e.target.value)} placeholder="es. 80" />
           </Field>
 
-          <Field label="Porta-utensile">
+          <Field label="Porta-utensile" tooltip="Tipo di porta-utensile per il montaggio in mandrino.\nInfluisce sulla rigidità e sulla lunghezza di aggetto.">
             <select className="input" value={form.tipo_holder} onChange={e => {
               const h = holders.find(x => x.chiave === e.target.value)
               f('tipo_holder', e.target.value); f('diam_holder', h?.diametri[0] || '')
@@ -172,7 +172,10 @@ export default function Generatore() {
 
               {/* Anteprima NC */}
               <div className="card" style={{ padding: 20 }}>
-                <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 10 }}>ANTEPRIMA CODICE NC</div>
+                <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 10, display:'flex', alignItems:'center', gap:4 }}>
+                  ANTEPRIMA CODICE NC
+                  <InfoTooltip text={"Sequenza di chiamata utensile nel programma NC Sinumerik.\nT=\"alias\" → seleziona l'utensile dal TOA\nD1 → attiva il correttore geometrico 1\nM6 → esegue il cambio utensile fisico\n; nome_cam → commento con il nome Cimatron per riferimento."} />
+                </div>
                 <pre className="mono" style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.8, background: 'var(--bg-base)', padding: 16, borderRadius: 'var(--radius-sm)', overflow: 'auto' }}>
 {`T="${result.commento}"
 D1
@@ -194,10 +197,12 @@ M6
   )
 }
 
-function Field({ label, children }) {
+function Field({ label, children, tooltip }) {
   return (
     <div>
-      <label style={{ display: 'block', fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 5 }}>{label}</label>
+      <label style={{ display: 'flex', alignItems:'center', gap:4, fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 5 }}>
+        {label}{tooltip && <InfoTooltip text={tooltip} />}
+      </label>
       {children}
     </div>
   )

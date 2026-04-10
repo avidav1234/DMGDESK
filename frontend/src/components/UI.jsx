@@ -49,7 +49,7 @@ export function SuccessBanner({ message, onClose }) {
   )
 }
 
-export function StatCard({ label, value, color, unit='' }) {
+export function StatCard({ label, value, color, unit='', tooltip }) {
   return (
     <div style={{
       background:'var(--bg-panel)', border:'1px solid var(--border)',
@@ -57,7 +57,9 @@ export function StatCard({ label, value, color, unit='' }) {
       borderRadius:'0 var(--radius-sm) var(--radius-sm) 0',
       padding:'10px 14px', minWidth:90,
     }}>
-      <div style={{ fontSize:11, color:'var(--text-dim)', marginBottom:4 }}>{label}</div>
+      <div style={{ fontSize:11, color:'var(--text-dim)', marginBottom:4, display:'flex', alignItems:'center', gap:4 }}>
+        {label}{tooltip && <InfoTooltip text={tooltip} />}
+      </div>
       <div style={{ fontSize:20, fontWeight:700, color: color || 'var(--text-primary)', lineHeight:1 }}>
         {value}<span style={{ fontSize:11, fontWeight:400, color:'var(--text-dim)', marginLeft:3 }}>{unit}</span>
       </div>

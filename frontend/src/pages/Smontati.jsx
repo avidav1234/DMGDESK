@@ -1,7 +1,7 @@
 // pages/Smontati.jsx — Archivio utensili smontati con workflow montaggio
 import { useState, useEffect, useCallback } from 'react'
 import { api } from '../api/client'
-import { Loader, EmptyState, ErrorBanner, SuccessBanner, StatCard, SectionHeader } from '../components/UI'
+import { Loader, EmptyState, ErrorBanner, SuccessBanner, StatCard, SectionHeader , InfoTooltip } from '../components/UI'
 
 export default function Smontati() {
   const [lista, setLista]         = useState([])
@@ -143,11 +143,11 @@ export default function Smontati() {
       />
 
       <div style={{ display: 'flex', gap: 12 }}>
-        <StatCard label="Totale Smontati"  value={lista.length}  color="var(--purple)" />
-        <StatCard label="Da Macchina"
+        <StatCard label="Totale Smontati"  value={lista.length}  color="var(--purple)" tooltip="Totale utensili nell'archivio smontati — utensili rimossi dalla macchina in attesa di valutazione o smaltimento." />
+        <StatCard tooltip="Utensili smontati direttamente dalla macchina — rimossi dal magazine Sinumerik per usura, rottura o fine vita." label="Da Macchina"
           value={lista.filter(u => u.provenienza?.toLowerCase().includes('pos')).length}
           color="var(--text-secondary)" />
-        <StatCard label="Manuali / Acquisto"
+        <StatCard tooltip="Utensili registrati manualmente nell'archivio — acquistati nuovi, ricevuti da fornitore o aggiunti senza provenienza dalla macchina." label="Manuali / Acquisto"
           value={lista.filter(u => !u.provenienza?.toLowerCase().includes('pos')).length}
           color="var(--text-dim)" />
       </div>

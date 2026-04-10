@@ -292,6 +292,7 @@ function SetupPannel({ setupData, setupPopup, setSetupPopup, onChiudi }) {
             </>}
           />
           <Section title={`⚠ FINE VITA (<15%) — ${fin_vita.length}`}
+            tooltip="Utensili con vita residua sotto il 15% nel TOA Sinumerik. Sostituire prima della prossima lavorazione per evitare interruzioni."
             items={fin_vita} c='#B45309' bg='#FEF3C7'
             renderItem={item=><>
               <div style={{flex:1}}>
@@ -323,8 +324,9 @@ function SetupPannel({ setupData, setupPopup, setSetupPopup, onChiudi }) {
               <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10,padding:'8px 12px',
                 background:'#fff3e0',border:'1px solid #ff9800',borderRadius:8}}>
                 <span style={{fontSize:16}}>🔮</span>
-                <span style={{fontSize:13,fontWeight:800,color:'#e65100'}}>
+                <span style={{fontSize:13,fontWeight:800,color:'#e65100',display:'flex',alignItems:'center',gap:4}}>
                   PREVISIONE FINE VITA — {previsione_vita.length} utensil{previsione_vita.length===1?'e':'i'} a rischio
+                  <InfoTooltip text={"Utensili che potrebbero esaurire la vita durante i programmi pianificati nel MAIN.\n\nCalcolato confrontando:\n• Vita rimanente (minuti dal TOA Sinumerik)\n• Consumo totale stimato (somma tempoStimato dei programmi che usano questo utensile)\n\nSe vita_rimanente < consumo_totale → l'utensile non basterà a completare il pallet.\nSostituire prima di avviare o impostare un duplo."} position='bottom' />
                 </span>
                 <span style={{fontSize:11,color:'#bf360c',marginLeft:'auto'}}>
                   basato sui tempi stimati nei file MPF
@@ -344,8 +346,9 @@ function SetupPannel({ setupData, setupPopup, setSetupPopup, onChiudi }) {
                         <div style={{height:6,width:`${Math.min(pct,100)}%`,
                           background:pct<50?'#f44336':'#ff9800',borderRadius:3}}/>
                       </div>
-                      <span style={{fontSize:12,fontWeight:700,color:'#e65100',flexShrink:0}}>
+                      <span style={{fontSize:12,fontWeight:700,color:'#e65100',flexShrink:0,display:'flex',alignItems:'center',gap:3}}>
                         {alert.vita_rimanente}min rim. / {alert.consumo_totale}min req.
+                        <InfoTooltip text={"Vita rimanente: minuti residui letti dal TOA Sinumerik (life_remaining del parametro utensile).\nConsumo totale: somma dei tempoStimato di tutti i programmi nel MAIN che usano questo utensile."} position='left' />
                       </span>
                     </div>
                     {cr&&<div style={{background:'#ffecb3',border:'1px solid #ffc107',

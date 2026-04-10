@@ -1,7 +1,7 @@
 // pages/Scaffale.jsx — Utensili assemblati a scaffale
 import { useState, useEffect } from 'react'
 import { api } from '../api/client'
-import { Loader, EmptyState, ErrorBanner, SuccessBanner, StatCard, SectionHeader } from '../components/UI'
+import { Loader, EmptyState, ErrorBanner, SuccessBanner, StatCard, SectionHeader, InfoTooltip } from '../components/UI'
 
 export default function Scaffale() {
   const [utensili, setUtensili]       = useState([])
@@ -51,9 +51,9 @@ export default function Scaffale() {
 
       {/* Stats */}
       <div style={{ display: 'flex', gap: 12 }}>
-        <StatCard label="A Scaffale"   value={utensili.length}  color="var(--amber)" />
-        <StatCard label="Frese Fin."   value={utensili.filter(u => u.alias.startsWith('FF')).length} color="var(--green)" />
-        <StatCard label="Frese Sgr."   value={utensili.filter(u => u.alias.startsWith('FS')).length} color="var(--navy-accent)" />
+        <StatCard label="A Scaffale"   value={utensili.length}  color="var(--amber)" tooltip="Utensili presenti fisicamente a scaffale — pronti per essere montati nel magazine della macchina." />
+        <StatCard label="Frese Fin."   value={utensili.filter(u => u.alias.startsWith('FF')).length} color="var(--green)" tooltip="Frese di finitura (alias che inizia con FF) presenti a scaffale.\nUsate per passate finali — tolleranze strette e basso carico di taglio." />
+        <StatCard label="Frese Sgr."   value={utensili.filter(u => u.alias.startsWith('FS')).length} color="var(--navy-accent)" tooltip="Frese di sgrossatura (alias che inizia con FS) presenti a scaffale.\nUsate per asportazione rapida del materiale grezzo." />
       </div>
 
       <ErrorBanner   message={error}   onClose={() => setError(null)} />

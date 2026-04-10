@@ -232,7 +232,11 @@ def aggiorna_da_log(
         # con stato=5/0, indipendentemente dall'esistenza di una sessione aperta.
         # Questo copre anche il caso "macchina ferma dall'inizio del turno".
         GRACE_SEC = 900  # 15 minuti
-        if stato_pgm in (0, 5):
+        # stato 2 = "ricerca blocco" Sinumerik — in pratica macchina ferma/idle
+        # quando programma_attivo è None (USERENDPROG o sistema) lo trattiamo come fermo
+        _prog_attivo = sc.get("programma_corrente") or data.get("programma_attivo")
+        _e_fermo = stato_pgm in (0, 5) or (stato_pgm == 2 and not _prog_attivo)
+        if _e_fermo:
             # ── Accumulo tempo fermo giornaliero (sempre, con o senza sessione) ──
             ultimo_fermo = sc.get("ultimo_tick_fermo")
             today = now[:10]

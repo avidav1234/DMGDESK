@@ -26,10 +26,10 @@ function diffGiorni(a,b) {
 
 function TimelineCommessa({ tl, scadenza, colore }) {
   const FASI_DEF = [
-    { key:'apertura_progetto', label:'Apertura',    col:'#1D5FAD', above:true  },
+    { key:'apertura_progetto', label:'Apertura',    col:'#1D5FAD', above:true,  tooltip:'Data di creazione del progetto in DMGDesk.' },
     { key:'inizio_macchina',   label:'Inizio mac.', col:colore||'#1D5FAD', above:false },
     { key:'fine_macchina',     label:'Fine mac.',   col:colore||'#1D5FAD', above:true  },
-    { key:'consegna',          label:'Consegna',    col:'#15803d', above:false },
+    { key:'consegna',          label:'Consegna',    col:'#15803d', above:false, tooltip:'Data di consegna pianificata. Segnata in verde se rispettata, rosso se superata.' },
   ]
   const fasi = FASI_DEF.filter(f => tl[f.key])
   if (fasi.length < 2) return null
@@ -297,7 +297,8 @@ export default function RendicontoProgetto() {
           sub={`${kpi.n_programmi_eseguiti} distinti eseguiti`} accent="#1D5FAD" icon="📋"
           tooltip="Programmi completati / totali per questa commessa.\nIl totale include tutti i file MPF nelle fasi di fresatura."/>
         <KpiCard label="Utensili usati" value={kpi.n_utensili}
-          sub={`${kpi.n_fasi} fas${kpi.n_fasi===1?'e':'i'} di lavorazione`} accent="#0f766e" icon="🔧"/>
+          sub={`${kpi.n_fasi} fas${kpi.n_fasi===1?'e':'i'} di lavorazione`} accent="#0f766e" icon="🔧"
+          tooltip="Numero di utensili distinti utilizzati in questa commessa.\nRilevati dal cambio utensile registrato nel LOG macchina durante le sessioni di lavorazione."/>
         <KpiCard label="Giorni commessa" value={timeline.giorni_totali??'—'}
           sub={`${timeline.giorni_macchina??'—'} giorni in macchina`} accent="#7c3aed" icon="📅"
           tooltip="Giorni totali dalla creazione della commessa alla consegna.\n'Giorni in macchina' = giorni con almeno una sessione di lavorazione attiva."/>

@@ -1,5 +1,6 @@
 // AlertUtensili.jsx — Monitoraggio predittivo utensili + Notifiche
 import { useState, useEffect } from 'react'
+import { InfoTooltip } from '../components/UI'
 
 function fmtSec(s) {
   if (!s) return '—'
@@ -16,8 +17,9 @@ function SlopeBar({ slope, max=10 }) {
         <div style={{width:`${pct}%`, height:'100%', background:color, borderRadius:3}}/>
       </div>
       <span style={{fontSize:11, fontFamily:'var(--font-mono)', color,
-        fontWeight:600, minWidth:60}}>
+        fontWeight:600, minWidth:60, display:'flex', alignItems:'center', gap:3}}>
         {slope > 0 ? '+' : ''}{slope.toFixed(1)}s/ciclo
+        <InfoTooltip text={"Slope: variazione media della durata ciclo per esecuzione successiva.\n\n+s/ciclo = cicli sempre più lenti → usura utensile\n-s/ciclo = cicli più veloci → improbabile, verificare\n\nRosso >5s/ciclo: degrado rapido\nArancio 2-5s/ciclo: attenzione\nVerde <2s/ciclo: stabile"} />
       </span>
     </div>
   )
@@ -62,8 +64,16 @@ function AlertCard({ item, tipo }) {
           <div style={{fontSize:12, color:'#475569'}}>{item.msg}</div>
         </div>
         <div style={{textAlign:'right', flexShrink:0}}>
-          <div style={{fontSize:10, color:'#94a3b8', marginBottom:4}}>
-            {item.n_cicli} cicli · media {fmtSec(item.media_sec)}
+          <div style={{fontSize:10, color:'#94a3b8', marginBottom:4, display:'flex', alignItems:'center', gap:4}}>
+            <span style={{display:'flex',alignItems:'center',gap:3}}>
+              {item.n_cicli} cicli
+              <InfoTooltip text={"Numero di esecuzioni del programma registrate nel LOG macchina.\nUsate per calcolare media, deviazione standard e slope."} />
+            </span>
+            · media
+            <span style={{display:'flex',alignItems:'center',gap:3}}>
+              {fmtSec(item.media_sec)}
+              <InfoTooltip text={"Durata media del ciclo su tutti i campioni disponibili.\nBase di riferimento per rilevare anomalie (picchi, degrado progressivo)."} />
+            </span>
           </div>
           {item.slope !== undefined && <SlopeBar slope={item.slope}/>}
         </div>
@@ -72,7 +82,10 @@ function AlertCard({ item, tipo }) {
         <div style={{marginTop:8, fontSize:11, color:'#64748b'}}>
           Ultimo: <strong>{fmtSec(item.ultimo_sec)}</strong> |
           Media: {fmtSec(item.media_sec)} |
-          Soglia: {fmtSec(item.soglia_sec)}
+          <span style={{display:'inline-flex',alignItems:'center',gap:3}}>
+            Soglia: {fmtSec(item.soglia_sec)}
+            <InfoTooltip text={"Soglia di alert per i picchi di durata ciclo.\nCalcolata come media + 3×σ (deviazione standard).\nUn ciclo che supera questa soglia indica un'anomalia — utensile consumato, collisione parziale, materiale duro."} />
+          </span>
         </div>
       )}
     </div>
@@ -283,8 +296,8 @@ export default function AlertUtensili() {
       {/* Tabs */}
       <div style={{display:'flex', gap:4, padding:'12px 24px 0', flexShrink:0}}>
         {[
-          {id:'alert', label:`Alert (${alerts?.n_alert||0})`},
-          {id:'warning', label:`Warning (${alerts?.n_warning||0})`},
+          {id:'alert', label:`Alert (${alerts?.n_alert||0})`, tooltip:'Utensili con anomalie critiche rilevate — picchi di durata ciclo, degrado rapido o vita sotto soglia ML.'},
+          {id:'warning', label:`Warning (${alerts?.n_warning||0})`, tooltip:'Utensili con trend di degrado in atto — non ancora critici ma da monitorare.'},
           {id:'notifiche', label:'Notifiche'},
         ].map(t => (
           <button key={t.id} onClick={() => setTab(t.id)} style={{
@@ -320,7 +333,10 @@ export default function AlertUtensili() {
                   Nessun alert — tutti gli utensili nel range normale
                 </div>
                 <div style={{fontSize:11, color:'#94a3b8', marginTop:4}}>
-                  {alerts?.totale_utensili_monitorati || 0} utensili monitorati
+                  <span style={{display:'flex',alignItems:'center',gap:3}}>
+                    {alerts?.totale_utensili_monitorati || 0} utensili monitorati
+                    <InfoTooltip text={"Utensili con almeno 3 cicli registrati nel LOG macchina.\nSolo questi vengono analizzati per alert e warning — gli utensili con meno campioni non hanno abbastanza dati per rilevare anomalie affidabilmente."} />
+                  </span>
                 </div>
               </div>
             ) : (

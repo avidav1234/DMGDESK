@@ -561,7 +561,10 @@ export default function CodaLavorazione() {
                 background: liveCtx.match.progetto_colore, transition: 'width 0.5s' }}/>
             </div>
             <span style={{ fontSize: 12, fontWeight: 700, color: '#5A5750', minWidth: 80 }}>
-              {liveCtx.match.programmi_completati}/{liveCtx.match.programmi_totali} pgm · {liveCtx.match.pct_avanzamento}%
+              <span style={{display:'flex',alignItems:'center',gap:3}}>
+                {liveCtx.match.programmi_completati}/{liveCtx.match.programmi_totali} pgm · {liveCtx.match.pct_avanzamento}%
+                <InfoTooltip text={"Avanzamento della commessa corrente.\nProgrammi completati / totali nel MAIN × 100.\nSolo programmi con stato completato vengono conteggiati come eseguiti."} />
+              </span>
             </span>
             {liveCtx.match.prossimi_programmi?.length > 0 && (
               <span style={{ fontSize: 11, color: '#9A978E' }}>
@@ -574,7 +577,10 @@ export default function CodaLavorazione() {
       {/* ── Griglia pallet ─────────────────────────────────── */}
       <div style={{ flexShrink: 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: '#0d2d5e', letterSpacing: 1, textTransform: 'uppercase' }}>Pallet</span>
+          <span style={{ fontSize: 11, fontWeight: 700, color: '#0d2d5e', letterSpacing: 1, textTransform: 'uppercase', display:'flex', alignItems:'center', gap:4 }}>
+            Pallet
+            <InfoTooltip text={"Stati pallet:\n\n• IN LAVORAZIONE — pallet in macchina, programmi in esecuzione\n• GREZZO — pallet caricato con materiale grezzo, in attesa\n• FINITO — lavorazione completata, pezzo da scaricare\n• GUASTO — lavorazione interrotta anomalmente (rottura utensile, allarme)\n• VUOTO — pallet libero, nessuna commessa assegnata\n\nClick su un pallet per cambiare stato manualmente."} position='right' />
+          </span>
           {lastUpdate && <span style={{ fontSize: 10, color: '#94a3b8' }}>{lastUpdate}</span>}
         </div>
 
@@ -672,7 +678,10 @@ export default function CodaLavorazione() {
                   <div style={{ height: '100%', background: proj.colore, width: `${proj.pct}%`, borderRadius: 2 }}/>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: 10, color: cardFg, opacity: 0.8 }}>{proj.completati}/{proj.totale} pgm</span>
+                  <span style={{ fontSize: 10, color: cardFg, opacity: 0.8, display:'flex', alignItems:'center', gap:3 }}>
+                    {proj.completati}/{proj.totale} pgm
+                    <InfoTooltip text={"Programmi NC completati rispetto al totale pianificato nel MAIN.\nLa barra colorata mostra la percentuale di avanzamento." } position='top' />
+                  </span>
                   <span style={{ fontSize: 12, fontWeight: 800, color: cardFg }}>{proj.pct}%</span>
                 </div>
                 {isCompleto && p.stato !== 'FINITO' && (

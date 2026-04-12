@@ -374,7 +374,9 @@ def aggiorna_da_log(
                     dirty = True
 
         # ── Macchina IN ESECUZIONE ────────────────────────────────────────────────
-        if stato_pgm in (1, 3) and programma_attivo:
+        # stato 2 con programma utente = posizionamento/ricerca blocco durante lavorazione
+        # trattato come in esecuzione per aggiornare programma_corrente e ultimo_tick
+        if stato_pgm in (1, 2, 3) and programma_attivo:
             # Filtra programmi di sistema Sinumerik e MAIN generati da AnalisiNC
             _FILTRI_SISTEMA = (
                 "_N_CMA_DIR", "_N_CST_DIR", "_N_SYF_DIR",

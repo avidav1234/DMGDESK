@@ -2100,6 +2100,22 @@ async def get_ore_progetto(progetto: str = None, project_id: str = None):
     }
 
 
+
+@router.get("/debug-stato-corrente")
+async def debug_stato_corrente():
+    """Debug: espone stato_corrente raw del log."""
+    config = carica_configurazione()
+    data = _load_log(config)
+    sc = data.get("stato_corrente", {})
+    return {
+        "stato_corrente": sc,
+        "ultimo_tick_fermo": sc.get("ultimo_tick_fermo"),
+        "in_esecuzione": sc.get("in_esecuzione"),
+        "in_pausa": sc.get("in_pausa"),
+        "programma_corrente": sc.get("programma_corrente"),
+        "sessione_id": sc.get("sessione_id"),
+        "fermo_sec_giornaliero": sc.get("fermo_sec_giornaliero"),
+    }
 @router.get("/debug-sessioni")
 async def debug_sessioni_progetto(progetto: str, giorni: int = 365):
     """

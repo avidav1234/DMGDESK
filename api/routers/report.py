@@ -232,7 +232,9 @@ def aggiorna_da_log(
         # con stato=5/0, indipendentemente dall'esistenza di una sessione aperta.
         # Questo copre anche il caso "macchina ferma dall'inizio del turno".
         GRACE_SEC = 900  # 15 minuti
-        if stato_pgm in (0, 5):
+        # stato 2 in grace period = macchina ferma — accumula fermo
+        _in_grace_stato2 = stato_pgm == 2 and sc.get("in_pausa")
+        if stato_pgm in (0, 5) or _in_grace_stato2:
             # ── Accumulo tempo fermo giornaliero (sempre, con o senza sessione) ──
             ultimo_fermo = sc.get("ultimo_tick_fermo")
             today = now[:10]

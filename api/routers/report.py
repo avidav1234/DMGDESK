@@ -2103,6 +2103,37 @@ async def get_ore_progetto(progetto: str = None, project_id: str = None):
 
 
 
+
+@router.post("/reset-stato-corrente")
+async def reset_stato_corrente():
+    """
+    Reset di emergenza dello stato_corrente bloccato.
+    Chiude la sessione orfana e azzera sc mantenendo fermo_sec_giornaliero.
+    """
+    config = carica_configurazione()
+    data = _load_log(config)
+    sc = data.get("stato_corrente", {})
+    now = _now_iso()
+
+    # Chiudi sessione orfana se esiste
+    if sc.get("sessione_id"):
+        sess = _find_sess(data, sc["sessione_id"])
+        if sess and sess.get("fine") is None:
+            _chiudi_sessione(data, sc, sc.get("ultimo_tick") or now)
+
+    # Preserva fermo giornaliero
+    _fs = sc.get("fermo_sec_giornaliero", 0)
+    _fd = sc.get("fermo_data", "")
+    today = now[:10]
+
+    sc.clear()
+    if _fs and _fd == today:
+        sc["fermo_sec_giornaliero"] = _fs
+        sc["fermo_data"] = _fd
+
+    _save_log(config, data)
+    return {"ok": True, "msg": "stato_corrente resettato", "fermo_preservato": _fs}
+
 @router.get("/debug-stato-corrente")
 async def debug_stato_corrente():
     """Debug: espone stato_corrente raw del log."""

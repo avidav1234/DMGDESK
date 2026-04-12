@@ -419,7 +419,9 @@ async def get_live_context():
     # Fallback: se prog_raw è null ma la macchina è in esecuzione,
     # usa il programma_corrente dallo stato_corrente del log sessioni
     _fallback_filename = None
-    if not prog_raw and stato_pgm in (2, 3):
+    # Fallback solo su stato 3 (in esecuzione con conferma), non su stato 2
+    # Stato 2 con prog_raw=None = USERENDPROG o fine ciclo — NON usare il programma precedente
+    if not prog_raw and stato_pgm == 3:
         try:
             from api.routers.report import _load_log as _rl
             _sc = _rl(config).get("stato_corrente", {})

@@ -208,9 +208,7 @@ def aggiorna_da_log(
         # Se il backend è stato riavviato mentre la macchina girava, la sessione
         # corrente è rimasta aperta (fine=None). Se ora la macchina è ferma,
         # chiudiamo la sessione orfana usando l'ultimo_tick come timestamp di fine.
-        # Chiudi sessione orfana anche se stato=2 senza programma utente (USERENDPROG)
-        _stato_fermo_orfana = stato_pgm in (0, 5) or (stato_pgm == 2 and not sc.get("programma_corrente"))
-        if _stato_fermo_orfana and sc.get("sessione_id"):
+        if stato_pgm in (0, 5) and sc.get("sessione_id"):
             sess_orfana = _find_sess(data, sc["sessione_id"])
             if sess_orfana and sess_orfana.get("fine") is None:
                 fine_orfana = sc.get("ultimo_tick") or now
@@ -234,12 +232,7 @@ def aggiorna_da_log(
         # con stato=5/0, indipendentemente dall'esistenza di una sessione aperta.
         # Questo copre anche il caso "macchina ferma dall'inizio del turno".
         GRACE_SEC = 900  # 15 minuti
-        # stato 2 = "ricerca blocco" Sinumerik — in pratica macchina ferma/idle
-        # quando programma_attivo è None (USERENDPROG o sistema) lo trattiamo come fermo
-        # stato 2 = ricerca blocco: fermo solo se nessun programma utente in esecuzione
-        _prog_attivo = sc.get("programma_corrente")
-        _e_fermo = stato_pgm in (0, 5) or (stato_pgm == 2 and not _prog_attivo)
-        if _e_fermo:
+        if stato_pgm in (0, 5):
             # ── Accumulo tempo fermo giornaliero (sempre, con o senza sessione) ──
             ultimo_fermo = sc.get("ultimo_tick_fermo")
             today = now[:10]
@@ -353,6 +346,31 @@ def aggiorna_da_log(
                     _fs, _fd = sc.get("fermo_sec_giornaliero",0), sc.get("fermo_data","")
                     sc.clear()
                     if _fs and _fd == now[:10]: sc["fermo_sec_giornaliero"]=_fs; sc["fermo_data"]=_fd
+                    dirty = True
+
+        # ── Stato 2 senza programma utente = fine ciclo / USERENDPROG ──────────────
+        # progStatus=2 con programma di sistema (USERENDPROG, _N_CMA_DIR) significa
+        # che il ciclo è finito e il CNC sta eseguendo routine di fine programma.
+        # Trattiamo come "macchina ferma" per chiudere la sessione corrente.
+        if stato_pgm == 2 and not sc.get("programma_corrente"):
+            if sc.get("in_esecuzione"):
+                sc["in_pausa"]      = True
+                sc["pausa_inizio"]  = now
+                sc["in_esecuzione"] = False
+                dirty = True
+            elif sc.get("in_pausa"):
+                try:
+                    pausa_sec = int((datetime.fromisoformat(now) -
+                                     datetime.fromisoformat(sc["pausa_inizio"])).total_seconds())
+                except Exception:
+                    pausa_sec = GRACE_SEC + 1
+                if pausa_sec > GRACE_SEC:
+                    _chiudi_sessione(data, sc, sc.get("pausa_inizio") or now)
+                    _fs, _fd = sc.get("fermo_sec_giornaliero",0), sc.get("fermo_data","")
+                    sc.clear()
+                    if _fs and _fd == now[:10]:
+                        sc["fermo_sec_giornaliero"] = _fs
+                        sc["fermo_data"]            = _fd
                     dirty = True
 
         # ── Macchina IN ESECUZIONE ────────────────────────────────────────────────

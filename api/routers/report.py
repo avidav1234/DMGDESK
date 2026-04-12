@@ -406,12 +406,48 @@ def aggiorna_da_log(
                     _dur = int((datetime.fromisoformat(now) -
                                 datetime.fromisoformat(fermo_glob_inizio)).total_seconds())
                     if _dur >= 60:  # solo fermi > 1 minuto
-                        data.setdefault("fermi_globali", []).append({
-                            "inizio": fermo_glob_inizio,
-                            "fine":   now,
-                            "durata_sec": _dur,
-                            "data":   now[:10],
-                        })
+                        # La data del fermo è quella dell'INIZIO, non della fine.
+                        # Se attraversa mezzanotte, tronca la durata alla mezzanotte
+                        # e registra solo la parte nella giornata di inizio.
+                        _data_inizio = fermo_glob_inizio[:10]
+                        _data_fine   = now[:10]
+                        if _data_inizio != _data_fine:
+                            # Fermo a cavallo di mezzanotte — tronca a mezzanotte
+                            try:
+                                _mezzanotte = datetime.fromisoformat(_data_fine + "T00:00:00")
+                                _ts_inizio  = datetime.fromisoformat(fermo_glob_inizio)
+                                _dur_troncato = int((_mezzanotte - _ts_inizio).total_seconds())
+                                if _dur_troncato >= 60:
+                                    data.setdefault("fermi_globali", []).append({
+                                        "inizio": fermo_glob_inizio,
+                                        "fine":   _data_fine + "T00:00:00",
+                                        "durata_sec": _dur_troncato,
+                                        "data":   _data_inizio,
+                                    })
+                                # Aggiungi anche la parte di oggi (da mezzanotte a ora)
+                                _dur_oggi = int((datetime.fromisoformat(now) - _mezzanotte).total_seconds())
+                                if _dur_oggi >= 60:
+                                    data.setdefault("fermi_globali", []).append({
+                                        "inizio": _data_fine + "T00:00:00",
+                                        "fine":   now,
+                                        "durata_sec": _dur_oggi,
+                                        "data":   _data_fine,
+                                    })
+                            except Exception:
+                                # Fallback: usa dati originali con data inizio
+                                data.setdefault("fermi_globali", []).append({
+                                    "inizio": fermo_glob_inizio,
+                                    "fine":   now,
+                                    "durata_sec": _dur,
+                                    "data":   _data_inizio,
+                                })
+                        else:
+                            data.setdefault("fermi_globali", []).append({
+                                "inizio": fermo_glob_inizio,
+                                "fine":   now,
+                                "durata_sec": _dur,
+                                "data":   _data_inizio,
+                            })
                         # Mantieni solo ultimi 500 fermi globali
                         if len(data["fermi_globali"]) > 500:
                             data["fermi_globali"] = data["fermi_globali"][-500:]
@@ -996,12 +1032,27 @@ async def get_report_giornaliero(data: str = Query(default=None)):
 
     # Per i giorni precedenti (fermo_sc==0) usa fermi_globali come fonte primaria.
     # I fermi_globali sono persistenti e coprono tutti i fermi tra sessioni.
+    # Tronca i fermi che attraversano mezzanotte alla sola quota del giorno target.
     if fermo_sc == 0:
-        fermi_del_giorno = [
-            f for f in log.get("fermi_globali", [])
-            if f.get("data") == target and not f.get("ignorato")
-        ]
-        fermo_sc = sum(f.get("durata_sec", 0) for f in fermi_del_giorno)
+        target_start = datetime.fromisoformat(target + "T00:00:00")
+        target_end   = datetime.fromisoformat(target + "T23:59:59")
+        fermo_sc_acc = 0
+        for f in log.get("fermi_globali", []):
+            if f.get("ignorato"):
+                continue
+            # Accetta fermi con data==target OPPURE che si sovrappongono al target
+            try:
+                f_inizio = datetime.fromisoformat(f["inizio"])
+                f_fine   = datetime.fromisoformat(f["fine"]) if f.get("fine") else datetime.fromisoformat(now_iso)
+                # Intersezione con il giorno target
+                eff_inizio = max(f_inizio, target_start)
+                eff_fine   = min(f_fine,   target_end)
+                if eff_fine > eff_inizio:
+                    fermo_sc_acc += int((eff_fine - eff_inizio).total_seconds())
+            except Exception:
+                if f.get("data") == target:
+                    fermo_sc_acc += f.get("durata_sec", 0)
+        fermo_sc = fermo_sc_acc
 
     fermo_extra = max(0, fermo_sc - gap_sessioni)  # fermo fuori sessioni
     if not sessioni_giorno:

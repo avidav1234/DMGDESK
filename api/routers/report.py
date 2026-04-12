@@ -394,7 +394,7 @@ def aggiorna_da_log(
                     programma_attivo = None
                     break
 
-        if stato_pgm in (1, 3) and programma_attivo:
+        if stato_pgm in (1, 2, 3) and programma_attivo:
             # ── Normalizzazione suffix numerico ────────────────────────────────
             # Il Siemens può registrare lo stesso programma con suffix diverso:
             # 4297_0006_001 durante EXTCALL dal MAIN
@@ -520,6 +520,8 @@ def aggiorna_da_log(
                 prev_prog = None  # Forza apertura nuova sessione sotto
 
             # Prima volta o cambio programma
+            _log_rpt = __import__('logging').getLogger("routers.report")
+            _log_rpt.info(f"aggiorna_da_log: stato={stato_pgm} prog={programma_attivo} prev={prev_prog} sc_sess={sc.get('sessione_id')} in_ex={sc.get('in_esecuzione')}")
             if prev_prog != programma_attivo:
 
                 # Chiudi programma precedente

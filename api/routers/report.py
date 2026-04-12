@@ -352,7 +352,7 @@ def aggiorna_da_log(
         # progStatus=2 con programma di sistema (USERENDPROG, _N_CMA_DIR) significa
         # che il ciclo è finito e il CNC sta eseguendo routine di fine programma.
         # Trattiamo come "macchina ferma" per chiudere la sessione corrente.
-        if stato_pgm == 2 and not sc.get("programma_corrente"):
+        if stato_pgm == 2 and not programma_attivo:  # USERENDPROG o fine ciclo
             if sc.get("in_esecuzione"):
                 sc["in_pausa"]      = True
                 sc["pausa_inizio"]  = now

@@ -352,7 +352,7 @@ def aggiorna_da_log(
         # progStatus=2 con programma di sistema (USERENDPROG, _N_CMA_DIR) significa
         # che il ciclo è finito e il CNC sta eseguendo routine di fine programma.
         # Trattiamo come "macchina ferma" per chiudere la sessione corrente.
-        if stato_pgm == 2 and not programma_attivo:  # USERENDPROG o fine ciclo
+        if stato_pgm == 2:  # ricerca blocco = macchina ferma, entra in grace period
             if sc.get("in_esecuzione"):
                 sc["in_pausa"]      = True
                 sc["pausa_inizio"]  = now
@@ -376,7 +376,7 @@ def aggiorna_da_log(
         # ── Macchina IN ESECUZIONE ────────────────────────────────────────────────
         # stato 2 con programma utente = posizionamento/ricerca blocco durante lavorazione
         # trattato come in esecuzione per aggiornare programma_corrente e ultimo_tick
-        if stato_pgm in (1, 2, 3) and programma_attivo:
+        if stato_pgm in (1, 3) and programma_attivo:
             # Filtra programmi di sistema Sinumerik e MAIN generati da AnalisiNC
             _FILTRI_SISTEMA = (
                 "_N_CMA_DIR", "_N_CST_DIR", "_N_SYF_DIR",
@@ -394,7 +394,7 @@ def aggiorna_da_log(
                     programma_attivo = None
                     break
 
-        if stato_pgm in (1, 2, 3) and programma_attivo:
+        if stato_pgm in (1, 3) and programma_attivo:
             # ── Normalizzazione suffix numerico ────────────────────────────────
             # Il Siemens può registrare lo stesso programma con suffix diverso:
             # 4297_0006_001 durante EXTCALL dal MAIN

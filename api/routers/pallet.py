@@ -421,8 +421,9 @@ async def assegna_progetto(numero: int, body: AssegnaProgettoBody):
 
             if body.progetto_id:
                 stato_attuale = p.get("stato", "vuoto")
-                # Blocca se non è VUOTO (a meno che non sia già lo stesso progetto)
-                if stato_attuale != "vuoto" and p.get("progetto_id") != body.progetto_id:
+                # Blocca se non è VUOTO e ha già un progetto diverso assegnato
+                # Permette assegnazione se grezzo/finito ma senza progetto (progetto_id null)
+                if stato_attuale != "vuoto" and p.get("progetto_id") and p.get("progetto_id") != body.progetto_id:
                     raise HTTPException(409,
                         f"Pallet {numero} è '{stato_attuale}' con progetto già assegnato. "
                         f"Sgancia prima il progetto corrente.")

@@ -128,6 +128,9 @@ async def startup():
         while True:
             try:
                 await job_sync_main_log()
+                # Dopo ogni sync, ricalcola stati pallet
+                from api.routers.pallet import ricalcola_stati_pallet as _ricalcola
+                await _ricalcola()
             except Exception as _e:
                 _log.warning(f"Main sync error: {_e}")
             await _aio.sleep(300)  # 5 minuti

@@ -711,6 +711,65 @@ async def avvia_pallet(numero: int):
     except Exception: pass
     return {"ok": True, "pallet": numero, "stato": "in_lavorazione"}
 
+@router.post("/ricalcola-stati")
+async def ricalcola_stati_pallet():
+    """
+    Ricalcola lo stato di tutti i pallet in base ai programmi attuali.
+    VUOTO = nessun in_main, GREZZO = ha in_main, FINITO = tutti completati.
+    Chiamato al riavvio e quando cambiano i programmi.
+    """
+    config = carica_configurazione()
+    state = _load(config)
+    proj_data = _load_progetti(config)
+    projects = proj_data.get("projects", [])
+    dirty = False
+
+    for pal in state.get("pallet", []):
+        cur_stato = (pal.get("stato") or "").lower()
+        # Non toccare pallet in lavorazione o guasto (gestiti dal poller)
+        if cur_stato in ("in_lavorazione",):
+            continue
+        pid = pal.get("progetto_id")
+        if not pid:
+            if cur_stato != "vuoto":
+                pal["stato"] = "vuoto"
+                dirty = True
+            continue
+        proj = next((p for p in projects if p.get("id") == pid), None)
+        if not proj:
+            continue
+        # Raccoglie programmi fresatura non-IPM
+        pgm = [pg for s in proj.get("steps", [])
+               for t in s.get("tasks", [])
+               if t.get("text", "").strip().lower() == "fresatura"
+               for pg in t.get("programs", [])
+               if pg.get("tipoGruppo") != "ipm"]
+        if not pgm:
+            nuovo = "vuoto"
+        else:
+            ha_in_main = any(pg.get("stato") == "in_main" for pg in pgm)
+            pgm_main = [pg for pg in pgm if pg.get("stato") in ("in_main", "completato")]
+            tutti_completati = pgm_main and all(pg.get("stato") == "completato" for pg in pgm_main)
+            if tutti_completati:
+                nuovo = "finito"
+                pal["ha_avuto_finito"] = True
+            elif ha_in_main:
+                nuovo = "grezzo"
+            else:
+                # Nessun in_main — se era guasto lo lasciamo, altrimenti vuoto
+                if cur_stato == "guasto":
+                    continue  # guasto rimane fino a reset manuale
+                nuovo = "vuoto"
+        if cur_stato != nuovo:
+            pal["stato"] = nuovo
+            pal["aggiornato"] = datetime.now().strftime("%d/%m/%Y %H:%M")
+            dirty = True
+
+    if dirty:
+        _save(config, state)
+    return {"ok": True, "aggiornati": dirty}
+
+
 @router.get("/ordine-esecuzione")
 async def get_ordine_esecuzione():
     """Legge l'ordine di esecuzione pallet dalla coda macchina."""

@@ -221,6 +221,7 @@ export default function Home(){
     const days=del?.dueDate&&!del.delivered?daysUntil(del.dueDate):null
     const isScaduto=days!==null&&days<=0
     if(stato==='in lavorazione') return {bg:'#dbeafe',fg:'#0d2d5e',border:'#1D5FAD',label:'LIVE',accent:'#1D5FAD',scaduto:isScaduto}
+    if(stato==='guasto') return {bg:'#fef2f2',fg:'#991b1b',border:'#ef4444',label:'GUASTO',accent:'#ef4444',scaduto:isScaduto}
     // FINITO: pct 100%, stato backend finito, OPPURE nessun programma in_main/in_macchina/in_lavorazione
     const hasPgmAttivi = info?.inMac > 0
     const isFinito = info?.pct>=100 || stato==='finito' || (info && !hasPgmAttivi && info.done > 0)

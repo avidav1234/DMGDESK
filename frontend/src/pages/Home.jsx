@@ -610,18 +610,26 @@ export default function Home(){
           {/* ── CARD PROGETTO ATTIVO ────────────────────────────────── */}
           {lavInfo?(
             <div style={{background:'#f0f7ff',border:'1.5px solid #1D5FAD',borderRadius:12,padding:'12px 16px',flexShrink:0}}>
-              {/* Header */}
-              <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:10}}>
-                <div style={{width:11,height:11,borderRadius:2,
-                  background:lavInfo.proj.color||'#1D5FAD',flexShrink:0}}/>
-                <span style={{fontSize:16,fontWeight:800,color:'#0d2d5e',flex:1,
-                  overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
-                  {lavInfo.proj.name}
-                </span>
-                <span style={{fontSize:11,fontWeight:700,color:'#1D5FAD',
-                  background:'#dbeafe',padding:'3px 10px',borderRadius:6}}>
-                  Pallet {palletLav.numero}
-                </span>
+              {/* Header — Pallet grande + commessa */}
+              <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:10}}>
+                <div style={{background:'#0d2d5e',borderRadius:10,padding:'6px 14px',
+                  display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
+                  <span style={{fontSize:28,fontWeight:900,color:'#fff',lineHeight:1,fontFamily:'monospace'}}>
+                    P{palletLav.numero}
+                  </span>
+                  <div>
+                    <div style={{fontSize:9,fontWeight:800,color:'#22c55e',letterSpacing:'0.1em',textTransform:'uppercase'}}>IN LAVORAZIONE</div>
+                    <div style={{width:8,height:8,borderRadius:'50%',background:'#22c55e',
+                      boxShadow:'0 0 6px #22c55e',marginTop:2}}/>
+                  </div>
+                </div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:18,fontWeight:800,color:'#0d2d5e',
+                    overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                    {lavInfo.proj.name}
+                  </div>
+                  <div style={{fontSize:11,color:'#64748b',marginTop:1}}>commessa attiva</div>
+                </div>
               </div>
 
               {/* Utensile prominente — grande e leggibile come nella Coda */}

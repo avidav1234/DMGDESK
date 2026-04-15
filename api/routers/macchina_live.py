@@ -1001,8 +1001,13 @@ async def aggiorna_stati_da_log():
             if t.get("text","").strip().lower()=="fresatura"
             for pg in t.get("programs",[])
             if pg.get("tipoGruppo")!="ipm"]
-        pal["stato"] = "finito" if (all_pgm and all(
-            pg.get("stato") in ("completato",) for pg in all_pgm)) else "grezzo"
+        if not all_pgm:
+            pal["stato"] = "grezzo"; return
+        # FINITO: nessun programma in_main residuo + almeno un completato
+        # (i da_fare sono programmi non ancora caricati nel MAIN — non bloccano il FINITO)
+        ha_in_main = any(pg.get("stato") == "in_main" for pg in all_pgm)
+        ha_completato = any(pg.get("stato") == "completato" for pg in all_pgm)
+        pal["stato"] = "finito" if (ha_completato and not ha_in_main) else "grezzo"
 
     if stato_pgm in (1, 3):
         # Macchina IN ESECUZIONE

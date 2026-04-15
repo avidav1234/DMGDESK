@@ -925,7 +925,7 @@ export default function CodaLavorazione() {
                 )}
 
                 {/* Voci stato */}
-                {STATI_MENU.map(({s, dot, bg, fg}) => {
+                {STATI_MENU.map(({s, dot, bg, fg, label}) => {
                   const sel = pal?.stato === s
                   return (
                     <div key={s}
@@ -940,7 +940,7 @@ export default function CodaLavorazione() {
                       onMouseLeave={e => { e.currentTarget.style.background = sel ? bg : 'transparent' }}>
                       <div style={{width:10,height:10,borderRadius:'50%',
                         background:dot,flexShrink:0}}/>
-                      <span>{s}</span>
+                      <span>{label || s}</span>
                       {sel && <span style={{marginLeft:'auto',fontSize:11,color:fg}}>✓</span>}
                     </div>
                   )

@@ -624,38 +624,38 @@ export default function Home(){
                 </span>
               </div>
 
-              {/* Utensile prominente — T number e vita sempre visibile */}
-              {(macchinaLive?.utensile_attivo||macchinaLive?.numero_utensile)&&(
-                <div style={{background:'#eff6ff',border:'1px solid #bfdbfe',borderRadius:8,
-                  padding:'7px 12px',display:'flex',alignItems:'center',gap:12,marginBottom:10}}>
+              {/* Utensile prominente — grande e leggibile come nella Coda */}
+              {(macchinaLive?.utensile_attivo||macchinaLive?.numero_utensile||sessLive?.utensile)&&(
+                <div style={{background:'#0d2d5e',borderRadius:8,
+                  padding:'8px 14px',display:'flex',alignItems:'center',gap:12,marginBottom:10}}>
                   <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:13,fontWeight:800,color:'#0d2d5e',whiteSpace:'nowrap',
-                      overflow:'hidden',textOverflow:'ellipsis'}}>
-                      {macchinaLive.utensile_attivo||'—'}
+                    <div style={{fontSize:16,fontWeight:800,color:'#f59e0b',fontFamily:'monospace',
+                      whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',letterSpacing:'0.02em'}}>
+                      {macchinaLive?.utensile_attivo||sessLive?.utensile||'—'}
                     </div>
-                    <div style={{fontSize:11,color:'#1D5FAD'}}>
-                      {macchinaLive.numero_utensile?`T${macchinaLive.numero_utensile} · `:''}utensile attivo
+                    <div style={{fontSize:11,color:'#93c5fd',marginTop:2}}>
+                      {(macchinaLive?.numero_utensile||sessLive?.t_number)?`T${macchinaLive?.numero_utensile||sessLive?.t_number} · `:''}utensile attivo
                     </div>
                   </div>
                   {(()=>{
-                    // Cerca vita dell'utensile attivo nei dati setup
-                    const alias = (macchinaLive.utensile_attivo||'').toUpperCase().trim()
-                    const utSetup = (setup.fin_vita||[]).find(u=>(u.alias||'').toUpperCase()===alias)
+                    const alias = (macchinaLive?.utensile_attivo||sessLive?.utensile||'').toUpperCase().trim()
+                    const utSetup = [...(setup.fin_vita||[]),...(setup.previsione_vita||[])].find(u=>(u.alias||'').toUpperCase()===alias)
                     if(!utSetup||utSetup.life_percent==null) return null
                     const pct = Math.round(utSetup.life_percent)
-                    const col = pct < 20 ? '#dc2626' : pct < 40 ? '#d97706' : '#16a34a'
+                    const col = pct < 20 ? '#ef4444' : pct < 40 ? '#f59e0b' : '#4ade80'
                     return (
                       <div style={{textAlign:'right',flexShrink:0}}>
-                        <div style={{fontSize:16,fontWeight:800,color:col}}>{pct}%</div>
-                        <div style={{height:4,width:54,background:'#bfdbfe',borderRadius:2,marginTop:3,overflow:'hidden'}}>
+                        <div style={{fontSize:20,fontWeight:900,color:col,fontFamily:'monospace'}}>{pct}%</div>
+                        <div style={{height:4,width:54,background:'#1e3a5f',borderRadius:2,marginTop:3,overflow:'hidden'}}>
                           <div style={{height:'100%',width:`${pct}%`,background:col,borderRadius:2}}/>
                         </div>
-                        <div style={{fontSize:9,color:'#64748b',marginTop:2}}>vita residua</div>
+                        <div style={{fontSize:9,color:'#93c5fd',marginTop:2}}>vita residua</div>
                       </div>
                     )
                   })()}
                 </div>
               )}
+
 
               {/* Timer principale — PROGRAMMA CORRENTE, grande al centro */}
               <div style={{textAlign:'center',padding:'8px 0 10px',borderBottom:'1px solid #bfdbfe',marginBottom:10}}>
@@ -687,15 +687,7 @@ export default function Home(){
                     )}
                   </div>
                 )}
-                {sessMatch&&sessLive?.utensile&&(
-                  <div style={{marginTop:6,display:'inline-block',fontSize:11,fontWeight:700,color:'#0d2d5e',
-                    background:'#eff6ff',padding:'3px 12px',borderRadius:6,fontFamily:'monospace'}}>
-                    {sessLive.utensile}
-                    {sessLive.t_number&&(
-                      <span style={{color:'#1D5FAD',marginLeft:8}}>T{sessLive.t_number}</span>
-                    )}
-                  </div>
-                )}
+
               </div>
 
               {/* ── INFO LIVE OPC UA: allarme, log stale, T number ── */}

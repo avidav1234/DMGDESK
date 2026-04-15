@@ -683,12 +683,18 @@ def _gestisci_cross_pallet(
             pgm["tempoFine"]   = None
         proj_dirty = True
 
-        # Pallet → GUASTO
+        # Pallet → GUASTO solo se non è mai passato per FINITO (multi-fase normale)
         pid = p_altro.get("id") or ""
         for pal in pallet_data.get("pallet", []):
             if pal.get("progetto_id") == pid:
-                if (pal.get("stato") or "").upper() not in ("FINITO", "GUASTO"):
-                    pal["stato"] = "guasto"
+                cur = (pal.get("stato") or "").upper()
+                if cur not in ("FINITO", "GUASTO"):
+                    # Se ha già avuto FINITO in precedenza → è un rientro normale (multi-fase)
+                    # Non segnare come GUASTO, torna a GREZZO
+                    if pal.get("ha_avuto_finito"):
+                        pal["stato"] = "grezzo"
+                    else:
+                        pal["stato"] = "guasto"
                     pallet_dirty = True
                     updates["pallet_guasto"] = updates.get("pallet_guasto", 0) + 1
                 break
@@ -739,7 +745,7 @@ def _verifica_utensili_pgm(
         for pal in pallet_data.get("pallet", []):
             if pal.get("progetto_id") == pid:
                 if (pal.get("stato") or "").upper() not in ("FINITO", "GUASTO"):
-                    pal["stato"] = "guasto"
+                    pal["stato"] = "guasto" if not pal.get("ha_avuto_finito") else "grezzo"
                     pallet_dirty = True
                 break
 
@@ -990,24 +996,37 @@ async def aggiorna_stati_da_log():
     # - Macchina FERMA → tutti i pallet in_lavorazione → grezzo/finito
 
     def _a_grezzo_o_finito(pal, projects):
+        """
+        Nuova logica stati pallet allineata alla macchina:
+        - VUOTO       : progetto assegnato ma nessun programma in_main nel MAIN
+        - GREZZO      : almeno un programma in_main (= pallet in coda nella macchina)
+        - FINITO      : tutti i programmi del MAIN sono completato
+        Il GUASTO viene gestito separatamente in _gestisci_cross_pallet.
+        """
         pid = pal.get("progetto_id")
         if not pid:
-            pal["stato"] = "grezzo"; return
+            pal["stato"] = "vuoto"; return
         proj = next((p for p in projects if p.get("id") == pid), None)
         if not proj:
-            pal["stato"] = "grezzo"; return
+            pal["stato"] = "vuoto"; return
         all_pgm = [pg for s in proj.get("steps",[])
             for t in s.get("tasks",[])
             if t.get("text","").strip().lower()=="fresatura"
             for pg in t.get("programs",[])
             if pg.get("tipoGruppo")!="ipm"]
         if not all_pgm:
-            pal["stato"] = "grezzo"; return
-        # FINITO: nessun programma in_main residuo + almeno un completato
-        # (i da_fare sono programmi non ancora caricati nel MAIN — non bloccano il FINITO)
-        ha_in_main = any(pg.get("stato") == "in_main" for pg in all_pgm)
+            pal["stato"] = "vuoto"; return
+        ha_in_main    = any(pg.get("stato") == "in_main"    for pg in all_pgm)
         ha_completato = any(pg.get("stato") == "completato" for pg in all_pgm)
-        pal["stato"] = "finito" if (ha_completato and not ha_in_main) else "grezzo"
+        pgm_main      = [pg for pg in all_pgm if pg.get("stato") in ("in_main","completato")]
+        tutti_completati = pgm_main and all(pg.get("stato") == "completato" for pg in pgm_main)
+        if tutti_completati:
+            pal["stato"] = "finito"
+            pal["ha_avuto_finito"] = True  # flag per discriminare GUASTO da multi-fase
+        elif ha_in_main:
+            pal["stato"] = "grezzo"   # in coda — ha programmi pronti nel MAIN
+        else:
+            pal["stato"] = "vuoto"    # progetto assegnato ma MAIN non ancora generato
 
     if stato_pgm in (1, 3):
         # Macchina IN ESECUZIONE

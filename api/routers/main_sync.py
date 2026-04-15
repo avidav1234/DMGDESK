@@ -299,12 +299,19 @@ async def reset_guasto(project_id: str):
     if not progetto:
         return {"ok": False, "detail": "Progetto non trovato"}
 
-    # Pallet → grezzo
+    # Pallet → ricalcola stato corretto (grezzo se ha in_main, vuoto altrimenti)
     pallet_data = _load_pallet(config)
     for pal in pallet_data.get("pallet", []):
         if pal.get("progetto_id") == project_id:
             if pal.get("stato") == "guasto":
-                pal["stato"] = "grezzo"
+                # Verifica se ha programmi in_main
+                _pgm = [pg for s in progetto.get("steps",[])
+                    for t in s.get("tasks",[])
+                    if t.get("text","").strip().lower()=="fresatura"
+                    for pg in t.get("programs",[])
+                    if pg.get("tipoGruppo")!="ipm"]
+                ha_in_main = any(pg.get("stato") == "in_main" for pg in _pgm)
+                pal["stato"] = "grezzo" if ha_in_main else "vuoto"
             break
     _save_pallet(config, pallet_data)
 

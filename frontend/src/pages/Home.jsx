@@ -222,11 +222,11 @@ export default function Home(){
     const isScaduto=days!==null&&days<=0
     if(stato==='in lavorazione') return {bg:'#dbeafe',fg:'#0d2d5e',border:'#1D5FAD',label:'LIVE',accent:'#1D5FAD',scaduto:isScaduto}
     if(stato==='guasto') return {bg:'#fef2f2',fg:'#991b1b',border:'#ef4444',label:'GUASTO',accent:'#ef4444',scaduto:isScaduto}
-    // FINITO: pct 100%, stato backend finito, OPPURE nessun programma in_main/in_macchina/in_lavorazione
-    const hasPgmAttivi = info?.inMac > 0
-    const isFinito = info?.pct>=100 || stato==='finito' || (info && !hasPgmAttivi && info.done > 0)
-    if(isFinito) return {bg:'#dcfce7',fg:'#14532d',border:'#16a34a',label:'FINITO',accent:'#16a34a',scaduto:isScaduto}
-    if(info) return {bg:'#fefce8',fg:'#854d0e',border:'#eab308',label:'GREZZO',accent:'#eab308',scaduto:isScaduto}
+    if(stato==='finito') return {bg:'#dcfce7',fg:'#14532d',border:'#16a34a',label:'FINITO',accent:'#16a34a',scaduto:isScaduto}
+    // GREZZO = in coda nella macchina (ha programmi in_main)
+    if(stato==='grezzo') return {bg:'#fefce8',fg:'#854d0e',border:'#eab308',label:'IN CODA',accent:'#eab308',scaduto:isScaduto}
+    // VUOTO con progetto = progetto assegnato ma MAIN non ancora generato
+    if(info) return {bg:'#f8fafc',fg:'#64748b',border:'#cbd5e1',label:'VUOTO',accent:'#94a3b8',scaduto:isScaduto}
     return {bg:'#f8fafc',fg:'#94a3b8',border:'#e2e8f0',label:'VUOTO',accent:null,scaduto:isScaduto}
   }
 

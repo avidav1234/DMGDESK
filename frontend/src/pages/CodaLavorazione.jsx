@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 // ── Colori stati pallet ──────────────────────────────────────────
 const STATI = {
   "IN LAVORAZIONE": { bg: "#0d2d5e", fg: "#fff",     border: "#1a4080" },
-  "GREZZO":         { bg: "#fefce8", fg: "#854d0e",  border: "#eab308" },
+  "GREZZO":         { bg: "#fefce8", fg: "#854d0e",  border: "#eab308", label: "IN CODA" },
   "FINITO":         { bg: "#dcfce7", fg: "#14532d",  border: "#22c55e" },
   "VUOTO":          { bg: "#f1f5f9", fg: "#94a3b8",  border: "#e2e8f0" },
   "GUASTO":         { bg: "#fef2f2", fg: "#991b1b",  border: "#f87171" },
@@ -579,7 +579,7 @@ export default function CodaLavorazione() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
           <span style={{ fontSize: 11, fontWeight: 700, color: '#0d2d5e', letterSpacing: 1, textTransform: 'uppercase', display:'flex', alignItems:'center', gap:4 }}>
             Pallet
-            <InfoTooltip text={"Stati pallet:\n\n• IN LAVORAZIONE — pallet in macchina, programmi in esecuzione\n• GREZZO — pallet caricato con materiale grezzo, in attesa\n• FINITO — lavorazione completata, pezzo da scaricare\n• GUASTO — lavorazione interrotta anomalmente (rottura utensile, allarme)\n• VUOTO — pallet libero, nessuna commessa assegnata\n\nClick su un pallet per cambiare stato manualmente."} position='right' />
+            <InfoTooltip text={"Stati pallet:\n\n• IN LAVORAZIONE — pallet in macchina, programmi in esecuzione\n• IN CODA (GREZZO) — MAIN generato, programmi pronti, in coda per la macchina\n• FINITO — lavorazione completata, pezzo da scaricare\n• GUASTO — lavorazione interrotta anomalmente (rottura utensile, allarme)\n• VUOTO — pallet libero, nessuna commessa assegnata\n\nClick su un pallet per cambiare stato manualmente."} position='right' />
           </span>
           {lastUpdate && <span style={{ fontSize: 10, color: '#94a3b8' }}>{lastUpdate}</span>}
         </div>
@@ -667,7 +667,9 @@ export default function CodaLavorazione() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
                   <span style={{ fontSize: 28, fontWeight: 900, color: cardFg, lineHeight: 1 }}>P{p.id}</span>
                   <span style={{ fontSize: 9, fontWeight: 800, color: cardFg, letterSpacing: 1,
-                    background: cardBorder + '22', padding: '2px 6px', borderRadius: 4 }}>{p.stato}</span>
+                    background: cardBorder + '22', padding: '2px 6px', borderRadius: 4 }}>
+                    {STATI[p.stato]?.label || p.stato}
+                  </span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
                   <div style={{ width: 6, height: 6, borderRadius: '50%', background: proj.colore, flexShrink: 0 }}/>
@@ -841,7 +843,7 @@ export default function CodaLavorazione() {
               const proj = progettiPallet[palletMenu.id]
               // Colori identici alle card pallet
               const STATI_MENU = [
-                { s:'GREZZO',  dot:'#eab308', bg:'#fefce8', fg:'#854d0e' },
+                { s:'GREZZO',  dot:'#eab308', bg:'#fefce8', fg:'#854d0e', label:'IN CODA' },
                 { s:'FINITO',  dot:'#22c55e', bg:'#dcfce7', fg:'#14532d' },
                 { s:'GUASTO',  dot:'#f87171', bg:'#fef2f2', fg:'#991b1b' },
                 { s:'VUOTO',   dot:'#cbd5e1', bg:'#f1f5f9', fg:'#94a3b8' },

@@ -442,8 +442,10 @@ async def assegna_progetto(numero: int, body: AssegnaProgettoBody):
             p["aggiornato"]      = now
 
             if body.progetto_id:
-                if p.get("stato", "vuoto") == "vuoto":
-                    p["stato"] = "grezzo"
+                # Non forzare grezzo — lo stato corretto viene calcolato
+                # dal main_sync quando registra i programmi in_main.
+                # Se il pallet era vuoto, rimane vuoto (con progetto) fino al MAIN.
+                pass  # stato invariato
             else:
                 if p.get("stato") not in ("in_lavorazione",):
                     p["stato"] = "vuoto"
@@ -685,7 +687,17 @@ async def avvia_pallet(numero: int):
                                for pg in t.get("programs",[])
                                if pg.get("tipoGruppo")!="ipm"]
                     all_done = all_pgm and all(pg.get("stato")=="completato" for pg in all_pgm)
-                    p["stato"] = "finito" if all_done else "grezzo"
+                    # Nuova logica: finito se tutti i pgm del MAIN completati
+                    # grezzo se ha in_main, vuoto se non ha in_main
+                    _pgm = p.get("programmi_fresatura", [])
+                    ha_in_main = any(pg.get("stato") == "in_main" for pg in _pgm)
+                    if all_done:
+                        p["stato"] = "finito"
+                        p["ha_avuto_finito"] = True
+                    elif ha_in_main:
+                        p["stato"] = "grezzo"
+                    else:
+                        p["stato"] = "vuoto"
             else:
                 p["stato"] = "grezzo"
 

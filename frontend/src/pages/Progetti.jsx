@@ -355,8 +355,10 @@ function FresaturaPanel({task,onUpdateTask,toolsDB,projectId,projectName}){
     disabilitato:{dot:'⊘',color:'#9333EA',bg:'#F3E8FF'},
     mancante:    {dot:'✗',color:'#dc2626',bg:'#fef2f2'},
   }
-  const ipmPrograms=programs.filter(p=>p.tipoGruppo==='ipm')
-  const fresPrograms=programs.filter(p=>p.tipoGruppo!=='ipm')
+  // Gruppo TASTATURA: solo file con _IPM_ nel nome
+  // RENISHAW senza _IPM_ restano in FRESATURA (colorati viola)
+  const ipmPrograms=programs.filter(p=>/_IPM_/i.test(p.filename||''))
+  const fresPrograms=programs.filter(p=>!/_IPM_/i.test(p.filename||''))
   const doneTotal=programs.filter(p=>p.stato==='completato').length
   const inMacchina=programs.filter(p=>['in_main','in_lavorazione','in_macchina'].includes(p.stato)).length
   const total=programs.length
@@ -419,8 +421,9 @@ function FresaturaPanel({task,onUpdateTask,toolsDB,projectId,projectName}){
         nuovi++
       }
     }
+    const _isIpmFile=p=>/_IPM_/i.test(p.filename||'')
     const sorted=updatedPrograms.sort((a,b)=>{
-      if(a.tipoGruppo!==b.tipoGruppo) return a.tipoGruppo==='ipm'?-1:1
+      if(_isIpmFile(a)!==_isIpmFile(b)) return _isIpmFile(a)?-1:1
       return a.numPgm.localeCompare(b.numPgm,undefined,{numeric:true})
     })
     updatePrograms(sorted)

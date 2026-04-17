@@ -191,7 +191,7 @@ function ProgramRow({pgm,gruppo,onStato,onOperatore,onTempo,onRemove,toolStatus,
   const opClean=(pgm.tipoOp||'').replace(/[-–]\s*NESSUN TESTO\s*/gi,'').replace(/MISURAZIONE NEL PROCESSO[-–]?/gi,'MISURA ').trim()
   const isIpmInline = pgm.tipoGruppo==='ipm' && !/_IPM_/i.test(pgm.filename||'')
   return(
-    <div style={{borderBottom:`1px solid ${T.border}`,background:selected?'#EFF6FF':pgm.stato==='completato'?'#f0fdf4':['in_main','in_lavorazione','in_macchina'].includes(pgm.stato)?'#eff6ff':isIpmInline?'#FAF5FF':T.surface,opacity:pgm.stato==='completato'&&!selected?0.75:1,transition:'background 0.15s'}}>
+    <div style={{borderBottom:`1px solid ${T.border}`,background:selected?'#EFF6FF':pgm.stato==='completato'?'#f0fdf4':['in_main','in_lavorazione','in_macchina'].includes(pgm.stato)?'#eff6ff':isIpmInline?'#F3E8FF':T.surface,opacity:pgm.stato==='completato'&&!selected?0.75:1,transition:'background 0.15s'}}>
       <div style={{display:'flex',alignItems:'center',minHeight:38}}>
         {/* Checkbox */}
         <div onClick={e=>{e.stopPropagation();onSelect&&onSelect()}}
@@ -1214,7 +1214,7 @@ function LancioNCModal({project, toolsDB, initialSelectedIds, onLancia, onClose}
     const isIpmInline = pgm.tipoGruppo==='ipm' && !/_IPM_/i.test(pgm.filename||'')
     const rowBg = sel
       ? ts==='mancante'?'#FEE2E2':ts==='fin_vita'?'#FEF9C3':isIpmInline?'#F3E8FF':'#EFF6FF'
-      : dimmed?'#FAFAFA':isIpmInline?'#FAF5FF':'#FFFFFF'
+      : dimmed?'#FAFAFA':isIpmInline?'#F3E8FF':'#FFFFFF'
     return(
       <div onClick={()=>toggle(pgm.id)}
         style={{display:'flex',alignItems:'center',gap:10,padding:'8px 14px',

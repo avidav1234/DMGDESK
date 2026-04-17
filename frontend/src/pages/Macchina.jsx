@@ -518,6 +518,7 @@ export default function Macchina() {
   }
 
   const filtered = tools.filter(t => !searchSync || t.name.toLowerCase().includes(searchSync.toLowerCase()))
+  const stime_live = setupData?.stime_live || {}
 
   const btn_small = {
     padding: '6px 14px', borderRadius: 5, fontSize: 12, cursor: 'pointer',

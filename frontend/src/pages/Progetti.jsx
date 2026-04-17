@@ -1128,8 +1128,33 @@ function LancioNCModal({project, toolsDB, initialSelectedIds, onLancia, onClose}
   const [showIpm, setShowIpm] = useState(allIpm.length > 0)
   const [faseMistaConfirmata, setFaseMistaConfirmata] = useState(false)
 
-  function toggle(id){ setSelected(s=>{ const n=new Set(s); n.has(id)?n.delete(id):n.add(id); return n }) }
-  function toggleIpm(id){ setSelectedIpm(s=>{ const n=new Set(s); n.has(id)?n.delete(id):n.add(id); return n }) }
+  function toggle(id){
+    setSelected(s=>{
+      const n=new Set(s)
+      if(n.has(id)){ n.delete(id); return n }
+      // Controlla se stiamo aggiungendo un programma di una fase diversa
+      const pgmDaAggiungere = allPgm.find(p=>p.id===id)
+      const fasiGiaSelezionate = new Set([...allPgm.filter(p=>n.has(p.id)),...allIpm.filter(p=>selectedIpm.has(p.id))].map(p=>p._stepId))
+      if(pgmDaAggiungere && fasiGiaSelezionate.size>0 && !fasiGiaSelezionate.has(pgmDaAggiungere._stepId)){
+        setFaseMistaConfirmata(false) // reset conferma — mostra avviso
+      }
+      n.add(id)
+      return n
+    })
+  }
+  function toggleIpm(id){
+    setSelectedIpm(s=>{
+      const n=new Set(s)
+      if(n.has(id)){ n.delete(id); return n }
+      const ipmDaAggiungere = allIpm.find(p=>p.id===id)
+      const fasiGiaSelezionate = new Set([...allPgm.filter(p=>selected.has(p.id)),...allIpm.filter(p=>n.has(p.id))].map(p=>p._stepId))
+      if(ipmDaAggiungere && fasiGiaSelezionate.size>0 && !fasiGiaSelezionate.has(ipmDaAggiungere._stepId)){
+        setFaseMistaConfirmata(false)
+      }
+      n.add(id)
+      return n
+    })
+  }
   function selezionaTutti(fase){
     // Seleziona solo questa fase — deseleziona le altre per evitare fasi miste
     setSelected(new Set(fase.pgms.map(p=>p.id)))
@@ -1238,27 +1263,27 @@ function LancioNCModal({project, toolsDB, initialSelectedIds, onLancia, onClose}
             <button onClick={onClose} style={{background:'none',border:'1px solid #D8D5CC',
               borderRadius:8,color:'#475569',fontSize:13,padding:'5px 12px',cursor:'pointer'}}>✕</button>
           </div>
-          <div style={{display:'flex',gap:8,alignItems:'center'}}>
-            <button onClick={()=>{
-                const primaFase=fasi.find(f=>f.pgms.some(p=>p.stato==='da_fare'))
-                if(primaFase){
-                  setSelected(new Set(primaFase.pgms.filter(p=>p.stato==='da_fare').map(p=>p.id)))
-                  setSelectedIpm(new Set(primaFase.pgmsIpm.filter(p=>p.stato==='da_fare').map(p=>p.id)))
-                }
-              }}
-              style={{background:'#f8fafc',border:'1px solid #e2e8f0',borderRadius:6,
-                color:'#475569',fontSize:11,fontWeight:700,padding:'4px 10px',cursor:'pointer'}}>
-              ○ Seleziona Da fare ({da_fare.length})
-            </button>
-            <button onClick={()=>setSelected(new Set(allPgm.map(p=>p.id)))}
-              style={{background:'#f8fafc',border:'1px solid #e2e8f0',borderRadius:6,
-                color:'#475569',fontSize:11,fontWeight:700,padding:'4px 10px',cursor:'pointer'}}>
-              ☑ Tutti ({allPgm.length})
-            </button>
+          <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+            {/* Selezione per fase — evita fasi miste */}
+            {fasi.filter(f=>f.pgms.some(p=>p.stato==='da_fare')||f.pgmsIpm.some(p=>p.stato==='da_fare')).map((fase,fi)=>{
+              const nDaFare = fase.pgms.filter(p=>p.stato==='da_fare').length
+              const nIpm    = fase.pgmsIpm.filter(p=>p.stato==='da_fare').length
+              const color   = FASE_COLORS[fasi.indexOf(fase)%FASE_COLORS.length]
+              return(
+                <button key={fase.stepId} onClick={()=>{
+                    setSelected(new Set(fase.pgms.filter(p=>p.stato==='da_fare').map(p=>p.id)))
+                    setSelectedIpm(new Set(fase.pgmsIpm.filter(p=>p.stato==='da_fare').map(p=>p.id)))
+                  }}
+                  style={{background:`${color}11`,border:`1px solid ${color}44`,borderRadius:6,
+                    color:color,fontSize:11,fontWeight:700,padding:'4px 10px',cursor:'pointer'}}>
+                  ○ {fase.stepTitle} da fare ({nDaFare}{nIpm>0?` +${nIpm} IPM`:''})
+                </button>
+              )
+            })}
             {selected.size>0&&<button onClick={deselezionaTutti}
               style={{background:'none',border:'1px solid #fca5a5',borderRadius:6,
                 color:'#dc2626',fontSize:11,padding:'4px 10px',cursor:'pointer'}}>
-              ✕ Deseleziona ({selected.size})
+              ✕ Deseleziona ({selected.size+selectedIpm.size})
             </button>}
           </div>
         </div>

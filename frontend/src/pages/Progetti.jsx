@@ -1560,6 +1560,7 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
   const[showSaveTemplate,setShowSaveTemplate]=useState(false)
   const[showMoreMenu,setShowMoreMenu]=useState(false)
   const[schedaPredittiva,setSchedaPredittiva]=useState(null)
+  const[pannelliCollassati,setPannelliCollassati]=useState(false)
   const[rendiconto,setRendiconto]=useState(null)
 
   useEffect(()=>{
@@ -1776,8 +1777,20 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
           )
         })()}
 
+        {/* Toggle pannelli analisi */}
+        {(schedaPredittiva?.simili?.length>0) && (
+          <div onClick={()=>setPannelliCollassati(v=>!v)}
+            style={{display:'flex',alignItems:'center',gap:6,padding:'4px 0',
+              cursor:'pointer',marginBottom:pannelliCollassati?6:0,userSelect:'none'}}>
+            <span style={{fontSize:10,color:'#94a3b8'}}>{pannelliCollassati?'▶':'▼'}</span>
+            <span style={{fontSize:10,color:'#94a3b8',fontWeight:600}}>
+              {pannelliCollassati?'Mostra pannelli analisi':'Nascondi pannelli analisi'}
+            </span>
+          </div>
+        )}
+
         {/* Scheda predittiva STEP */}
-        {schedaPredittiva && (
+        {!pannelliCollassati && schedaPredittiva && (
           <div style={{background:'#f5f3ff',border:'1px solid #c4b5fd',borderRadius:10,
             padding:'10px 14px',marginBottom:10,fontSize:12}}>
             <div style={{display:'flex',alignItems:'center',gap:8,marginBottom: schedaPredittiva.simili?.length>0 ? 8 : 0}}>
@@ -1867,7 +1880,7 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
         )}
 
         {/* ── RACE — batti il record ───────────────────────────────── */}
-        {(()=>{
+        {!pannelliCollassati && (()=>{
           // Record da battere: ore_macchina del simile migliore con dati reali
           const similiConOre = schedaPredittiva?.simili?.filter(s=>s.ore_macchina) || []
           if(!similiConOre.length || !rendiconto) return null

@@ -96,27 +96,16 @@ def _norm_fase(raw: str) -> str:
     return re.sub(r"[\s\-_]+", "", raw.lower())
 
 
-def _parse_mpf_metadati(path: Path) -> dict:
+def _leggi_file_mpf(path: Path) -> str | None:
     """
-    Legge i metadati essenziali da un file MPF:
-    - utensile (primo T="..." prima di M6)
-    - tempoStimato (somma tutti i TEMPO: HH:MM:SS sulle righe M6)
-    - tipoGruppo (ipm se filename contiene _IPM_)
-
-    Usa apertura condivisa (read-only, share_all) per non bloccare Cimatron
-    se sta scrivendo lo stesso file nello stesso momento.
+    Legge un file MPF con apertura condivisa (non blocca Cimatron).
     """
-    content = None
-
-    # Su Windows: apri con FILE_SHARE_READ|WRITE|DELETE per non entrare
-    # in conflitto con Cimatron che potrebbe stare salvando il file.
-    # Su altri OS: fallback a open() normale.
     try:
-        import msvcrt, ctypes
-        GENERIC_READ          = 0x80000000
-        FILE_SHARE_ALL        = 0x00000007   # read+write+delete
-        OPEN_EXISTING         = 3
-        FILE_FLAG_SEQUENTIAL  = 0x08000000
+        import msvcrt, ctypes, io
+        GENERIC_READ         = 0x80000000
+        FILE_SHARE_ALL       = 0x00000007
+        OPEN_EXISTING        = 3
+        FILE_FLAG_SEQUENTIAL = 0x08000000
         handle = ctypes.windll.kernel32.CreateFileW(
             str(path), GENERIC_READ, FILE_SHARE_ALL,
             None, OPEN_EXISTING, FILE_FLAG_SEQUENTIAL, None
@@ -124,49 +113,65 @@ def _parse_mpf_metadati(path: Path) -> dict:
         INVALID = ctypes.c_void_p(-1).value
         if handle and handle != INVALID:
             try:
-                import io
-                fd   = msvcrt.open_osfhandle(handle, os.O_RDONLY)
+                fd = msvcrt.open_osfhandle(handle, os.O_RDONLY)
                 with io.open(fd, encoding="utf-8", errors="replace", closefd=True) as f:
-                    content = f.read()
+                    return f.read()
             except Exception:
                 try: ctypes.windll.kernel32.CloseHandle(handle)
                 except: pass
     except Exception:
-        pass   # non Windows o errore import
+        pass
+    try:
+        return path.read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        return None
 
+
+def _parse_mpf_metadati(path: Path) -> dict:
+    """
+    Estrae metadati completi da un file MPF usando la stessa logica
+    del caricamento manuale (nc_analyzer):
+    - utensile: primo utensile (T="..." prima di M6)
+    - utensili_lista: tutti gli utensili in ordine di apparizione
+    - tempoStimato: somma TEMPO: sulle righe M6 (minuti)
+    - num_m6: numero di cambi utensile
+    - tipoGruppo: ipm / fresatura
+    - numPgm: numero sequenziale estratto dal filename
+    """
+    content = _leggi_file_mpf(path)
     if content is None:
-        try:
-            content = path.read_text(encoding="utf-8", errors="replace")
-        except Exception:
-            return {}
-
+        return {}
 
     lines = content.splitlines()
 
-    # utensile: risale da primo M6
-    utensile = ""
-    m6_idx = next((i for i, l in enumerate(lines) if re.search(r"\bM6\b", l)), -1)
-    if m6_idx > 0:
-        for i in range(m6_idx - 1, max(0, m6_idx - 6), -1):
-            m = re.search(r'T\s*=\s*"([^"]+)"', lines[i])
-            if m:
-                utensile = m.group(1).strip()
-                break
+    # ── Usa nc_analyzer per estrarre utensili in modo robusto ──────────
+    utensile      = ""
+    utensili_lista = []
+    try:
+        from logic.nc_analyzer import estrai_tutti_utensili_da_file
+        utensili_raw = estrai_tutti_utensili_da_file(str(path))
+        if utensili_raw:
+            utensile       = utensili_raw[0][0]          # primo utensile
+            utensili_lista = [u[0] for u in utensili_raw]  # tutti in ordine
+    except Exception:
+        # fallback parser interno
+        m6_idx = next((i for i, l in enumerate(lines) if re.search(r"\bM6\b", l)), -1)
+        if m6_idx > 0:
+            for i in range(m6_idx - 1, max(0, m6_idx - 6), -1):
+                m = re.search(r'T\s*=\s*"([^"]+)"', lines[i])
+                if m:
+                    utensile = m.group(1).strip()
+                    break
 
-    # tempoStimato: somma tutti M6 con TEMPO:
+    # ── Tempo stimato: somma tutti M6 con TEMPO: ───────────────────────
     def parse_tempo(raw):
-        if not raw:
-            return 0
+        if not raw: return 0
         if ":" in raw:
             p = raw.split(":")
-            if len(p) == 3:
-                return int(p[0]) * 60 + int(p[1]) + round(int(p[2]) / 60)
-            if len(p) == 2:
-                return int(p[0]) + round(int(p[1]) / 60)
-        try:
-            return int(raw)
-        except Exception:
-            return 0
+            if len(p) == 3: return int(p[0]) * 60 + int(p[1]) + round(int(p[2]) / 60)
+            if len(p) == 2: return int(p[0]) + round(int(p[1]) / 60)
+        try: return int(raw)
+        except: return 0
 
     tempo_tot = 0
     for l in lines:
@@ -175,19 +180,23 @@ def _parse_mpf_metadati(path: Path) -> dict:
             if m:
                 tempo_tot += parse_tempo(m.group(1))
 
-    # Estrai info strutturate dal filename
-    info = _estrai_info_filename(path.name)
+    # ── Tipo IPM ───────────────────────────────────────────────────────
     tipo = "ipm" if "_IPM_" in path.name.upper() else "fresatura"
 
+    # ── Info da filename ───────────────────────────────────────────────
+    info = _estrai_info_filename(path.name)
+
     return {
-        "filename":     path.name,
-        "utensile":     utensile,
-        "tempoStimato": tempo_tot or None,
-        "tipoGruppo":   tipo,
-        "numPgm":       info["seq"] or path.stem.split("_")[-1],
-        "fase_da_file": info["fase"],   # fase estratta dal filename
-        "commessa":     info["commessa"],
-        "posizione":    info["posizione"],
+        "filename":      path.name,
+        "utensile":      utensile,
+        "utensili_lista": utensili_lista,
+        "num_m6":        len(utensili_lista),
+        "tempoStimato":  tempo_tot or None,
+        "tipoGruppo":    tipo,
+        "numPgm":        info["seq"] or path.stem.split("_")[-1],
+        "fase_da_file":  info["fase"],
+        "commessa":      info["commessa"],
+        "posizione":     info["posizione"],
     }
 
 
@@ -346,6 +355,13 @@ def scansiona_directory(config: dict) -> dict:
             if meta["tempoStimato"] and existing.get("tempoStimato") != meta["tempoStimato"]:
                 existing["tempoStimato"] = meta["tempoStimato"]
                 changed = True
+            if meta.get("utensili_lista") and existing.get("utensili_lista") != meta["utensili_lista"]:
+                existing["utensili_lista"] = meta["utensili_lista"]
+                existing["num_m6"]         = meta.get("num_m6", 0)
+                changed = True
+            if meta.get("num_m6") and not existing.get("num_m6"):
+                existing["num_m6"] = meta["num_m6"]
+                changed = True
             if changed:
                 stats["aggiornati"] += 1
                 dirty = True
@@ -353,18 +369,20 @@ def scansiona_directory(config: dict) -> dict:
             # Nuovo programma — aggiunge con stato da_fare
             now = datetime.now().isoformat(timespec="seconds")
             programs.append({
-                "id":           _uid(),
-                "filename":     filename,
-                "utensile":     meta["utensile"],
-                "tempoStimato": meta["tempoStimato"],
-                "tipoGruppo":   meta["tipoGruppo"],
-                "numPgm":       meta["numPgm"],
-                "stato":        "da_fare",
-                "operatore":    "",
-                "tempoInizio":  None,
-                "tempoFine":    None,
-                "rilevato_da":  "nc_scanner",
-                "rilevato_il":  now,
+                "id":            _uid(),
+                "filename":      filename,
+                "utensile":      meta["utensile"],
+                "utensili_lista": meta.get("utensili_lista", []),
+                "num_m6":        meta.get("num_m6", 0),
+                "tempoStimato":  meta["tempoStimato"],
+                "tipoGruppo":    meta["tipoGruppo"],
+                "numPgm":        meta["numPgm"],
+                "stato":         "da_fare",
+                "operatore":     "",
+                "tempoInizio":   None,
+                "tempoFine":     None,
+                "rilevato_da":   "nc_scanner",
+                "rilevato_il":   now,
             })
             stats["aggiunti"] += 1
             dirty = True
@@ -410,6 +428,21 @@ async def scansiona_ora():
     config = carica_configurazione()
     async with _write_lock:
         result = scansiona_directory(config)
+    return result
+
+
+@router.post("/riscansiona-tutto")
+async def riscansiona_tutto():
+    """
+    Forza la riscansione di tutti i file (reset cache mtime).
+    Utile dopo aggiornamenti al parser per riacquisire metadati mancanti.
+    """
+    global _mtime_cache
+    _mtime_cache = {}
+    config = carica_configurazione()
+    async with _write_lock:
+        result = scansiona_directory(config)
+    result["cache_reset"] = True
     return result
 
 

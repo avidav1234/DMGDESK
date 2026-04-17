@@ -189,8 +189,9 @@ function ProgramRow({pgm,gruppo,onStato,onOperatore,onTempo,onRemove,toolStatus,
   const[editingT,setEditingT]=useState(false)
   const sc=_sc(pgm.stato)
   const opClean=(pgm.tipoOp||'').replace(/[-–]\s*NESSUN TESTO\s*/gi,'').replace(/MISURAZIONE NEL PROCESSO[-–]?/gi,'MISURA ').trim()
+  const isIpmInline = pgm.tipoGruppo==='ipm' && !/_IPM_/i.test(pgm.filename||'')
   return(
-    <div style={{borderBottom:`1px solid ${T.border}`,background:selected?'#EFF6FF':pgm.stato==='completato'?'#f0fdf4':['in_main','in_lavorazione','in_macchina'].includes(pgm.stato)?'#eff6ff':T.surface,opacity:pgm.stato==='completato'&&!selected?0.75:1,transition:'background 0.15s'}}>
+    <div style={{borderBottom:`1px solid ${T.border}`,background:selected?'#EFF6FF':pgm.stato==='completato'?'#f0fdf4':['in_main','in_lavorazione','in_macchina'].includes(pgm.stato)?'#eff6ff':isIpmInline?'#FAF5FF':T.surface,opacity:pgm.stato==='completato'&&!selected?0.75:1,transition:'background 0.15s'}}>
       <div style={{display:'flex',alignItems:'center',minHeight:38}}>
         {/* Checkbox */}
         <div onClick={e=>{e.stopPropagation();onSelect&&onSelect()}}
@@ -1091,11 +1092,13 @@ function SaveAsTemplateModal({project,templates,onSave,onClose}){
 // ── LancioNCModal ─────────────────────────────────────────────────────────────
 function LancioNCModal({project, toolsDB, initialSelectedIds, onLancia, onClose}){
   // Costruisce mappa fase → programmi, IPM INCLUSI (sezione separata)
+  // pgmsIpm: SOLO file con _IPM_ nel nome (separati in sezione dedicata)
+  // pgms: tutti gli altri, inclusi RENISHAW senza _IPM_ (restano in lista, colorati viola)
   const fasi = (project.steps||[]).map(step=>{
     const fres = (step.tasks||[]).find(t=>t.text?.trim().toLowerCase()==='fresatura')
     const pgmsAll = fres ? (fres.programs||[]) : []
-    const pgmsFres = pgmsAll.filter(p=>p.tipoGruppo!=='ipm')
-    const pgmsIpm  = pgmsAll.filter(p=>p.tipoGruppo==='ipm')
+    const pgmsFres = pgmsAll.filter(p=>!/_IPM_/i.test(p.filename||''))
+    const pgmsIpm  = pgmsAll.filter(p=> /_IPM_/i.test(p.filename||''))
     return { stepId: step.id, stepTitle: step.title, pgms: pgmsFres, pgmsIpm }
   }).filter(f=>f.pgms.length>0||f.pgmsIpm.length>0)
 
@@ -1128,8 +1131,8 @@ function LancioNCModal({project, toolsDB, initialSelectedIds, onLancia, onClose}
       // Se ci sono IPM pre-selezionati, usali — non aggiungere il fallback
       return validIpm  // può essere vuoto se nessun IPM era selezionato
     }
-    // Nessuna pre-selezione: usa IPM da_fare della prima fase
-    const primaFase = fasi.find(f=>f.pgms.some(p=>p.stato==='da_fare')||f.pgmsIpm.some(p=>p.stato==='da_fare'))
+    // Nessuna pre-selezione: IPM della stessa fase della fresatura — mai fasi miste
+    const primaFase = fasi.find(f=>f.pgms.some(p=>p.stato==='da_fare'))
     if(primaFase) return new Set(primaFase.pgmsIpm.filter(p=>p.stato==='da_fare').map(p=>p.id))
     return new Set()
   })
@@ -1204,14 +1207,16 @@ function LancioNCModal({project, toolsDB, initialSelectedIds, onLancia, onClose}
   function PgmRow({pgm, dimmed}){
     const sel = selected.has(pgm.id)
     const ts  = classifyTool(pgm.utensile, toolsDB)
+    // RENISHAW senza _IPM_: rimane in lista fresatura ma colorato viola
+    const isIpmInline = pgm.tipoGruppo==='ipm' && !/_IPM_/i.test(pgm.filename||'')
     const rowBg = sel
-      ? ts==='mancante'?'#FEE2E2':ts==='fin_vita'?'#FEF9C3':'#EFF6FF'
-      : dimmed?'#FAFAFA':'#FFFFFF'
+      ? ts==='mancante'?'#FEE2E2':ts==='fin_vita'?'#FEF9C3':isIpmInline?'#F3E8FF':'#EFF6FF'
+      : dimmed?'#FAFAFA':isIpmInline?'#FAF5FF':'#FFFFFF'
     return(
       <div onClick={()=>toggle(pgm.id)}
         style={{display:'flex',alignItems:'center',gap:10,padding:'8px 14px',
           cursor:'pointer',background:rowBg,
-          borderLeft:sel?(ts==='mancante'?'3px solid #DC2626':ts==='fin_vita'?'3px solid #D97706':'3px solid #1D5FAD'):'3px solid transparent',
+          borderLeft:sel?(ts==='mancante'?'3px solid #DC2626':ts==='fin_vita'?'3px solid #D97706':isIpmInline?'3px solid #8B2FC9':'3px solid #1D5FAD'):'3px solid transparent',
           borderBottom:'1px solid #F0EEE8',transition:'background 0.1s',
           opacity:dimmed?0.55:1}}>
         <div style={{width:18,height:18,borderRadius:5,flexShrink:0,
@@ -1233,9 +1238,10 @@ function LancioNCModal({project, toolsDB, initialSelectedIds, onLancia, onClose}
         )})()}
         {/* Filename */}
         <span style={{fontSize:12,fontFamily:'monospace',fontWeight:700,
-          color:'#0d2d5e',minWidth:145,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+          color:isIpmInline?'#8B2FC9':'#0d2d5e',minWidth:145,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
           {pgm.filename?.replace(/\.MPF$/i,'')||`#${pgm.numPgm}`}
         </span>
+        {isIpmInline&&<span style={{fontSize:10,fontWeight:700,color:'#8B2FC9',background:'#F3E8FF',padding:'1px 6px',borderRadius:10,flexShrink:0}}>📏 IPM</span>}
         {/* Utensile */}
         <span style={{fontSize:11,fontFamily:'monospace',color:'#0f172a',
           minWidth:120,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>

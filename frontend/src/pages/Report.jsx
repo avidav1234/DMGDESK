@@ -748,7 +748,7 @@ function TabPerdite({ rpt }) {
     { k: 'microfermi',       label: 'Microfermi inter-programma',    sec: p.microfermi_sec,
       tooltip: 'Pause brevi (< soglia setup) tra un programma e il successivo nella stessa sessione.\nTipicamente: cambio utensile, misura, riposizionamento.' },
     { k: 'setup',            label: 'Setup / cambio pallet',         sec: p.setup_sec,
-      tooltip: 'Tempo tra la fine di una sessione e l'inizio della successiva.\nInclude: cambio pallet, serraggio grezzo, misura zero pezzo, caricamento MAIN.' },
+      tooltip: `Tempo tra la fine di una sessione e l'inizio della successiva.\nInclude: cambio pallet, serraggio grezzo, misura zero pezzo, caricamento MAIN.` },
     { k: 'guasti',           label: 'Fermi anomali (reset)',         sec: p.guasti_sec,
       tooltip: 'Fermi non pianificati classificati come anomalia — reset macchina, allarmi bloccanti, spegnimenti imprevisti.\nIndicatore di affidabilità macchina.' },
     { k: 'fermo_extra',      label: 'Fermo fuori produzione',        sec: p.fermo_extra_sec,
@@ -849,7 +849,7 @@ function TabPerdite({ rpt }) {
                 sub: p.velocita_ridotta_sec > 0
                   ? `${rpt.override_ridotto?.pct_tempo||0}% del tempo di taglio`
                   : 'Feed/mandrino sempre al 100%',
-                tooltip:'Tempo in cui l'override feed o mandrino era sotto il 90%.\nSegnala lavorazioni conservative o problemi utensile.\nRilevato dal valore OPC UA dell'override macchina.' },
+                tooltip:`Tempo in cui l'override feed o mandrino era sotto il 90%.\nSegnala lavorazioni conservative o problemi utensile.\nRilevato dal valore OPC UA dell'override macchina.` },
             ].map((kpi, i) => (
               <div key={i} style={{ padding:'10px 14px', background:'var(--bg-hover)',
                 borderRadius:8, borderLeft:`3px solid ${kpi.color}` }}>

@@ -1414,65 +1414,7 @@ function LancioNCModal({project, toolsDB, initialSelectedIds, onLancia, onClose}
             </div>
           )}
 
-          {/* Sezione IPM / Tastatura — sempre visibile se presenti */}
-          {allIpm.length>0&&(
-            <div>
-              <div onClick={()=>setShowIpm(v=>!v)}
-                style={{padding:'8px 14px',fontSize:10,fontWeight:700,color:'#8B2FC9',
-                  letterSpacing:'0.07em',background:'#F9F0FF',
-                  borderBottom:'1px solid #DDD6FE',borderTop:'1px solid #DDD6FE',
-                  cursor:'pointer',display:'flex',alignItems:'center',gap:6}}>
-                📏 {showIpm?'▼':'▶'} TASTATURA (IPM) — {allIpm.length} programmi
-                <span style={{marginLeft:'auto',fontSize:11,color:'#8B2FC9',fontWeight:400}}>
-                  {selectedIpm.size} selezionati
-                </span>
-                <button onClick={e=>{e.stopPropagation();
-                  setSelectedIpm(allIpm.length===selectedIpm.size
-                    ? new Set()
-                    : new Set(allIpm.map(p=>p.id)))}}
-                  style={{background:'none',border:'1px solid #8B2FC944',borderRadius:5,
-                    color:'#8B2FC9',fontSize:10,fontWeight:700,padding:'2px 7px',cursor:'pointer'}}>
-                  {allIpm.length===selectedIpm.size?'Desel. tutti':'Sel. tutti'}
-                </button>
-              </div>
-              {showIpm&&allIpm.map(pgm=>{
-                const sel=selectedIpm.has(pgm.id)
-                const cfg={da_fare:{label:'Da fare',color:'#94a3b8',bg:'#f8fafc'},
-                  in_macchina:{label:'In macchina',color:'#0d2d5e',bg:'#DBEAFE'},
-                  completato:{label:'Fatto',color:'#166534',bg:'#DCFCE7'}}[pgm.stato]||{label:pgm.stato,color:'#94a3b8',bg:'#f8fafc'}
-                return(
-                  <div key={pgm.id} onClick={()=>toggleIpm(pgm.id)}
-                    style={{display:'flex',alignItems:'center',gap:10,padding:'7px 14px',
-                      cursor:'pointer',background:sel?'#F3E8FF':'#FAFAFA',
-                      borderLeft:`3px solid ${sel?'#8B2FC9':'transparent'}`,
-                      borderBottom:'1px solid #F0EEE8',transition:'background 0.1s'}}>
-                    <div style={{width:16,height:16,borderRadius:4,flexShrink:0,
-                      border:sel?'none':'2px solid #B0ADA4',
-                      background:sel?'#8B2FC9':'transparent',
-                      display:'flex',alignItems:'center',justifyContent:'center'}}>
-                      {sel&&<span style={{color:'#fff',fontSize:11,fontWeight:800}}>✓</span>}
-                    </div>
-                    <span style={{fontSize:10,fontWeight:700,color:cfg.color,background:cfg.bg,
-                      padding:'2px 6px',borderRadius:10,flexShrink:0,whiteSpace:'nowrap'}}>
-                      {cfg.label}
-                    </span>
-                    <span style={{fontSize:12,fontFamily:'monospace',fontWeight:700,color:'#8B2FC9',
-                      minWidth:140,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
-                      {pgm.filename?.replace(/\.MPF$/i,'')||`#${pgm.numPgm}`}
-                    </span>
-                    <span style={{fontSize:11,fontFamily:'monospace',color:'#0f172a',
-                      minWidth:100,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
-                      {pgm.utensile||'RENISHAW'}
-                    </span>
-                    <span style={{fontSize:11,color:'#94a3b8',flex:1,
-                      overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
-                      {(pgm.tipoOp||'').replace(/[-–]\s*NESSUN TESTO\s*/gi,'').trim()||''}
-                    </span>
-                  </div>
-                )
-              })}
-            </div>
-          )}
+
         </div>
 
         {/* Footer */}

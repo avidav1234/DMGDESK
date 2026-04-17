@@ -1273,11 +1273,34 @@ async def get_storico(giorni: int = Query(default=7, ge=1, le=365)):
         if d == today and sc_oggi.get("fermo_data") == today:
             fermo_sc = sc_oggi.get("fermo_sec_giornaliero", 0)
         if fermo_sc == 0:
-            fermi_del_giorno = [
-                f for f in log.get("fermi_globali", [])
-                if f.get("data") == d and not f.get("ignorato")
-            ]
-            fermo_sc = sum(f.get("durata_sec", 0) for f in fermi_del_giorno)
+            # Calcola durata intersecata con la giornata d (00:00 - 24:00)
+            # Evita che fermi cross-mezzanotte vengano contati per intero nel giorno sbagliato
+            d_start = datetime.fromisoformat(d + "T00:00:00")
+            d_end   = datetime.fromisoformat(d + "T23:59:59")
+            fermo_sc = 0
+            for f in log.get("fermi_globali", []):
+                if f.get("ignorato"):
+                    continue
+                try:
+                    f_ini = datetime.fromisoformat(f["inizio"]) if f.get("inizio") else None
+                    f_fin = datetime.fromisoformat(f["fine"])   if f.get("fine")   else None
+                    if f_ini is None:
+                        # Nessun inizio — usa data field come fallback
+                        if f.get("data") == d:
+                            fermo_sc += f.get("durata_sec", 0)
+                        continue
+                    if f_fin is None:
+                        f_fin = datetime.fromisoformat(now_iso)
+                    # Intersezione con la giornata d
+                    overlap_start = max(f_ini, d_start)
+                    overlap_end   = min(f_fin, d_end)
+                    overlap_sec   = int((overlap_end - overlap_start).total_seconds())
+                    if overlap_sec > 0:
+                        fermo_sc += overlap_sec
+                except Exception:
+                    # Fallback: usa data field
+                    if f.get("data") == d:
+                        fermo_sc += f.get("durata_sec", 0)
         # Somma corretta: gap dentro sessioni + fermo fuori sessioni
         fermo_extra = max(0, fermo_sc - gap_sess)
         gap = gap_sess + fermo_extra if sess else fermo_sc

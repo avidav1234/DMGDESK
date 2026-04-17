@@ -1239,30 +1239,30 @@ export default function CodaLavorazione() {
 
           {/* Header + refresh */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-            <span style={{ fontSize: 12, fontWeight: 800, color: '#0d2d5e' }}>📜 Log turno</span>
-            <span style={{ fontSize: 10, color: '#94a3b8' }}>
+            <span style={{ fontSize: 14, fontWeight: 800, color: '#0d2d5e' }}>📜 Log turno</span>
+            <span style={{ fontSize: 11, color: '#94a3b8' }}>
               {logEventi.length > 0 ? `${logEventi.length} eventi` : ''}
             </span>
             <button onClick={fetchLog}
               style={{ marginLeft: 'auto', background: 'none', border: '1px solid #e2e8f0',
-                borderRadius: 6, padding: '2px 8px', cursor: 'pointer', fontSize: 11, color: '#64748b' }}>
+                borderRadius: 6, padding: '4px 12px', cursor: 'pointer', fontSize: 13, color: '#64748b' }}>
               ↻
             </button>
           </div>
 
           {/* Filtri */}
-          <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', flexShrink: 0 }}>
+          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', flexShrink: 0 }}>
             {[
-              { id: 'tutti',     label: 'Tutti',     col: '#64748b' },
-              { id: 'programma', label: '⚙ Pgm',     col: '#1D5FAD' },
-              { id: 'utensile',  label: '🔧 Utens.',  col: '#d97706' },
-              { id: 'fermo',     label: '⏸ Fermi',   col: '#f59e0b' },
-              { id: 'allarme',   label: '🚨 Allarmi', col: '#dc2626' },
-              { id: 'pallet',    label: '📦 Pallet',  col: '#7c3aed' },
+              { id: 'tutti',     label: 'Tutti',      col: '#64748b' },
+              { id: 'programma', label: '⚙ Pgm',      col: '#1D5FAD' },
+              { id: 'utensile',  label: '🔧 Utens.',   col: '#d97706' },
+              { id: 'fermo',     label: '⏸ Fermi',    col: '#f59e0b' },
+              { id: 'allarme',   label: '🚨 Allarmi',  col: '#dc2626' },
+              { id: 'pallet',    label: '📦 Pallet',   col: '#7c3aed' },
             ].map(f => (
               <button key={f.id} onClick={() => setLogFiltro(f.id)}
-                style={{ padding: '2px 7px', borderRadius: 5, border: 'none', cursor: 'pointer',
-                  fontSize: 10, fontWeight: logFiltro === f.id ? 700 : 400,
+                style={{ padding: '4px 11px', borderRadius: 6, border: 'none', cursor: 'pointer',
+                  fontSize: 12, fontWeight: logFiltro === f.id ? 700 : 500,
                   background: logFiltro === f.id ? f.col : '#f1f5f9',
                   color: logFiltro === f.id ? '#fff' : '#64748b' }}>
                 {f.label}
@@ -1273,47 +1273,50 @@ export default function CodaLavorazione() {
           {/* Lista eventi scrollabile */}
           <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
             {logLoading ? (
-              <div style={{ textAlign: 'center', padding: 20, color: '#94a3b8', fontSize: 12 }}>Caricamento…</div>
+              <div style={{ textAlign: 'center', padding: 20, color: '#94a3b8', fontSize: 13 }}>Caricamento…</div>
             ) : logEventi.filter(e => logFiltro === 'tutti' || e.tipo === logFiltro).length === 0 ? (
-              <div style={{ textAlign: 'center', padding: 20, color: '#94a3b8', fontSize: 12 }}>
+              <div style={{ textAlign: 'center', padding: 20, color: '#94a3b8', fontSize: 13 }}>
                 {logEventi.length === 0 ? 'Nessun evento oggi — clicca ↻ per caricare' : 'Nessun evento di questo tipo'}
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                 {logEventi
                   .filter(e => logFiltro === 'tutti' || e.tipo === logFiltro)
                   .map((e, i) => {
                     const ora = new Date(e.ts).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
                     const fmtDur = (sec) => {
                       if (!sec) return null
-                      const m = Math.floor(sec / 60), s = sec % 60
-                      return m > 0 ? `${m}m` : `${s}s`
+                      const h = Math.floor(sec / 3600)
+                      const m = Math.floor((sec % 3600) / 60)
+                      const s = sec % 60
+                      return h > 0 ? `${h}h ${m}m` : m > 0 ? `${m}m` : `${s}s`
                     }
                     const ICONE = { programma: '⚙', utensile: '🔧', fermo: '⏸', pallet: '📦', allarme: '🚨' }
                     const COLORI = { programma: '#1D5FAD', utensile: '#d97706', fermo: '#f59e0b', pallet: '#7c3aed', allarme: '#dc2626' }
                     const col = COLORI[e.tipo] || '#94a3b8'
                     return (
                       <div key={i} style={{
-                        display: 'flex', alignItems: 'center', gap: 6, padding: '5px 6px',
-                        borderRadius: 5, borderLeft: `2px solid ${col}`,
+                        display: 'flex', alignItems: 'flex-start', gap: 10, padding: '8px 10px',
+                        borderRadius: 7, borderLeft: `3px solid ${col}`,
                         background: i % 2 === 0 ? '#f8fafc' : '#fff',
                         opacity: e.ignorato ? 0.45 : 1,
                       }}>
-                        <span style={{ fontSize: 9, color: '#94a3b8', fontFamily: 'monospace',
-                          flexShrink: 0, minWidth: 34 }}>{ora}</span>
-                        <span style={{ fontSize: 12, flexShrink: 0 }}>{ICONE[e.tipo] || '•'}</span>
+                        <span style={{ fontSize: 11, color: '#94a3b8', fontFamily: 'monospace',
+                          flexShrink: 0, minWidth: 38, marginTop: 1 }}>{ora}</span>
+                        <span style={{ fontSize: 18, flexShrink: 0, lineHeight: 1.2 }}>{ICONE[e.tipo] || '•'}</span>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <span style={{ fontSize: 11, fontWeight: 700, color: '#1e293b',
+                          <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b',
                             fontFamily: ['programma','utensile'].includes(e.tipo) ? 'monospace' : 'inherit',
-                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>
+                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {e.testo}
-                          </span>
-                          {e.sub && <span style={{ fontSize: 9, color: col }}>{e.sub}</span>}
+                          </div>
+                          {e.sub && <div style={{ fontSize: 11, color: col, marginTop: 2 }}>{e.sub}</div>}
+                          {e.extra && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 1 }}>{e.extra}</div>}
                         </div>
-                        <div style={{ textAlign: 'right', flexShrink: 0, minWidth: 0 }}>
-                          {e.extra && <div style={{ fontSize: 9, color: '#94a3b8', whiteSpace: 'nowrap' }}>{e.extra}</div>}
-                          {e.durata_sec > 0 && <div style={{ fontSize: 9, color: '#64748b', fontFamily: 'monospace' }}>{fmtDur(e.durata_sec)}</div>}
-                        </div>
+                        {e.durata_sec > 0 && (
+                          <div style={{ fontSize: 12, color: '#64748b', fontFamily: 'monospace',
+                            flexShrink: 0, alignSelf: 'center' }}>{fmtDur(e.durata_sec)}</div>
+                        )}
                       </div>
                     )
                   })}

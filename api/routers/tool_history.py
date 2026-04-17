@@ -324,27 +324,36 @@ async def classifica_sostituzione(ts: str, body: dict = Body(...)):
     if causa not in CAUSE_VALIDE:
         from fastapi import HTTPException
         raise HTTPException(400, f"causa non valida: {causa}. Valide: {CAUSE_VALIDE}")
-    # Normalizza il ts per confronto (rimuove spazi, gestisce varianti)
     ts_norm = ts.strip().replace(" ", "T")
+    alias_r  = (body.get("alias") or "").strip().upper()
+    pos_r    = body.get("posizione")
     aggiornato = False
     for r in records:
         r_ts = (r.get("ts") or "").strip()
-        if r_ts == ts_norm or r_ts == ts:
-            r["causa"]            = causa
-            r["classificato_ts"]  = datetime.now().isoformat(timespec="seconds")
-            aggiornato = True
-            log.info(f"tool_history: classificata sostituzione {r.get('alias')} ts={r_ts} causa={causa}")
-            break
+        if r_ts not in (ts_norm, ts):
+            continue
+        # Se stesso ts ma più record, discrimina per alias+posizione
+        if alias_r and r.get("alias","").upper() != alias_r:
+            continue
+        if pos_r is not None and r.get("posizione") != pos_r:
+            continue
+        if r.get("causa") is not None:
+            continue  # già classificato — salta
+        r["causa"]            = causa
+        r["classificato_ts"]  = datetime.now().isoformat(timespec="seconds")
+        aggiornato = True
+        log.info(f"tool_history: classificata {r.get('alias')} pos={r.get('posizione')} ts={r_ts} causa={causa}")
+        break
     if not aggiornato:
-        log.warning(f"tool_history: sostituzione non trovata ts={ts!r} — records ts: {[r.get('ts') for r in records[-5:]]}")
+        log.warning(f"tool_history: non trovata ts={ts!r} alias={alias_r!r} pos={pos_r}")
         from fastapi import HTTPException
-        raise HTTPException(404, f"sostituzione non trovata: {ts!r}")
+        raise HTTPException(404, f"sostituzione non trovata")
     _save_history(config, records)
     return {"ok": True, "ts": ts, "causa": causa}
 
 
 @router.post("/sostituzioni/{ts}/ignora")
-async def ignora_sostituzione(ts: str):
+async def ignora_sostituzione(ts: str, body: dict = Body({})):
     """
     Marca una sostituzione come ignorata (causa = 'ignorata').
     Non riapparirà nei popup.
@@ -352,16 +361,25 @@ async def ignora_sostituzione(ts: str):
     from database.db_handler import carica_configurazione as _cfg
     config  = _cfg()
     records = _load_history(config)
-    ts_norm = ts.strip().replace(" ", "T")
+    ts_norm  = ts.strip().replace(" ", "T")
+    alias_r  = (body.get("alias") or "").strip().upper() if isinstance(body, dict) else ""
+    pos_r    = body.get("posizione") if isinstance(body, dict) else None
     aggiornato = False
     for r in records:
         r_ts = (r.get("ts") or "").strip()
-        if r_ts == ts_norm or r_ts == ts:
-            r["causa"]           = "ignorata"
-            r["classificato_ts"] = datetime.now().isoformat(timespec="seconds")
-            aggiornato = True
-            log.info(f"tool_history: ignorata sostituzione {r.get('alias')} ts={r_ts}")
-            break
+        if r_ts not in (ts_norm, ts):
+            continue
+        if alias_r and r.get("alias","").upper() != alias_r:
+            continue
+        if pos_r is not None and r.get("posizione") != pos_r:
+            continue
+        if r.get("causa") is not None:
+            continue
+        r["causa"]           = "ignorata"
+        r["classificato_ts"] = datetime.now().isoformat(timespec="seconds")
+        aggiornato = True
+        log.info(f"tool_history: ignorata {r.get('alias')} pos={r.get('posizione')} ts={r_ts}")
+        break
     if aggiornato:
         _save_history(config, records)
     return {"ok": True, "ts": ts, "aggiornato": aggiornato}

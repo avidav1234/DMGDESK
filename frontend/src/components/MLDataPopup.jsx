@@ -33,7 +33,7 @@ export function PopupSostituzione({ sostituzione, onClassifica, onIgnora }) {
       await fetch(`/api/tool-history/sostituzioni/${encodeURIComponent(sostituzione.ts)}/causa`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ causa: selected }),
+        body: JSON.stringify({ causa: selected, alias: sostituzione.alias, posizione: sostituzione.posizione }),
       })
       onClassifica(sostituzione.ts, selected)
     } catch (e) {

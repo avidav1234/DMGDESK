@@ -190,21 +190,81 @@ def _parse_mpf_metadati(path: Path) -> dict:
 
     # ── Tipo IPM ───────────────────────────────────────────────────────
     tipo = "ipm" if "_IPM_" in path.name.upper() else "fresatura"
+    # Fallback: se utensile contiene RENISHAW è IPM
+    if not tipo == "ipm" and "RENISHAW" in utensile.upper():
+        tipo = "ipm"
+
+    # ── tipoOp: prima riga con pattern N\d+; (descrizione operazione) ─
+    tipo_op = ""
+    for l in lines:
+        import re as _re
+        if _re.search(r"N\d+;", l) and "DIAMETER" not in l.upper()                 and "TOOL COMMENT" not in l.upper() and "CIMATRON" not in l.upper()                 and "DOCUMENTO" not in l.upper() and "POST" not in l.upper()                 and "REVISIONE" not in l.upper() and "DATA" not in l.upper()                 and "N.UT" not in l.upper() and ";" in l:
+            cleaned = _re.sub(r"N\d+;\s*", "", l).strip()
+            if len(cleaned) > 3:
+                tipo_op = cleaned
+                break
+
+    # ── diametro ───────────────────────────────────────────────────────
+    diametro = ""
+    for l in lines:
+        if "DIAMETER:" in l.upper():
+            import re as _re
+            d = _re.sub(r".*DIAMETER:\s*", "", l, flags=_re.IGNORECASE)
+            d = _re.sub(r"CORNER.*", "", d, flags=_re.IGNORECASE).strip()
+            if d:
+                diametro = d
+            break
+
+    # ── dataPost ───────────────────────────────────────────────────────
+    data_post = ""
+    for l in lines:
+        if "DATA ESECUZIONE POST" in l.upper():
+            raw = l[l.index(":")+1:].strip() if ":" in l else ""
+            if raw:
+                import re as _re
+                m = _re.search(r"(\d{1,2})/(\d{1,2})/(\d{4}).*?(\d{1,2}):(\d{2})", raw)
+                if m:
+                    d, mo, y, h, mi = m.groups()
+                    data_post = f"{d.zfill(2)}/{mo.zfill(2)}/{y} {h}:{mi}"
+                else:
+                    data_post = raw
+            break
+
+    # ── utensili con tempi per M6 (compatibile con caricamento manuale) ─
+    utensili_con_tempi = []
+    for idx, line in enumerate(lines):
+        if not re.search(r"M6", line):
+            continue
+        alias_m6 = ""
+        for i in range(idx - 1, max(0, idx - 5), -1):
+            m = re.search(r'T\s*=\s*"([^"]+)"', lines[i])
+            if m:
+                alias_m6 = m.group(1).strip()
+                break
+        if not alias_m6:
+            continue
+        raw_t = (re.search(r"TEMPO\s*:\s*([\d:]+)", line, re.IGNORECASE) or [None, None])[1]
+        tempo_min = parse_tempo(raw_t) if raw_t else None
+        utensili_con_tempi.append({"alias": alias_m6, "tempoMin": tempo_min})
 
     # ── Info da filename ───────────────────────────────────────────────
     info = _estrai_info_filename(path.name)
 
     return {
-        "filename":      path.name,
-        "utensile":      utensile,
-        "utensili_lista": utensili_lista,
-        "num_m6":        len(utensili_lista),
-        "tempoStimato":  tempo_tot or None,
-        "tipoGruppo":    tipo,
-        "numPgm":        info["seq"] or path.stem.split("_")[-1],
-        "fase_da_file":  info["fase"],
-        "commessa":      info["commessa"],
-        "posizione":     info["posizione"],
+        "filename":          path.name,
+        "utensile":          utensile,
+        "utensili_lista":    utensili_lista,
+        "utensili":          utensili_con_tempi,   # compatibile con caricamento manuale
+        "num_m6":            len(utensili_lista),
+        "tempoStimato":      tempo_tot or None,
+        "tipoGruppo":        tipo,
+        "tipoOp":            tipo_op,
+        "diametro":          diametro,
+        "dataPost":          data_post,
+        "numPgm":            info["seq"] or path.stem.split("_")[-1],
+        "fase_da_file":      info["fase"],
+        "commessa":          info["commessa"],
+        "posizione":         info["posizione"],
     }
 
 
@@ -378,18 +438,14 @@ def scansiona_directory(config: dict) -> dict:
                 continue
             # Aggiorna metadati se cambiati
             changed = False
-            if meta["utensile"] and existing.get("utensile") != meta["utensile"]:
-                existing["utensile"] = meta["utensile"]
-                changed = True
-            if meta["tempoStimato"] and existing.get("tempoStimato") != meta["tempoStimato"]:
-                existing["tempoStimato"] = meta["tempoStimato"]
-                changed = True
+            for campo in ["utensile", "tempoStimato", "tipoOp", "diametro", "dataPost"]:
+                if meta.get(campo) and existing.get(campo) != meta[campo]:
+                    existing[campo] = meta[campo]
+                    changed = True
             if meta.get("utensili_lista") and existing.get("utensili_lista") != meta["utensili_lista"]:
                 existing["utensili_lista"] = meta["utensili_lista"]
+                existing["utensili"]       = meta.get("utensili", [])
                 existing["num_m6"]         = meta.get("num_m6", 0)
-                changed = True
-            if meta.get("num_m6") and not existing.get("num_m6"):
-                existing["num_m6"] = meta["num_m6"]
                 changed = True
             if changed:
                 stats["aggiornati"] += 1
@@ -402,9 +458,13 @@ def scansiona_directory(config: dict) -> dict:
                 "filename":      filename,
                 "utensile":      meta["utensile"],
                 "utensili_lista": meta.get("utensili_lista", []),
+                "utensili":      meta.get("utensili", []),
                 "num_m6":        meta.get("num_m6", 0),
                 "tempoStimato":  meta["tempoStimato"],
                 "tipoGruppo":    meta["tipoGruppo"],
+                "tipoOp":        meta.get("tipoOp", ""),
+                "diametro":      meta.get("diametro", ""),
+                "dataPost":      meta.get("dataPost", ""),
                 "numPgm":        meta["numPgm"],
                 "stato":         "da_fare",
                 "operatore":     "",

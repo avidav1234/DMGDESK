@@ -686,9 +686,9 @@ export default function Macchina() {
                   { h:'Duplo', t:'Numero fratello gemello (duplo) nel sistema Sinumerik.\nUtensili con lo stesso alias e duplo diverso sono gemelli intercambiabili — la macchina li alterna automaticamente quando uno si consuma.' },
                   { h:'L (mm)', t:'Lunghezza utensile in mm, letta dal TOA Sinumerik.\nValore di compensazione geometrica usato dal CNC per il calcolo delle traiettorie.' },
                   { h:'R (mm)', t:'Raggio utensile in mm, letto dal TOA Sinumerik.\nUsato per la compensazione del raggio nelle operazioni di fresatura.' },
-                  { h:'Vita %', t:'Percentuale di vita utensile residua letta dal TOA Sinumerik.\n100% = utensile nuovo · 0% = vita esaurita (il CNC bloccherà l'uso).\nLa barra viola indica il livello residuo — rosso sotto il 10%.' },
+                  { h:'Vita %', t:"Percentuale di vita utensile residua letta dal TOA Sinumerik.\n100% = utensile nuovo · 0% = vita esaurita (il CNC bloccherà l'uso).\nLa barra viola indica il livello residuo — rosso sotto il 10%." },
                   { h:'Cicli', t:'Numero di cicli NC eseguiti con questo utensile, rilevati dal LOG macchina.\nMostra anche la durata media per ciclo — utile per confrontare con il valore atteso dal CAM.' },
-                  { h:'Stato', t:'Stato operativo dell'utensile:\n• Attivo — disponibile e nella norma\n• Worn — vita quasi esaurita (<10%)\n• Disabled — disabilitato nel Sinumerik\n• Fuori mag. — non montato nel magazine' },
+                  { h:'Stato', t:"Stato operativo dell'utensile:\n• Attivo — disponibile e nella norma\n• Worn — vita quasi esaurita (<10%)\n• Disabled — disabilitato nel Sinumerik\n• Fuori mag. — non montato nel magazine" },
                 ].map(({h, t}) => (
                   <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontSize: 10,
                     fontFamily: 'var(--font-mono)', color: 'var(--text-dim)',

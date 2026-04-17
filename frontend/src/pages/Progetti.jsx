@@ -1110,9 +1110,11 @@ function LancioNCModal({project, toolsDB, initialSelectedIds, onLancia, onClose}
 
   const [selected, setSelected] = useState(()=>{
     if(initialSelectedIds && initialSelectedIds.size > 0){
-      // Filtra solo i programmi fresatura (IPM vengono gestiti sotto)
-      const valid = new Set([...initialSelectedIds].filter(id=>allPgm.some(p=>p.id===id)))
-      if(valid.size > 0) return valid
+      const validFres = new Set([...initialSelectedIds].filter(id=>allPgm.some(p=>p.id===id)))
+      const hasIpmOnly = validFres.size === 0 && [...initialSelectedIds].some(id=>allIpm.some(p=>p.id===id))
+      // Se la pre-selezione contiene solo IPM, non scattare il fallback fresatura
+      if(validFres.size > 0) return validFres
+      if(hasIpmOnly) return new Set()  // nessun fresatura selezionato — rispetta la scelta
     }
     // Nessuna pre-selezione: usa da_fare della PRIMA fase
     const primaFase = fasi.find(f=>f.pgms.some(p=>p.stato==='da_fare'))
@@ -1123,7 +1125,8 @@ function LancioNCModal({project, toolsDB, initialSelectedIds, onLancia, onClose}
   const [selectedIpm, setSelectedIpm] = useState(()=>{
     if(initialSelectedIds && initialSelectedIds.size > 0){
       const validIpm = new Set([...initialSelectedIds].filter(id=>allIpm.some(p=>p.id===id)))
-      if(validIpm.size > 0) return validIpm
+      // Se ci sono IPM pre-selezionati, usali — non aggiungere il fallback
+      return validIpm  // può essere vuoto se nessun IPM era selezionato
     }
     // Nessuna pre-selezione: usa IPM da_fare della prima fase
     const primaFase = fasi.find(f=>f.pgms.some(p=>p.stato==='da_fare')||f.pgmsIpm.some(p=>p.stato==='da_fare'))

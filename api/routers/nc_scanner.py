@@ -70,7 +70,15 @@ def _estrai_info_filename(filename: str) -> dict:
     while tokens and not tokens[-1].isdigit():
         tokens.pop()
 
-    if len(tokens) >= 4:
+    # Gestione IPM: 4298_005_01_IPM_01 → commessa=4298, pos=005, fase=01, seq=01
+    ipm_idx = next((i for i, t in enumerate(tokens) if t.upper() == "IPM"), -1)
+    if ipm_idx >= 0:
+        # File IPM: la fase è il token prima di IPM
+        commessa  = tokens[0]
+        posizione = tokens[1] if len(tokens) > 1 else ""
+        fase      = tokens[ipm_idx - 1] if ipm_idx >= 2 else "1"
+        seq       = tokens[ipm_idx + 1] if ipm_idx + 1 < len(tokens) else str(ipm_idx)
+    elif len(tokens) >= 4:
         commessa  = tokens[0]
         posizione = tokens[1]
         fase      = tokens[2]
@@ -205,17 +213,28 @@ def _parse_mpf_metadati(path: Path) -> dict:
 def _trova_o_crea_task_fresatura(project: dict, fase_label: str) -> dict | None:
     """
     Cerca il task 'Fresatura' nella fase corrispondente.
-    Se la fase non esiste, non la crea (conservativo).
-    Ritorna il task dict (reference mutabile) o None.
+    Supporta matching flessibile: "01" == "1" == "fase1" == "fase-1" == "Fase 1"
     """
+    if not fase_label:
+        # Nessuna fase specificata: prendi la prima task Fresatura disponibile
+        for step in project.get("steps", []):
+            for task in step.get("tasks", []):
+                if task.get("text", "").strip().lower() == "fresatura":
+                    return task
+        return None
+
     fase_norm = _norm_fase(fase_label)
+    # Varianti numeriche: "01" → ["01", "1", "fase01", "fase1"]
+    fase_num  = fase_label.lstrip("0") or "1"
+    varianti  = {fase_norm, _norm_fase(fase_num), _norm_fase(f"fase{fase_num}"),
+                 _norm_fase(f"fase{fase_label}"), _norm_fase(fase_label)}
+
     for step in project.get("steps", []):
         step_norm = _norm_fase(step.get("title", ""))
-        if fase_norm and step_norm != fase_norm:
-            continue  # fase specificata ma non corrisponde
-        for task in step.get("tasks", []):
-            if task.get("text", "").strip().lower() == "fresatura":
-                return task
+        if step_norm in varianti or fase_norm in step_norm or step_norm in fase_norm:
+            for task in step.get("tasks", []):
+                if task.get("text", "").strip().lower() == "fresatura":
+                    return task
     return None
 
 
@@ -327,11 +346,21 @@ def scansiona_directory(config: dict) -> dict:
 
         fase_label = fase_cartella or meta.get("fase_da_file") or ""
 
-        # Trova task Fresatura
+        # Trova task Fresatura nella fase corretta
+        # Per IPM: la fase è estratta dal filename (es. 4298_005_01_IPM_01 → fase "01")
+        # Non usare fallback senza fase — evita che IPM di fasi diverse si mescolino
         task = _trova_o_crea_task_fresatura(project, fase_label)
+        if not task and fase_label:
+            # Prova anche con fase numerica pura (es. "01" → cerca "Fase 1" o "Fase-1")
+            fase_num = fase_label.lstrip("0") or "1"
+            task = _trova_o_crea_task_fresatura(project, fase_num)
+        if not task and fase_label:
+            # Prova con numero senza zero iniziale
+            task = _trova_o_crea_task_fresatura(project, fase_label.lstrip("0") or fase_label)
         if not task:
-            # Nessun task Fresatura trovato in questa fase — cerca in qualsiasi fase
-            task = _trova_o_crea_task_fresatura(project, "")
+            # Solo se non c'è nessuna fase specificata, prendi la prima disponibile
+            if not fase_label:
+                task = _trova_o_crea_task_fresatura(project, "")
         if not task:
             stats["orfani"] += 1
             continue

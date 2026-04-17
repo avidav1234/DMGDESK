@@ -1289,7 +1289,11 @@ function LancioNCModal({project, toolsDB, initialSelectedIds, onLancia, onClose}
                   borderTop:fi>0?'1px solid #e2e8f0':'none',position:'sticky',top:0,zIndex:2}}>
                   <div style={{width:10,height:10,borderRadius:'50%',background:faseColor,flexShrink:0}}/>
                   <span style={{fontSize:12,fontWeight:800,color:faseColor,flex:1}}>
-                    {fase.stepTitle} — {fase.pgms.length} programmi
+                    {fase.stepTitle} — {fase.pgms.length} pgm
+                    {fase.pgmsIpm.length>0&&<span style={{fontSize:10,fontWeight:700,color:'#8B2FC9',
+                      background:'#F3E8FF',padding:'1px 5px',borderRadius:4,marginLeft:6}}>
+                      +{fase.pgmsIpm.length} IPM
+                    </span>}
                   </span>
                   <span style={{fontSize:11,color:faseColor,opacity:0.7}}>
                     {faseSelected.length}/{fase.pgms.length} sel.
@@ -1300,7 +1304,34 @@ function LancioNCModal({project, toolsDB, initialSelectedIds, onLancia, onClose}
                     {tuttiSel?'Desel. tutti':'Sel. tutti'}
                   </button>
                 </div>
-                {/* Righe programmi */}
+                {/* IPM della fase — IN CIMA */}
+                {fase.pgmsIpm.length>0&&fase.pgmsIpm.map(pgm=>{
+                  const sel=selectedIpm.has(pgm.id)
+                  return(
+                    <div key={pgm.id} onClick={()=>toggleIpm(pgm.id)}
+                      style={{display:'flex',alignItems:'center',gap:10,padding:'6px 14px',
+                        cursor:'pointer',background:sel?'#F3E8FF':'#FDFAFF',
+                        borderLeft:`3px solid ${sel?'#8B2FC9':'#DDD6FE'}`,
+                        borderBottom:'1px solid #EDE9F8'}}>
+                      <div style={{width:16,height:16,borderRadius:4,flexShrink:0,
+                        border:sel?'none':'2px solid #C4B5FD',
+                        background:sel?'#8B2FC9':'transparent',
+                        display:'flex',alignItems:'center',justifyContent:'center'}}>
+                        {sel&&<span style={{color:'#fff',fontSize:11,fontWeight:800}}>✓</span>}
+                      </div>
+                      <span style={{fontSize:10,fontWeight:700,color:'#8B2FC9',background:'#F3E8FF',
+                        padding:'2px 6px',borderRadius:10,flexShrink:0}}>📏 IPM</span>
+                      <span style={{fontSize:12,fontFamily:'monospace',fontWeight:700,color:'#6D28D9',
+                        flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                        {pgm.filename?.replace(/\.MPF$/i,'')||`#${pgm.numPgm}`}
+                      </span>
+                      <span style={{fontSize:11,fontFamily:'monospace',color:'#8B2FC9'}}>
+                        {pgm.utensile||'—'}
+                      </span>
+                    </div>
+                  )
+                })}
+                {/* Righe programmi fresatura */}
                 {fase.pgms.map(pgm=>{
                   const sel=selected.has(pgm.id)
                   const ts=classifyTool(pgm.utensile,toolsDB)

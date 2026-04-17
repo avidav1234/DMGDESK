@@ -693,8 +693,8 @@ function FresaturaPanel({task,onUpdateTask,toolsDB,projectId,projectName}){
                   onClick={e=>e.stopPropagation()} style={{cursor:'pointer',accentColor:'#0d2d5e'}}/>
               </div>
               <div style={{width:110,padding:'5px 10px',borderRight:`1px solid ${T.border}`}}>STATO</div>
-              <div style={{width:160,padding:'5px 10px',borderRight:`1px solid ${T.border}`}}>PROGRAMMA</div>
-              <div style={{width:130,padding:'5px 10px',borderRight:`1px solid ${T.border}`}}>UTENSILE</div>
+              <div style={{width:52,padding:'5px 4px',borderRight:`1px solid ${T.border}`,textAlign:'center'}}>#</div>
+              <div style={{width:140,padding:'5px 10px',borderRight:`1px solid ${T.border}`}}>UTENSILE</div>
               <div style={{flex:1,padding:'5px 10px'}}>OPERAZIONE</div>
             </div>
           )}

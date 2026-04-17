@@ -994,11 +994,30 @@ async def get_analisi_setup():
             "progetti":  [{"progetto": r[0], "file": r[1]} for r in refs[:5]],
         })
 
+    # Stime vita live (tra TOA e TOA)
+    try:
+        from api.routers.vita_stimata import calcola_stime
+        stime_live = calcola_stime(config)
+    except Exception:
+        stime_live = {}
+
+    # Aggiungi stima a fin_vita
+    for ut in fin_vita:
+        s = stime_live.get((ut["alias"] or "").upper())
+        if s and s.get("life_percent_stimato") is not None:
+            ut["life_percent_stimato"] = s["life_percent_stimato"]
+            ut["sec_dopo_toa"]         = s["sec_dopo_toa"]
+            ut["stima_affidabile"]     = s["stima_affidabile"]
+
+    # Aggiungi stima a previsione_vita (tutti gli utensili in macchina)
+    fin_vita_display = sorted(fin_vita, key=lambda x: x.get("life_percent") or 0)
+
     result = {
         "non_utilizzati": sorted(non_utilizzati, key=lambda x: x["alias"]),
         "da_montare":     da_montare,
-        "fin_vita":       sorted(fin_vita, key=lambda x: x.get("life_percent") or 0),
+        "fin_vita":       fin_vita_display,
         "sync_time":      sync_time,
+        "stime_live":     stime_live,   # tutte le stime, per Macchina.jsx
         "previsione_vita": _calcola_previsione_vita(
             projects, tools_db, _ct,
             ordine_pallet=pallet_state_data.get("ordine_esecuzione", []),

@@ -742,19 +742,19 @@ function TabPerdite({ rpt }) {
   }
   const voci = [
     { k: 'produzione_netta', label: 'Produzione netta',              sec: p.produzione_netta_sec,
-      tooltip: 'Ore effettive di taglio — macchina in esecuzione programma NC.\nÈ il tempo valorizzato direttamente in produzione.' },
+      tooltip: `Ore effettive di taglio — macchina in esecuzione programma NC.\nÈ il tempo valorizzato direttamente in produzione.` },
     { k: 'velocita_ridotta', label: 'Velocità ridotta (override<90%)', sec: p.velocita_ridotta_sec,
-      tooltip: 'Tempo in cui feed o mandrino erano sotto il 90% del valore programmato.\nIndicatore di usura utensile, problemi di staffaggio o scelte operative conservative.' },
+      tooltip: `Tempo in cui feed o mandrino erano sotto il 90% del valore programmato.\nIndicatore di usura utensile, problemi di staffaggio o scelte operative conservative.` },
     { k: 'microfermi',       label: 'Microfermi inter-programma',    sec: p.microfermi_sec,
-      tooltip: 'Pause brevi (< soglia setup) tra un programma e il successivo nella stessa sessione.\nTipicamente: cambio utensile, misura, riposizionamento.' },
+      tooltip: `Pause brevi (< soglia setup) tra un programma e il successivo nella stessa sessione.\nTipicamente: cambio utensile, misura, riposizionamento.` },
     { k: 'setup',            label: 'Setup / cambio pallet',         sec: p.setup_sec,
       tooltip: `Tempo tra la fine di una sessione e l'inizio della successiva.\nInclude: cambio pallet, serraggio grezzo, misura zero pezzo, caricamento MAIN.` },
     { k: 'guasti',           label: 'Fermi anomali (reset)',         sec: p.guasti_sec,
-      tooltip: 'Fermi non pianificati classificati come anomalia — reset macchina, allarmi bloccanti, spegnimenti imprevisti.\nIndicatore di affidabilità macchina.' },
+      tooltip: `Fermi non pianificati classificati come anomalia — reset macchina, allarmi bloccanti, spegnimenti imprevisti.\nIndicatore di affidabilità macchina.` },
     { k: 'fermo_extra',      label: 'Fermo fuori produzione',        sec: p.fermo_extra_sec,
-      tooltip: 'Fermo registrato fuori dalle sessioni di lavorazione — pausa pranzo, fine turno, attesa materiale.\nCalcolato da fermi_globali non ignorati.' },
+      tooltip: `Fermo registrato fuori dalle sessioni di lavorazione — pausa pranzo, fine turno, attesa materiale.\nCalcolato da fermi_globali non ignorati.` },
     { k: 'libero',           label: 'Tempo non programmato',         sec: p.libero_sec,
-      tooltip: 'Residuo del turno 24h non coperto da lavorazione né da fermo classificato.\nNotte non produttiva o dati mancanti.' },
+      tooltip: `Residuo del turno 24h non coperto da lavorazione né da fermo classificato.\nNotte non produttiva o dati mancanti.` },
   ].filter(v => v.sec > 0)
   const totale = voci.reduce((a, v) => a + v.sec, 0) || 1
 
@@ -836,14 +836,14 @@ function TabPerdite({ rpt }) {
               { label:'OEE', value:`${oee?.valore||'—'}%`,
                 color:(oee?.valore||0)>=75?'#22c55e':(oee?.valore||0)>=50?'#f59e0b':'#ef4444',
                 sub:`Target industriale stampi: 65-75%`,
-                tooltip:'OEE = Disponibilità × Performance × Qualità.\n≥85% classe mondiale · ≥65% buono · <40% critico.\nTarget lavorazione stampi: 65-75%.' },
+                tooltip:`OEE = Disponibilità × Performance × Qualità.\n≥85% classe mondiale · ≥65% buono · <40% critico.\nTarget lavorazione stampi: 65-75%.` },
               { label:'Setup medio / cambio pallet', value: p.n_setup > 0 ? fmt(p.media_setup_sec) : '—',
                 color:'#8b5cf6', sub:`${p.n_setup} cambi rilevati oggi`,
-                tooltip:'Tempo medio tra fine di una sessione e inizio della successiva.\nInclude cambio pallet, serraggio, zero pezzo e caricamento MAIN.\nRidurre il setup aumenta direttamente l'OEE.' },
+                tooltip:`Tempo medio tra fine di una sessione e inizio della successiva.\nInclude cambio pallet, serraggio, zero pezzo e caricamento MAIN.\nRidurre il setup aumenta direttamente l'OEE.` },
               { label:'Fermi anomali', value: p.n_guasti,
                 color: p.n_guasti > 2 ? '#ef4444' : p.n_guasti > 0 ? '#f59e0b' : '#22c55e',
                 sub: p.n_guasti === 0 ? 'Nessun reset anomalo ✓' : 'Reset/spegnimenti imprevisti',
-                tooltip:'Numero di fermi classificati come anomalia — allarmi bloccanti, reset Sinumerik, spegnimenti imprevisti.\n0 = ottimale · >2 = analizzare causa radice.' },
+                tooltip:`Numero di fermi classificati come anomalia — allarmi bloccanti, reset Sinumerik, spegnimenti imprevisti.\n0 = ottimale · >2 = analizzare causa radice.` },
               { label:'Tempo con override ridotto', value: p.velocita_ridotta_sec > 0 ? fmt(p.velocita_ridotta_sec) : '—',
                 color: p.velocita_ridotta_sec > 1800 ? '#f59e0b' : '#22c55e',
                 sub: p.velocita_ridotta_sec > 0
@@ -972,19 +972,19 @@ function TabCicli() {
               <div style={{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:10 }}>
                 {[
                   { label:'Media', value:fmt(s.media), color:'#1D5FAD',
-                    tooltip:'Durata media del ciclo su tutti i campioni disponibili.\nBase di riferimento per il confronto con nuovi cicli.' },
+                    tooltip:`Durata media del ciclo su tutti i campioni disponibili.\nBase di riferimento per il confronto con nuovi cicli.` },
                   { label:'Dev. std (σ)', value:fmt(s.std), color:'#7C3AED',
-                    tooltip:'Deviazione standard della durata ciclo.\nMisura la variabilità — valori alti indicano cicli irregolari (usura utensile, variazioni materiale, collisioni parziali).' },
+                    tooltip:`Deviazione standard della durata ciclo.\nMisura la variabilità — valori alti indicano cicli irregolari (usura utensile, variazioni materiale, collisioni parziali).` },
                   { label:'CV%', value:`${s.cv_pct}%`,
                     color:cvColor(s.cv_pct),
                     sub: s.cv_pct<10?'Stabile ✓':s.cv_pct<20?'Attenzione':'Instabile ⚠',
-                    tooltip:'Coefficiente di variazione = σ/media × 100.\nNormalizza la variabilità rispetto alla durata media.\n<10% stabile · 10-20% attenzione · >20% instabile — indagare causa.' },
+                    tooltip:`Coefficiente di variazione = σ/media × 100.\nNormalizza la variabilità rispetto alla durata media.\n<10% stabile · 10-20% attenzione · >20% instabile — indagare causa.` },
                   { label:'P95 (worst case)', value:fmt(s.p95), color:'#f59e0b',
-                    tooltip:'Percentile 95 — il 95% dei cicli è più breve di questo valore.\nUsar come stima pessimistica per la pianificazione (evita sorprese).' },
+                    tooltip:`Percentile 95 — il 95% dei cicli è più breve di questo valore.\nUsar come stima pessimistica per la pianificazione (evita sorprese).` },
                   { label:'Trend', value:slopeLabel(s.slope),
                     color:slopeColor(s.slope),
                     sub:`${Math.abs(s.slope).toFixed(1)}s/ciclo`,
-                    tooltip:'Variazione media della durata ciclo per esecuzione successiva.\nPositivo = cicli sempre più lenti (usura utensile) · Negativo = cicli più veloci (riscaldamento, ottimizzazione) · Stabile = nessuna deriva.' },
+                    tooltip:`Variazione media della durata ciclo per esecuzione successiva.\nPositivo = cicli sempre più lenti (usura utensile) · Negativo = cicli più veloci (riscaldamento, ottimizzazione) · Stabile = nessuna deriva.` },
                 ].map((k,i) => (
                   <div key={i} style={{ padding:'10px 12px', background:'var(--bg-hover)',
                     borderRadius:8, textAlign:'center' }}>

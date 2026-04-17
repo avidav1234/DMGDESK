@@ -434,17 +434,19 @@ def scansiona_directory(config: dict) -> dict:
         if existing:
             stato = existing.get("stato", "da_fare")
             if stato in ("in_main", "in_lavorazione", "completato", "in_macchina"):
-                # Non cambiamo lo stato, ma aggiorniamo i metadati mancanti
-                meta_campi = ["utensile", "tempoStimato", "tipoOp", "diametro",
-                              "dataPost", "utensili_lista", "utensili", "num_m6"]
-                meta_changed = any(
-                    meta.get(c) and not existing.get(c)
-                    for c in meta_campi
-                )
+                # Non cambiamo lo stato, ma aggiorniamo i metadati
+                # tipoOp/diametro/dataPost/utensili sono nuovi — sempre aggiorna se mancanti
+                # utensile/tempoStimato — aggiorna solo se il nuovo valore è migliore
+                meta_changed = False
+                for c in ["tipoOp", "diametro", "dataPost", "utensili", "utensili_lista"]:
+                    if meta.get(c) and existing.get(c) != meta[c]:
+                        existing[c] = meta[c]
+                        meta_changed = True
+                for c in ["utensile", "tempoStimato", "num_m6"]:
+                    if meta.get(c) and not existing.get(c):
+                        existing[c] = meta[c]
+                        meta_changed = True
                 if meta_changed:
-                    for c in meta_campi:
-                        if meta.get(c) and not existing.get(c):
-                            existing[c] = meta[c]
                     stats["aggiornati"] += 1
                     dirty = True
                 else:

@@ -1113,21 +1113,30 @@ function LancioNCModal({project, toolsDB, initialSelectedIds, onLancia, onClose}
       const valid = new Set([...initialSelectedIds].filter(id=>allPgm.some(p=>p.id===id)))
       if(valid.size > 0) return valid
     }
-    return new Set(da_fare.map(p=>p.id))
+    // Seleziona solo i da_fare della PRIMA fase che ha programmi da fare
+    const primaFase = fasi.find(f=>f.pgms.some(p=>p.stato==='da_fare'))
+    if(primaFase) return new Set(primaFase.pgms.filter(p=>p.stato==='da_fare').map(p=>p.id))
+    return new Set()
   })
-  // Selezione IPM separata — di default tutti i da_fare
-  const [selectedIpm, setSelectedIpm] = useState(()=>
-    new Set(allIpm.filter(p=>p.stato==='da_fare').map(p=>p.id))
-  )
+  // Selezione IPM separata — di default solo IPM da_fare della prima fase con da_fare
+  const [selectedIpm, setSelectedIpm] = useState(()=>{
+    const primaFase = fasi.find(f=>f.pgms.some(p=>p.stato==='da_fare')||f.pgmsIpm.some(p=>p.stato==='da_fare'))
+    if(primaFase) return new Set(primaFase.pgmsIpm.filter(p=>p.stato==='da_fare').map(p=>p.id))
+    return new Set()
+  })
   const [showCompletati, setShowCompletati] = useState(false)
   const [showIpm, setShowIpm] = useState(allIpm.length > 0)
   const [faseMistaConfirmata, setFaseMistaConfirmata] = useState(false)
 
   function toggle(id){ setSelected(s=>{ const n=new Set(s); n.has(id)?n.delete(id):n.add(id); return n }) }
   function toggleIpm(id){ setSelectedIpm(s=>{ const n=new Set(s); n.has(id)?n.delete(id):n.add(id); return n }) }
-  function selezionaTutti(fase){ setSelected(s=>{ const n=new Set(s); fase.pgms.forEach(p=>n.add(p.id)); return n }) }
+  function selezionaTutti(fase){
+    // Seleziona solo questa fase — deseleziona le altre per evitare fasi miste
+    setSelected(new Set(fase.pgms.map(p=>p.id)))
+    setSelectedIpm(new Set(fase.pgmsIpm.map(p=>p.id)))
+  }
   function deselezionaFase(fase){ setSelected(s=>{ const n=new Set(s); fase.pgms.forEach(p=>n.delete(p.id)); return n }) }
-  function deselezionaTutti(){ setSelected(new Set()) }
+  function deselezionaTutti(){ setSelected(new Set()); setSelectedIpm(new Set()) }
 
   // pgmSelezionati include sia fresatura che IPM selezionati
   const pgmSelezionati = [
@@ -1230,7 +1239,13 @@ function LancioNCModal({project, toolsDB, initialSelectedIds, onLancia, onClose}
               borderRadius:8,color:'#475569',fontSize:13,padding:'5px 12px',cursor:'pointer'}}>✕</button>
           </div>
           <div style={{display:'flex',gap:8,alignItems:'center'}}>
-            <button onClick={()=>setSelected(new Set(da_fare.map(p=>p.id)))}
+            <button onClick={()=>{
+                const primaFase=fasi.find(f=>f.pgms.some(p=>p.stato==='da_fare'))
+                if(primaFase){
+                  setSelected(new Set(primaFase.pgms.filter(p=>p.stato==='da_fare').map(p=>p.id)))
+                  setSelectedIpm(new Set(primaFase.pgmsIpm.filter(p=>p.stato==='da_fare').map(p=>p.id)))
+                }
+              }}
               style={{background:'#f8fafc',border:'1px solid #e2e8f0',borderRadius:6,
                 color:'#475569',fontSize:11,fontWeight:700,padding:'4px 10px',cursor:'pointer'}}>
               ○ Seleziona Da fare ({da_fare.length})

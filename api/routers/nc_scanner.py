@@ -198,7 +198,15 @@ def _parse_mpf_metadati(path: Path) -> dict:
     tipo_op = ""
     for l in lines:
         import re as _re
-        if _re.search(r"N\d+;", l) and "DIAMETER" not in l.upper()                 and "TOOL COMMENT" not in l.upper() and "CIMATRON" not in l.upper()                 and "DOCUMENTO" not in l.upper() and "POST" not in l.upper()                 and "REVISIONE" not in l.upper() and "DATA" not in l.upper()                 and "N.UT" not in l.upper() and ";" in l:
+        if not _re.search(r"N\d+;", l):
+                continue
+            l_up = l.upper()
+            skip_kw = ["DIAMETER", "TOOL COMMENT", "CIMATRON", "DOCUMENTO",
+                       "POST", "REVISIONE", "DATA", "N.UT", "UTENTE",
+                       "COMMESSA", "PROGRAMMA:", "VERSIONE", "AUTORE",
+                       "OPERATORE", "CLIENTE", "MACCHINA:"]
+            if any(kw in l_up for kw in skip_kw):
+                continue
             cleaned = _re.sub(r"N\d+;\s*", "", l).strip()
             if len(cleaned) > 3:
                 tipo_op = cleaned

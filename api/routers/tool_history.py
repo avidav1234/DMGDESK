@@ -338,6 +338,27 @@ async def classifica_sostituzione(ts: str, body: dict = Body(...)):
     return {"ok": True, "ts": ts, "causa": causa}
 
 
+@router.post("/sostituzioni/{ts}/ignora")
+async def ignora_sostituzione(ts: str):
+    """
+    Marca una sostituzione come ignorata (causa = 'ignorata').
+    Non riapparirà nei popup.
+    """
+    from database.db_handler import carica_configurazione as _cfg
+    config  = _cfg()
+    records = _load_history(config)
+    aggiornato = False
+    for r in records:
+        if r.get("ts") == ts:
+            r["causa"]           = "ignorata"
+            r["classificato_ts"] = datetime.now().isoformat(timespec="seconds")
+            aggiornato = True
+            break
+    if aggiornato:
+        _save_history(config, records)
+    return {"ok": True, "ts": ts}
+
+
 @router.get("/sostituzioni/non-classificate")
 async def get_sostituzioni_non_classificate():
     """Restituisce sostituzioni senza causa classificata (per popup frontend)."""

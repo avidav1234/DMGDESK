@@ -510,12 +510,15 @@ export default function Home(){
           }, 500)
         }}
         onIgnora={()=>{
+          // Marca come ignorata nel backend — non riapparirà
+          const ts = popupSost?.ts
+          if(ts) fetch(`/api/tool-history/sostituzioni/${encodeURIComponent(ts)}/ignora`, {method:'POST'}).catch(()=>{})
           setPopupSost(null)
           // Passa alla prossima sostituzione non classificata
           setTimeout(()=>{
             fetch('/api/tool-history/sostituzioni/non-classificate').then(r=>r.ok?r.json():null)
               .then(d=>{
-                const prossima = d?.sostituzioni?.find(s=>s.ts !== popupSost?.ts)
+                const prossima = d?.sostituzioni?.find(s=>s.ts !== ts)
                 if(prossima) setPopupSost(prossima)
               }).catch(()=>{})
           }, 500)

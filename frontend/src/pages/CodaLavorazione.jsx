@@ -65,6 +65,10 @@ export default function CodaLavorazione() {
   const [pgmSaving, setPgmSaving] = useState(false);
   // Pallet espansi nella coda unificata
   const [palletEspansi, setPalletEspansi] = useState(new Set());
+  const [tabDestra, setTabDestra]     = useState('coda')  // 'coda' | 'log'
+  const [logEventi, setLogEventi]     = useState([])
+  const [logLoading, setLogLoading]   = useState(false)
+  const [logFiltro, setLogFiltro]     = useState('tutti') // tutti|programmi|fermi|utensili|pallet|allarmi
 
   const fetchLiveContext = async () => {
     try {
@@ -206,6 +210,8 @@ export default function CodaLavorazione() {
         caricaPgmInMacchina()
         // Risincronizza la coda: un completato potrebbe rimuovere un pallet
         fetch('/api/pallet/sincronizza-coda', { method: 'POST' })
+        // Aggiorna log se tab log è attiva
+        if (tabDestra === 'log') fetchLog()
           .then(r => r.ok ? r.json() : null)
           .then(d => { if (d?.aggiornato) setCodaOrdine(d.ordine || []) })
           .catch(() => {})
@@ -470,6 +476,93 @@ export default function CodaLavorazione() {
     const h = Math.floor(tot / 3600), m = Math.round((tot % 3600) / 60)
     return h > 0 ? (m > 0 ? `~${h}h ${m}m` : `~${h}h`) : `~${m} min`
   }
+
+  // ── Fetch log eventi ──────────────────────────────────────────────
+  const fetchLog = async () => {
+    setLogLoading(true)
+    try {
+      const today = new Date().toISOString().slice(0, 10)
+      const [rpt, macchina] = await Promise.all([
+        fetch(`/api/report/giornaliero?data=${today}`).then(r => r.ok ? r.json() : null),
+        fetch('/api/macchina-live/stato').then(r => r.ok ? r.json() : null),
+      ])
+      const eventi = []
+
+      // Programmi dalle sessioni
+      if (rpt?.sessioni) {
+        for (const sess of rpt.sessioni) {
+          for (const pgm of (sess.programmi || [])) {
+            if (!pgm.inizio) continue
+            eventi.push({
+              tipo: 'programma',
+              ts: pgm.inizio,
+              ts_fine: pgm.fine,
+              durata_sec: pgm.durata_sec,
+              testo: pgm.filename?.replace('.MPF','') || pgm.filename,
+              sub: pgm.utensile ? `${pgm.utensile}${pgm.t_number ? ' T'+pgm.t_number : ''}` : null,
+              extra: `P${sess.pallet || '?'} · ${sess.progetto || '?'}`,
+              colore: '#1D5FAD',
+            })
+          }
+          // Cambio utensile: quando cambia utensile tra programmi consecutivi
+          const pgms = (sess.programmi || []).filter(p => p.utensile)
+          for (let i = 1; i < pgms.length; i++) {
+            if (pgms[i].utensile !== pgms[i-1].utensile && pgms[i].inizio) {
+              eventi.push({
+                tipo: 'utensile',
+                ts: pgms[i].inizio,
+                testo: `${pgms[i-1].utensile} → ${pgms[i].utensile}`,
+                sub: pgms[i].t_number ? `T${pgms[i].t_number}` : null,
+                extra: `P${sess.pallet || '?'}`,
+                colore: '#d97706',
+              })
+            }
+          }
+        }
+      }
+
+      // Fermi
+      if (rpt?.fermi_globali) {
+        for (const f of rpt.fermi_globali) {
+          if (!f.inizio) continue
+          eventi.push({
+            tipo: 'fermo',
+            ts: f.inizio,
+            ts_fine: f.fine,
+            durata_sec: f.durata_sec,
+            testo: f.causa || 'Fermo macchina',
+            sub: f.causa ? null : 'Non classificato',
+            colore: f.ignorato ? '#94a3b8' : '#f59e0b',
+            ignorato: f.ignorato,
+          })
+        }
+      }
+
+      // Allarmi dalla macchina live
+      if (macchina?.allarme_attivo) {
+        eventi.push({
+          tipo: 'allarme',
+          ts: new Date().toISOString(),
+          testo: macchina.allarme_attivo,
+          sub: 'ATTIVO ORA',
+          colore: '#dc2626',
+        })
+      }
+
+      // Ordina per timestamp decrescente
+      eventi.sort((a, b) => new Date(b.ts) - new Date(a.ts))
+      setLogEventi(eventi)
+    } catch(e) {
+      console.warn('fetchLog error:', e)
+    } finally {
+      setLogLoading(false)
+    }
+  }
+
+  // Carica log quando si apre il tab
+  useEffect(() => {
+    if (tabDestra === 'log') fetchLog()
+  }, [tabDestra])
 
   return (
     <div style={{
@@ -952,11 +1045,24 @@ export default function CodaLavorazione() {
       , document.body)}
 
       {/* COL DESTRA */}
-      <div style={{ flex: '0 0 calc(50% - 7px)', display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0, overflowY: 'auto' }}>
+      <div style={{ flex: '0 0 calc(50% - 7px)', display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0, overflow: 'hidden' }}>
 
-        {/* ── CODA UNIFICATA: pallet + programmi inline ──────────── */}
-        {assegnatiCoda.length > 0 && (
-          <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '12px 16px' }}>
+        {/* ── Tab switcher Coda / Log ─────────────────────────────── */}
+        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+          {[{id:'coda', label:'📋 Coda esecuzione'}, {id:'log', label:'📜 Log turno'}].map(t => (
+            <button key={t.id} onClick={() => setTabDestra(t.id)}
+              style={{ flex: 1, padding: '7px 10px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                fontWeight: 700, fontSize: 12,
+                background: tabDestra === t.id ? '#0d2d5e' : '#e2e8f0',
+                color: tabDestra === t.id ? '#fff' : '#64748b' }}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {/* ── TAB CODA ─────────────────────────────────────────────── */}
+        {tabDestra === 'coda' && assegnatiCoda.length > 0 && (
+          <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '12px 16px', flex: 1, overflowY: 'auto' }}>
             {/* Header */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
               <span style={{ fontSize: 13, fontWeight: 800, color: '#0d2d5e' }}>📋 Coda esecuzione</span>
@@ -1105,10 +1211,95 @@ export default function CodaLavorazione() {
           </div>
         )}
 
-        {assegnatiCoda.length === 0 && (
+        {tabDestra === 'coda' && assegnatiCoda.length === 0 && (
           <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12,
             padding: '32px 20px', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
             Nessun progetto in coda — assegna un progetto a un pallet e genera il MAIN
+          </div>
+        )}
+
+        {/* ── TAB LOG ─────────────────────────────────────────────── */}
+        {tabDestra === 'log' && (
+          <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12,
+            padding: '12px 16px', flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
+
+            {/* Header + filtri + refresh */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', flexShrink: 0 }}>
+              <span style={{ fontSize: 13, fontWeight: 800, color: '#0d2d5e' }}>📜 Log turno</span>
+              <button onClick={fetchLog} style={{ marginLeft: 'auto', background: 'none', border: '1px solid #e2e8f0',
+                borderRadius: 6, padding: '3px 10px', cursor: 'pointer', fontSize: 11, color: '#64748b' }}>
+                ↻ Aggiorna
+              </button>
+            </div>
+
+            {/* Filtri tipo */}
+            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', flexShrink: 0 }}>
+              {[
+                { id: 'tutti',      label: 'Tutti',      col: '#64748b' },
+                { id: 'programma',  label: '🔵 Programmi', col: '#1D5FAD' },
+                { id: 'utensile',   label: '🟡 Utensili', col: '#d97706' },
+                { id: 'fermo',      label: '🟠 Fermi',    col: '#f59e0b' },
+                { id: 'allarme',    label: '🔴 Allarmi',  col: '#dc2626' },
+              ].map(f => (
+                <button key={f.id} onClick={() => setLogFiltro(f.id)}
+                  style={{ padding: '3px 9px', borderRadius: 6, border: 'none', cursor: 'pointer',
+                    fontSize: 11, fontWeight: logFiltro === f.id ? 700 : 400,
+                    background: logFiltro === f.id ? f.col + '20' : '#f8fafc',
+                    color: logFiltro === f.id ? f.col : '#64748b',
+                    outline: logFiltro === f.id ? `1.5px solid ${f.col}` : 'none' }}>
+                  {f.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Lista eventi */}
+            {logLoading ? (
+              <div style={{ textAlign: 'center', padding: 20, color: '#94a3b8', fontSize: 12 }}>Caricamento…</div>
+            ) : logEventi.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: 20, color: '#94a3b8', fontSize: 12 }}>
+                Nessun evento oggi
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                {logEventi
+                  .filter(e => logFiltro === 'tutti' || e.tipo === logFiltro)
+                  .map((e, i) => {
+                    const ora = new Date(e.ts).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
+                    const fmtDur = (sec) => {
+                      if (!sec) return null
+                      const m = Math.floor(sec / 60), s = sec % 60
+                      return m > 0 ? `${m}m ${s}s` : `${s}s`
+                    }
+                    const ICONE = { programma: '⚙', utensile: '🔧', fermo: '⏸', pallet: '📦', allarme: '🚨' }
+                    return (
+                      <div key={i} style={{
+                        display: 'flex', alignItems: 'flex-start', gap: 8, padding: '6px 8px',
+                        borderRadius: 6, background: i % 2 === 0 ? '#f8fafc' : '#fff',
+                        borderLeft: `3px solid ${e.colore}${e.ignorato ? '60' : 'ff'}`,
+                        opacity: e.ignorato ? 0.5 : 1,
+                      }}>
+                        <span style={{ fontSize: 10, color: '#94a3b8', fontFamily: 'monospace',
+                          flexShrink: 0, minWidth: 38, marginTop: 2 }}>{ora}</span>
+                        <span style={{ fontSize: 14, flexShrink: 0 }}>{ICONE[e.tipo] || '•'}</span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: '#1e293b',
+                            fontFamily: e.tipo === 'programma' || e.tipo === 'utensile' ? 'monospace' : 'inherit',
+                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {e.testo}
+                          </div>
+                          {e.sub && (
+                            <div style={{ fontSize: 10, color: e.colore, marginTop: 1 }}>{e.sub}</div>
+                          )}
+                        </div>
+                        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                          {e.extra && <div style={{ fontSize: 10, color: '#94a3b8' }}>{e.extra}</div>}
+                          {e.durata_sec && <div style={{ fontSize: 10, color: '#64748b', fontFamily: 'monospace' }}>{fmtDur(e.durata_sec)}</div>}
+                        </div>
+                      </div>
+                    )
+                  })}
+              </div>
+            )}
           </div>
         )}
 

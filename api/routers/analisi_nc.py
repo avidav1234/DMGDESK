@@ -445,18 +445,6 @@ class AnteprimeMainResponse(BaseModel):
     nome_file: str                   # es. "0_MAIN_TEST.MPF"
 
 
-def _seq_num(nome_file: str) -> int:
-    """Estrae il numero sequenziale finale dal filename per l'ordinamento.
-    Es: 4349_0221_02_IPM_003.MPF → 3
-        4349_0221_02_018.MPF     → 18
-    Fallback 9999 se non trovabile.
-    """
-    import re as _re
-    stem = nome_file.upper().replace(".MPF", "")
-    nums = _re.findall(r"\d+", stem)
-    return int(nums[-1]) if nums else 9999
-
-
 def _build_main_content(nome_cartella: str, programmi: List[ProgrammaNC]) -> str:
     """
     Genera il contenuto testuale del file MAIN secondo il formato V14.
@@ -470,10 +458,8 @@ def _build_main_content(nome_cartella: str, programmi: List[ProgrammaNC]) -> str
     """
     cartella_upper = nome_cartella.strip().upper()
 
-    ipm_pgm   = sorted([p for p in programmi if "_IPM_" in p.nome_file.upper()],
-                       key=lambda p: _seq_num(p.nome_file))
-    other_pgm = sorted([p for p in programmi if "_IPM_" not in p.nome_file.upper()],
-                       key=lambda p: _seq_num(p.nome_file))
+    ipm_pgm   = [p for p in programmi if     "_IPM_" in p.nome_file.upper()]
+    other_pgm = [p for p in programmi if not "_IPM_" in p.nome_file.upper()]
     programmi = ipm_pgm + other_pgm
 
     lines = []

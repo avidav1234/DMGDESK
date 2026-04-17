@@ -458,8 +458,13 @@ def _build_main_content(nome_cartella: str, programmi: List[ProgrammaNC]) -> str
     """
     cartella_upper = nome_cartella.strip().upper()
 
-    ipm_pgm   = [p for p in programmi if     "_IPM_" in p.nome_file.upper()]
-    other_pgm = [p for p in programmi if not "_IPM_" in p.nome_file.upper()]
+    def _seq(nome: str) -> int:
+        import re as _re
+        nums = _re.findall(r"\d+", nome.upper().replace(".MPF", ""))
+        return int(nums[-1]) if nums else 9999
+
+    ipm_pgm   = sorted([p for p in programmi if     "_IPM_" in p.nome_file.upper()], key=lambda p: _seq(p.nome_file))
+    other_pgm = sorted([p for p in programmi if not "_IPM_" in p.nome_file.upper()], key=lambda p: _seq(p.nome_file))
     programmi = ipm_pgm + other_pgm
 
     lines = []

@@ -190,17 +190,35 @@ function CodaEsecuzione({ setupData, onOrdineChanged }) {
   )
 }
 
-function LifeBar({ pct }) {
+function LifeBar({ pct, pctStimato, stimaAffidabile }) {
   if (pct === null || pct === undefined)
     return <span style={{ color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>—</span>
   const c = Math.min(100, Math.max(0, pct))
+  const cs = pctStimato != null ? Math.min(100, Math.max(0, pctStimato)) : null
   const color = c < 10 ? 'var(--red)' : c < 30 ? 'var(--amber)' : 'var(--green)'
+  const colorS = cs != null ? (cs < 10 ? 'var(--red)' : cs < 30 ? 'var(--amber)' : '#0369a1') : null
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-      <div style={{ width: 44, height: 4, background: 'var(--border)', borderRadius: 2, overflow: 'hidden' }}>
-        <div style={{ width: `${c}%`, height: '100%', background: color, borderRadius: 2 }} />
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      {/* Valore TOA reale */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div style={{ width: 44, height: 4, background: 'var(--border)', borderRadius: 2, overflow: 'hidden' }}>
+          <div style={{ width: `${c}%`, height: '100%', background: color, borderRadius: 2 }} />
+        </div>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color }}>{Math.round(c)}%</span>
       </div>
-      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color }}>{Math.round(c)}%</span>
+      {/* Stima live — mostrata solo se disponibile */}
+      {cs != null && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div style={{ width: 44, height: 3, background: 'var(--border)', borderRadius: 2, overflow: 'hidden' }}>
+            <div style={{ width: `${cs}%`, height: '100%', background: colorS,
+              borderRadius: 2, opacity: stimaAffidabile ? 1 : 0.5 }} />
+          </div>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: colorS,
+            opacity: stimaAffidabile ? 1 : 0.7 }}>
+            ~{Math.round(cs)}%
+          </span>
+        </div>
+      )}
     </div>
   )
 }
@@ -215,7 +233,7 @@ const COL = {
 function SetupPannel({ setupData, setupPopup, setSetupPopup, onChiudi }) {
   const chiudi = onChiudi || (()=>setSetupPopup&&setSetupPopup(false))
   if (!setupPopup || !setupData) return null
-  const {non_utilizzati, da_montare, fin_vita, previsione_vita=[]} = setupData
+  const {non_utilizzati, da_montare, fin_vita, previsione_vita=[], stime_live={}} = setupData
   const [q, setQ] = useState('')
   const filter = items => q.trim()
     ? items.filter(i => i.alias?.toLowerCase().includes(q.toLowerCase()))
@@ -739,7 +757,15 @@ export default function Macchina() {
                     <td style={{ padding: '9px 14px', fontFamily: 'var(--font-mono)', fontSize: 12,
                       color: 'var(--text-secondary)' }}>{t.radius?.toFixed(3)}</td>
                     {/* Vita */}
-                    <td style={{ padding: '9px 14px' }}><LifeBar pct={t.life_percent} /></td>
+                    <td style={{ padding: '9px 14px' }}>{(()=>{
+                      const alias = (t.name||'').toUpperCase().trim()
+                      const stima = stime_live?.[alias]
+                      return <LifeBar
+                        pct={t.life_percent}
+                        pctStimato={stima?.life_percent_stimato}
+                        stimaAffidabile={stima?.stima_affidabile}
+                      />
+                    })()}</td>
                     {/* Cicli — dati storici da lavorazioni_log */}
                     {(()=>{
                       const alias = (t.name||'').toUpperCase().trim()

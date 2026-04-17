@@ -478,9 +478,15 @@ export default function Home(){
     })
     ;(setup.fin_vita||[]).forEach(u=>{
       const pct=typeof u.life_percent==='number'?u.life_percent:null
-      if(!map[u.alias]) map[u.alias]={alias:u.alias,tipo:'fin_vita',label:pct!==null?`${pct.toFixed(0)}%`:'FINE VITA',color:'#c2410c',bg:'#fff7ed',border:'#fdba74',
+      const pctS=typeof u.life_percent_stimato==='number'?u.life_percent_stimato:null
+      // Mostra stima se disponibile e diversa dal TOA (almeno 2% di scarto)
+      const labelVita = pctS!=null && Math.abs(pct-pctS)>=2
+        ? `${pct!=null?pct.toFixed(0):'?'}% →~${pctS.toFixed(0)}%`
+        : pct!=null?`${pct.toFixed(0)}%`:'FINE VITA'
+      if(!map[u.alias]) map[u.alias]={alias:u.alias,tipo:'fin_vita',label:labelVita,color:'#c2410c',bg:'#fff7ed',border:'#fdba74',
         detail:(u.progetti||[]).length>0?(u.progetti||[]).map(r=>r.progetto).join(', '):`pos. ${u.position||u.posizione||'—'}`,
-        posizione:u.position||u.posizione,progetti:u.progetti||[]}
+        posizione:u.position||u.posizione,progetti:u.progetti||[],
+        pctStimato:pctS,stimaAffidabile:u.stima_affidabile}
     })
     ;(setup.previsione_vita?.utensili_critici||[]).forEach(u=>{
       if(!map[u.alias]) map[u.alias]={alias:u.alias,tipo:'rischio',label:`pgm ${u.programma_critico||'?'}`,color:'#7c3aed',bg:'#f5f3ff',border:'#c4b5fd',
@@ -657,14 +663,26 @@ export default function Home(){
                     const utSetup = [...(setup.fin_vita||[]),...(setup.previsione_vita||[])].find(u=>(u.alias||'').toUpperCase()===alias)
                     if(!utSetup||utSetup.life_percent==null) return null
                     const pct = Math.round(utSetup.life_percent)
+                    const pctS = typeof utSetup.life_percent_stimato==='number' ? Math.round(utSetup.life_percent_stimato) : null
                     const col = pct < 20 ? '#ef4444' : pct < 40 ? '#f59e0b' : '#4ade80'
+                    const colS = pctS!=null ? (pctS < 20 ? '#ef4444' : pctS < 40 ? '#f59e0b' : '#60a5fa') : null
                     return (
                       <div style={{textAlign:'right',flexShrink:0}}>
                         <div style={{fontSize:20,fontWeight:900,color:col,fontFamily:'monospace'}}>{pct}%</div>
+                        {pctS!=null && Math.abs(pct-pctS)>=2 && (
+                          <div style={{fontSize:13,fontWeight:700,color:colS,fontFamily:'monospace',opacity:0.85}}>~{pctS}%</div>
+                        )}
                         <div style={{height:4,width:54,background:'#1e3a5f',borderRadius:2,marginTop:3,overflow:'hidden'}}>
                           <div style={{height:'100%',width:`${pct}%`,background:col,borderRadius:2}}/>
                         </div>
-                        <div style={{fontSize:9,color:'#93c5fd',marginTop:2}}>vita residua</div>
+                        {pctS!=null && Math.abs(pct-pctS)>=2 && (
+                          <div style={{height:3,width:54,background:'#1e3a5f',borderRadius:2,marginTop:2,overflow:'hidden'}}>
+                            <div style={{height:'100%',width:`${pctS}%`,background:colS,borderRadius:2,opacity:0.7}}/>
+                          </div>
+                        )}
+                        <div style={{fontSize:9,color:'#93c5fd',marginTop:2}}>
+                          {pctS!=null && Math.abs(pct-pctS)>=2 ? 'TOA → stimato' : 'vita residua'}
+                        </div>
                       </div>
                     )
                   })()}

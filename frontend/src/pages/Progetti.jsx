@@ -189,9 +189,13 @@ function ProgramRow({pgm,gruppo,onStato,onOperatore,onTempo,onRemove,toolStatus,
   const[editingT,setEditingT]=useState(false)
   const sc=_sc(pgm.stato)
   const opClean=(pgm.tipoOp||'').replace(/[-–]\s*NESSUN TESTO\s*/gi,'').replace(/MISURAZIONE NEL PROCESSO[-–]?/gi,'MISURA ').trim()
-  const isIpmInline = pgm.tipoGruppo==='ipm' && !/_IPM_/i.test(pgm.filename||'')
+  // isIpmGroup: file con _IPM_ → nel gruppo TASTATURA → sfondo viola pieno
+  // isIpmInline: RENISHAW senza _IPM_ → rimane in FRESATURA → stesso sfondo viola
+  const isIpmGroup  = /_IPM_/i.test(pgm.filename||'')
+  const isIpmInline = pgm.tipoGruppo==='ipm' && !isIpmGroup
+  const isIpm = isIpmGroup || isIpmInline
   return(
-    <div style={{borderBottom:`1px solid ${T.border}`,borderLeft:isIpmInline?'3px solid #8B2FC9':'3px solid transparent',background:selected?'#EFF6FF':pgm.stato==='completato'?'#f0fdf4':['in_main','in_lavorazione','in_macchina'].includes(pgm.stato)?'#eff6ff':isIpmInline?'#F3E8FF':T.surface,opacity:pgm.stato==='completato'&&!selected?0.75:1,transition:'background 0.15s'}}>
+    <div style={{borderBottom:`1px solid ${T.border}`,borderLeft:isIpm?'3px solid #8B2FC9':'3px solid transparent',background:selected?'#EFF6FF':pgm.stato==='completato'?'#f0fdf4':['in_main','in_lavorazione','in_macchina'].includes(pgm.stato)?'#eff6ff':isIpm?'#F3E8FF':T.surface,opacity:pgm.stato==='completato'&&!selected?0.75:1,transition:'background 0.15s'}}>
       <div style={{display:'flex',alignItems:'center',minHeight:38}}>
         {/* Checkbox */}
         <div onClick={e=>{e.stopPropagation();onSelect&&onSelect()}}

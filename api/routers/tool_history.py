@@ -324,16 +324,21 @@ async def classifica_sostituzione(ts: str, body: dict = Body(...)):
     if causa not in CAUSE_VALIDE:
         from fastapi import HTTPException
         raise HTTPException(400, f"causa non valida: {causa}. Valide: {CAUSE_VALIDE}")
+    # Normalizza il ts per confronto (rimuove spazi, gestisce varianti)
+    ts_norm = ts.strip().replace(" ", "T")
     aggiornato = False
     for r in records:
-        if r.get("ts") == ts:
+        r_ts = (r.get("ts") or "").strip()
+        if r_ts == ts_norm or r_ts == ts:
             r["causa"]            = causa
             r["classificato_ts"]  = datetime.now().isoformat(timespec="seconds")
             aggiornato = True
+            log.info(f"tool_history: classificata sostituzione {r.get('alias')} ts={r_ts} causa={causa}")
             break
     if not aggiornato:
+        log.warning(f"tool_history: sostituzione non trovata ts={ts!r} — records ts: {[r.get('ts') for r in records[-5:]]}")
         from fastapi import HTTPException
-        raise HTTPException(404, "sostituzione non trovata")
+        raise HTTPException(404, f"sostituzione non trovata: {ts!r}")
     _save_history(config, records)
     return {"ok": True, "ts": ts, "causa": causa}
 
@@ -347,16 +352,19 @@ async def ignora_sostituzione(ts: str):
     from database.db_handler import carica_configurazione as _cfg
     config  = _cfg()
     records = _load_history(config)
+    ts_norm = ts.strip().replace(" ", "T")
     aggiornato = False
     for r in records:
-        if r.get("ts") == ts:
+        r_ts = (r.get("ts") or "").strip()
+        if r_ts == ts_norm or r_ts == ts:
             r["causa"]           = "ignorata"
             r["classificato_ts"] = datetime.now().isoformat(timespec="seconds")
             aggiornato = True
+            log.info(f"tool_history: ignorata sostituzione {r.get('alias')} ts={r_ts}")
             break
     if aggiornato:
         _save_history(config, records)
-    return {"ok": True, "ts": ts}
+    return {"ok": True, "ts": ts, "aggiornato": aggiornato}
 
 
 @router.get("/sostituzioni/non-classificate")

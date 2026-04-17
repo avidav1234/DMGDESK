@@ -194,23 +194,45 @@ def _parse_mpf_metadati(path: Path) -> dict:
     if not tipo == "ipm" and "RENISHAW" in utensile.upper():
         tipo = "ipm"
 
-    # ── tipoOp: prima riga con pattern N\d+; (descrizione operazione) ─
+    # ── tipoOp: parte dal PRIMO M6 e risale cercando il commento operazione ─
+    # L'intestazione generale del file (CIMATRON, DOCUMENTO NC, NOME POST...)
+    # non è la procedura. La procedura è il commento "N<nnn>; <descrizione>"
+    # più vicino al richiamo utensile, es:
+    #     N18; FORATURA AUTO 3X_122 - NESSUN TESTO
+    #     N19; DIAMETER: 12 CORNER RADIUS: 0
+    #     N20; TOOL COMMENT: PI12-5VDF100H10
+    #     N21 T = "PI12-5VDF100H10"; T261
+    #     N22 M6
+    _HDR_RE = re.compile(r"^\s*N\d+\s*;\s*(.+?)\s*$")
+    _SKIP_KW = [
+        "DIAMETER", "TOOL COMMENT", "CIMATRON", "DOCUMENTO NC",
+        "NOME POST", "VERSIONE POST", "REVISIONE", "DATA MODIFICA",
+        "DATA ESECUZIONE", "N.UT", "UTENTE", "COMMESSA", "PROGRAMMA:",
+        "AUTORE", "OPERATORE", "CLIENTE", "MACCHINA:",
+    ]
+
+    def _estrai_procedura_da_m6(m6_idx: int, max_su: int = 30) -> str:
+        """Risale da M6 fino a max_su righe cercando il commento operazione."""
+        for i in range(m6_idx - 1, max(-1, m6_idx - max_su), -1):
+            mh = _HDR_RE.match(lines[i])
+            if not mh:
+                continue
+            body = mh.group(1).strip()
+            if len(body) < 3:
+                continue
+            body_up = body.upper()
+            if any(kw in body_up for kw in _SKIP_KW):
+                continue
+            # Salta "CHIAVE: valore numerico" (es. DIAMETER residuo, TEMPO:, ecc.)
+            if re.match(r"^[A-Z_\s\.]+:\s*[\d\.\-]", body):
+                continue
+            return body
+        return ""
+
     tipo_op = ""
-    for l in lines:
-        import re as _re
-        if not _re.search(r"N\d+;", l):
-                continue
-            l_up = l.upper()
-            skip_kw = ["DIAMETER", "TOOL COMMENT", "CIMATRON", "DOCUMENTO",
-                       "POST", "REVISIONE", "DATA", "N.UT", "UTENTE",
-                       "COMMESSA", "PROGRAMMA:", "VERSIONE", "AUTORE",
-                       "OPERATORE", "CLIENTE", "MACCHINA:"]
-            if any(kw in l_up for kw in skip_kw):
-                continue
-            cleaned = _re.sub(r"N\d+;\s*", "", l).strip()
-            if len(cleaned) > 3:
-                tipo_op = cleaned
-                break
+    primo_m6_idx = next((i for i, l in enumerate(lines) if re.search(r"\bM6\b", l)), -1)
+    if primo_m6_idx > 0:
+        tipo_op = _estrai_procedura_da_m6(primo_m6_idx)
 
     # ── diametro ───────────────────────────────────────────────────────
     diametro = ""
@@ -241,10 +263,10 @@ def _parse_mpf_metadati(path: Path) -> dict:
     # ── utensili con tempi per M6 (compatibile con caricamento manuale) ─
     utensili_con_tempi = []
     for idx, line in enumerate(lines):
-        if not re.search(r"M6", line):
+        if not re.search(r"\bM6\b", line):
             continue
         alias_m6 = ""
-        for i in range(idx - 1, max(0, idx - 5), -1):
+        for i in range(idx - 1, max(-1, idx - 5), -1):
             m = re.search(r'T\s*=\s*"([^"]+)"', lines[i])
             if m:
                 alias_m6 = m.group(1).strip()
@@ -253,7 +275,12 @@ def _parse_mpf_metadati(path: Path) -> dict:
             continue
         raw_t = (re.search(r"TEMPO\s*:\s*([\d:]+)", line, re.IGNORECASE) or [None, None])[1]
         tempo_min = parse_tempo(raw_t) if raw_t else None
-        utensili_con_tempi.append({"alias": alias_m6, "tempoMin": tempo_min})
+        procedura_m6 = _estrai_procedura_da_m6(idx)
+        utensili_con_tempi.append({
+            "alias":     alias_m6,
+            "tempoMin":  tempo_min,
+            "procedura": procedura_m6,
+        })
 
     # ── Info da filename ───────────────────────────────────────────────
     info = _estrai_info_filename(path.name)

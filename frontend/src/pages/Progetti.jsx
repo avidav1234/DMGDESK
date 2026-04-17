@@ -1522,6 +1522,7 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
   const [toolsDB, setToolsDB] = useState(null)
   const [palletError, setPalletError] = useState(null)  // errore assegnazione pallet
   const [selectedIds, setSelectedIds] = useState(new Set())
+  const [lancioInitialIds, setLancioInitialIds] = useState(new Set())
   const [showLancioModal, setShowLancioModal] = useState(()=>{
     // Apri automaticamente se arrivato dalla Coda con bottone Avvia
     const flag = sessionStorage.getItem('dmgdesk_apri_modal_lancio')
@@ -1674,7 +1675,7 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
 
           {/* CTA primaria */}
           {mpfList.length>0&&(
-            <button onClick={()=>setShowLancioModal(true)}
+            <button onClick={()=>{ setLancioInitialIds(new Set(selectedIds)); setShowLancioModal(true) }}
               style={{background:'#0d2d5e',border:'none',borderRadius:8,color:'#fff',fontWeight:800,fontSize:13,padding:'7px 16px',cursor:'pointer',flexShrink:0}}>
               📄 Lancia in NC →
             </button>
@@ -2072,7 +2073,7 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
         project={project}
         toolsDB={toolsDB}
 
-        initialSelectedIds={selectedIds}
+        initialSelectedIds={lancioInitialIds}
         onClose={()=>setShowLancioModal(false)}
         onLancia={pgmSelezionati=>{
           setShowLancioModal(false)

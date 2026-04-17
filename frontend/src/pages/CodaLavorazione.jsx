@@ -65,10 +65,9 @@ export default function CodaLavorazione() {
   const [pgmSaving, setPgmSaving] = useState(false);
   // Pallet espansi nella coda unificata
   const [palletEspansi, setPalletEspansi] = useState(new Set());
-  const [tabDestra, setTabDestra]     = useState('coda')  // 'coda' | 'log'
   const [logEventi, setLogEventi]     = useState([])
   const [logLoading, setLogLoading]   = useState(false)
-  const [logFiltro, setLogFiltro]     = useState('tutti') // tutti|programmi|fermi|utensili|pallet|allarmi
+  const [logFiltro, setLogFiltro]     = useState('tutti')
 
   const fetchLiveContext = async () => {
     try {
@@ -210,8 +209,7 @@ export default function CodaLavorazione() {
         caricaPgmInMacchina()
         // Risincronizza la coda: un completato potrebbe rimuovere un pallet
         fetch('/api/pallet/sincronizza-coda', { method: 'POST' })
-        // Aggiorna log se tab log è attiva
-        if (tabDestra === 'log') fetchLog()
+        fetchLog()
           .then(r => r.ok ? r.json() : null)
           .then(d => { if (d?.aggiornato) setCodaOrdine(d.ordine || []) })
           .catch(() => {})
@@ -538,6 +536,34 @@ export default function CodaLavorazione() {
         }
       }
 
+      // Cambi pallet dai dati pallet
+      try {
+        const palRes = await fetch('/api/pallet/').then(r => r.ok ? r.json() : null)
+        if (palRes?.pallet) {
+          for (const pal of palRes.pallet) {
+            if (pal.aggiornato && pal.progetto_nome && pal.stato !== 'vuoto') {
+              // Mostra solo pallet aggiornati oggi
+              const aggTs = pal.aggiornato.includes('T') ? pal.aggiornato
+                : pal.aggiornato.split(' ').reverse().join('T').replace(/(\d{2})\/(\d{2})\/(\d{4})/, '$3-$2-$1') + 'T' + (pal.aggiornato.split(' ')[1] || '00:00')
+              const today2 = new Date().toISOString().slice(0, 10)
+              try {
+                const d = new Date(aggTs)
+                if (!isNaN(d) && d.toISOString().slice(0,10) === today2) {
+                  const statoLabel = { grezzo:'IN CODA', in_lavorazione:'IN LAVORAZIONE', finito:'FINITO', guasto:'GUASTO', vuoto:'VUOTO' }
+                  eventi.push({
+                    tipo: 'pallet',
+                    ts: aggTs,
+                    testo: `P${pal.numero} → ${statoLabel[pal.stato] || pal.stato}`,
+                    sub: pal.progetto_nome,
+                    colore: '#7c3aed',
+                  })
+                }
+              } catch {}
+            }
+          }
+        }
+      } catch {}
+
       // Allarmi dalla macchina live
       if (macchina?.allarme_attivo) {
         eventi.push({
@@ -560,9 +586,8 @@ export default function CodaLavorazione() {
   }
 
   // Carica log quando si apre il tab
-  useEffect(() => {
-    if (tabDestra === 'log') fetchLog()
-  }, [tabDestra])
+  // Carica log all'avvio
+  useEffect(() => { fetchLog() }, [])
 
   return (
     <div style={{
@@ -1044,25 +1069,13 @@ export default function CodaLavorazione() {
         </div>
       , document.body)}
 
-      {/* COL DESTRA */}
+      {/* COL DESTRA — Coda sopra + Log sotto */}
       <div style={{ flex: '0 0 calc(50% - 7px)', display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0, overflow: 'hidden' }}>
 
-        {/* ── Tab switcher Coda / Log ─────────────────────────────── */}
-        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-          {[{id:'coda', label:'📋 Coda esecuzione'}, {id:'log', label:'📜 Log turno'}].map(t => (
-            <button key={t.id} onClick={() => setTabDestra(t.id)}
-              style={{ flex: 1, padding: '7px 10px', borderRadius: 8, border: 'none', cursor: 'pointer',
-                fontWeight: 700, fontSize: 12,
-                background: tabDestra === t.id ? '#0d2d5e' : '#e2e8f0',
-                color: tabDestra === t.id ? '#fff' : '#64748b' }}>
-              {t.label}
-            </button>
-          ))}
-        </div>
-
-        {/* ── TAB CODA ─────────────────────────────────────────────── */}
-        {tabDestra === 'coda' && assegnatiCoda.length > 0 && (
-          <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '12px 16px', flex: 1, overflowY: 'auto' }}>
+        {/* ── CODA ESECUZIONE (altezza fissa, max 40% dello spazio) ── */}
+        <div style={{ flexShrink: 0 }}>
+          {assegnatiCoda.length > 0 && (
+<div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '12px 16px', flex: 1, overflowY: 'auto' }}>
             {/* Header */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
               <span style={{ fontSize: 13, fontWeight: 800, color: '#0d2d5e' }}>📋 Coda esecuzione</span>
@@ -1209,58 +1222,63 @@ export default function CodaLavorazione() {
               </div>
             )}
           </div>
-        )}
 
-        {tabDestra === 'coda' && assegnatiCoda.length === 0 && (
-          <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12,
-            padding: '32px 20px', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
-            Nessun progetto in coda — assegna un progetto a un pallet e genera il MAIN
+          )}
+          {assegnatiCoda.length === 0 && (
+            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12,
+              padding: '16px 20px', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
+              Nessun progetto in coda — assegna un progetto a un pallet e genera il MAIN
+            </div>
+          )}
+        </div>
+
+        {/* ── LOG TURNO (spazio rimanente, scrollabile) ────────────── */}
+        <div style={{ flex: 1, minHeight: 0, background: '#fff', border: '1px solid #e2e8f0',
+          borderRadius: 12, padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 6, overflow: 'hidden' }}>
+
+          {/* Header + refresh */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+            <span style={{ fontSize: 12, fontWeight: 800, color: '#0d2d5e' }}>📜 Log turno</span>
+            <span style={{ fontSize: 10, color: '#94a3b8' }}>
+              {logEventi.length > 0 ? `${logEventi.length} eventi` : ''}
+            </span>
+            <button onClick={fetchLog}
+              style={{ marginLeft: 'auto', background: 'none', border: '1px solid #e2e8f0',
+                borderRadius: 6, padding: '2px 8px', cursor: 'pointer', fontSize: 11, color: '#64748b' }}>
+              ↻
+            </button>
           </div>
-        )}
 
-        {/* ── TAB LOG ─────────────────────────────────────────────── */}
-        {tabDestra === 'log' && (
-          <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12,
-            padding: '12px 16px', flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
-
-            {/* Header + filtri + refresh */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', flexShrink: 0 }}>
-              <span style={{ fontSize: 13, fontWeight: 800, color: '#0d2d5e' }}>📜 Log turno</span>
-              <button onClick={fetchLog} style={{ marginLeft: 'auto', background: 'none', border: '1px solid #e2e8f0',
-                borderRadius: 6, padding: '3px 10px', cursor: 'pointer', fontSize: 11, color: '#64748b' }}>
-                ↻ Aggiorna
+          {/* Filtri */}
+          <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', flexShrink: 0 }}>
+            {[
+              { id: 'tutti',     label: 'Tutti',     col: '#64748b' },
+              { id: 'programma', label: '⚙ Pgm',     col: '#1D5FAD' },
+              { id: 'utensile',  label: '🔧 Utens.',  col: '#d97706' },
+              { id: 'fermo',     label: '⏸ Fermi',   col: '#f59e0b' },
+              { id: 'allarme',   label: '🚨 Allarmi', col: '#dc2626' },
+              { id: 'pallet',    label: '📦 Pallet',  col: '#7c3aed' },
+            ].map(f => (
+              <button key={f.id} onClick={() => setLogFiltro(f.id)}
+                style={{ padding: '2px 7px', borderRadius: 5, border: 'none', cursor: 'pointer',
+                  fontSize: 10, fontWeight: logFiltro === f.id ? 700 : 400,
+                  background: logFiltro === f.id ? f.col : '#f1f5f9',
+                  color: logFiltro === f.id ? '#fff' : '#64748b' }}>
+                {f.label}
               </button>
-            </div>
+            ))}
+          </div>
 
-            {/* Filtri tipo */}
-            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', flexShrink: 0 }}>
-              {[
-                { id: 'tutti',      label: 'Tutti',      col: '#64748b' },
-                { id: 'programma',  label: '🔵 Programmi', col: '#1D5FAD' },
-                { id: 'utensile',   label: '🟡 Utensili', col: '#d97706' },
-                { id: 'fermo',      label: '🟠 Fermi',    col: '#f59e0b' },
-                { id: 'allarme',    label: '🔴 Allarmi',  col: '#dc2626' },
-              ].map(f => (
-                <button key={f.id} onClick={() => setLogFiltro(f.id)}
-                  style={{ padding: '3px 9px', borderRadius: 6, border: 'none', cursor: 'pointer',
-                    fontSize: 11, fontWeight: logFiltro === f.id ? 700 : 400,
-                    background: logFiltro === f.id ? f.col + '20' : '#f8fafc',
-                    color: logFiltro === f.id ? f.col : '#64748b',
-                    outline: logFiltro === f.id ? `1.5px solid ${f.col}` : 'none' }}>
-                  {f.label}
-                </button>
-              ))}
-            </div>
-
-            {/* Lista eventi */}
+          {/* Lista eventi scrollabile */}
+          <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
             {logLoading ? (
               <div style={{ textAlign: 'center', padding: 20, color: '#94a3b8', fontSize: 12 }}>Caricamento…</div>
-            ) : logEventi.length === 0 ? (
+            ) : logEventi.filter(e => logFiltro === 'tutti' || e.tipo === logFiltro).length === 0 ? (
               <div style={{ textAlign: 'center', padding: 20, color: '#94a3b8', fontSize: 12 }}>
-                Nessun evento oggi
+                {logEventi.length === 0 ? 'Nessun evento oggi — clicca ↻ per caricare' : 'Nessun evento di questo tipo'}
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                 {logEventi
                   .filter(e => logFiltro === 'tutti' || e.tipo === logFiltro)
                   .map((e, i) => {
@@ -1268,32 +1286,32 @@ export default function CodaLavorazione() {
                     const fmtDur = (sec) => {
                       if (!sec) return null
                       const m = Math.floor(sec / 60), s = sec % 60
-                      return m > 0 ? `${m}m ${s}s` : `${s}s`
+                      return m > 0 ? `${m}m` : `${s}s`
                     }
                     const ICONE = { programma: '⚙', utensile: '🔧', fermo: '⏸', pallet: '📦', allarme: '🚨' }
+                    const COLORI = { programma: '#1D5FAD', utensile: '#d97706', fermo: '#f59e0b', pallet: '#7c3aed', allarme: '#dc2626' }
+                    const col = COLORI[e.tipo] || '#94a3b8'
                     return (
                       <div key={i} style={{
-                        display: 'flex', alignItems: 'flex-start', gap: 8, padding: '6px 8px',
-                        borderRadius: 6, background: i % 2 === 0 ? '#f8fafc' : '#fff',
-                        borderLeft: `3px solid ${e.colore}${e.ignorato ? '60' : 'ff'}`,
-                        opacity: e.ignorato ? 0.5 : 1,
+                        display: 'flex', alignItems: 'center', gap: 6, padding: '5px 6px',
+                        borderRadius: 5, borderLeft: `2px solid ${col}`,
+                        background: i % 2 === 0 ? '#f8fafc' : '#fff',
+                        opacity: e.ignorato ? 0.45 : 1,
                       }}>
-                        <span style={{ fontSize: 10, color: '#94a3b8', fontFamily: 'monospace',
-                          flexShrink: 0, minWidth: 38, marginTop: 2 }}>{ora}</span>
-                        <span style={{ fontSize: 14, flexShrink: 0 }}>{ICONE[e.tipo] || '•'}</span>
+                        <span style={{ fontSize: 9, color: '#94a3b8', fontFamily: 'monospace',
+                          flexShrink: 0, minWidth: 34 }}>{ora}</span>
+                        <span style={{ fontSize: 12, flexShrink: 0 }}>{ICONE[e.tipo] || '•'}</span>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 12, fontWeight: 700, color: '#1e293b',
-                            fontFamily: e.tipo === 'programma' || e.tipo === 'utensile' ? 'monospace' : 'inherit',
-                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: '#1e293b',
+                            fontFamily: ['programma','utensile'].includes(e.tipo) ? 'monospace' : 'inherit',
+                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>
                             {e.testo}
-                          </div>
-                          {e.sub && (
-                            <div style={{ fontSize: 10, color: e.colore, marginTop: 1 }}>{e.sub}</div>
-                          )}
+                          </span>
+                          {e.sub && <span style={{ fontSize: 9, color: col }}>{e.sub}</span>}
                         </div>
-                        <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                          {e.extra && <div style={{ fontSize: 10, color: '#94a3b8' }}>{e.extra}</div>}
-                          {e.durata_sec && <div style={{ fontSize: 10, color: '#64748b', fontFamily: 'monospace' }}>{fmtDur(e.durata_sec)}</div>}
+                        <div style={{ textAlign: 'right', flexShrink: 0, minWidth: 0 }}>
+                          {e.extra && <div style={{ fontSize: 9, color: '#94a3b8', whiteSpace: 'nowrap' }}>{e.extra}</div>}
+                          {e.durata_sec > 0 && <div style={{ fontSize: 9, color: '#64748b', fontFamily: 'monospace' }}>{fmtDur(e.durata_sec)}</div>}
                         </div>
                       </div>
                     )
@@ -1301,7 +1319,7 @@ export default function CodaLavorazione() {
               </div>
             )}
           </div>
-        )}
+        </div>
 
       </div>
       </div>

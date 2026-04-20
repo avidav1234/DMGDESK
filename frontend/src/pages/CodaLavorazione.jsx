@@ -69,6 +69,7 @@ export default function CodaLavorazione() {
   const [logEventi, setLogEventi]     = useState([])
   const [logLoading, setLogLoading]   = useState(false)
   const [logFiltro, setLogFiltro]     = useState('tutti')
+  const [fermoInClassifica, setFermoInClassifica] = useState(null)
 
   const fetchLiveContext = async () => {
     try {

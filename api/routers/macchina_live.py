@@ -1200,6 +1200,7 @@ async def aggiorna_stati_da_log():
             override_feed      = data.get("override_feed"),
             override_mandrino  = data.get("override_mandrino"),
             stop_type          = updates.get("stop_type"),
+            allarme_testo      = data.get("allarme"),   # testo allarme Sinumerik attivo
         )
     except Exception as _e:
         updates["_report_err"] = str(_e)

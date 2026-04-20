@@ -192,6 +192,7 @@ def aggiorna_da_log(
     override_mandrino: Optional[int] = None,
     stop_type: Optional[str] = None,   # "reset" | "stop" | "search" | None
     progetto_id: Optional[str] = None,
+    allarme_testo: Optional[str] = None,
 ):
     """
     Chiamato da aggiorna-stati-da-log ogni 5 secondi.
@@ -297,6 +298,8 @@ def aggiorna_da_log(
             # Traccia inizio fermo globale (per heatmap/tabella fermi)
             if not sc.get("fermo_globale_inizio"):
                 sc["fermo_globale_inizio"] = now
+                if allarme_testo:
+                    sc["fermo_globale_allarme"] = allarme_testo
             dirty = True
 
             if sc.get("in_esecuzione"):
@@ -421,7 +424,8 @@ def aggiorna_da_log(
 
             # Quando la macchina riparte, azzera il tracker del fermo
             # Registra l'intervallo di fermo globale (per heatmap/tabella)
-            fermo_glob_inizio = sc.pop("fermo_globale_inizio", None)
+            fermo_glob_inizio  = sc.pop("fermo_globale_inizio", None)
+            fermo_glob_allarme = sc.pop("fermo_globale_allarme", None)
             if fermo_glob_inizio:
                 try:
                     _dur = int((datetime.fromisoformat(now) -
@@ -444,6 +448,7 @@ def aggiorna_da_log(
                                         "fine":   _data_fine + "T00:00:00",
                                         "durata_sec": _dur_troncato,
                                         "data":   _data_inizio,
+                                        "allarme_testo": fermo_glob_allarme,
                                     })
                                 # Aggiungi anche la parte di oggi (da mezzanotte a ora)
                                 _dur_oggi = int((datetime.fromisoformat(now) - _mezzanotte).total_seconds())
@@ -453,6 +458,7 @@ def aggiorna_da_log(
                                         "fine":   now,
                                         "durata_sec": _dur_oggi,
                                         "data":   _data_fine,
+                                        "allarme_testo": fermo_glob_allarme,
                                     })
                             except Exception:
                                 # Fallback: usa dati originali con data inizio
@@ -461,6 +467,7 @@ def aggiorna_da_log(
                                     "fine":   now,
                                     "durata_sec": _dur,
                                     "data":   _data_inizio,
+                                    "allarme_testo": fermo_glob_allarme,
                                 })
                         else:
                             data.setdefault("fermi_globali", []).append({
@@ -468,6 +475,7 @@ def aggiorna_da_log(
                                 "fine":   now,
                                 "durata_sec": _dur,
                                 "data":   _data_inizio,
+                                "allarme_testo": fermo_glob_allarme,
                             })
                         # Mantieni solo ultimi 500 fermi globali
                         if len(data["fermi_globali"]) > 500:

@@ -576,7 +576,7 @@ export default function CodaLavorazione() {
             ts: f.inizio,
             ts_fine: f.fine,
             durata_sec: f.durata_sec,
-            testo: 'Fermo per allarme',
+            testo: f.allarme_testo || 'Fermo per allarme',
             sub: f.durata_sec ? null : 'In corso',
             colore: '#dc2626',
           })

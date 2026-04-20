@@ -607,7 +607,35 @@ export default function CodaLavorazione() {
   // Carica log all'avvio
   useEffect(() => { fetchLog() }, [])
 
+  // Handler classificazione fermo dal log
+  const handleClassificaFermoLog = async (causa) => {
+    if (!fermoInClassifica) return
+    try {
+      await fetch('/api/report/fermi/classifica', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inizio: fermoInClassifica.ts, causa })
+      })
+      setLogEventi(ev => ev.map(e =>
+        e.ts === fermoInClassifica.ts && e.tipo === 'fermo'
+          ? { ...e, causa, sub: causa.replace(/_/g,' ') }
+          : e
+      ))
+    } catch(err) { console.error(err) }
+    finally { setFermoInClassifica(null) }
+  }
+
   return (
+    <>
+      {fermoInClassifica && (
+        <PopupFermo
+          fermoSec={fermoInClassifica.durata_sec}
+          tsInizio={fermoInClassifica.ts}
+          tsFine={fermoInClassifica.ts_fine}
+          onClassifica={handleClassificaFermoLog}
+          onIgnora={()=>setFermoInClassifica(null)}
+        />
+      )}
     <div style={{
       display: "flex",
       flexDirection: "column",
@@ -1345,5 +1373,6 @@ export default function CodaLavorazione() {
       </div>
       </div>
     </div>
+    </>
   );
 }

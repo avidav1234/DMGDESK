@@ -71,6 +71,10 @@ export default function CodaLavorazione() {
   const [logLoading, setLogLoading]   = useState(false)
   const [logFiltro, setLogFiltro]     = useState('tutti')
   const [fermoInClassifica, setFermoInClassifica] = useState(null)
+  const [logData, setLogData]         = useState(new Date().toISOString().slice(0,10))
+  const [logFiltroOra, setLogFiltroOra] = useState('tutto')   // tutto|mattina|pomeriggio|notte|custom
+  const [logOraFrom, setLogOraFrom]   = useState('00:00')
+  const [logOraTo, setLogOraTo]       = useState('23:59')
 
   const fetchLiveContext = async () => {
     try {
@@ -479,13 +483,16 @@ export default function CodaLavorazione() {
   }
 
   // ── Fetch log eventi ──────────────────────────────────────────────
-  const fetchLog = async () => {
+  const fetchLog = async (dataParam) => {
     setLogLoading(true)
+    const dataTarget = dataParam || logData
     try {
       const today = new Date().toISOString().slice(0, 10)
       const [rpt, macchina] = await Promise.all([
-        fetch(`/api/report/giornaliero?data=${today}`).then(r => r.ok ? r.json() : null),
-        fetch('/api/macchina-live/stato').then(r => r.ok ? r.json() : null),
+        fetch(`/api/report/giornaliero?data=${dataTarget}`).then(r => r.ok ? r.json() : null),
+        dataTarget === today
+          ? fetch('/api/macchina-live/stato').then(r => r.ok ? r.json() : null)
+          : Promise.resolve(null),  // dati live solo per oggi
       ])
       const eventi = []
 
@@ -618,7 +625,7 @@ export default function CodaLavorazione() {
 
   // Carica log quando si apre il tab
   // Carica log all'avvio
-  useEffect(() => { fetchLog() }, [])
+  useEffect(() => { fetchLog(logData) }, [logData])
 
   // Handler classificazione fermo dal log
   const handleClassificaFermoLog = async (causa) => {
@@ -1295,20 +1302,81 @@ export default function CodaLavorazione() {
         <div style={{ flex: 1, minHeight: 0, background: '#fff', border: '1px solid #e2e8f0',
           borderRadius: 12, padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 6, overflow: 'hidden' }}>
 
-          {/* Header + refresh */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-            <span style={{ fontSize: 14, fontWeight: 800, color: '#0d2d5e' }}>📜 Log turno</span>
-            <span style={{ fontSize: 11, color: '#94a3b8' }}>
+          {/* Header: titolo + navigazione data + refresh + esporta */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 14, fontWeight: 800, color: '#0d2d5e' }}>📜 Log</span>
+            {/* Navigazione data */}
+            <button onClick={() => {
+                const d = new Date(logData); d.setDate(d.getDate()-1)
+                setLogData(d.toISOString().slice(0,10))
+              }} style={{ background: 'none', border: '1px solid #e2e8f0', borderRadius: 5,
+                padding: '2px 7px', cursor: 'pointer', fontSize: 12, color: '#64748b' }}>‹</button>
+            <input type="date" value={logData} onChange={e => setLogData(e.target.value)}
+              style={{ border: '1px solid #e2e8f0', borderRadius: 6, padding: '3px 7px',
+                fontSize: 12, color: '#0d2d5e', fontWeight: 700, cursor: 'pointer', outline: 'none' }}/>
+            <button onClick={() => {
+                const d = new Date(logData); d.setDate(d.getDate()+1)
+                const today = new Date().toISOString().slice(0,10)
+                if (d.toISOString().slice(0,10) <= today) setLogData(d.toISOString().slice(0,10))
+              }} style={{ background: 'none', border: '1px solid #e2e8f0', borderRadius: 5,
+                padding: '2px 7px', cursor: 'pointer', fontSize: 12, color: '#64748b' }}>›</button>
+            {logData !== new Date().toISOString().slice(0,10) && (
+              <button onClick={() => setLogData(new Date().toISOString().slice(0,10))}
+                style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 5,
+                  padding: '2px 8px', cursor: 'pointer', fontSize: 11, color: '#1D5FAD', fontWeight: 700 }}>
+                oggi
+              </button>
+            )}
+            <span style={{ fontSize: 11, color: '#94a3b8', marginLeft: 2 }}>
               {logEventi.length > 0 ? `${logEventi.length} eventi` : ''}
             </span>
-            <button onClick={fetchLog}
-              style={{ marginLeft: 'auto', background: 'none', border: '1px solid #e2e8f0',
-                borderRadius: 6, padding: '4px 12px', cursor: 'pointer', fontSize: 13, color: '#64748b' }}>
-              ↻
-            </button>
+            {/* Refresh + Esporta */}
+            <div style={{ marginLeft: 'auto', display: 'flex', gap: 5 }}>
+              <button onClick={() => fetchLog(logData)}
+                style={{ background: 'none', border: '1px solid #e2e8f0', borderRadius: 6,
+                  padding: '4px 10px', cursor: 'pointer', fontSize: 13, color: '#64748b' }}>↻</button>
+              <button onClick={() => {
+                  const today2 = new Date().toISOString().slice(0,10)
+                  const filtrati = logEventi.filter(e => {
+                    if (logFiltro !== 'tutti' && e.tipo !== logFiltro) return false
+                    if (logFiltroOra !== 'tutto') {
+                      const h = new Date(e.ts).getHours()
+                      if (logFiltroOra === 'mattina'    && (h < 6  || h >= 14)) return false
+                      if (logFiltroOra === 'pomeriggio' && (h < 14 || h >= 22)) return false
+                      if (logFiltroOra === 'notte'      && (h >= 6 && h < 22))  return false
+                      if (logFiltroOra === 'custom') {
+                        const [fh,fm] = logOraFrom.split(':').map(Number)
+                        const [th,tm] = logOraTo.split(':').map(Number)
+                        const tot = h*60 + new Date(e.ts).getMinutes()
+                        if (tot < fh*60+fm || tot > th*60+tm) return false
+                      }
+                    }
+                    return true
+                  })
+                  const rows = ['Data,Ora,Tipo,Testo,Dettaglio,Durata(min)']
+                  for (const e of filtrati) {
+                    const d = new Date(e.ts)
+                    const data_e = d.toLocaleDateString('it-IT')
+                    const ora_e  = d.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'})
+                    const dur    = e.durata_sec ? Math.round(e.durata_sec/60) : ''
+                    const testo  = (e.testo||'').replace(/,/g,';')
+                    const sub    = (e.sub||e.extra||'').replace(/,/g,';')
+                    rows.push(`${data_e},${ora_e},${e.tipo},${testo},${sub},${dur}`)
+                  }
+                  const blob = new Blob([rows.join('\n')], {type:'text/csv;charset=utf-8;'})
+                  const url  = URL.createObjectURL(blob)
+                  const a    = document.createElement('a')
+                  a.href = url; a.download = `log_${logData}.csv`; a.click()
+                  URL.revokeObjectURL(url)
+                }}
+                style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 6,
+                  padding: '4px 10px', cursor: 'pointer', fontSize: 12, color: '#166534', fontWeight: 700 }}>
+                ⬇ CSV
+              </button>
+            </div>
           </div>
 
-          {/* Filtri */}
+          {/* Filtri tipo */}
           <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', flexShrink: 0 }}>
             {[
               { id: 'tutti',     label: 'Tutti',      col: '#64748b' },
@@ -1328,18 +1396,79 @@ export default function CodaLavorazione() {
             ))}
           </div>
 
+          {/* Filtro orario */}
+          <div style={{ display: 'flex', gap: 5, alignItems: 'center', flexShrink: 0, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 700, letterSpacing: '.05em' }}>🕐 ORA</span>
+            {[
+              { id: 'tutto',      label: 'Tutto il giorno' },
+              { id: 'mattina',    label: '6–14' },
+              { id: 'pomeriggio', label: '14–22' },
+              { id: 'notte',      label: '22–6' },
+              { id: 'custom',     label: 'Personalizzato' },
+            ].map(f => (
+              <button key={f.id} onClick={() => setLogFiltroOra(f.id)}
+                style={{ padding: '3px 9px', borderRadius: 6, border: 'none', cursor: 'pointer',
+                  fontSize: 11, fontWeight: logFiltroOra === f.id ? 700 : 400,
+                  background: logFiltroOra === f.id ? '#0d2d5e' : '#f1f5f9',
+                  color: logFiltroOra === f.id ? '#fff' : '#64748b' }}>
+                {f.label}
+              </button>
+            ))}
+            {logFiltroOra === 'custom' && (
+              <>
+                <input type="time" value={logOraFrom} onChange={e => setLogOraFrom(e.target.value)}
+                  style={{ border: '1px solid #e2e8f0', borderRadius: 5, padding: '2px 6px', fontSize: 11 }}/>
+                <span style={{ fontSize: 11, color: '#94a3b8' }}>→</span>
+                <input type="time" value={logOraTo} onChange={e => setLogOraTo(e.target.value)}
+                  style={{ border: '1px solid #e2e8f0', borderRadius: 5, padding: '2px 6px', fontSize: 11 }}/>
+              </>
+            )}
+          </div>
+
           {/* Lista eventi scrollabile */}
           <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
             {logLoading ? (
               <div style={{ textAlign: 'center', padding: 20, color: '#94a3b8', fontSize: 13 }}>Caricamento…</div>
-            ) : logEventi.filter(e => logFiltro === 'tutti' || e.tipo === logFiltro).length === 0 ? (
+            ) : logEventi.filter(e => {
+                    if (logFiltro !== 'tutti' && e.tipo !== logFiltro) return false
+                    if (logFiltroOra !== 'tutto') {
+                      const h = new Date(e.ts).getHours()
+                      const m2 = new Date(e.ts).getMinutes()
+                      const tot = h*60+m2
+                      if (logFiltroOra === 'mattina'    && (h < 6  || h >= 14)) return false
+                      if (logFiltroOra === 'pomeriggio' && (h < 14 || h >= 22)) return false
+                      if (logFiltroOra === 'notte'      && (h >= 6 && h < 22))  return false
+                      if (logFiltroOra === 'custom') {
+                        const [fh,fm] = logOraFrom.split(':').map(Number)
+                        const [th,tm] = logOraTo.split(':').map(Number)
+                        if (tot < fh*60+fm || tot > th*60+tm) return false
+                      }
+                    }
+                    return true
+                  }).length === 0 ? (
               <div style={{ textAlign: 'center', padding: 20, color: '#94a3b8', fontSize: 13 }}>
                 {logEventi.length === 0 ? 'Nessun evento oggi — clicca ↻ per caricare' : 'Nessun evento di questo tipo'}
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                 {logEventi
-                  .filter(e => logFiltro === 'tutti' || e.tipo === logFiltro)
+                  .filter(e => {
+                    if (logFiltro !== 'tutti' && e.tipo !== logFiltro) return false
+                    if (logFiltroOra !== 'tutto') {
+                      const h = new Date(e.ts).getHours()
+                      const m2 = new Date(e.ts).getMinutes()
+                      const tot = h*60+m2
+                      if (logFiltroOra === 'mattina'    && (h < 6  || h >= 14)) return false
+                      if (logFiltroOra === 'pomeriggio' && (h < 14 || h >= 22)) return false
+                      if (logFiltroOra === 'notte'      && (h >= 6 && h < 22))  return false
+                      if (logFiltroOra === 'custom') {
+                        const [fh,fm] = logOraFrom.split(':').map(Number)
+                        const [th,tm] = logOraTo.split(':').map(Number)
+                        if (tot < fh*60+fm || tot > th*60+tm) return false
+                      }
+                    }
+                    return true
+                  })
                   .map((e, i) => {
                     const ora = new Date(e.ts).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
                     const fmtDur = (sec) => {

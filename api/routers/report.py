@@ -1008,6 +1008,68 @@ async def get_confronto_ieri():
 
 
 @router.get("/giornaliero")
+def _merge_fermi(fermi: list, gap_max_sec: int = 180) -> list:
+    """
+    Unisce fermi contigui: se il gap tra fine di uno e inizio del successivo
+    è < gap_max_sec (default 3 min), vengono considerati lo stesso fermo.
+    Regola: si fondono solo fermi senza causa (non classificati) — un fermo
+    già classificato non viene mai assorbito in un altro.
+    Restituisce la lista ordinata per inizio, con durata ricalcolata.
+    """
+    if not fermi:
+        return []
+
+    ordinati = sorted(
+        [f for f in fermi if f.get("inizio")],
+        key=lambda f: f["inizio"]
+    )
+
+    merged = []
+    for f in ordinati:
+        prev = merged[-1] if merged else None
+        if (
+            prev
+            and not prev.get("causa")      # fermo precedente non classificato
+            and not f.get("causa")          # fermo corrente non classificato
+            and prev.get("_fine_ts") is not None
+        ):
+            try:
+                gap = (
+                    datetime.fromisoformat(f["inizio"]) -
+                    datetime.fromisoformat(prev["_fine_ts"])
+                ).total_seconds()
+            except Exception:
+                gap = gap_max_sec + 1
+
+            if gap <= gap_max_sec:
+                # Estendi il precedente
+                fine_new = f.get("fine") or f["inizio"]
+                prev["fine"]     = fine_new
+                prev["_fine_ts"] = fine_new
+                try:
+                    prev["durata_sec"] = int(
+                        (datetime.fromisoformat(fine_new) -
+                         datetime.fromisoformat(prev["inizio"])).total_seconds()
+                    )
+                except Exception:
+                    pass
+                # Conserva allarme_testo se il nuovo ce l'ha
+                if f.get("allarme_testo") and not prev.get("allarme_testo"):
+                    prev["allarme_testo"] = f["allarme_testo"]
+                continue  # non aggiungere come nuovo
+
+        # Nuovo fermo separato — copia e aggiungi _fine_ts di lavoro
+        entry = dict(f)
+        entry["_fine_ts"] = f.get("fine") or f["inizio"]
+        merged.append(entry)
+
+    # Rimuovi il campo di lavoro _fine_ts prima di restituire
+    for m in merged:
+        m.pop("_fine_ts", None)
+
+    return merged
+
+
 async def get_report_giornaliero(data: str = Query(default=None)):
     """
     Restituisce report giornaliero.
@@ -1272,7 +1334,7 @@ async def get_report_giornaliero(data: str = Query(default=None)):
         "utensili":         {k: {"sec": v, "ore": _durata_str(v)}
                               for k, v in sorted(utensili_agg.items(), key=lambda x: -x[1])},
         "sessioni":         sessioni_output,
-        "fermi_globali":    [f for f in log.get("fermi_globali", []) if f.get("data") == target],
+        "fermi_globali":    _merge_fermi([f for f in log.get("fermi_globali", []) if f.get("data") == target]),
         "allarmi_log":      [a for a in log.get("allarmi_log", []) if a.get("data") == target],
     }
 

@@ -522,7 +522,7 @@ export default function CodaLavorazione() {
         }
       }
 
-      // Fermi
+      // Fermi (già fusi dal backend)
       if (rpt?.fermi_globali) {
         for (const f of rpt.fermi_globali) {
           if (!f.inizio) continue
@@ -533,6 +533,7 @@ export default function CodaLavorazione() {
             durata_sec: f.durata_sec,
             testo: f.causa || 'Fermo macchina',
             sub: f.causa ? null : 'Non classificato',
+            causa: f.causa || null,
             colore: f.ignorato ? '#94a3b8' : '#f59e0b',
             ignorato: f.ignorato,
           })

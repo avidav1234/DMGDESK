@@ -234,20 +234,35 @@ def aggiorna_da_log(
         # Questo copre anche il caso "macchina ferma dall'inizio del turno".
         # ── Tracking storico allarmi ─────────────────────────────────────────
         # Registra ogni comparsa/sparizione di allarme in allarmi_log.
-        # Confronta l'allarme attuale con l'ultimo salvato in stato_corrente.
+        # Ricostruzione dopo riavvio: se stato_corrente non ha ultimo_allarme_testo
+        # (azzerato al riavvio), lo recuperiamo dall'ultimo record aperto in allarmi_log.
+        if "ultimo_allarme_testo" not in sc:
+            al_log_rec = data.get("allarmi_log", [])
+            allarme_aperto = next(
+                (r["testo"] for r in reversed(al_log_rec)
+                 if r.get("evento") == "comparso" and not r.get("ts_fine")),
+                None
+            )
+            sc["ultimo_allarme_testo"] = allarme_aperto  # None se nessuno era aperto
+
         _allarme_prec = sc.get("ultimo_allarme_testo")
         if allarme_testo != _allarme_prec:
             today_al = now[:10]
             if allarme_testo:
-                # Nuovo allarme comparso
-                data.setdefault("allarmi_log", []).append({
+                # Nuovo allarme comparso — chiudi eventuale record aperto prima di aprirne uno nuovo
+                al_log = data.setdefault("allarmi_log", [])
+                for rec in reversed(al_log):
+                    if rec.get("evento") == "comparso" and not rec.get("ts_fine"):
+                        rec["ts_fine"] = now
+                        break
+                al_log.append({
                     "ts":     now,
                     "data":   today_al,
                     "testo":  allarme_testo,
                     "evento": "comparso",
                 })
             elif _allarme_prec:
-                # Allarme sparito — aggiorna la fine dell'ultimo record
+                # Allarme sparito (o backend riavviato senza allarme) — chiudi il record aperto
                 al_log = data.get("allarmi_log", [])
                 for rec in reversed(al_log):
                     if rec.get("testo") == _allarme_prec and not rec.get("ts_fine"):

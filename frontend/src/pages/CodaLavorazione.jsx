@@ -569,24 +569,34 @@ export default function CodaLavorazione() {
         }
       } catch {}
 
-      // Allarmi: fermi classificati come 'allarme' nel report giornaliero
-      if (rpt?.fermi_globali) {
-        for (const f of rpt.fermi_globali) {
-          if (!f.inizio || f.causa !== 'allarme') continue
+      // Allarmi storici da allarmi_log (ogni comparsa registrata dal backend)
+      if (rpt?.allarmi_log) {
+        const visti = new Set()
+        for (const a of rpt.allarmi_log) {
+          if (!a.ts || a.evento !== 'comparso') continue
+          const key = `${a.testo}|${a.ts.slice(0,16)}`
+          if (visti.has(key)) continue
+          visti.add(key)
+          const durata = a.ts_fine
+            ? Math.round((new Date(a.ts_fine) - new Date(a.ts)) / 1000)
+            : null
           eventi.push({
             tipo: 'allarme',
-            ts: f.inizio,
-            ts_fine: f.fine,
-            durata_sec: f.durata_sec,
-            testo: f.allarme_testo || 'Fermo per allarme',
-            sub: f.durata_sec ? null : 'In corso',
+            ts: a.ts,
+            ts_fine: a.ts_fine,
+            durata_sec: durata,
+            testo: a.testo,
+            sub: a.ts_fine ? null : 'ATTIVO ORA',
             colore: '#dc2626',
           })
         }
       }
-      // Allarme attivo in questo momento
-      if (macchina?.allarme) {
-        eventi.push({
+      // Allarme attivo ora — aggiunto solo se non già in log
+      if (macchina?.allarme && macchina?.allarme_tipo === 'allarme') {
+        const giaPresente = eventi.some(e =>
+          e.tipo === 'allarme' && e.testo === macchina.allarme && !e.ts_fine
+        )
+        if (!giaPresente) eventi.push({
           tipo: 'allarme',
           ts: new Date().toISOString(),
           testo: macchina.allarme,

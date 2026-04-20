@@ -232,6 +232,33 @@ def aggiorna_da_log(
         # TEMPO FERMO: accumulato in sc["fermo_sec_giornaliero"] ad ogni tick
         # con stato=5/0, indipendentemente dall'esistenza di una sessione aperta.
         # Questo copre anche il caso "macchina ferma dall'inizio del turno".
+        # ── Tracking storico allarmi ─────────────────────────────────────────
+        # Registra ogni comparsa/sparizione di allarme in allarmi_log.
+        # Confronta l'allarme attuale con l'ultimo salvato in stato_corrente.
+        _allarme_prec = sc.get("ultimo_allarme_testo")
+        if allarme_testo != _allarme_prec:
+            today_al = now[:10]
+            if allarme_testo:
+                # Nuovo allarme comparso
+                data.setdefault("allarmi_log", []).append({
+                    "ts":     now,
+                    "data":   today_al,
+                    "testo":  allarme_testo,
+                    "evento": "comparso",
+                })
+            elif _allarme_prec:
+                # Allarme sparito — aggiorna la fine dell'ultimo record
+                al_log = data.get("allarmi_log", [])
+                for rec in reversed(al_log):
+                    if rec.get("testo") == _allarme_prec and not rec.get("ts_fine"):
+                        rec["ts_fine"] = now
+                        break
+            # Mantieni solo ultimi 200 allarmi
+            if len(data.get("allarmi_log", [])) > 200:
+                data["allarmi_log"] = data["allarmi_log"][-200:]
+            sc["ultimo_allarme_testo"] = allarme_testo
+            dirty = True
+
         GRACE_SEC = 900  # 15 minuti
         # stato 2 = ricerca blocco = macchina ferma — accumula sempre fermo
         if stato_pgm in (0, 2, 5):
@@ -1246,6 +1273,7 @@ async def get_report_giornaliero(data: str = Query(default=None)):
                               for k, v in sorted(utensili_agg.items(), key=lambda x: -x[1])},
         "sessioni":         sessioni_output,
         "fermi_globali":    [f for f in log.get("fermi_globali", []) if f.get("data") == target],
+        "allarmi_log":      [a for a in log.get("allarmi_log", []) if a.get("data") == target],
     }
 
 @router.get("/storico")

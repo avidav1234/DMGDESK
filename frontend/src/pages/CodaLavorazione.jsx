@@ -541,36 +541,53 @@ export default function CodaLavorazione() {
       try {
         const palRes = await fetch('/api/pallet/').then(r => r.ok ? r.json() : null)
         if (palRes?.pallet) {
+          const today2 = new Date().toISOString().slice(0, 10)
           for (const pal of palRes.pallet) {
-            if (pal.aggiornato && pal.progetto_nome && pal.stato !== 'vuoto') {
-              // Mostra solo pallet aggiornati oggi
-              const aggTs = pal.aggiornato.includes('T') ? pal.aggiornato
-                : pal.aggiornato.split(' ').reverse().join('T').replace(/(\d{2})\/(\d{2})\/(\d{4})/, '$3-$2-$1') + 'T' + (pal.aggiornato.split(' ')[1] || '00:00')
-              const today2 = new Date().toISOString().slice(0, 10)
-              try {
-                const d = new Date(aggTs)
-                if (!isNaN(d) && d.toISOString().slice(0,10) === today2) {
-                  const statoLabel = { grezzo:'IN CODA', in_lavorazione:'IN LAVORAZIONE', finito:'FINITO', guasto:'GUASTO', vuoto:'VUOTO' }
-                  eventi.push({
-                    tipo: 'pallet',
-                    ts: aggTs,
-                    testo: `P${pal.numero} → ${statoLabel[pal.stato] || pal.stato}`,
-                    sub: pal.progetto_nome,
-                    colore: '#7c3aed',
-                  })
-                }
-              } catch {}
-            }
+            if (!pal.aggiornato || pal.stato === 'vuoto') continue
+            try {
+              // Supporta sia ISO (2026-04-17T14:21:00) che DD/MM/YYYY HH:MM
+              let aggTs = pal.aggiornato
+              if (!aggTs.includes('T')) {
+                // formato DD/MM/YYYY HH:MM:SS o DD/MM/YYYY HH:MM
+                const m = aggTs.match(/(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}:\d{2}(?::\d{2})?)/)
+                if (m) aggTs = `${m[3]}-${m[2]}-${m[1]}T${m[4]}`
+              }
+              const d = new Date(aggTs)
+              if (isNaN(d) || d.toISOString().slice(0,10) !== today2) continue
+              const statoLabel = { grezzo:'IN CODA', in_lavorazione:'IN LAVORAZIONE', finito:'FINITO', guasto:'GUASTO' }
+              eventi.push({
+                tipo: 'pallet',
+                ts: aggTs,
+                testo: `P${pal.numero} → ${statoLabel[pal.stato] || pal.stato.toUpperCase()}`,
+                sub: pal.progetto_nome || null,
+                colore: '#7c3aed',
+              })
+            } catch {}
           }
         }
       } catch {}
 
-      // Allarmi dalla macchina live
-      if (macchina?.allarme_attivo) {
+      // Allarmi: fermi classificati come 'allarme' nel report giornaliero
+      if (rpt?.fermi_globali) {
+        for (const f of rpt.fermi_globali) {
+          if (!f.inizio || f.causa !== 'allarme') continue
+          eventi.push({
+            tipo: 'allarme',
+            ts: f.inizio,
+            ts_fine: f.fine,
+            durata_sec: f.durata_sec,
+            testo: 'Fermo per allarme',
+            sub: f.durata_sec ? null : 'In corso',
+            colore: '#dc2626',
+          })
+        }
+      }
+      // Allarme attivo in questo momento
+      if (macchina?.allarme) {
         eventi.push({
           tipo: 'allarme',
           ts: new Date().toISOString(),
-          testo: macchina.allarme_attivo,
+          testo: macchina.allarme,
           sub: 'ATTIVO ORA',
           colore: '#dc2626',
         })

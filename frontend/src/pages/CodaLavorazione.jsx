@@ -1340,13 +1340,19 @@ export default function CodaLavorazione() {
                     const ICONE = { programma: '⚙', utensile: '🔧', fermo: '⏸', pallet: '📦', allarme: '🚨' }
                     const COLORI = { programma: '#1D5FAD', utensile: '#d97706', fermo: '#f59e0b', pallet: '#7c3aed', allarme: '#dc2626' }
                     const col = COLORI[e.tipo] || '#94a3b8'
+                    const isFermoNonClass = e.tipo === 'fermo' && !e.causa
                     return (
-                      <div key={i} style={{
-                        display: 'flex', alignItems: 'flex-start', gap: 10, padding: '8px 10px',
-                        borderRadius: 7, borderLeft: `3px solid ${col}`,
-                        background: i % 2 === 0 ? '#f8fafc' : '#fff',
-                        opacity: e.ignorato ? 0.45 : 1,
-                      }}>
+                      <div key={i}
+                        onClick={isFermoNonClass ? () => setFermoInClassifica(e) : undefined}
+                        style={{
+                          display: 'flex', alignItems: 'flex-start', gap: 10, padding: '8px 10px',
+                          borderRadius: 7,
+                          borderLeft: `3px solid ${isFermoNonClass ? '#f59e0b' : col}`,
+                          background: isFermoNonClass ? '#fffbeb' : i % 2 === 0 ? '#f8fafc' : '#fff',
+                          opacity: e.ignorato ? 0.45 : 1,
+                          cursor: isFermoNonClass ? 'pointer' : 'default',
+                          outline: isFermoNonClass ? '1px dashed #fcd34d' : 'none',
+                        }}>
                         <span style={{ fontSize: 11, color: '#94a3b8', fontFamily: 'monospace',
                           flexShrink: 0, minWidth: 38, marginTop: 1 }}>{ora}</span>
                         <span style={{ fontSize: 18, flexShrink: 0, lineHeight: 1.2 }}>{ICONE[e.tipo] || '•'}</span>
@@ -1356,7 +1362,14 @@ export default function CodaLavorazione() {
                             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {e.testo}
                           </div>
-                          {e.sub && <div style={{ fontSize: 11, color: col, marginTop: 2 }}>{e.sub}</div>}
+                          <div style={{ fontSize: 11, color: col, marginTop: 2, display: 'flex', alignItems: 'center', gap: 6 }}>
+                            {e.sub && <span>{e.sub}</span>}
+                            {isFermoNonClass && (
+                              <span style={{ fontSize: 10, fontWeight: 700, color: '#d97706',
+                                background: '#fef3c7', padding: '1px 6px', borderRadius: 8,
+                                border: '1px solid #fcd34d' }}>✎ tocca per classificare</span>
+                            )}
+                          </div>
                           {e.extra && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 1 }}>{e.extra}</div>}
                         </div>
                         {e.durata_sec > 0 && (

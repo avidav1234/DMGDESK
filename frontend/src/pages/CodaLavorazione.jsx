@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from 'react-router-dom';
 import { InfoTooltip } from '../components/UI.jsx';
+import { PopupFermo } from '../components/MLDataPopup.jsx';
 
 // ── Colori stati pallet ──────────────────────────────────────────
 const STATI = {

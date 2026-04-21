@@ -622,6 +622,109 @@ export default function Macchina() {
         </div>
       )}
 
+      {/* ── Pannello Utilizzo Magazine (toggle) ──────────────────────── */}
+      {showUtilizzo&&(
+        <div style={{background:'#fff',border:'1px solid #e2e8f0',borderRadius:12,padding:'14px 18px'}}>
+          <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10,flexWrap:'wrap'}}>
+            <span style={{fontSize:11,fontWeight:800,letterSpacing:'.08em',color:'#64748b',textTransform:'uppercase'}}>
+              📊 Utilizzo utensili — magazine
+            </span>
+            {utilizzoMag&&(
+              <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
+                {[
+                  {id:'tutti',        label:'Tutti',          n:utilizzoMag.riepilogo.totale_in_macchina, col:'#64748b'},
+                  {id:'inutilizzato', label:'🔴 Inutilizzati', n:utilizzoMag.riepilogo.inutilizzati,      col:'#dc2626'},
+                  {id:'dormiente',    label:'🟡 Dormienti',    n:utilizzoMag.riepilogo.dormienti,          col:'#d97706'},
+                  {id:'attivo',       label:'🟢 Attivi',       n:utilizzoMag.riepilogo.attivi,             col:'#16a34a'},
+                  {id:'nuovo',        label:'⚪ Nuovi',        n:utilizzoMag.riepilogo.nuovi,              col:'#94a3b8'},
+                ].map(f=>(
+                  <button key={f.id} onClick={()=>setUtilizzoFiltro(f.id)}
+                    style={{fontSize:10,fontWeight:utilizzoFiltro===f.id?800:500,
+                      padding:'2px 8px',borderRadius:8,border:'none',cursor:'pointer',
+                      background:utilizzoFiltro===f.id?f.col:'#f1f5f9',
+                      color:utilizzoFiltro===f.id?'#fff':'#64748b'}}>
+                    {f.label}{f.n!=null?` (${f.n})`:''}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div style={{marginLeft:'auto',display:'flex',gap:5,alignItems:'center'}}>
+              <select value={utilizzoGiorni}
+                onChange={e=>{setUtilizzoGiorni(Number(e.target.value));fetchUtilizzo(Number(e.target.value))}}
+                style={{fontSize:11,border:'1px solid #e2e8f0',borderRadius:6,padding:'3px 6px',background:'#f8fafc'}}>
+                <option value={30}>30 giorni</option>
+                <option value={90}>90 giorni</option>
+                <option value={180}>180 giorni</option>
+                <option value={365}>365 giorni</option>
+              </select>
+              <button onClick={()=>fetchUtilizzo(utilizzoGiorni)}
+                style={{fontSize:11,padding:'3px 10px',borderRadius:6,border:'1px solid #e2e8f0',
+                  background:'#f8fafc',cursor:'pointer',color:'#475569'}}>
+                {utilizzoLoading?'…':'↻'}
+              </button>
+              <button onClick={()=>setShowUtilizzo(false)}
+                style={{fontSize:11,padding:'3px 8px',borderRadius:6,border:'1px solid #fca5a5',
+                  background:'#fef2f2',cursor:'pointer',color:'#dc2626'}}>✕</button>
+            </div>
+          </div>
+          {utilizzoLoading&&(
+            <div style={{textAlign:'center',padding:'16px 0',color:'#94a3b8',fontSize:12}}>Analisi in corso…</div>
+          )}
+          {utilizzoMag&&!utilizzoLoading&&(()=>{
+            const lista=utilizzoMag.utensili.filter(u=>utilizzoFiltro==='tutti'||u.categoria===utilizzoFiltro)
+            const CAT={
+              attivo:       {dot:'🟢',col:'#16a34a',bg:'#f0fdf4',label:'Attivo'},
+              dormiente:    {dot:'🟡',col:'#d97706',bg:'#fffbeb',label:'Dormiente'},
+              inutilizzato: {dot:'🔴',col:'#dc2626',bg:'#fef2f2',label:'Inutilizzato'},
+              nuovo:        {dot:'⚪',col:'#94a3b8',bg:'#f8fafc',label:'Nuovo'},
+            }
+            return(
+              <div>
+                <div style={{fontSize:10,color:'#94a3b8',marginBottom:8}}>
+                  Analisi su {utilizzoMag.giorni_analisi} giorni · {utilizzoMag.data_analisi}
+                  {utilizzoMag.riepilogo.inutilizzati>0&&(
+                    <span style={{marginLeft:8,fontWeight:700,color:'#dc2626'}}>
+                      ⚠ {utilizzoMag.riepilogo.inutilizzati} utensili mai chiamati
+                    </span>
+                  )}
+                </div>
+                <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(250px,1fr))',gap:6}}>
+                  {lista.map(u=>{
+                    const c=CAT[u.categoria]||CAT.nuovo
+                    return(
+                      <div key={u.alias} style={{background:c.bg,border:`1px solid ${c.col}33`,
+                        borderLeft:`3px solid ${c.col}`,borderRadius:8,padding:'8px 10px'}}>
+                        <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:3}}>
+                          <span style={{fontSize:13}}>{c.dot}</span>
+                          <span style={{fontSize:11,fontWeight:700,fontFamily:'monospace',
+                            color:'#0f172a',flex:1,overflow:'hidden',textOverflow:'ellipsis',
+                            whiteSpace:'nowrap'}}>{u.alias}</span>
+                          <span style={{fontSize:10,fontWeight:700,color:c.col,
+                            padding:'1px 5px',borderRadius:5,background:'#fff',
+                            border:`1px solid ${c.col}44`,flexShrink:0}}>{c.label}</span>
+                        </div>
+                        <div style={{display:'flex',gap:8,fontSize:10,color:'#64748b',flexWrap:'wrap'}}>
+                          {u.magazine!=null&&<span style={{fontFamily:'monospace'}}>M{u.magazine}{u.posizione!=null?` P${u.posizione}`:''}</span>}
+                          {u.ultima_chiamata
+                            ?<span>Ultima: <b style={{color:'#334155'}}>{u.ultima_chiamata}</b></span>
+                            :<span style={{color:'#dc2626',fontWeight:700}}>Mai chiamato</span>}
+                          {u.n_chiamate>0&&<span>{u.n_chiamate}×</span>}
+                          {u.giorni_silenzio!=null&&(
+                            <span style={{color:u.giorni_silenzio>90?'#dc2626':u.giorni_silenzio>30?'#d97706':'#94a3b8'}}>
+                              {u.giorni_silenzio}gg fa
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })()}
+        </div>
+      )}
+
       {/* Lista file caricati */}
       {checkFiles.length > 0 && (
         <div style={{ padding: '8px 12px', borderRadius: 6,

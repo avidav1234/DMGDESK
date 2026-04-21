@@ -637,14 +637,14 @@ export default function Macchina() {
             <span style={{fontSize:11,fontWeight:800,letterSpacing:'.08em',color:'#64748b',textTransform:'uppercase'}}>
               📊 Utilizzo utensili — magazine
             </span>
-            {utilizzoMag&&(
+            {utilizzoMag?.ok&&(
               <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
                 {[
-                  {id:'tutti',        label:'Tutti',          n:utilizzoMag.riepilogo.totale_in_macchina, col:'#64748b'},
-                  {id:'inutilizzato', label:'🔴 Inutilizzati', n:utilizzoMag.riepilogo.inutilizzati,      col:'#dc2626'},
-                  {id:'dormiente',    label:'🟡 Dormienti',    n:utilizzoMag.riepilogo.dormienti,          col:'#d97706'},
-                  {id:'attivo',       label:'🟢 Attivi',       n:utilizzoMag.riepilogo.attivi,             col:'#16a34a'},
-                  {id:'nuovo',        label:'⚪ Nuovi',        n:utilizzoMag.riepilogo.nuovi,              col:'#94a3b8'},
+                  {id:'tutti',        label:'Tutti',          n:utilizzoMag.riepilogo?.totale_in_macchina, col:'#64748b'},
+                  {id:'inutilizzato', label:'🔴 Inutilizzati', n:utilizzoMag.riepilogo?.inutilizzati,      col:'#dc2626'},
+                  {id:'dormiente',    label:'🟡 Dormienti',    n:utilizzoMag.riepilogo?.dormienti,          col:'#d97706'},
+                  {id:'attivo',       label:'🟢 Attivi',       n:utilizzoMag.riepilogo?.attivi,             col:'#16a34a'},
+                  {id:'nuovo',        label:'⚪ Nuovi',        n:utilizzoMag.riepilogo?.nuovi,              col:'#94a3b8'},
                 ].map(f=>(
                   <button key={f.id} onClick={()=>setUtilizzoFiltro(f.id)}
                     style={{fontSize:10,fontWeight:utilizzoFiltro===f.id?800:500,

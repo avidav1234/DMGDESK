@@ -168,14 +168,27 @@ def calcola_snapshot(
             if cam_file.exists():
                 cam_data = json.loads(cam_file.read_text(encoding="utf-8"))
                 for e in cam_data:
-                    # Controlla timestamp sessione CAM
+                    # Controlla e clippa timestamp sessione CAM alla finestra
                     ts_start = e.get("start") or e.get("timestamp", "")
                     ts_end   = e.get("end") or ""
-                    if ts_start and ts_start > fine_iso:
+                    if not ts_start:
                         continue
-                    if ts_end and ts_end < inizio_iso:
+                    # Sessione completamente fuori finestra → salta
+                    if ts_start >= fine_iso:
                         continue
-                    sec = e.get("seconds", 0)
+                    if ts_end and ts_end <= inizio_iso:
+                        continue
+                    # Clippa la sessione alla finestra e calcola sovrapposizione
+                    from datetime import datetime as _dt
+                    try:
+                        t0 = max(_dt.fromisoformat(ts_start), _dt.fromisoformat(inizio_iso))
+                        t1 = _dt.fromisoformat(ts_end) if ts_end else _dt.fromisoformat(fine_iso)
+                        t1 = min(t1, _dt.fromisoformat(fine_iso))
+                        sec = max(0, int((t1 - t0).total_seconds()))
+                    except Exception:
+                        sec = e.get("seconds", 0)
+                    if sec <= 0:
+                        continue
                     proj = (e.get("project") or "").upper()
                     ore_cam_sec += sec
                     cam_per_commessa[proj] = cam_per_commessa.get(proj, 0) + sec

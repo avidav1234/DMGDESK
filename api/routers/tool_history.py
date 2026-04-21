@@ -541,17 +541,29 @@ async def get_utilizzo_magazine(giorni: int = 90):
                     ts_pgm = None
                     if ts_str:
                         try:
-                            # Normalizza DD/MM/YYYY HH:MM o ISO
-                            if "/" in ts_str and len(ts_str) >= 10:
-                                from dateutil.parser import parse as _dparse
-                                ts_pgm = _dparse(ts_str, dayfirst=True)
+                            ts_clean = ts_str[:19].strip()
+                            # Supporta DD/MM/YYYY HH:MM e ISO YYYY-MM-DD
+                            if ts_clean[2:3] == "/":
+                                # DD/MM/YYYY HH:MM
+                                parts = ts_clean.replace(" ", "/").replace(":", "/").split("/")
+                                if len(parts) >= 3:
+                                    d,m,y = parts[0],parts[1],parts[2]
+                                    hh = parts[3] if len(parts)>3 else "00"
+                                    mm = parts[4] if len(parts)>4 else "00"
+                                    ts_pgm = datetime(int(y),int(m),int(d),int(hh),int(mm))
                             else:
-                                ts_pgm = datetime.fromisoformat(ts_str[:19])
+                                ts_pgm = datetime.fromisoformat(ts_clean)
                         except Exception:
                             pass
 
-                    # Lista alias del programma
-                    utensili_pgm = pgm.get("utensili_lista") or []
+                    # Lista alias del programma — tutte le fonti disponibili
+                    utensili_pgm = list(pgm.get("utensili_lista") or [])
+                    # Fallback: campo utensili [{alias, tempoMin}]
+                    for u in (pgm.get("utensili") or []):
+                        a = (u.get("alias") or "").strip()
+                        if a and a not in utensili_pgm:
+                            utensili_pgm.append(a)
+                    # Fallback: campo utensile singolo
                     if not utensili_pgm and pgm.get("utensile"):
                         utensili_pgm = [pgm["utensile"]]
 
@@ -654,4 +666,56 @@ async def get_utilizzo_magazine(giorni: int = 90):
         "data_analisi": now.strftime("%d/%m/%Y %H:%M"),
         "riepilogo": riepilogo,
         "utensili": risultati,
+    }
+
+
+@router.get("/utilizzo-debug")
+async def debug_utilizzo():
+    """Debug: mostra quanti programmi con utensili_lista trova nel worktrack_projects."""
+    from database.db_handler import carica_configurazione as _cfg
+    from api.routers.tools import _load_tools_db
+    from api.routers.progetti import _load_progetti
+
+    config  = _cfg()
+    tools_db, _, _ = _load_tools_db()
+    data    = _load_progetti(config)
+    progetti = data.get("projects", [])
+
+    ESCLUSI = {9998, 9999, None}
+    n_toa = sum(1 for t in tools_db.values()
+                if t.get("name") and t.get("magazine") not in ESCLUSI)
+
+    STATI = {"completato","in_macchina","in_main","in_lavorazione"}
+    n_pgm_tot, n_pgm_con_lista, n_pgm_con_utensile, n_pgm_con_stati = 0,0,0,0
+    alias_trovati = set()
+
+    for proj in progetti:
+        for step in proj.get("steps",[]):
+            for task in step.get("tasks",[]):
+                if task.get("text","").strip().lower() != "fresatura": continue
+                for pgm in task.get("programs",[]):
+                    n_pgm_tot += 1
+                    if pgm.get("stato") in STATI: n_pgm_con_stati += 1
+                    if pgm.get("utensili_lista"): n_pgm_con_lista += 1
+                    if pgm.get("utensile"): n_pgm_con_utensile += 1
+                    for a in (pgm.get("utensili_lista") or []):
+                        alias_trovati.add(a.upper())
+                    for u in (pgm.get("utensili") or []):
+                        if u.get("alias"): alias_trovati.add(u["alias"].upper())
+                    if pgm.get("utensile"): alias_trovati.add(pgm["utensile"].upper())
+
+    toa_aliases = {t["name"].upper() for t in tools_db.values()
+                   if t.get("name") and t.get("magazine") not in ESCLUSI}
+
+    return {
+        "toa_utensili_in_macchina": n_toa,
+        "toa_aliases": sorted(toa_aliases)[:20],
+        "progetti_totali": len(progetti),
+        "programmi_totali": n_pgm_tot,
+        "programmi_con_stato_eseguito": n_pgm_con_stati,
+        "programmi_con_utensili_lista": n_pgm_con_lista,
+        "programmi_con_utensile_singolo": n_pgm_con_utensile,
+        "alias_unici_trovati_nei_pgm": len(alias_trovati),
+        "alias_in_comune_toa_e_pgm": len(toa_aliases & alias_trovati),
+        "esempi_alias_pgm": sorted(alias_trovati)[:20],
     }

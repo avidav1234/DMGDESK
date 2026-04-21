@@ -413,6 +413,7 @@ export default function Macchina() {
   const [utilizzoLoading, setUtilizzoLoading] = useState(false)
   const [utilizzoGiorni, setUtilizzoGiorni]   = useState(90)
   const [utilizzoFiltro, setUtilizzoFiltro]   = useState('tutti')
+  const [showUtilizzo, setShowUtilizzo]         = useState(false)
 
   useEffect(() => {
     fetch('/api/tool-history/sostituzioni?limit=50')

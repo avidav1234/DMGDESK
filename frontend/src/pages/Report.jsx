@@ -1291,7 +1291,7 @@ export default function Report() {
         <div style={{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:14, marginBottom:18 }}>
           <KpiCard tooltip="Ore in cui la macchina ha eseguito programmi NC in questo giorno.\nCalcolate sommando le durate di tutte le sessioni attive." label="Ore lavorate"  value={rpt.ore_lavorate}  color="#22c55e" />
           <KpiCard tooltip="Tempo totale di fermo macchina in questo giorno.\nInclude i gap tra sessioni e i fermi classificati." label="Tempo fermo"   value={rpt.tempo_fermo}   color="#f59e0b" />
-          <KpiCard tooltip="Ore lavorate / (Ore lavorate + Ore fermo) × 100 per questo giorno." label="Efficienza"    value={`${rpt.efficienza_pct}%`}
+          <KpiCard tooltip="Ore lavorate / (Ore lavorate + Ore fermo) × 100 per questo giorno." label="Efficienza"    value={rpt.efficienza_pct != null ? `${rpt.efficienza_pct}%` : "—"}
                    color={rpt.efficienza_pct > 70 ? '#22c55e' : rpt.efficienza_pct > 40 ? '#f59e0b' : '#ef4444'} />
           <KpiCard tooltip="Numero di programmi NC completati in questo giorno." label="Programmi"     value={rpt.n_programmi}   color="#3b82f6" />
           {/* OEE — se disponibile, sostituisce Sessioni */}

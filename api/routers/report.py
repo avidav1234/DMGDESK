@@ -1022,7 +1022,6 @@ async def get_confronto_ieri():
     }
 
 
-@router.get("/giornaliero")
 def _merge_fermi(fermi: list, gap_max_sec: int = 180) -> list:
     """
     Unisce fermi contigui: se il gap tra fine di uno e inizio del successivo
@@ -1085,6 +1084,7 @@ def _merge_fermi(fermi: list, gap_max_sec: int = 180) -> list:
     return merged
 
 
+@router.get("/giornaliero")
 async def get_report_giornaliero(data: str = Query(default=None)):
     """
     Restituisce report giornaliero.

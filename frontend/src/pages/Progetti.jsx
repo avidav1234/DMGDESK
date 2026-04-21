@@ -358,8 +358,13 @@ function FresaturaPanel({task,onUpdateTask,toolsDB,projectId,projectName}){
   }
   // Gruppo TASTATURA: solo file con _IPM_ nel nome
   // RENISHAW senza _IPM_ restano in FRESATURA (colorati viola)
-  const ipmPrograms=programs.filter(p=>/_IPM_/i.test(p.filename||''))
-  const fresPrograms=programs.filter(p=>!/_IPM_/i.test(p.filename||''))
+  const _pgmSort=(a,b)=>{
+    const ia=/_IPM_/i.test(a.filename||''), ib=/_IPM_/i.test(b.filename||'')
+    if(ia!==ib) return ia?-1:1
+    return (a.numPgm||'').localeCompare(b.numPgm||'',undefined,{numeric:true})
+  }
+  const ipmPrograms=[...programs.filter(p=>/_IPM_/i.test(p.filename||''))].sort(_pgmSort)
+  const fresPrograms=[...programs.filter(p=>!/_IPM_/i.test(p.filename||''))].sort(_pgmSort)
   const doneTotal=programs.filter(p=>p.stato==='completato').length
   const inMacchina=programs.filter(p=>['in_main','in_lavorazione','in_macchina'].includes(p.stato)).length
   const total=programs.length

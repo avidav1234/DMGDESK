@@ -485,7 +485,9 @@ export default function CodaLavorazione() {
   // ── Fetch log eventi ──────────────────────────────────────────────
   const fetchLog = async (dataParam) => {
     setLogLoading(true)
-    const dataTarget = dataParam || logData
+    // Sanifica la data — alcuni browser aggiungono suffissi tipo ':1'
+    const rawData = dataParam || logData
+    const dataTarget = (rawData || '').slice(0, 10)  // prende solo YYYY-MM-DD
     try {
       const today = new Date().toISOString().slice(0, 10)
       const [rpt, macchina] = await Promise.all([
@@ -495,6 +497,7 @@ export default function CodaLavorazione() {
           : Promise.resolve(null),  // dati live solo per oggi
       ])
       const eventi = []
+      if (!rpt) { setLogEventi([]); return }
 
       // Programmi dalle sessioni
       if (rpt?.sessioni) {
@@ -1311,7 +1314,7 @@ export default function CodaLavorazione() {
                 setLogData(d.toISOString().slice(0,10))
               }} style={{ background: 'none', border: '1px solid #e2e8f0', borderRadius: 5,
                 padding: '2px 7px', cursor: 'pointer', fontSize: 12, color: '#64748b' }}>‹</button>
-            <input type="date" value={logData} onChange={e => setLogData(e.target.value)}
+            <input type="date" value={logData} onChange={e => setLogData((e.target.value||'').slice(0,10))}
               style={{ border: '1px solid #e2e8f0', borderRadius: 6, padding: '3px 7px',
                 fontSize: 12, color: '#0d2d5e', fontWeight: 700, cursor: 'pointer', outline: 'none' }}/>
             <button onClick={() => {

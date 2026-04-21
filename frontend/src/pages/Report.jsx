@@ -1266,7 +1266,7 @@ export default function Report() {
       {/* Header */}
       <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:20, flexWrap:'wrap' }}>
         <div style={{ fontSize:22, fontWeight:800, color:'var(--text-primary)' }}>Analisi Lavorazioni</div>
-        <input type="date" value={data} onChange={e => setData(e.target.value)}
+        <input type="date" value={data} onChange={e => setData((e.target.value||'').slice(0,10))}
           style={{ padding:'6px 12px', borderRadius:6, border:'1px solid var(--border)',
                    background:'var(--bg-card)', color:'var(--text-primary)', fontSize:13 }} />
         <button onClick={carica}
@@ -1353,12 +1353,12 @@ export default function Report() {
             </Card>
             <Card style={{ padding:'20px 24px' }}>
               <SectionTitle>Commesse lavorate</SectionTitle>
-              {Object.entries(rpt.progetti).length === 0
+              {Object.entries(rpt.progetti || {}).length === 0
                 ? <div style={{ color:'var(--text-dim)', fontSize:12 }}>Nessun progetto</div>
                 : (
                 <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-                  {Object.entries(rpt.progetti).map(([nome, info]) => {
-                    const tot = Object.values(rpt.progetti).reduce((a,v)=>a+(v.durata_sec||0),0) || 1
+                  {Object.entries(rpt.progetti || {}).map(([nome, info]) => {
+                    const tot = Object.values(rpt.progetti || {}).reduce((a,v)=>a+(v.durata_sec||0),0) || 1
                     const pct = (info.durata_sec / tot * 100).toFixed(0)
                     const color = colorForProject(nome)
                     return (

@@ -243,6 +243,25 @@ export default function AnalisiNC() {
     })
     setCheckResult(null); setInvioResults([])
 
+    // Auto-popola commessa/posizione/fase dal primo file se i campi sono vuoti
+    if (valid.length > 0) {
+      const firstName = valid[0].name  // es. 4349_0221_02_018.MPF
+      const stem = firstName.replace(/\.(mpf|nc|spf)$/i, '')
+      // Rimuovi eventuale _IPM_ dal pattern prima di splittare
+      const cleanStem = stem.replace(/_IPM_/i, '_')
+      const parts = cleanStem.split('_')
+      // Pattern atteso: COMMESSA_POSIZIONE_FASE_SEQUENZA
+      if (parts.length >= 3 && /^\d{4}$/.test(parts[0])) {
+        setCommessa(c => c.trim() ? c : parts[0])
+        setPosizione(p => p.trim() ? p : parts[1])
+        // Fase: parts[2] es. "02" → rimuovi zero iniziale → "2" → "Fase-2"
+        if (parts[2] && /^\d+$/.test(parts[2])) {
+          const faseNum = parseInt(parts[2], 10)
+          setFase(f => f.trim() ? f : `Fase-${faseNum}`)
+        }
+      }
+    }
+
     // Analisi automatica
     for (const entry of newEntries) {
       try {

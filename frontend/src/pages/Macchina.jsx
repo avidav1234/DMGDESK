@@ -560,6 +560,13 @@ export default function Macchina() {
           style={{ display: 'none' }}
           onChange={e => handleCheckFiles(e.target.files)} />
         <button onClick={resetFiles} style={btn_small}>Reset</button>
+        <button onClick={()=>{ setShowUtilizzo(v=>!v); if(!utilizzoMag) fetchUtilizzo(utilizzoGiorni) }}
+          style={{...btn_small,
+            background: showUtilizzo ? '#0d2d5e' : 'var(--bg-hover)',
+            color:      showUtilizzo ? '#fff'    : 'var(--text-secondary)',
+            border:     showUtilizzo ? '1px solid #0d2d5e' : '1px solid var(--border)'}}>
+          📊 Utilizzo
+        </button>
 
         {checkFiles.length > 0 && (
           <span style={{ fontSize: 12, color: 'var(--navy-accent)', fontFamily: 'var(--font-mono)' }}>

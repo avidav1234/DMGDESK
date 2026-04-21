@@ -188,6 +188,15 @@ export default function AnalisiNC() {
               setPosizione(parts[1])
             }
           }
+          // Auto-fase dal primo filename: 4360_7221_02_001.mpf → Fase-2
+          if (lancio.mpfFiles?.length) {
+            const firstName = lancio.mpfFiles[0]
+            const stem = firstName.replace(/\.(mpf|nc|spf)$/i, '').replace(/_IPM_/i, '_')
+            const fp = stem.split('_')
+            if (fp.length >= 3 && /^\d+$/.test(fp[2])) {
+              setFase(`Fase-${parseInt(fp[2], 10)}`)
+            }
+          }
 
           // Carica e analizza i file dal disco tramite API
           if (lancio.mpfFiles?.length) {

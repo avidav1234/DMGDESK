@@ -554,7 +554,7 @@ async def get_utilizzo_magazine(giorni: int = 90):
                         a_single = (pgm.get("utensile") or "").strip()
                         if a_single: alias_set.add(a_single.upper())
 
-                        ore = (pgm.get("tempoStimato") or 0) / 60.0
+                        ore = (float(pgm.get("tempoStimato") or 0) or 0.0) / 60.0
                         pgm_id = pgm.get("filename") or pgm.get("id") or ""
 
                         for alias in alias_set:

@@ -433,9 +433,9 @@ export default function Macchina() {
   const fetchUtilizzo = (giorni=90) => {
     setUtilizzoLoading(true)
     fetch(`/api/tool-history/utilizzo-magazine?giorni=${giorni}`)
-      .then(r=>r.ok?r.json():null)
-      .then(d=>{ if(d?.ok) setUtilizzoMag(d) })
-      .catch(()=>{})
+      .then(r=>r.json())
+      .then(d=>{ setUtilizzoMag(d) })
+      .catch(err=>{ setUtilizzoMag({ok:false, error: String(err)}) })
       .finally(()=>setUtilizzoLoading(false))
   }
 
@@ -671,7 +671,12 @@ export default function Macchina() {
           {utilizzoLoading&&(
             <div style={{textAlign:'center',padding:'16px 0',color:'#94a3b8',fontSize:12}}>Analisi in corso…</div>
           )}
-          {utilizzoMag&&!utilizzoLoading&&(()=>{
+          {utilizzoMag&&!utilizzoMag.ok&&(
+            <div style={{padding:'10px',background:'#fef2f2',borderRadius:8,fontSize:11,color:'#dc2626',fontFamily:'monospace'}}>
+              ⚠ Errore: {utilizzoMag.error}<br/>{utilizzoMag.detail}
+            </div>
+          )}
+          {utilizzoMag?.ok&&!utilizzoLoading&&(()=>{
             const lista=utilizzoMag.utensili.filter(u=>utilizzoFiltro==='tutti'||u.categoria===utilizzoFiltro)
             const CAT={
               attivo:       {dot:'🟢',col:'#16a34a',bg:'#f0fdf4',label:'Attivo'},
@@ -1014,112 +1019,6 @@ export default function Macchina() {
         )}
       </div>
 
-      {/* ── Analisi Utilizzo Magazine ─────────────────────────────────── */}
-      <div style={{background:'#fff',border:'1px solid #e2e8f0',borderRadius:12,
-        padding:'14px 18px',marginTop:10}}>
-        <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10,flexWrap:'wrap'}}>
-          <span style={{fontSize:10,fontWeight:800,letterSpacing:'.1em',color:'#64748b',textTransform:'uppercase'}}>
-            📊 Utilizzo utensili in macchina
-          </span>
-          {utilizzoMag&&(
-            <div style={{display:'flex',gap:6,marginLeft:4,flexWrap:'wrap'}}>
-              {[
-                {id:'tutti',    label:'Tutti',        n: utilizzoMag.riepilogo.totale_in_macchina, col:'#64748b'},
-                {id:'inutilizzato', label:'🔴 Inutilizzati', n: utilizzoMag.riepilogo.inutilizzati, col:'#dc2626'},
-                {id:'dormiente',    label:'🟡 Dormienti',   n: utilizzoMag.riepilogo.dormienti,    col:'#d97706'},
-                {id:'attivo',       label:'🟢 Attivi',       n: utilizzoMag.riepilogo.attivi,       col:'#16a34a'},
-                {id:'nuovo',        label:'⚪ Nuovi',        n: utilizzoMag.riepilogo.nuovi,        col:'#64748b'},
-              ].map(f=>(
-                <button key={f.id} onClick={()=>setUtilizzoFiltro(f.id)}
-                  style={{fontSize:10,fontWeight:utilizzoFiltro===f.id?800:500,
-                    padding:'2px 8px',borderRadius:8,border:'none',cursor:'pointer',
-                    background:utilizzoFiltro===f.id?f.col:'#f1f5f9',
-                    color:utilizzoFiltro===f.id?'#fff':'#64748b'}}>
-                  {f.label} {f.n!=null?`(${f.n})`:''}
-                </button>
-              ))}
-            </div>
-          )}
-          <div style={{marginLeft:'auto',display:'flex',gap:6,alignItems:'center'}}>
-            <select value={utilizzoGiorni} onChange={e=>{setUtilizzoGiorni(Number(e.target.value));fetchUtilizzo(Number(e.target.value))}}
-              style={{fontSize:11,border:'1px solid #e2e8f0',borderRadius:6,padding:'3px 6px',background:'#f8fafc'}}>
-              <option value={30}>30 giorni</option>
-              <option value={90}>90 giorni</option>
-              <option value={180}>180 giorni</option>
-              <option value={365}>365 giorni</option>
-            </select>
-            <button onClick={()=>fetchUtilizzo(utilizzoGiorni)}
-              style={{fontSize:11,padding:'3px 10px',borderRadius:6,border:'1px solid #e2e8f0',
-                background:'#f8fafc',cursor:'pointer',color:'#475569'}}>
-              {utilizzoLoading?'…':'↻ Analizza'}
-            </button>
-          </div>
-        </div>
-
-        {!utilizzoMag&&!utilizzoLoading&&(
-          <div style={{textAlign:'center',padding:'20px 0',color:'#94a3b8',fontSize:12}}>
-            Clicca <b>↻ Analizza</b> per vedere l'utilizzo degli utensili in macchina
-          </div>
-        )}
-        {utilizzoLoading&&(
-          <div style={{textAlign:'center',padding:'20px 0',color:'#94a3b8',fontSize:12}}>Analisi in corso…</div>
-        )}
-        {utilizzoMag&&!utilizzoLoading&&(()=>{
-          const lista = utilizzoMag.utensili.filter(u=>utilizzoFiltro==='tutti'||u.categoria===utilizzoFiltro)
-          const CAT_CFG = {
-            attivo:       {dot:'🟢', col:'#16a34a', bg:'#f0fdf4', label:'Attivo'},
-            dormiente:    {dot:'🟡', col:'#d97706', bg:'#fffbeb', label:'Dormiente'},
-            inutilizzato: {dot:'🔴', col:'#dc2626', bg:'#fef2f2', label:'Inutilizzato'},
-            nuovo:        {dot:'⚪', col:'#64748b', bg:'#f8fafc', label:'Nuovo'},
-          }
-          return(
-            <div>
-              <div style={{fontSize:10,color:'#94a3b8',marginBottom:8}}>
-                Analisi su {utilizzoMag.giorni_analisi} giorni — {utilizzoMag.data_analisi}
-                {utilizzoMag.riepilogo.inutilizzati>0&&(
-                  <span style={{marginLeft:8,fontWeight:700,color:'#dc2626'}}>
-                    ⚠ {utilizzoMag.riepilogo.inutilizzati} utensili non risultano mai chiamati
-                  </span>
-                )}
-              </div>
-              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))',gap:6}}>
-                {lista.map((u,i)=>{
-                  const cfg = CAT_CFG[u.categoria]||CAT_CFG.nuovo
-                  return(
-                    <div key={u.alias} style={{background:cfg.bg,border:`1px solid ${cfg.col}33`,
-                      borderLeft:`3px solid ${cfg.col}`,borderRadius:8,padding:'8px 10px'}}>
-                      <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:4}}>
-                        <span style={{fontSize:14}}>{cfg.dot}</span>
-                        <span style={{fontSize:11,fontWeight:700,fontFamily:'monospace',
-                          color:'#0f172a',flex:1,overflow:'hidden',textOverflow:'ellipsis',
-                          whiteSpace:'nowrap'}}>{u.alias}</span>
-                        <span style={{fontSize:10,fontWeight:700,color:cfg.col,background:'#fff',
-                          padding:'1px 6px',borderRadius:6,flexShrink:0,border:`1px solid ${cfg.col}44`}}>
-                          {cfg.label}
-                        </span>
-                      </div>
-                      <div style={{display:'flex',gap:10,fontSize:10,color:'#64748b',flexWrap:'wrap'}}>
-                        {u.magazine!=null&&<span>M{u.magazine}{u.posizione!=null?` P${u.posizione}`:''}</span>}
-                        {u.ultima_chiamata
-                          ?<span>Ultima: <b style={{color:'#334155'}}>{u.ultima_chiamata}</b></span>
-                          :<span style={{color:'#dc2626',fontWeight:700}}>Mai chiamato</span>
-                        }
-                        {u.n_chiamate>0&&<span>{u.n_chiamate} chiamate</span>}
-                        {u.ore_stimate>0&&<span>~{u.ore_stimate.toFixed(1)}h</span>}
-                        {u.giorni_silenzio!=null&&u.giorni_silenzio>0&&(
-                          <span style={{color: u.giorni_silenzio>90?'#dc2626':u.giorni_silenzio>30?'#d97706':'#64748b'}}>
-                            {u.giorni_silenzio}gg fa
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          )
-        })()}
-      </div>
 
       {/* ── Suggerimenti Vita Ottimale ML — visibile solo con dati reali (min 10 sostituzioni classificate) */}
       {vitaOtt.length>0&&(

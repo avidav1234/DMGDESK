@@ -473,3 +473,185 @@ async def get_stato_snapshot():
             k: v.isoformat() for k, v in _alert_inviati.items()
         },
     }
+
+
+# ── Utilizzo magazine ─────────────────────────────────────────────────────────
+
+@router.get("/utilizzo-magazine")
+async def get_utilizzo_magazine(giorni: int = 90):
+    """
+    Analizza l'utilizzo degli utensili montati in macchina.
+
+    Per ogni utensile nel TOA corrente calcola:
+    - ultima_chiamata: ultima data in cui è apparso in un programma andato in macchina
+    - n_chiamate: quante volte è stato chiamato nel periodo analizzato
+    - n_programmi: in quanti programmi distinti compare
+    - ore_stimate: somma ore stimate dei programmi che lo usano
+    - categoria: attivo / dormiente / inutilizzato / nuovo
+
+    Fonti: worktrack_projects.json (programmi + stati) + tool_replacements.json (date montaggio)
+    """
+    from database.db_handler import carica_configurazione as _cfg
+    from api.routers.tools import _load_tools_db
+    from api.routers.progetti import _load_progetti
+    from datetime import datetime, timedelta
+
+    config  = _cfg()
+    now     = datetime.now()
+    cutoff  = now - timedelta(days=giorni)
+
+    # ── 1. TOA corrente ───────────────────────────────────────────────────────
+    tools_db, _, _ = _load_tools_db()
+    # Considera solo utensili con magazine valido (montati fisicamente)
+    MAGAZINE_ESCLUSI = {9998, 9999, None}
+    utensili_macchina = {
+        t["name"].upper().strip(): t
+        for t in tools_db.values()
+        if t.get("name") and t.get("magazine") not in MAGAZINE_ESCLUSI
+    }
+
+    if not utensili_macchina:
+        return {"ok": True, "utensili": [], "riepilogo": {}, "giorni_analisi": giorni}
+
+    # ── 2. Programmi andati in macchina da worktrack_projects ─────────────────
+    data = _load_progetti(config)
+    progetti = data.get("projects", [])
+
+    # Accumula per alias: {alias -> {ultima_chiamata, n_chiamate, n_programmi, ore}}
+    stats: dict[str, dict] = {alias: {
+        "ultima_chiamata": None,
+        "n_chiamate": 0,
+        "n_programmi": 0,
+        "ore_stimate": 0.0,
+        "programmi": [],
+    } for alias in utensili_macchina}
+
+    STATI_ESEGUITI = {"completato", "in_macchina", "in_main", "in_lavorazione"}
+
+    for proj in progetti:
+        for step in proj.get("steps", []):
+            for task in step.get("tasks", []):
+                if task.get("text", "").strip().lower() != "fresatura":
+                    continue
+                for pgm in task.get("programs", []):
+                    if pgm.get("stato") not in STATI_ESEGUITI:
+                        continue
+                    # Data esecuzione: tempoInizio o dataPost
+                    ts_str = pgm.get("tempoInizio") or pgm.get("dataPost") or ""
+                    ts_pgm = None
+                    if ts_str:
+                        try:
+                            # Normalizza DD/MM/YYYY HH:MM o ISO
+                            if "/" in ts_str and len(ts_str) >= 10:
+                                from dateutil.parser import parse as _dparse
+                                ts_pgm = _dparse(ts_str, dayfirst=True)
+                            else:
+                                ts_pgm = datetime.fromisoformat(ts_str[:19])
+                        except Exception:
+                            pass
+
+                    # Lista alias del programma
+                    utensili_pgm = pgm.get("utensili_lista") or []
+                    if not utensili_pgm and pgm.get("utensile"):
+                        utensili_pgm = [pgm["utensile"]]
+
+                    ore_pgm = (pgm.get("tempoStimato") or 0) / 60.0  # min → ore
+
+                    for alias_raw in utensili_pgm:
+                        alias_up = (alias_raw or "").upper().strip()
+                        if alias_up not in stats:
+                            continue
+                        s = stats[alias_up]
+                        s["n_chiamate"] += 1
+                        s["ore_stimate"] = round(s["ore_stimate"] + ore_pgm, 2)
+                        if ts_pgm:
+                            if s["ultima_chiamata"] is None or ts_pgm > s["ultima_chiamata"]:
+                                s["ultima_chiamata"] = ts_pgm
+                        pgm_id = pgm.get("filename") or pgm.get("id") or ""
+                        if pgm_id and pgm_id not in s["programmi"]:
+                            s["programmi"].append(pgm_id)
+                            s["n_programmi"] += 1
+
+    # ── 3. Date montaggio da tool_replacements ────────────────────────────────
+    replacements = _load_history(config)
+    # Ultimo evento per alias: ts del montaggio (vita_dopo > 0 = nuovo montaggio)
+    montaggio: dict[str, datetime] = {}
+    for r in replacements:
+        alias_up = (r.get("alias") or "").upper().strip()
+        if alias_up not in utensili_macchina:
+            continue
+        try:
+            ts = datetime.fromisoformat(r["ts"][:19])
+        except Exception:
+            continue
+        # "sostituito" o "allungamento_vita" = utensile presente/montato
+        if r.get("tipo") in ("sostituito", "allungamento_vita"):
+            if alias_up not in montaggio or ts > montaggio[alias_up]:
+                montaggio[alias_up] = ts
+
+    # ── 4. Classificazione ───────────────────────────────────────────────────
+    SOGLIA_ATTIVO     = 30   # giorni
+    SOGLIA_DORMIENTE  = 90   # giorni
+    SOGLIA_NUOVO      = 30   # giorni dal montaggio
+
+    risultati = []
+    for alias, s in stats.items():
+        tool = utensili_macchina[alias]
+        uc   = s["ultima_chiamata"]
+        mont = montaggio.get(alias)
+
+        # Calcola giorni dall'ultima chiamata
+        giorni_silenzio = None
+        if uc:
+            giorni_silenzio = (now - uc).days
+
+        # Categoria
+        if mont and (now - mont).days < SOGLIA_NUOVO and not uc:
+            categoria = "nuovo"
+        elif uc is None:
+            categoria = "inutilizzato"
+        elif giorni_silenzio <= SOGLIA_ATTIVO:
+            categoria = "attivo"
+        elif giorni_silenzio <= SOGLIA_DORMIENTE:
+            categoria = "dormiente"
+        else:
+            categoria = "inutilizzato"
+
+        risultati.append({
+            "alias":           alias,
+            "magazine":        tool.get("magazine"),
+            "posizione":       tool.get("position"),
+            "life_percent":    tool.get("life_percent"),
+            "is_enabled":      tool.get("is_enabled", True),
+            "categoria":       categoria,
+            "ultima_chiamata": uc.strftime("%d/%m/%Y") if uc else None,
+            "giorni_silenzio": giorni_silenzio,
+            "n_chiamate":      s["n_chiamate"],
+            "n_programmi":     s["n_programmi"],
+            "ore_stimate":     s["ore_stimate"],
+            "data_montaggio":  mont.strftime("%d/%m/%Y") if mont else None,
+        })
+
+    # Ordina: inutilizzati prima, poi per giorni_silenzio decrescente
+    ORDINE_CAT = {"inutilizzato": 0, "dormiente": 1, "nuovo": 2, "attivo": 3}
+    risultati.sort(key=lambda x: (
+        ORDINE_CAT.get(x["categoria"], 9),
+        -(x["giorni_silenzio"] or 9999)
+    ))
+
+    # ── 5. Riepilogo ─────────────────────────────────────────────────────────
+    riepilogo = {
+        "totale_in_macchina": len(risultati),
+        "attivi":      sum(1 for r in risultati if r["categoria"] == "attivo"),
+        "dormienti":   sum(1 for r in risultati if r["categoria"] == "dormiente"),
+        "inutilizzati":sum(1 for r in risultati if r["categoria"] == "inutilizzato"),
+        "nuovi":       sum(1 for r in risultati if r["categoria"] == "nuovo"),
+    }
+
+    return {
+        "ok": True,
+        "giorni_analisi": giorni,
+        "data_analisi": now.strftime("%d/%m/%Y %H:%M"),
+        "riepilogo": riepilogo,
+        "utensili": risultati,
+    }

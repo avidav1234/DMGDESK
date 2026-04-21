@@ -245,31 +245,24 @@ export default function AnalisiNC() {
   const addFiles = useCallback(async (files) => {
     const valid = Array.from(files).filter(f => /\.(mpf|nc|spf)$/i.test(f.name))
     if (!valid.length) return
+    // Auto-popola commessa/posizione/fase dal primo file se i campi sono vuoti
+    // (fatto prima di setEntries per garantire che i campi siano pronti)
+    const firstName = valid[0].name
+    const stem = firstName.replace(/\.(mpf|nc|spf)$/i, '').replace(/_IPM_/i, '_')
+    const fParts = stem.split('_')
+    if (fParts.length >= 3 && /^\d+$/.test(fParts[0]) && /^\d+$/.test(fParts[2])) {
+      setCommessa(c => c.trim() ? c : fParts[0])
+      setPosizione(p => p.trim() ? p : fParts[1])
+      const faseNum = parseInt(fParts[2], 10)
+      if (faseNum > 0) setFase(f => f.trim() ? f : `Fase-${faseNum}`)
+    }
+
     const newEntries = valid.map(f => ({ id: ++idRef.current, file: f, status: 'analyzing', result: null, error: null }))
     setEntries(prev => {
       const names = new Set(prev.map(e => e.file.name))
       return [...prev, ...newEntries.filter(e => !names.has(e.file.name))]
     })
     setCheckResult(null); setInvioResults([])
-
-    // Auto-popola commessa/posizione/fase dal primo file se i campi sono vuoti
-    if (valid.length > 0) {
-      const firstName = valid[0].name  // es. 4349_0221_02_018.MPF
-      const stem = firstName.replace(/\.(mpf|nc|spf)$/i, '')
-      // Rimuovi eventuale _IPM_ dal pattern prima di splittare
-      const cleanStem = stem.replace(/_IPM_/i, '_')
-      const parts = cleanStem.split('_')
-      // Pattern atteso: COMMESSA_POSIZIONE_FASE_SEQUENZA
-      if (parts.length >= 3 && /^\d{4}$/.test(parts[0])) {
-        setCommessa(c => c.trim() ? c : parts[0])
-        setPosizione(p => p.trim() ? p : parts[1])
-        // Fase: parts[2] es. "02" → rimuovi zero iniziale → "2" → "Fase-2"
-        if (parts[2] && /^\d+$/.test(parts[2])) {
-          const faseNum = parseInt(parts[2], 10)
-          setFase(f => f.trim() ? f : `Fase-${faseNum}`)
-        }
-      }
-    }
 
     // Analisi automatica
     for (const entry of newEntries) {

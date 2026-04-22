@@ -962,16 +962,22 @@ export default function Home(){
                 return(
                   <div key={n}
                     onClick={info?()=>nav('/progetti',{state:{openId:info.proj.id}}):undefined}
-                    style={{background:c.bg,border:`1.5px solid ${c.border}`,borderRadius:10,
-                      padding:'14px 14px',cursor:info?'pointer':'default',
-                      minHeight:130,display:'flex',flexDirection:'column',gap:6,
+                    style={{
+                      background: isVuoto ? '#fafafa' : c.bg,
+                      border: `1.5px solid ${isVuoto ? '#e8ecf0' : c.border}`,
+                      borderRadius:10,
+                      padding: isVuoto ? '10px 10px' : '14px 14px',
+                      cursor:info?'pointer':'default',
+                      minHeight: isVuoto ? 80 : 130,
+                      opacity: isVuoto ? 0.6 : 1,
+                      display:'flex',flexDirection:'column',gap:6,
                       transition:'transform 0.12s, box-shadow 0.12s',position:'relative'}}
                     onMouseEnter={e=>{if(info){e.currentTarget.style.transform='translateY(-2px)';e.currentTarget.style.boxShadow='0 4px 14px rgba(0,0,0,.08)'}}}
                     onMouseLeave={e=>{e.currentTarget.style.transform='none';e.currentTarget.style.boxShadow='none'}}>
 
                     {/* Numero + badge stato */}
                     <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
-                      <span style={{fontSize:30,fontWeight:900,color:c.fg,lineHeight:1}}>P{n}</span>
+                      <span style={{fontSize: isVuoto ? 20 : 30,fontWeight: isVuoto ? 700 : 900,color:c.fg,lineHeight:1}}>P{n}</span>
                       <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:3}}>
                         {!isVuoto&&(
                           <span style={{fontSize:9,fontWeight:800,color:c.accent||c.fg,

@@ -509,15 +509,44 @@ export default function AnalisiNC() {
               borderColor: mainGeneratoFile ? 'rgba(21,128,61,0.4)' : 'var(--border)' }}
             onFocus={e => e.target.style.borderColor = 'var(--cyan)'}
             onBlur={e => e.target.style.borderColor = mainGeneratoFile ? 'rgba(21,128,61,0.4)' : 'var(--border)'} />
-          <button onClick={handleGeneraMain}
-            disabled={mainBusy || !done.length || !nomeCartella.trim() || !percorso}
-            style={{ padding: '6px 12px', borderRadius: 7, fontSize: 12, fontWeight: 700, flexShrink: 0,
-              cursor: (mainBusy || !done.length || !nomeCartella.trim() || !percorso) ? 'not-allowed' : 'pointer',
-              background: mainGeneratoFile ? 'rgba(21,128,61,0.15)' : (!done.length || !nomeCartella.trim() || !percorso) ? 'var(--bg-hover)' : '#D4700A',
-              border: mainGeneratoFile ? '1px solid rgba(21,128,61,0.3)' : 'none',
-              color: mainGeneratoFile ? '#15803d' : (!done.length || !nomeCartella.trim() || !percorso) ? 'var(--text-dim)' : 'white' }}>
-            {mainBusy ? '⏳' : mainGeneratoFile ? `✓ ${mainGeneratoFile.name}` : '📄 Genera MAIN'}
-          </button>
+          {(() => {
+            const motivoDisabilitato = !done.length
+              ? 'Aggiungi almeno un file NC prima'
+              : !nomeCartella.trim()
+              ? 'Inserisci il nome commessa (es. 4297_0005)'
+              : !percorso
+              ? 'Percorso di salvataggio non configurato'
+              : null
+            return (
+              <div style={{ position: 'relative', display: 'inline-block' }}
+                title={motivoDisabilitato || ''}>
+                <button onClick={handleGeneraMain}
+                  disabled={mainBusy || !!motivoDisabilitato}
+                  style={{ padding: '6px 12px', borderRadius: 7, fontSize: 12, fontWeight: 700, flexShrink: 0,
+                    cursor: (mainBusy || !!motivoDisabilitato) ? 'not-allowed' : 'pointer',
+                    background: mainGeneratoFile ? 'rgba(21,128,61,0.15)' : motivoDisabilitato ? 'var(--bg-hover)' : '#D4700A',
+                    border: mainGeneratoFile ? '1px solid rgba(21,128,61,0.3)' : motivoDisabilitato ? '1px dashed var(--border)' : 'none',
+                    color: mainGeneratoFile ? '#15803d' : motivoDisabilitato ? 'var(--text-dim)' : 'white' }}>
+                  {mainBusy ? '⏳' : mainGeneratoFile ? `✓ ${mainGeneratoFile.name}` : '📄 Genera MAIN'}
+                </button>
+                {motivoDisabilitato && (
+                  <div style={{
+                    position: 'absolute', bottom: 'calc(100% + 6px)', left: '50%',
+                    transform: 'translateX(-50%)', whiteSpace: 'nowrap',
+                    background: '#1e293b', color: '#fff', fontSize: 11,
+                    padding: '5px 9px', borderRadius: 6, pointerEvents: 'none',
+                    zIndex: 100, boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
+                    opacity: 0,
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.opacity = '1'}
+                  className="btn-tooltip"
+                  >
+                    ⚠ {motivoDisabilitato}
+                  </div>
+                )}
+              </div>
+            )
+          })()}
         </div>
 
         <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>›</span>
@@ -687,8 +716,30 @@ export default function AnalisiNC() {
             {/* Righe */}
             <div style={{ flex: 1, overflow: 'auto' }}>
               {entries.length === 0 && (
-                <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--text-dim)', fontSize: 13 }}>
-                  Aggiungi file NC per il confronto automatico
+                <div style={{
+                  padding: '32px 20px', textAlign: 'center',
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12,
+                }}>
+                  <div style={{
+                    width: 52, height: 52, borderRadius: 14,
+                    background: 'var(--bg-hover)',
+                    border: '2px dashed var(--border)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 22,
+                  }}>📂</div>
+                  <div style={{ color: 'var(--text-primary)', fontWeight: 700, fontSize: 13 }}>
+                    Nessun file NC caricato
+                  </div>
+                  <div style={{ color: 'var(--text-dim)', fontSize: 12, lineHeight: 1.6, maxWidth: 220 }}>
+                    Clicca <strong style={{color:'var(--text-primary)'}}>+ File NC</strong> in alto per aggiungere uno o più file MPF.<br/>
+                    Il sistema confronterà automaticamente gli utensili richiesti con quelli presenti nel magazine Sinumerik.
+                  </div>
+                  <div style={{
+                    background: 'rgba(29,95,173,0.07)', border: '1px solid rgba(29,95,173,0.2)',
+                    borderRadius: 8, padding: '8px 14px', fontSize: 11, color: '#1D5FAD',
+                  }}>
+                    💡 Suggerimento: puoi aggiungere più file NC della stessa commessa
+                  </div>
                 </div>
               )}
               {/* Mancanti — con bottone esplicito */}

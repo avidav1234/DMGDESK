@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
-import { useEffect, Component } from 'react'
+import { useEffect, useState, Component } from 'react'
 import Sidebar       from './components/Sidebar'
 import Home          from './pages/Home'
 import CodaLavorazione from './pages/CodaLavorazione'
@@ -67,6 +67,63 @@ class ErrorBoundary extends Component {
   }
 }
 
+// ── Barra stato macchina globale ──────────────────────────────────────────────
+// Striscia di 4px in cima al contenuto principale, sempre visibile.
+// Verde = in lavorazione · Giallo = JOG · Rosso pulse = FERMA/allarme · Grigio = sconosciuto
+function GlobalStatusBar() {
+  const [stato, setStato] = useState(null)
+
+  useEffect(() => {
+    const onUpdate = (e) => {
+      const d = e.detail || {}
+      if (d.log_stale) {
+        setStato('stale')
+      } else if (d.stato_macchina !== undefined) {
+        if ([1, 3].includes(d.stato_macchina)) setStato('attiva')
+        else if (d.stato_macchina === 2)        setStato('jog')
+        else                                    setStato('ferma')
+      }
+    }
+    // Fetch iniziale
+    fetch('/api/macchina-live/stato')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (!d) return
+        if (d.log_stale) setStato('stale')
+        else if ([1, 3].includes(d.stato_programma)) setStato('attiva')
+        else if (d.stato_programma === 2)             setStato('jog')
+        else                                          setStato('ferma')
+      }).catch(() => {})
+
+    window.addEventListener('dmgdesk:stati-aggiornati', onUpdate)
+    return () => window.removeEventListener('dmgdesk:stati-aggiornati', onUpdate)
+  }, [])
+
+  const cfg = {
+    attiva: { color: '#22c55e', label: 'IN LAVORAZIONE', animate: false },
+    jog:    { color: '#3b82f6', label: 'JOG',            animate: false },
+    ferma:  { color: '#ef4444', label: 'FERMA',          animate: true  },
+    stale:  { color: '#ef4444', label: 'CONNESSIONE PERSA', animate: true },
+  }[stato] || { color: '#475569', label: '', animate: false }
+
+  return (
+    <div style={{
+      height: 4, flexShrink: 0,
+      background: cfg.color,
+      transition: 'background 0.4s ease',
+      animation: cfg.animate ? 'statusPulse 2s ease-in-out infinite' : 'none',
+      position: 'relative', zIndex: 10,
+    }}>
+      <style>{`
+        @keyframes statusPulse {
+          0%, 100% { opacity: 1; }
+          50%       { opacity: 0.45; }
+        }
+      `}</style>
+    </div>
+  )
+}
+
 // Polling globale — gira sempre, indipendentemente dalla pagina aperta
 function GlobalPoller() {
   useEffect(() => {
@@ -99,7 +156,9 @@ function MainContent() {
   const Wrap = ({ children }) => <ErrorBoundary>{children}</ErrorBoundary>
   return (
     <main style={{ flex:1, overflow:'auto', background:'var(--bg-base)',
-      padding: isFull ? 0 : '20px 24px', display:'flex', flexDirection:'column' }}>
+      padding: 0, display:'flex', flexDirection:'column' }}>
+      <GlobalStatusBar />
+      <div style={{ flex:1, overflow:'auto', padding: isFull ? 0 : '20px 24px' }}>
       <Routes>
         <Route path="/"               element={<Navigate to="/home" replace />} />
         <Route path="/home"           element={<Wrap><Home /></Wrap>} />
@@ -121,6 +180,7 @@ function MainContent() {
         <Route path="/turno"          element={<Wrap><RiepilogoTurno /></Wrap>} />
         <Route path="/step-analyzer"  element={<Wrap><StepAnalyzer /></Wrap>} />
       </Routes>
+      </div>
     </main>
   )
 }

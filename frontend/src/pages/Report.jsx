@@ -1299,7 +1299,8 @@ export default function Report() {
             ? <KpiCard label="OEE"
                 value={`${rpt.oee.valore}%`}
                 color={rpt.oee.valore >= 75 ? '#22c55e' : rpt.oee.valore >= 50 ? '#f59e0b' : '#ef4444'}
-                sub={`D:${rpt.oee.disponibilita}% P:${rpt.oee.performance}%`} />
+                sub={`D:${rpt.oee.disponibilita}% P:${rpt.oee.performance}%`}
+                tooltip={`OEE = Disponibilità × Performance × Qualità\n\nD (Disponibilità): ${rpt.oee.disponibilita}% — % del turno in cui la macchina era in esecuzione\nP (Performance): ${rpt.oee.performance}% — velocità reale vs attesa\n\n≥75% = World class · ≥50% = In miglioramento · <50% = Da analizzare`} />
             : <KpiCard label="Sessioni" value={rpt.n_sessioni} color="#8b5cf6" />
           }
         </div>

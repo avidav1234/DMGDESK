@@ -104,13 +104,18 @@ function AlertBadge({ alert }) {
   const isRitardo = alert.tipo === 'ritardo'
   return (
     <div style={{
-      fontSize:10, fontWeight:700, padding:'3px 8px', borderRadius:4,
+      fontSize: isRitardo ? 11 : 10,
+      fontWeight: 700,
+      padding: isRitardo ? '4px 10px' : '3px 8px',
+      borderRadius: 5,
       background: isRitardo ? '#fef2f2' : '#fffbeb',
-      color: isRitardo ? '#dc2626' : '#b45309',
-      border: `1px solid ${isRitardo ? '#fca5a5' : '#fcd34d'}`,
+      color: isRitardo ? '#991b1b' : '#b45309',
+      border: `1.5px solid ${isRitardo ? '#f87171' : '#fcd34d'}`,
       whiteSpace:'nowrap',
+      display:'inline-flex', alignItems:'center', gap:5,
+      boxShadow: isRitardo ? '0 1px 4px rgba(239,68,68,0.18)' : 'none',
     }}>
-      {isRitardo ? '⚠ ' : '⏰ '}{alert.msg}
+      {isRitardo ? '🔴' : '⏰'} {alert.msg}
     </div>
   )
 }
@@ -263,11 +268,11 @@ function HeatmapUtilizzo({ data }) {
             </tr>
           </thead>
           <tbody>
-            {FASCIA_ORDER.map(fk => (
-              <tr key={fk}>
+            {FASCIA_ORDER.map((fk, rowIdx) => (
+              <tr key={fk} style={{ background: rowIdx % 2 === 1 ? 'rgba(241,245,249,0.7)' : 'transparent' }}>
                 <td style={{fontSize:10, color:'#475569', paddingRight:10,
                   paddingTop:3, paddingBottom:3, whiteSpace:'nowrap',
-                  fontWeight:600}}>
+                  fontWeight:600, background: rowIdx % 2 === 1 ? 'rgba(241,245,249,0.7)' : 'transparent' }}>
                   {FASCIA_LABEL[fk]}
                 </td>
                 {giorni.map(g => {

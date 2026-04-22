@@ -3372,7 +3372,7 @@ export default function Progetti(){
   const[showNewProject,setShowNewProject]=useState(false)
   const[preselectedTemplate,setPreselectedTemplate]=useState(null)
   const[search,setSearch]=useState('')
-  const[sidebarCollapsed,setSidebarCollapsed]=useState(false)
+  const[sidebarCollapsed,setSidebarCollapsed]=useState(true)
   const[lastSavedProj,setLastSavedProj]=useState(null)
   const[lastSavedTmpl,setLastSavedTmpl]=useState(null)
   const[saveError,setSaveError]=useState(null)        // errore salvataggio batch

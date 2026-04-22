@@ -829,18 +829,21 @@ export default function Macchina() {
             <thead>
               <tr style={{ borderBottom: '2px solid var(--border)', background: '#f8fafc' }}>
                 {[
-                  { h:'Pos', t:'Posizione nel magazine Sinumerik.\nM = numero magazine · P = posizione slot.\nGli utensili fuori magazine (M—) non sono montati ma presenti in archivio TOA.' },
-                  { h:'Nome utensile', t:'Alias utensile come registrato nel TOA (Tool Offset Archive) Sinumerik.\nUsato come chiave per associare i cicli di lavorazione registrati dal LOG macchina.' },
-                  { h:'Duplo', t:'Numero fratello gemello (duplo) nel sistema Sinumerik.\nUtensili con lo stesso alias e duplo diverso sono gemelli intercambiabili — la macchina li alterna automaticamente quando uno si consuma.' },
-                  { h:'L (mm)', t:'Lunghezza utensile in mm, letta dal TOA Sinumerik.\nValore di compensazione geometrica usato dal CNC per il calcolo delle traiettorie.' },
-                  { h:'R (mm)', t:'Raggio utensile in mm, letto dal TOA Sinumerik.\nUsato per la compensazione del raggio nelle operazioni di fresatura.' },
-                  { h:'Vita %', t:"Percentuale di vita utensile residua letta dal TOA Sinumerik.\n100% = utensile nuovo · 0% = vita esaurita (il CNC bloccherà l'uso).\nLa barra viola indica il livello residuo — rosso sotto il 10%." },
-                  { h:'Cicli', t:'Numero di cicli NC eseguiti con questo utensile, rilevati dal LOG macchina.\nMostra anche la durata media per ciclo — utile per confrontare con il valore atteso dal CAM.' },
-                  { h:'Stato', t:"Stato operativo dell'utensile:\n• Attivo — disponibile e nella norma\n• Worn — vita quasi esaurita (<10%)\n• Disabled — disabilitato nel Sinumerik\n• Fuori mag. — non montato nel magazine" },
-                ].map(({h, t}) => (
+                  { h:'Pos',          t:'Posizione nel magazine Sinumerik.\nM = numero magazine · P = posizione slot.\nGli utensili fuori magazine (M—) non sono montati ma presenti in archivio TOA.', primary:false },
+                  { h:'Nome utensile',t:'Alias utensile come registrato nel TOA (Tool Offset Archive) Sinumerik.\nUsato come chiave per associare i cicli di lavorazione registrati dal LOG macchina.', primary:true },
+                  { h:'Duplo',        t:'Numero fratello gemello (duplo) nel sistema Sinumerik.\nUtensili con lo stesso alias e duplo diverso sono gemelli intercambiabili — la macchina li alterna automaticamente quando uno si consuma.', primary:false },
+                  { h:'L (mm)',       t:'Lunghezza utensile in mm, letta dal TOA Sinumerik.\nValore di compensazione geometrica usato dal CNC per il calcolo delle traiettorie.', primary:false },
+                  { h:'R (mm)',       t:'Raggio utensile in mm, letto dal TOA Sinumerik.\nUsato per la compensazione del raggio nelle operazioni di fresatura.', primary:false },
+                  { h:'Vita %',       t:"Percentuale di vita utensile residua letta dal TOA Sinumerik.\n100% = utensile nuovo · 0% = vita esaurita (il CNC bloccherà l'uso).\nLa barra viola indica il livello residuo — rosso sotto il 10%.", primary:true },
+                  { h:'Cicli',        t:'Numero di cicli NC eseguiti con questo utensile, rilevati dal LOG macchina.\nMostra anche la durata media per ciclo — utile per confrontare con il valore atteso dal CAM.', primary:false },
+                  { h:'Stato',        t:"Stato operativo dell'utensile:\n• Attivo — disponibile e nella norma\n• Worn — vita quasi esaurita (<10%)\n• Disabled — disabilitato nel Sinumerik\n• Fuori mag. — non montato nel magazine", primary:true },
+                ].map(({h, t, primary}) => (
                   <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontSize: 10,
-                    fontFamily: 'var(--font-mono)', color: 'var(--text-dim)',
-                    fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em',
+                    fontFamily: 'var(--font-mono)',
+                    color: primary ? 'var(--navy-700)' : 'var(--text-dim)',
+                    fontWeight: primary ? 800 : 600,
+                    textTransform: 'uppercase', letterSpacing: '0.1em',
+                    borderBottom: primary ? '2px solid var(--navy-700)' : undefined,
                     position: 'sticky', top: 0, background: '#f8fafc', zIndex: 1 }}>
                     <span style={{display:'inline-flex',alignItems:'center',gap:3}}>
                       {h}<InfoTooltip text={t} position='bottom' />
@@ -878,14 +881,14 @@ export default function Macchina() {
                     <td style={{ padding: '9px 14px', fontFamily: 'var(--font-mono)', fontSize: 13,
                       color: isDis ? 'var(--text-dim)' : 'var(--text-primary)', fontWeight: 700 }}>{t.name}</td>
                     {/* Duplo */}
-                    <td style={{ padding: '9px 14px', fontFamily: 'var(--font-mono)', fontSize: 12,
-                      fontWeight: 700, color: '#475569' }}>#{t.duplo}</td>
+                    <td style={{ padding: '9px 14px', fontFamily: 'var(--font-mono)', fontSize: 11,
+                      fontWeight: 600, color: '#94a3b8' }}>#{t.duplo}</td>
                     {/* L mm */}
-                    <td style={{ padding: '9px 14px', fontFamily: 'var(--font-mono)', fontSize: 12,
-                      color: 'var(--text-secondary)' }}>{t.length?.toFixed(3)}</td>
+                    <td style={{ padding: '9px 14px', fontFamily: 'var(--font-mono)', fontSize: 11,
+                      color: '#94a3b8' }}>{t.length?.toFixed(3)}</td>
                     {/* R mm */}
-                    <td style={{ padding: '9px 14px', fontFamily: 'var(--font-mono)', fontSize: 12,
-                      color: 'var(--text-secondary)' }}>{t.radius?.toFixed(3)}</td>
+                    <td style={{ padding: '9px 14px', fontFamily: 'var(--font-mono)', fontSize: 11,
+                      color: '#94a3b8' }}>{t.radius?.toFixed(3)}</td>
                     {/* Vita */}
                     <td style={{ padding: '9px 14px' }}>{(()=>{
                       const alias = (t.name||'').toUpperCase().trim()

@@ -1,0 +1,152 @@
+307 INFO: PyInstaller: 6.17.0, contrib hooks: 2025.9
+307 INFO: Python: 3.12.3
+352 INFO: Platform: Windows-11-10.0.26100-SP0
+352 INFO: Python environment: C:\Users\i.dodon\AppData\Local\Programs\Python\Python312
+356 INFO: Removing temporary files and cleaning cache in C:\Users\i.dodon\AppData\Local\pyinstaller
+359 INFO: Module search paths (PYTHONPATH):
+['C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Scripts\\pyinstaller.exe',
+ 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\python312.zip',
+ 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\DLLs',
+ 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib',
+ 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312',
+ 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages',
+ 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\win32',
+ 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\win32\\lib',
+ 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\Pythonwin',
+ 'C:\\Tool_App\\tool_manager_v2\\ToolManager_V14_Fase1\\tool_manager']
+1366 INFO: Appending 'datas' from .spec
+1371 INFO: checking Analysis
+1371 INFO: Building Analysis because Analysis-00.toc is non existent
+1371 INFO: Looking for Python shared library...
+1371 INFO: Using Python shared library: C:\Users\i.dodon\AppData\Local\Programs\Python\Python312\python312.dll
+1371 INFO: Running Analysis Analysis-00.toc
+1371 INFO: Target bytecode optimization level: 0
+1371 INFO: Initializing module dependency graph...
+1373 INFO: Initializing module graph hook caches...
+1398 INFO: Analyzing modules for base_library.zip ...
+2837 INFO: Processing standard module hook 'hook-encodings.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+3433 INFO: Processing standard module hook 'hook-heapq.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+4024 INFO: Processing standard module hook 'hook-pickle.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+5127 INFO: Caching module dependency graph...
+5194 INFO: Analyzing C:\Tool_App\tool_manager_v2\ToolManager_V14_Fase1\tool_manager\main.py
+5200 INFO: Processing standard module hook 'hook-customtkinter.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+5250 INFO: Processing pre-find-module-path hook 'hook-tkinter.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks\\pre_find_module_path'
+5252 INFO: TclTkInfo: initializing cached Tcl/Tk info...
+5546 INFO: Processing standard module hook 'hook-_tkinter.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+5593 INFO: Processing pre-safe-import-module hook 'hook-distutils.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+5596 INFO: SetuptoolsInfo: initializing cached setuptools info...
+8486 INFO: Processing standard module hook 'hook-setuptools.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+8523 INFO: Processing standard module hook 'hook-platform.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+8566 INFO: Processing standard module hook 'hook-sysconfig.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+8573 INFO: Processing pre-safe-import-module hook 'hook-jaraco.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+8574 INFO: Setuptools: 'jaraco' appears to be a full setuptools-vendored copy - creating alias to 'setuptools._vendor.jaraco'!
+8583 INFO: Processing pre-safe-import-module hook 'hook-more_itertools.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+8585 INFO: Setuptools: 'more_itertools' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.more_itertools'!
+8664 INFO: Processing pre-safe-import-module hook 'hook-typing_extensions.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+8863 INFO: Processing standard module hook 'hook-multiprocessing.util.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+8976 INFO: Processing standard module hook 'hook-xml.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+9169 INFO: Processing standard module hook 'hook-_ctypes.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+9503 INFO: Processing pre-safe-import-module hook 'hook-packaging.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+9628 INFO: Processing standard module hook 'hook-setuptools._vendor.jaraco.text.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+9631 INFO: Processing pre-safe-import-module hook 'hook-importlib_resources.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+9766 INFO: Processing pre-safe-import-module hook 'hook-backports.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+9767 INFO: Setuptools: 'backports' appears to be a full setuptools-vendored copy - creating alias to 'setuptools._vendor.backports'!
+9896 INFO: Processing pre-safe-import-module hook 'hook-importlib_metadata.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+9897 INFO: Setuptools: 'importlib_metadata' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.importlib_metadata'!
+9912 INFO: Processing standard module hook 'hook-setuptools._vendor.importlib_metadata.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+9939 INFO: Processing pre-safe-import-module hook 'hook-zipp.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+9941 INFO: Setuptools: 'zipp' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.zipp'!
+10157 INFO: Processing pre-safe-import-module hook 'hook-tomli.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+10159 INFO: Setuptools: 'tomli' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.tomli'!
+10521 INFO: Processing pre-safe-import-module hook 'hook-wheel.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+10523 INFO: Setuptools: 'wheel' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.wheel'!
+10919 INFO: Processing standard module hook 'hook-PIL.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+10981 INFO: Processing standard module hook 'hook-PIL.Image.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+11508 INFO: Processing standard module hook 'hook-pycparser.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+12095 INFO: Processing standard module hook 'hook-difflib.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+12521 INFO: Processing standard module hook 'hook-numpy.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+14158 INFO: Processing standard module hook 'hook-PIL.ImageFilter.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+14413 INFO: Processing standard module hook 'hook-pandas.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+18198 INFO: Processing standard module hook 'hook-pytz.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+18495 INFO: Processing standard module hook 'hook-pyarrow.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+19605 INFO: Processing standard module hook 'hook-urllib3.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+20074 INFO: Processing standard module hook 'hook-charset_normalizer.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+20225 INFO: Processing standard module hook 'hook-cryptography.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+21518 INFO: hook-cryptography: cryptography does not seem to be using dynamically linked OpenSSL.
+21766 INFO: Processing standard module hook 'hook-bcrypt.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+21827 INFO: Processing standard module hook 'hook-certifi.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+21914 INFO: Processing standard module hook 'hook-fsspec.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+24065 INFO: Processing standard module hook 'hook-pandas.io.formats.style.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+26598 INFO: Processing standard module hook 'hook-openpyxl.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+26717 INFO: Processing standard module hook 'hook-lxml.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+27315 INFO: Processing standard module hook 'hook-lxml.etree.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+27513 INFO: Processing standard module hook 'hook-xml.etree.cElementTree.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+28785 INFO: Processing standard module hook 'hook-pandas.plotting.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+28986 INFO: Processing standard module hook 'hook-dateutil.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+29091 INFO: Processing pre-safe-import-module hook 'hook-six.moves.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+29746 INFO: Processing standard module hook 'hook-sqlalchemy.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+32691 INFO: Processing standard module hook 'hook-sqlite3.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+33117 INFO: Processing standard module hook 'hook-pandas.io.clipboard.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+34023 INFO: Processing standard module hook 'hook-xml.dom.domreg.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+C:\Tool_App\tool_manager_v2\ToolManager_V14_Fase1\tool_manager\database\db_handler.py:1317: SyntaxWarning: invalid escape sequence '\d'
+  """
+35088 INFO: Analyzing hidden import 'PIL._tkinter_finder'
+35091 INFO: Analyzing hidden import 'api.routers'
+35092 INFO: Processing module hooks (post-graph stage)...
+35328 INFO: Processing standard module hook 'hook-jinja2.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+35687 INFO: Processing standard module hook 'hook-fastparquet.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+35736 INFO: Processing standard module hook 'hook-zoneinfo.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+36078 INFO: Processing standard module hook 'hook-lxml.isoschematron.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+36612 INFO: Processing standard module hook 'hook-PIL.SpiderImagePlugin.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+36677 INFO: Processing standard module hook 'hook-sqlalchemy.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+37396 WARNING: Hidden import "pysqlite2" not found!
+37397 WARNING: Hidden import "MySQLdb" not found!
+37397 WARNING: Hidden import "psycopg2" not found!
+38164 INFO: Processing standard module hook 'hook-_tkinter.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks'
+38165 INFO: Processing standard module hook 'hook-lxml.objectify.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+38167 INFO: Processing standard module hook 'hook-tzdata.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+38930 INFO: Performing binary vs. data reclassification (2846 entries)
+45215 INFO: Looking for ctypes DLLs
+45224 WARNING: Ignoring AppKit.framework/AppKit imported from C:\Users\i.dodon\AppData\Local\Programs\Python\Python312\Lib\site-packages\darkdetect\_mac_detect.py - only basenames are supported with ctypes imports!
+45256 INFO: Analyzing run-time hooks ...
+45262 INFO: Including run-time hook 'pyi_rth_inspect.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+45268 INFO: Including run-time hook 'pyi_rth_pkgutil.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+45271 INFO: Including run-time hook 'pyi_rth_multiprocessing.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+45275 INFO: Including run-time hook 'pyi_rth_cryptography_openssl.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\rthooks'
+45278 INFO: Including run-time hook 'pyi_rth_setuptools.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+45281 INFO: Including run-time hook 'pyi_rth__tkinter.py' from 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+45337 INFO: Creating base_library.zip...
+45683 INFO: Looking for dynamic libraries
+C:\Tool_App\tool_manager_v2\ToolManager_V14_Fase1\tool_manager\database\db_handler.py:1317: SyntaxWarning: invalid escape sequence '\d'
+  """
+2026-03-24 16:21:55 | INFO     | toolmanager                    | ============================================================
+2026-03-24 16:21:55 | INFO     | toolmanager                    | Tool Manager V14.0 — Logger inizializzato
+2026-03-24 16:21:55 | INFO     | toolmanager                    | Log file: C:\Tool_App\tool_manager_v2\ToolManager_V14_Fase1\tool_manager\logs\toolmanager.log
+2026-03-24 16:21:55 | INFO     | toolmanager                    | Error file: C:\Tool_App\tool_manager_v2\ToolManager_V14_Fase1\tool_manager\logs\errors.log
+2026-03-24 16:21:55 | INFO     | toolmanager                    | ============================================================
+C:\Users\i.dodon\AppData\Local\Programs\Python\Python312\Lib\site-packages\PyInstaller\building\build_main.py:227: UserWarning: The numpy.array_api submodule is still experimental. See NEP 47.
+  __import__(package)
+50985 INFO: Extra DLL search directories (AddDllDirectory): ['C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\pandas.libs', 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\numpy.libs', 'C:\\Users\\i.dodon\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\pyarrow.libs']
+50986 INFO: Extra DLL search directories (PATH): []
+52626 INFO: Warnings written to C:\Tool_App\tool_manager_v2\ToolManager_V14_Fase1\tool_manager\build\DMGDesk\warn-DMGDesk.txt
+52751 INFO: Graph cross-reference written to C:\Tool_App\tool_manager_v2\ToolManager_V14_Fase1\tool_manager\build\DMGDesk\xref-DMGDesk.html
+52886 INFO: checking PYZ
+52887 INFO: Building PYZ because PYZ-00.toc is non existent
+52887 INFO: Building PYZ (ZlibArchive) C:\Tool_App\tool_manager_v2\ToolManager_V14_Fase1\tool_manager\build\DMGDesk\PYZ-00.pyz
+54004 INFO: Building PYZ (ZlibArchive) C:\Tool_App\tool_manager_v2\ToolManager_V14_Fase1\tool_manager\build\DMGDesk\PYZ-00.pyz completed successfully.
+54067 INFO: checking PKG
+54067 INFO: Building PKG because PKG-00.toc is non existent
+54067 INFO: Building PKG (CArchive) DMGDesk.pkg
+72208 INFO: Building PKG (CArchive) DMGDesk.pkg completed successfully.
+72247 INFO: Bootloader C:\Users\i.dodon\AppData\Local\Programs\Python\Python312\Lib\site-packages\PyInstaller\bootloader\Windows-64bit-intel\runw.exe
+72247 INFO: checking EXE
+72247 INFO: Building EXE because EXE-00.toc is non existent
+72247 INFO: Building EXE from EXE-00.toc
+72247 INFO: Copying bootloader EXE to C:\Tool_App\tool_manager_v2\ToolManager_V14_Fase1\tool_manager\dist\DMGDesk.exe
+72315 INFO: Copying icon to EXE
+72538 INFO: Copying 0 resources to EXE
+72538 INFO: Embedding manifest in EXE
+72564 INFO: Appending PKG archive to EXE
+72640 INFO: Fixing EXE headers
+73001 INFO: Building EXE from EXE-00.toc completed successfully.
+73041 INFO: Build complete! The results are available in: C:\Tool_App\tool_manager_v2\ToolManager_V14_Fase1\tool_manager\dist

@@ -1,0 +1,13 @@
+{
+  "data": "2026-04-08",
+  "timestamp": "2026-04-08T20:11:43",
+  "files": [
+    {
+      "nome": "config.json",
+      "sorgente": "config.json",
+      "hash": "6d370802c5e16188d43b8dbb2da323c6",
+      "bytes": 176
+    }
+  ],
+  "errori": []
+}

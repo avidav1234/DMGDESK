@@ -1,0 +1,14 @@
+Traceback (most recent call last):
+  File "C:\Tool_App\tool_manager_v2\ToolManager_V14_Fase1\tool_manager\main.py", line 28, in main
+    app = MainWindow()
+          ^^^^^^^^^^^^
+  File "C:\Tool_App\tool_manager_v2\ToolManager_V14_Fase1\tool_manager\ui\main_window.py", line 47, in __init__
+    self._create_ui()
+  File "C:\Tool_App\tool_manager_v2\ToolManager_V14_Fase1\tool_manager\ui\main_window.py", line 73, in _create_ui
+    logo_box = _tk.Frame(logo_frame, bg="#ffffff22", width=48, height=48)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\i.dodon\AppData\Local\Programs\Python\Python312\Lib\tkinter\__init__.py", line 3213, in __init__
+    Widget.__init__(self, master, 'frame', cnf, {}, extra)
+  File "C:\Users\i.dodon\AppData\Local\Programs\Python\Python312\Lib\tkinter\__init__.py", line 2648, in __init__
+    self.tk.call(
+_tkinter.TclError: invalid color name "#ffffff22"

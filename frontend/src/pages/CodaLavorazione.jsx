@@ -1159,9 +1159,7 @@ export default function CodaLavorazione() {
                       color: '#fff', fontWeight: 700, fontSize: 12, padding: '5px 14px', cursor: 'pointer' }}>
                     ✓ Segna {totSel} completat{totSel === 1 ? 'o' : 'i'}
                   </button>
-                ) : (
-
-                )
+                ) : null
               })()}
             </div>
 

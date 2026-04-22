@@ -2308,15 +2308,31 @@ function ProgettiListaFiltrata({inProgress,completed,urgentProjects,palletState,
                 </div>
 
                 {/* Colonna 3: Scadenza */}
-                <div style={{textAlign:'center'}}>
-                  {d?.dueDate&&!d.delivered?(
-                    <span style={{fontSize:12,fontWeight:700,color:p._urg.color,
-                      background:p._urg.bg,padding:'3px 10px',borderRadius:5,
-                      display:'inline-block',textAlign:'center'}}>
-                      {p._days===0?'OGGI':p._days<0?`${Math.abs(p._days)}gg fa`:`${p._days}gg`}
-                    </span>
+                <div style={{textAlign:'center',display:'flex',flexDirection:'column',alignItems:'center',gap:4}}>
+                  {d?.dueDate?(
+                    <>
+                      {!d.delivered&&(
+                        <span style={{fontSize:12,fontWeight:700,color:p._urg.color,
+                          background:p._urg.bg,padding:'3px 10px',borderRadius:5,
+                          display:'inline-block',textAlign:'center'}}>
+                          {p._days===0?'OGGI':p._days<0?`${Math.abs(p._days)}gg fa`:`${p._days}gg`}
+                        </span>
+                      )}
+                      <button
+                        onClick={e=>{e.stopPropagation();const del=getDelivery(p.id);if(del)setDelivery(del.id,{delivered:!del.delivered,deliveredAt:!del.delivered?nowStr():null},true)}}
+                        style={{background:'none',border:`1px solid ${T.border}`,borderRadius:5,
+                          fontSize:11,cursor:'pointer',padding:'2px 8px',
+                          color:d.delivered?T.green:T.textMuted,fontWeight:d.delivered?700:400}}>
+                        {d.delivered?'✓ Consegnato':'Segna consegnato'}
+                      </button>
+                    </>
                   ):(
-                    <span style={{fontSize:12,color:T.textMuted}}>—</span>
+                    <button
+                      onClick={e=>{e.stopPropagation();setSelectedId(p.id)}}
+                      style={{background:'none',border:`1px dashed ${T.border}`,borderRadius:5,
+                        fontSize:11,cursor:'pointer',padding:'2px 8px',color:T.textMuted}}>
+                      📅 Imposta
+                    </button>
                   )}
                 </div>
 
@@ -2470,11 +2486,11 @@ function ProjectCard({project,onClick,onDelete,onArchive,delivery,onSetDelivery}
                 </span>
               )}
               <span style={{fontSize:12,color:T.textMuted}}>{new Date(delivery.dueDate).toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric'})}</span>
-              <button onClick={e=>{e.stopPropagation();setDateVal(delivery.dueDate);setEditingDate(true)}} style={{background:'none',border:'none',color:T.textMuted,fontSize:11,cursor:'pointer',padding:'0 2px',opacity:hovered?0.7:0}}>✏️</button>
-              <button onClick={e=>{e.stopPropagation();onSetDelivery(project.id,null,!delivery.delivered)}} title={delivery.delivered?'Segna come da consegnare':'Segna come consegnato'} style={{background:'none',border:`1px solid ${T.border}`,borderRadius:6,color:delivery.delivered?T.textMuted:T.green,fontSize:11,cursor:'pointer',padding:'2px 7px',opacity:hovered?1:0}}>{delivery.delivered?'↩ Riapri':'✓ Consegnato'}</button>
+              <button onClick={e=>{e.stopPropagation();setDateVal(delivery.dueDate);setEditingDate(true)}} style={{background:'none',border:'none',color:T.textMuted,fontSize:11,cursor:'pointer',padding:'0 2px',opacity:0.5}}>✏️</button>
+              <button onClick={e=>{e.stopPropagation();onSetDelivery(project.id,null,!delivery.delivered)}} title={delivery.delivered?'Segna come da consegnare':'Segna come consegnato'} style={{background:'none',border:`1px solid ${T.border}`,borderRadius:6,color:delivery.delivered?T.textMuted:T.green,fontSize:11,cursor:'pointer',padding:'2px 7px'}}>{delivery.delivered?'↩ Riapri':'✓ Consegnato'}</button>
             </div>
           ):(
-            <button onClick={e=>{e.stopPropagation();setDateVal('');setEditingDate(true)}} style={{background:'none',border:`1px dashed ${T.border}`,borderRadius:6,color:T.textMuted,fontSize:12,padding:'3px 10px',cursor:'pointer',opacity:hovered?1:0.4}}>📅 Imposta scadenza</button>
+            <button onClick={e=>{e.stopPropagation();setDateVal('');setEditingDate(true)}} style={{background:'none',border:`1px dashed ${T.border}`,borderRadius:6,color:T.textMuted,fontSize:12,padding:'3px 10px',cursor:'pointer',opacity:0.7}}>📅 Imposta scadenza</button>
           )}
         </div>
         {/* Barra preparazione */}

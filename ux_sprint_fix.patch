@@ -1,0 +1,438 @@
+From be04fc79be4bfefd52cc8ced51100ac68d9ef54f Mon Sep 17 00:00:00 2001
+From: DMGDesk UX <ux@dmgdesk>
+Date: Wed, 22 Apr 2026 18:04:28 +0000
+Subject: [PATCH] =?UTF-8?q?ux:=20sprint=20UX/UI=20=E2=80=94=209=20fix=20da?=
+ =?UTF-8?q?=20analisi=20interfaccia?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+- App.jsx: barra stato macchina globale 4px (verde/rosso/blu/grigio)
+  sempre visibile su tutte le pagine, aggiornata dal GlobalPoller
+- CodaLavorazione: stato FERMA → rosso con pulse, sfondo card rosa tenue
+- AnalisiNC: empty state guidato con icona + istruzioni; bottone
+  'Genera MAIN' disabilitato ora mostra tooltip con motivo specifico
+- Progetti: Note rapide collassate di default (non intralcia operatore)
+- Macchina: gerarchia colonne utensili — Nome/Vita/Stato enfatizzati,
+  L/R/Duplo smorzati; intestazioni primarie con bordo navy
+- Report: KpiCard OEE — tooltip con spiegazione D (Disponibilità) e
+  P (Performance) con valori live
+- CodaLavorazione: handle drag ⠿ visibile su ogni riga coda;
+  rimossa micro-label 'trascina per riordinare'
+- AnalyticsCommesse: righe alternate mappa termica fasce orarie;
+  AlertBadge ritardo più prominente (box-shadow, colore scuro)
+- Home: pallet vuoti ridotti (minHeight 80px, opacity 0.6,
+  numero P più piccolo) — meno rumore visivo
+---
+ frontend/src/App.jsx                     | 64 ++++++++++++++++++++-
+ frontend/src/pages/AnalisiNC.jsx         | 73 ++++++++++++++++++++----
+ frontend/src/pages/AnalyticsCommesse.jsx | 19 +++---
+ frontend/src/pages/CodaLavorazione.jsx   | 22 +++++--
+ frontend/src/pages/Home.jsx              | 14 +++--
+ frontend/src/pages/Macchina.jsx          | 37 ++++++------
+ frontend/src/pages/Progetti.jsx          |  2 +-
+ frontend/src/pages/Report.jsx            |  3 +-
+ 8 files changed, 185 insertions(+), 49 deletions(-)
+
+diff --git a/frontend/src/App.jsx b/frontend/src/App.jsx
+index b3771e9..04527ac 100644
+--- a/frontend/src/App.jsx
++++ b/frontend/src/App.jsx
+@@ -1,5 +1,5 @@
+ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
+-import { useEffect, Component } from 'react'
++import { useEffect, useState, Component } from 'react'
+ import Sidebar       from './components/Sidebar'
+ import Home          from './pages/Home'
+ import CodaLavorazione from './pages/CodaLavorazione'
+@@ -67,6 +67,63 @@ class ErrorBoundary extends Component {
+   }
+ }
+ 
++// ── Barra stato macchina globale ──────────────────────────────────────────────
++// Striscia di 4px in cima al contenuto principale, sempre visibile.
++// Verde = in lavorazione · Giallo = JOG · Rosso pulse = FERMA/allarme · Grigio = sconosciuto
++function GlobalStatusBar() {
++  const [stato, setStato] = useState(null)
++
++  useEffect(() => {
++    const onUpdate = (e) => {
++      const d = e.detail || {}
++      if (d.log_stale) {
++        setStato('stale')
++      } else if (d.stato_macchina !== undefined) {
++        if ([1, 3].includes(d.stato_macchina)) setStato('attiva')
++        else if (d.stato_macchina === 2)        setStato('jog')
++        else                                    setStato('ferma')
++      }
++    }
++    // Fetch iniziale
++    fetch('/api/macchina-live/stato')
++      .then(r => r.ok ? r.json() : null)
++      .then(d => {
++        if (!d) return
++        if (d.log_stale) setStato('stale')
++        else if ([1, 3].includes(d.stato_programma)) setStato('attiva')
++        else if (d.stato_programma === 2)             setStato('jog')
++        else                                          setStato('ferma')
++      }).catch(() => {})
++
++    window.addEventListener('dmgdesk:stati-aggiornati', onUpdate)
++    return () => window.removeEventListener('dmgdesk:stati-aggiornati', onUpdate)
++  }, [])
++
++  const cfg = {
++    attiva: { color: '#22c55e', label: 'IN LAVORAZIONE', animate: false },
++    jog:    { color: '#3b82f6', label: 'JOG',            animate: false },
++    ferma:  { color: '#ef4444', label: 'FERMA',          animate: true  },
++    stale:  { color: '#ef4444', label: 'CONNESSIONE PERSA', animate: true },
++  }[stato] || { color: '#475569', label: '', animate: false }
++
++  return (
++    <div style={{
++      height: 4, flexShrink: 0,
++      background: cfg.color,
++      transition: 'background 0.4s ease',
++      animation: cfg.animate ? 'statusPulse 2s ease-in-out infinite' : 'none',
++      position: 'relative', zIndex: 10,
++    }}>
++      <style>{`
++        @keyframes statusPulse {
++          0%, 100% { opacity: 1; }
++          50%       { opacity: 0.45; }
++        }
++      `}</style>
++    </div>
++  )
++}
++
+ // Polling globale — gira sempre, indipendentemente dalla pagina aperta
+ function GlobalPoller() {
+   useEffect(() => {
+@@ -99,7 +156,9 @@ function MainContent() {
+   const Wrap = ({ children }) => <ErrorBoundary>{children}</ErrorBoundary>
+   return (
+     <main style={{ flex:1, overflow:'auto', background:'var(--bg-base)',
+-      padding: isFull ? 0 : '20px 24px', display:'flex', flexDirection:'column' }}>
++      padding: 0, display:'flex', flexDirection:'column' }}>
++      <GlobalStatusBar />
++      <div style={{ flex:1, overflow:'auto', padding: isFull ? 0 : '20px 24px' }}>
+       <Routes>
+         <Route path="/"               element={<Navigate to="/home" replace />} />
+         <Route path="/home"           element={<Wrap><Home /></Wrap>} />
+@@ -121,6 +180,7 @@ function MainContent() {
+         <Route path="/turno"          element={<Wrap><RiepilogoTurno /></Wrap>} />
+         <Route path="/step-analyzer"  element={<Wrap><StepAnalyzer /></Wrap>} />
+       </Routes>
++      </div>
+     </main>
+   )
+ }
+diff --git a/frontend/src/pages/AnalisiNC.jsx b/frontend/src/pages/AnalisiNC.jsx
+index 63d99a2..aa76202 100644
+--- a/frontend/src/pages/AnalisiNC.jsx
++++ b/frontend/src/pages/AnalisiNC.jsx
+@@ -509,15 +509,44 @@ export default function AnalisiNC() {
+               borderColor: mainGeneratoFile ? 'rgba(21,128,61,0.4)' : 'var(--border)' }}
+             onFocus={e => e.target.style.borderColor = 'var(--cyan)'}
+             onBlur={e => e.target.style.borderColor = mainGeneratoFile ? 'rgba(21,128,61,0.4)' : 'var(--border)'} />
+-          <button onClick={handleGeneraMain}
+-            disabled={mainBusy || !done.length || !nomeCartella.trim() || !percorso}
+-            style={{ padding: '6px 12px', borderRadius: 7, fontSize: 12, fontWeight: 700, flexShrink: 0,
+-              cursor: (mainBusy || !done.length || !nomeCartella.trim() || !percorso) ? 'not-allowed' : 'pointer',
+-              background: mainGeneratoFile ? 'rgba(21,128,61,0.15)' : (!done.length || !nomeCartella.trim() || !percorso) ? 'var(--bg-hover)' : '#D4700A',
+-              border: mainGeneratoFile ? '1px solid rgba(21,128,61,0.3)' : 'none',
+-              color: mainGeneratoFile ? '#15803d' : (!done.length || !nomeCartella.trim() || !percorso) ? 'var(--text-dim)' : 'white' }}>
+-            {mainBusy ? '⏳' : mainGeneratoFile ? `✓ ${mainGeneratoFile.name}` : '📄 Genera MAIN'}
+-          </button>
++          {(() => {
++            const motivoDisabilitato = !done.length
++              ? 'Aggiungi almeno un file NC prima'
++              : !nomeCartella.trim()
++              ? 'Inserisci il nome commessa (es. 4297_0005)'
++              : !percorso
++              ? 'Percorso di salvataggio non configurato'
++              : null
++            return (
++              <div style={{ position: 'relative', display: 'inline-block' }}
++                title={motivoDisabilitato || ''}>
++                <button onClick={handleGeneraMain}
++                  disabled={mainBusy || !!motivoDisabilitato}
++                  style={{ padding: '6px 12px', borderRadius: 7, fontSize: 12, fontWeight: 700, flexShrink: 0,
++                    cursor: (mainBusy || !!motivoDisabilitato) ? 'not-allowed' : 'pointer',
++                    background: mainGeneratoFile ? 'rgba(21,128,61,0.15)' : motivoDisabilitato ? 'var(--bg-hover)' : '#D4700A',
++                    border: mainGeneratoFile ? '1px solid rgba(21,128,61,0.3)' : motivoDisabilitato ? '1px dashed var(--border)' : 'none',
++                    color: mainGeneratoFile ? '#15803d' : motivoDisabilitato ? 'var(--text-dim)' : 'white' }}>
++                  {mainBusy ? '⏳' : mainGeneratoFile ? `✓ ${mainGeneratoFile.name}` : '📄 Genera MAIN'}
++                </button>
++                {motivoDisabilitato && (
++                  <div style={{
++                    position: 'absolute', bottom: 'calc(100% + 6px)', left: '50%',
++                    transform: 'translateX(-50%)', whiteSpace: 'nowrap',
++                    background: '#1e293b', color: '#fff', fontSize: 11,
++                    padding: '5px 9px', borderRadius: 6, pointerEvents: 'none',
++                    zIndex: 100, boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
++                    opacity: 0,
++                  }}
++                  onMouseEnter={e => e.currentTarget.style.opacity = '1'}
++                  className="btn-tooltip"
++                  >
++                    ⚠ {motivoDisabilitato}
++                  </div>
++                )}
++              </div>
++            )
++          })()}
+         </div>
+ 
+         <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>›</span>
+@@ -687,8 +716,30 @@ export default function AnalisiNC() {
+             {/* Righe */}
+             <div style={{ flex: 1, overflow: 'auto' }}>
+               {entries.length === 0 && (
+-                <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--text-dim)', fontSize: 13 }}>
+-                  Aggiungi file NC per il confronto automatico
++                <div style={{
++                  padding: '32px 20px', textAlign: 'center',
++                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12,
++                }}>
++                  <div style={{
++                    width: 52, height: 52, borderRadius: 14,
++                    background: 'var(--bg-hover)',
++                    border: '2px dashed var(--border)',
++                    display: 'flex', alignItems: 'center', justifyContent: 'center',
++                    fontSize: 22,
++                  }}>📂</div>
++                  <div style={{ color: 'var(--text-primary)', fontWeight: 700, fontSize: 13 }}>
++                    Nessun file NC caricato
++                  </div>
++                  <div style={{ color: 'var(--text-dim)', fontSize: 12, lineHeight: 1.6, maxWidth: 220 }}>
++                    Clicca <strong style={{color:'var(--text-primary)'}}>+ File NC</strong> in alto per aggiungere uno o più file MPF.<br/>
++                    Il sistema confronterà automaticamente gli utensili richiesti con quelli presenti nel magazine Sinumerik.
++                  </div>
++                  <div style={{
++                    background: 'rgba(29,95,173,0.07)', border: '1px solid rgba(29,95,173,0.2)',
++                    borderRadius: 8, padding: '8px 14px', fontSize: 11, color: '#1D5FAD',
++                  }}>
++                    💡 Suggerimento: puoi aggiungere più file NC della stessa commessa
++                  </div>
+                 </div>
+               )}
+               {/* Mancanti — con bottone esplicito */}
+diff --git a/frontend/src/pages/AnalyticsCommesse.jsx b/frontend/src/pages/AnalyticsCommesse.jsx
+index 8694135..47a4328 100644
+--- a/frontend/src/pages/AnalyticsCommesse.jsx
++++ b/frontend/src/pages/AnalyticsCommesse.jsx
+@@ -104,13 +104,18 @@ function AlertBadge({ alert }) {
+   const isRitardo = alert.tipo === 'ritardo'
+   return (
+     <div style={{
+-      fontSize:10, fontWeight:700, padding:'3px 8px', borderRadius:4,
++      fontSize: isRitardo ? 11 : 10,
++      fontWeight: 700,
++      padding: isRitardo ? '4px 10px' : '3px 8px',
++      borderRadius: 5,
+       background: isRitardo ? '#fef2f2' : '#fffbeb',
+-      color: isRitardo ? '#dc2626' : '#b45309',
+-      border: `1px solid ${isRitardo ? '#fca5a5' : '#fcd34d'}`,
++      color: isRitardo ? '#991b1b' : '#b45309',
++      border: `1.5px solid ${isRitardo ? '#f87171' : '#fcd34d'}`,
+       whiteSpace:'nowrap',
++      display:'inline-flex', alignItems:'center', gap:5,
++      boxShadow: isRitardo ? '0 1px 4px rgba(239,68,68,0.18)' : 'none',
+     }}>
+-      {isRitardo ? '⚠ ' : '⏰ '}{alert.msg}
++      {isRitardo ? '🔴' : '⏰'} {alert.msg}
+     </div>
+   )
+ }
+@@ -263,11 +268,11 @@ function HeatmapUtilizzo({ data }) {
+             </tr>
+           </thead>
+           <tbody>
+-            {FASCIA_ORDER.map(fk => (
+-              <tr key={fk}>
++            {FASCIA_ORDER.map((fk, rowIdx) => (
++              <tr key={fk} style={{ background: rowIdx % 2 === 1 ? 'rgba(241,245,249,0.7)' : 'transparent' }}>
+                 <td style={{fontSize:10, color:'#475569', paddingRight:10,
+                   paddingTop:3, paddingBottom:3, whiteSpace:'nowrap',
+-                  fontWeight:600}}>
++                  fontWeight:600, background: rowIdx % 2 === 1 ? 'rgba(241,245,249,0.7)' : 'transparent' }}>
+                   {FASCIA_LABEL[fk]}
+                 </td>
+                 {giorni.map(g => {
+diff --git a/frontend/src/pages/CodaLavorazione.jsx b/frontend/src/pages/CodaLavorazione.jsx
+index 97c24ec..2fbf9b5 100644
+--- a/frontend/src/pages/CodaLavorazione.jsx
++++ b/frontend/src/pages/CodaLavorazione.jsx
+@@ -908,8 +908,8 @@ export default function CodaLavorazione() {
+ 
+         {/* ── Card stato macchina compatta ─────────────────────────── */}
+         <div style={{
+-          background: inLavorazione ? '#0d2d5e' : '#ffffff',
+-          border: '1px solid ' + (inLavorazione ? '#1a4080' : '#e2e8f0'),
++          background: inLavorazione ? '#0d2d5e' : '#fff5f5',
++          border: '1px solid ' + (inLavorazione ? '#1a4080' : '#fecaca'),
+           borderRadius: 12, padding: '12px 16px', flexShrink: 0
+         }}>
+           {/* Riga principale: stato + programma + utensile */}
+@@ -917,11 +917,12 @@ export default function CodaLavorazione() {
+             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+               <div style={{
+                 width: 10, height: 10, borderRadius: '50%', flexShrink: 0,
+-                background: inLavorazione ? '#22c55e' : '#94a3b8',
+-                boxShadow: inLavorazione ? '0 0 6px #22c55e' : 'none'
++                background: inLavorazione ? '#22c55e' : '#ef4444',
++                boxShadow: inLavorazione ? '0 0 6px #22c55e' : '0 0 5px rgba(239,68,68,0.5)',
++                animation: inLavorazione ? 'none' : 'pulseRed 2s ease-in-out infinite'
+               }}/>
+               <span style={{ fontSize: 13, fontWeight: 800,
+-                color: inLavorazione ? '#fff' : '#374151' }}>
++                color: inLavorazione ? '#fff' : '#dc2626' }}>
+                 {inLavorazione ? 'IN ESECUZIONE' : 'FERMA'}
+               </span>
+             </div>
+@@ -1159,7 +1160,7 @@ export default function CodaLavorazione() {
+                     ✓ Segna {totSel} completat{totSel === 1 ? 'o' : 'i'}
+                   </button>
+                 ) : (
+-                  <span style={{ fontSize: 11, color: '#94a3b8', marginLeft: 'auto' }}>trascina per riordinare</span>
++
+                 )
+               })()}
+             </div>
+@@ -1197,6 +1198,15 @@ export default function CodaLavorazione() {
+                         n.has(p.numero) ? n.delete(p.numero) : n.add(p.numero)
+                         return n
+                       })}>
++                      {/* Handle drag visibile */}
++                      {!espanso && (
++                        <span style={{ fontSize: 12, color: '#cbd5e1', cursor: 'grab',
++                          flexShrink: 0, lineHeight: 1, userSelect: 'none',
++                          padding: '0 2px', letterSpacing: '-1px' }}
++                          title="Trascina per riordinare">
++                          ⠿
++                        </span>
++                      )}
+                       <span style={{ fontSize: 9, fontWeight: 800, color: col,
+                         background: col + '18', padding: '2px 6px', borderRadius: 8, flexShrink: 0 }}>
+                         {idx + 1}°
+diff --git a/frontend/src/pages/Home.jsx b/frontend/src/pages/Home.jsx
+index 3626e2a..9ab92b6 100644
+--- a/frontend/src/pages/Home.jsx
++++ b/frontend/src/pages/Home.jsx
+@@ -962,16 +962,22 @@ export default function Home(){
+                 return(
+                   <div key={n}
+                     onClick={info?()=>nav('/progetti',{state:{openId:info.proj.id}}):undefined}
+-                    style={{background:c.bg,border:`1.5px solid ${c.border}`,borderRadius:10,
+-                      padding:'14px 14px',cursor:info?'pointer':'default',
+-                      minHeight:130,display:'flex',flexDirection:'column',gap:6,
++                    style={{
++                      background: isVuoto ? '#fafafa' : c.bg,
++                      border: `1.5px solid ${isVuoto ? '#e8ecf0' : c.border}`,
++                      borderRadius:10,
++                      padding: isVuoto ? '10px 10px' : '14px 14px',
++                      cursor:info?'pointer':'default',
++                      minHeight: isVuoto ? 80 : 130,
++                      opacity: isVuoto ? 0.6 : 1,
++                      display:'flex',flexDirection:'column',gap:6,
+                       transition:'transform 0.12s, box-shadow 0.12s',position:'relative'}}
+                     onMouseEnter={e=>{if(info){e.currentTarget.style.transform='translateY(-2px)';e.currentTarget.style.boxShadow='0 4px 14px rgba(0,0,0,.08)'}}}
+                     onMouseLeave={e=>{e.currentTarget.style.transform='none';e.currentTarget.style.boxShadow='none'}}>
+ 
+                     {/* Numero + badge stato */}
+                     <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+-                      <span style={{fontSize:30,fontWeight:900,color:c.fg,lineHeight:1}}>P{n}</span>
++                      <span style={{fontSize: isVuoto ? 20 : 30,fontWeight: isVuoto ? 700 : 900,color:c.fg,lineHeight:1}}>P{n}</span>
+                       <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:3}}>
+                         {!isVuoto&&(
+                           <span style={{fontSize:9,fontWeight:800,color:c.accent||c.fg,
+diff --git a/frontend/src/pages/Macchina.jsx b/frontend/src/pages/Macchina.jsx
+index d192560..6e24681 100644
+--- a/frontend/src/pages/Macchina.jsx
++++ b/frontend/src/pages/Macchina.jsx
+@@ -829,18 +829,21 @@ export default function Macchina() {
+             <thead>
+               <tr style={{ borderBottom: '2px solid var(--border)', background: '#f8fafc' }}>
+                 {[
+-                  { h:'Pos', t:'Posizione nel magazine Sinumerik.\nM = numero magazine · P = posizione slot.\nGli utensili fuori magazine (M—) non sono montati ma presenti in archivio TOA.' },
+-                  { h:'Nome utensile', t:'Alias utensile come registrato nel TOA (Tool Offset Archive) Sinumerik.\nUsato come chiave per associare i cicli di lavorazione registrati dal LOG macchina.' },
+-                  { h:'Duplo', t:'Numero fratello gemello (duplo) nel sistema Sinumerik.\nUtensili con lo stesso alias e duplo diverso sono gemelli intercambiabili — la macchina li alterna automaticamente quando uno si consuma.' },
+-                  { h:'L (mm)', t:'Lunghezza utensile in mm, letta dal TOA Sinumerik.\nValore di compensazione geometrica usato dal CNC per il calcolo delle traiettorie.' },
+-                  { h:'R (mm)', t:'Raggio utensile in mm, letto dal TOA Sinumerik.\nUsato per la compensazione del raggio nelle operazioni di fresatura.' },
+-                  { h:'Vita %', t:"Percentuale di vita utensile residua letta dal TOA Sinumerik.\n100% = utensile nuovo · 0% = vita esaurita (il CNC bloccherà l'uso).\nLa barra viola indica il livello residuo — rosso sotto il 10%." },
+-                  { h:'Cicli', t:'Numero di cicli NC eseguiti con questo utensile, rilevati dal LOG macchina.\nMostra anche la durata media per ciclo — utile per confrontare con il valore atteso dal CAM.' },
+-                  { h:'Stato', t:"Stato operativo dell'utensile:\n• Attivo — disponibile e nella norma\n• Worn — vita quasi esaurita (<10%)\n• Disabled — disabilitato nel Sinumerik\n• Fuori mag. — non montato nel magazine" },
+-                ].map(({h, t}) => (
++                  { h:'Pos',          t:'Posizione nel magazine Sinumerik.\nM = numero magazine · P = posizione slot.\nGli utensili fuori magazine (M—) non sono montati ma presenti in archivio TOA.', primary:false },
++                  { h:'Nome utensile',t:'Alias utensile come registrato nel TOA (Tool Offset Archive) Sinumerik.\nUsato come chiave per associare i cicli di lavorazione registrati dal LOG macchina.', primary:true },
++                  { h:'Duplo',        t:'Numero fratello gemello (duplo) nel sistema Sinumerik.\nUtensili con lo stesso alias e duplo diverso sono gemelli intercambiabili — la macchina li alterna automaticamente quando uno si consuma.', primary:false },
++                  { h:'L (mm)',       t:'Lunghezza utensile in mm, letta dal TOA Sinumerik.\nValore di compensazione geometrica usato dal CNC per il calcolo delle traiettorie.', primary:false },
++                  { h:'R (mm)',       t:'Raggio utensile in mm, letto dal TOA Sinumerik.\nUsato per la compensazione del raggio nelle operazioni di fresatura.', primary:false },
++                  { h:'Vita %',       t:"Percentuale di vita utensile residua letta dal TOA Sinumerik.\n100% = utensile nuovo · 0% = vita esaurita (il CNC bloccherà l'uso).\nLa barra viola indica il livello residuo — rosso sotto il 10%.", primary:true },
++                  { h:'Cicli',        t:'Numero di cicli NC eseguiti con questo utensile, rilevati dal LOG macchina.\nMostra anche la durata media per ciclo — utile per confrontare con il valore atteso dal CAM.', primary:false },
++                  { h:'Stato',        t:"Stato operativo dell'utensile:\n• Attivo — disponibile e nella norma\n• Worn — vita quasi esaurita (<10%)\n• Disabled — disabilitato nel Sinumerik\n• Fuori mag. — non montato nel magazine", primary:true },
++                ].map(({h, t, primary}) => (
+                   <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontSize: 10,
+-                    fontFamily: 'var(--font-mono)', color: 'var(--text-dim)',
+-                    fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em',
++                    fontFamily: 'var(--font-mono)',
++                    color: primary ? 'var(--navy-700)' : 'var(--text-dim)',
++                    fontWeight: primary ? 800 : 600,
++                    textTransform: 'uppercase', letterSpacing: '0.1em',
++                    borderBottom: primary ? '2px solid var(--navy-700)' : undefined,
+                     position: 'sticky', top: 0, background: '#f8fafc', zIndex: 1 }}>
+                     <span style={{display:'inline-flex',alignItems:'center',gap:3}}>
+                       {h}<InfoTooltip text={t} position='bottom' />
+@@ -878,14 +881,14 @@ export default function Macchina() {
+                     <td style={{ padding: '9px 14px', fontFamily: 'var(--font-mono)', fontSize: 13,
+                       color: isDis ? 'var(--text-dim)' : 'var(--text-primary)', fontWeight: 700 }}>{t.name}</td>
+                     {/* Duplo */}
+-                    <td style={{ padding: '9px 14px', fontFamily: 'var(--font-mono)', fontSize: 12,
+-                      fontWeight: 700, color: '#475569' }}>#{t.duplo}</td>
++                    <td style={{ padding: '9px 14px', fontFamily: 'var(--font-mono)', fontSize: 11,
++                      fontWeight: 600, color: '#94a3b8' }}>#{t.duplo}</td>
+                     {/* L mm */}
+-                    <td style={{ padding: '9px 14px', fontFamily: 'var(--font-mono)', fontSize: 12,
+-                      color: 'var(--text-secondary)' }}>{t.length?.toFixed(3)}</td>
++                    <td style={{ padding: '9px 14px', fontFamily: 'var(--font-mono)', fontSize: 11,
++                      color: '#94a3b8' }}>{t.length?.toFixed(3)}</td>
+                     {/* R mm */}
+-                    <td style={{ padding: '9px 14px', fontFamily: 'var(--font-mono)', fontSize: 12,
+-                      color: 'var(--text-secondary)' }}>{t.radius?.toFixed(3)}</td>
++                    <td style={{ padding: '9px 14px', fontFamily: 'var(--font-mono)', fontSize: 11,
++                      color: '#94a3b8' }}>{t.radius?.toFixed(3)}</td>
+                     {/* Vita */}
+                     <td style={{ padding: '9px 14px' }}>{(()=>{
+                       const alias = (t.name||'').toUpperCase().trim()
+diff --git a/frontend/src/pages/Progetti.jsx b/frontend/src/pages/Progetti.jsx
+index b0c7b01..a8e321d 100644
+--- a/frontend/src/pages/Progetti.jsx
++++ b/frontend/src/pages/Progetti.jsx
+@@ -3372,7 +3372,7 @@ export default function Progetti(){
+   const[showNewProject,setShowNewProject]=useState(false)
+   const[preselectedTemplate,setPreselectedTemplate]=useState(null)
+   const[search,setSearch]=useState('')
+-  const[sidebarCollapsed,setSidebarCollapsed]=useState(false)
++  const[sidebarCollapsed,setSidebarCollapsed]=useState(true)
+   const[lastSavedProj,setLastSavedProj]=useState(null)
+   const[lastSavedTmpl,setLastSavedTmpl]=useState(null)
+   const[saveError,setSaveError]=useState(null)        // errore salvataggio batch
+diff --git a/frontend/src/pages/Report.jsx b/frontend/src/pages/Report.jsx
+index f9f557c..f7b1f7e 100644
+--- a/frontend/src/pages/Report.jsx
++++ b/frontend/src/pages/Report.jsx
+@@ -1299,7 +1299,8 @@ export default function Report() {
+             ? <KpiCard label="OEE"
+                 value={`${rpt.oee.valore}%`}
+                 color={rpt.oee.valore >= 75 ? '#22c55e' : rpt.oee.valore >= 50 ? '#f59e0b' : '#ef4444'}
+-                sub={`D:${rpt.oee.disponibilita}% P:${rpt.oee.performance}%`} />
++                sub={`D:${rpt.oee.disponibilita}% P:${rpt.oee.performance}%`}
++                tooltip={`OEE = Disponibilità × Performance × Qualità\n\nD (Disponibilità): ${rpt.oee.disponibilita}% — % del turno in cui la macchina era in esecuzione\nP (Performance): ${rpt.oee.performance}% — velocità reale vs attesa\n\n≥75% = World class · ≥50% = In miglioramento · <50% = Da analizzare`} />
+             : <KpiCard label="Sessioni" value={rpt.n_sessioni} color="#8b5cf6" />
+           }
+         </div>
+-- 
+2.43.0
+

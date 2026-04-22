@@ -2477,17 +2477,25 @@ function ProjectCard({project,onClick,onDelete,onArchive,delivery,onSetDelivery}
               <button onClick={e=>{e.stopPropagation();setEditingDate(false)}} style={{background:'none',border:`1px solid ${T.border}`,borderRadius:6,color:T.textSub,fontSize:12,padding:'4px 8px',cursor:'pointer'}}>✕</button>
             </div>
           ):delivery?.dueDate?(
-            <div style={{display:'flex',alignItems:'center',gap:8}}>
-              {delivery.delivered?(
-                <span style={{fontSize:12,color:T.green,fontWeight:700,background:T.greenBg,padding:'2px 10px',borderRadius:20}}>✓ Consegnato {delivery.deliveredAt||''}</span>
-              ):(
-                <span style={{fontSize:12,fontWeight:800,color:urgency.color,background:urgency.bg,padding:'3px 12px',borderRadius:20,border:`1px solid ${urgency.color}33`}}>
-                  {urgency.dot} {days===0?'OGGI':days<0?`Scaduto ${Math.abs(days)}gg fa`:`${days}gg alla consegna`}
-                </span>
-              )}
-              <span style={{fontSize:12,color:T.textMuted}}>{new Date(delivery.dueDate).toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric'})}</span>
-              <button onClick={e=>{e.stopPropagation();setDateVal(delivery.dueDate);setEditingDate(true)}} style={{background:'none',border:'none',color:T.textMuted,fontSize:11,cursor:'pointer',padding:'0 2px',opacity:0.5}}>✏️</button>
-              <button onClick={e=>{e.stopPropagation();onSetDelivery(project.id,null,!delivery.delivered)}} title={delivery.delivered?'Segna come da consegnare':'Segna come consegnato'} style={{background:'none',border:`1px solid ${T.border}`,borderRadius:6,color:delivery.delivered?T.textMuted:T.green,fontSize:11,cursor:'pointer',padding:'2px 7px'}}>{delivery.delivered?'↩ Riapri':'✓ Consegnato'}</button>
+            <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+              {/* Badge countdown/consegnato — click per modificare data */}
+              <div onClick={e=>{e.stopPropagation();setDateVal(delivery.dueDate);setEditingDate(true)}}
+                style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer',borderRadius:6,
+                  padding:'2px 4px',transition:'background 0.12s'}}
+                onMouseEnter={e=>e.currentTarget.style.background='rgba(0,0,0,0.04)'}
+                onMouseLeave={e=>e.currentTarget.style.background='transparent'}
+                title="Clicca per modificare la data">
+                {delivery.delivered?(
+                  <span style={{fontSize:12,color:T.green,fontWeight:700,background:T.greenBg,padding:'2px 10px',borderRadius:20}}>✓ Consegnato {delivery.deliveredAt||''}</span>
+                ):(
+                  <span style={{fontSize:12,fontWeight:800,color:urgency.color,background:urgency.bg,padding:'3px 12px',borderRadius:20,border:`1px solid ${urgency.color}33`}}>
+                    {urgency.dot} {days===0?'OGGI':days<0?`Scaduto ${Math.abs(days)}gg fa`:`${days}gg alla consegna`}
+                  </span>
+                )}
+                <span style={{fontSize:12,color:T.textMuted}}>{new Date(delivery.dueDate).toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric'})}</span>
+                <span style={{fontSize:10,color:T.textMuted,opacity:0.4}}>✏️</span>
+              </div>
+              <button onClick={e=>{e.stopPropagation();onSetDelivery(project.id,null,!delivery.delivered)}} title={delivery.delivered?'Segna come da consegnare':'Segna come consegnato'} style={{background:'none',border:`1px solid ${T.border}`,borderRadius:6,color:delivery.delivered?T.textMuted:T.green,fontSize:11,cursor:'pointer',padding:'2px 7px',fontWeight:600}}>{delivery.delivered?'↩ Riapri':'✓ Consegnato'}</button>
             </div>
           ):(
             <button onClick={e=>{e.stopPropagation();setDateVal('');setEditingDate(true)}} style={{background:'none',border:`1px dashed ${T.border}`,borderRadius:6,color:T.textMuted,fontSize:12,padding:'3px 10px',cursor:'pointer',opacity:0.7}}>📅 Imposta scadenza</button>

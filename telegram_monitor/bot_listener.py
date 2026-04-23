@@ -109,6 +109,7 @@ class BotListener:
             try:
                 ctx = await self._get_live_context()
                 match = ctx.get("match")
+                log.info(f"_cmd_stato ctx keys={list(ctx.keys())} match={match!r}")
                 if match:
                     nome            = match.get("progetto_nome", "")
                     batch_comp      = match.get("batch_completati", 0)

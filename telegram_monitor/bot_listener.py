@@ -122,8 +122,8 @@ class BotListener:
                         f"⚙️ Batch:    {_barra(batch_pct, 10)} {batch_pct}% ({batch_comp}/{batch_tot})\n"
                         f"📦 Progetto: {_barra(prog_pct, 10)} {prog_pct}% ({prog_comp}/{prog_tot})"
                     )
-            except Exception:
-                pass
+            except Exception as e:
+                log.warning(f"_cmd_stato progresso fetch error: {e}")
 
         stale_warn = ""
         if log_age and log_age > 120:

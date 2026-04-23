@@ -448,6 +448,10 @@ async def get_live_context():
         m = _re.search(r'_N_([^/]+)_MPF', prog_raw, _re.IGNORECASE)
         if m:
             mpf_filename = m.group(1).replace('_', '_') + '.MPF'
+        elif prog_raw.upper().endswith('.MPF'):
+            # prog_raw è già un filename pulito (non formato OPC UA)
+            mpf_filename = prog_raw
+        if m:
             # Potrebbe avere underscore → es _N_SGROSSATURA_SPIRALE_14_MPF
             # → SGROSSATURA_SPIRALE_14.MPF
         # Estrai cartella WPD (commessa)

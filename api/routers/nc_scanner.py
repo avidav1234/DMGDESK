@@ -326,7 +326,7 @@ def _trova_o_crea_task_fresatura(project: dict, fase_label: str) -> dict | None:
 
     for step in project.get("steps", []):
         step_norm = _norm_fase(step.get("title", ""))
-        if step_norm in varianti or fase_norm in step_norm or step_norm in fase_norm:
+        if step_norm and step_norm in varianti:
             for task in step.get("tasks", []):
                 if task.get("text", "").strip().lower() == "fresatura":
                     return task

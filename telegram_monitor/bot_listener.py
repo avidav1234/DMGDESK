@@ -105,7 +105,7 @@ class BotListener:
 
         # Prova a recuperare il progresso dal live context
         progresso_str = ""
-        if self._get_live_context and stato_prog in (2, 3):
+        if self._get_live_context:
             try:
                 ctx = await self._get_live_context()
                 match = ctx.get("match")

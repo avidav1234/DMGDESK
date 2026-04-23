@@ -266,11 +266,20 @@ async def salva_main_snapshot(body: dict = Body(...)):
     mp = Path(main_path)
     hash_val = _hash_file(mp) if mp.exists() else ""
 
+    def _norm_pgm(f):
+        n = str(f).strip().upper()
+        if n.startswith("_N_"):
+            n = n[3:]
+        if n.endswith("_MPF"):
+            n = n[:-4] + ".MPF"
+        if not n.endswith(".MPF"):
+            n += ".MPF"
+        return n
+
     progetto["main_snapshot"] = {
         "main_path":      main_path,
         "main_hash":      hash_val,
-        "main_programmi": [f.upper() if not f.upper().endswith(".MPF")
-                           else f.upper() for f in programmi],
+        "main_programmi": [_norm_pgm(f) for f in programmi],
         "generato_il":    datetime.now().isoformat(timespec="seconds"),
         "main_sync_ts":   datetime.now().isoformat(timespec="seconds"),
     }

@@ -1540,7 +1540,7 @@ function LancioNCModal({project, toolsDB, initialSelectedIds, onLancia, onClose}
   )
 }
 
-function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onSaveAsTemplate,onLanciaNC,palletDisponibili=[],palletStato=[],delivery=null}){
+function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onSaveAsTemplate,onLanciaNC,palletDisponibili=[],palletStato=[],delivery=null,onSetDelivery}){
   const navPD = useNavigate()
   // Carica tools_machine una volta sola per questo progetto
   const [toolsDB, setToolsDB] = useState(null)
@@ -1740,6 +1740,41 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
               </div>
             )}
           </div>
+        </div>
+
+        {/* Barra gestione consegna */}
+        <div style={{
+          display:'flex',alignItems:'center',gap:12,flexWrap:'wrap',
+          padding:'8px 12px',marginBottom:10,
+          background:delivery?.delivered?T.greenBg:T.surface2,
+          border:`1px solid ${delivery?.delivered?T.green+'55':T.border}`,
+          borderRadius:10,fontSize:13
+        }}>
+          <span style={{fontSize:14,flexShrink:0}}>📅</span>
+          <span style={{fontWeight:600,color:T.textSub,flexShrink:0}}>Consegna:</span>
+          <input type="date" value={delivery?.dueDate||''}
+            onChange={e=>onSetDelivery&&onSetDelivery(project.id,e.target.value)}
+            style={{background:T.surface,border:`1px solid ${T.border}`,
+              borderRadius:6,padding:'4px 8px',fontSize:13,color:T.text,fontFamily:'inherit'}}/>
+          {delivery?.dueDate&&(
+            <button onClick={()=>onSetDelivery&&onSetDelivery(project.id,'')}
+              title="Rimuovi scadenza"
+              style={{background:'none',border:'none',color:T.textMuted,
+                fontSize:14,cursor:'pointer',padding:'2px 6px'}}>✕</button>
+          )}
+          <div style={{flex:1}}/>
+          <label style={{display:'flex',alignItems:'center',gap:6,
+            cursor:delivery?.dueDate?'pointer':'not-allowed',
+            opacity:delivery?.dueDate?1:0.5,flexShrink:0}}>
+            <input type="checkbox" checked={!!delivery?.delivered}
+              disabled={!delivery?.dueDate}
+              onChange={e=>onSetDelivery&&onSetDelivery(project.id,null,e.target.checked)}
+              style={{cursor:'inherit'}}/>
+            <span style={{fontWeight:700,
+              color:delivery?.delivered?T.green:T.textSub}}>
+              {delivery?.delivered?'✓ Consegnato':'Consegnato'}
+            </span>
+          </label>
         </div>
 
         {/* RIGA 2: doppie barre + ETA + scadenza */}
@@ -3746,7 +3781,7 @@ export default function Progetti(){
           {isOnEditor?(
             <TemplateEditor template={editingTemplate} onSave={saveTemplate} onCancel={()=>{setPage('templates');setEditingTemplate(null)}}/>
           ):isOnProject?(
-            <ProjectDetail project={selectedProject} onBack={()=>setSelectedId(null)} onUpdate={updateProject} onDelete={deleteProject} onArchive={archiveProject} templates={templates} onSaveAsTemplate={tmpl=>{setTemplates(ts=>{const next=ts.some(t=>t.id===tmpl.id)?ts.map(t=>t.id===tmpl.id?tmpl:t):[...ts,tmpl];persistTemplates(next);return next})}} onLanciaNC={lanciaNC} palletDisponibili={palletDisponibili} palletStato={palletState} delivery={getDelivery(selectedProject?.id)}/>
+            <ProjectDetail project={selectedProject} onBack={()=>setSelectedId(null)} onUpdate={updateProject} onDelete={deleteProject} onArchive={archiveProject} templates={templates} onSaveAsTemplate={tmpl=>{setTemplates(ts=>{const next=ts.some(t=>t.id===tmpl.id)?ts.map(t=>t.id===tmpl.id?tmpl:t):[...ts,tmpl];persistTemplates(next);return next})}} onLanciaNC={lanciaNC} palletDisponibili={palletDisponibili} palletStato={palletState} delivery={getDelivery(selectedProject?.id)} onSetDelivery={(pid,date,toggle)=>{const d=getDelivery(pid);if(toggle!==undefined){const patch={delivered:toggle,deliveredAt:toggle?new Date().toISOString():null};if(d)setDelivery(d.id,patch,true);else setDelivery(uid(),{projectId:pid,dueDate:'',...patch},false)}else if(!date){if(d)setDelivery(d.id,{dueDate:''},true)}else{if(d)setDelivery(d.id,{dueDate:date},true);else setDelivery(uid(),{projectId:pid,dueDate:date,delivered:false},false)}}}/>
           ):page==='home'?(
             <HomePage projects={projects} deliveries={deliveries} palletState={palletState} setupData={setupData}
               onNavigateProject={id=>{setSelectedId(id);setPage('projects')}}

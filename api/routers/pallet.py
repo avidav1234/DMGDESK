@@ -693,7 +693,7 @@ async def avvia_pallet(numero: int):
                     ha_in_main = any(pg.get("stato") == "in_main" for pg in _pgm)
                     if all_done:
                         p["stato"] = "finito"
-                        p["ha_avuto_finito"] = True
+                        # v2: ha_avuto_finito rimosso — non più usato dalla regola d'oro
                     elif ha_in_main:
                         p["stato"] = "grezzo"
                     else:
@@ -752,7 +752,7 @@ async def ricalcola_stati_pallet():
             tutti_completati = pgm_main and all(pg.get("stato") == "completato" for pg in pgm_main)
             if tutti_completati:
                 nuovo = "finito"
-                pal["ha_avuto_finito"] = True
+                # v2: ha_avuto_finito rimosso — non più usato
             elif ha_in_main:
                 nuovo = "grezzo"
             else:

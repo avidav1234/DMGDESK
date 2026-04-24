@@ -622,21 +622,10 @@ def _progetto_mai_iniziato(progetto: dict) -> bool:
     return True
 
 
-def _ha_main_valido(progetto: dict) -> bool:
-    """
-    True se il progetto ha un main_snapshot con path valido su disco.
-    Se il MAIN esiste, i programmi in_main sono intenzionali — non è interruzione.
-    """
-    snap = progetto.get("main_snapshot")
-    if not snap:
-        return False
-    path = snap.get("main_path")
-    if not path:
-        return False
-    try:
-        return Path(path).exists()
-    except Exception:
-        return False
+# _ha_main_valido RIMOSSA (feature/pallet-logic-v2):
+# La protezione "MAIN esiste su disco" mascherava interruzioni reali.
+# Con la regola d'oro, un pallet in_lavorazione che esce va sempre a finito o
+# guasto in base allo stato dei programmi — il MAIN non è rilevante qui.
 
 
 def _gestisci_cross_pallet(
@@ -646,69 +635,60 @@ def _gestisci_cross_pallet(
     updates: dict,
 ) -> tuple[bool, bool]:
     """
-    Quando parte un nuovo progetto, analizza p_altro per rilevare:
-    - Scenario A: completamento normale (solo in_lavorazione, nessun in_main)
-    - Scenario B: interruzione (in_main residui su progetto già avviato)
+    Quando parte un programma di un progetto diverso da `p_altro`, chiude i
+    programmi in_lavorazione di p_altro (erano attivi ma ora non più).
+
+    NOTA v2: questa funzione NON decide più lo stato del pallet.
+    La transizione del pallet (finito/guasto) è centralizzata in
+    _chiudi_pallet_in_lavorazione, chiamata dal blocco principale del tick
+    quando vede il pallet in_lavorazione non più attivo.
+
+    I programmi in_main residui NON vengono resettati a `da_fare`:
+    servono alla regola d'oro (pallet → guasto se esistono `in_main`).
+    Il reset dei programmi avviene solo alla rigenerazione del MAIN.
 
     Restituisce (proj_dirty, pallet_dirty).
     """
-    proj_dirty = pallet_dirty = False
+    proj_dirty = False
 
-    pgm_in_lav  = [p for p in _itera_programmi_fresatura(p_altro) if p.get("stato") == "in_lavorazione"]
-    pgm_in_main = [p for p in _itera_programmi_fresatura(p_altro) if p.get("stato") == "in_main"]
+    pgm_in_lav = [p for p in _itera_programmi_fresatura(p_altro) if p.get("stato") == "in_lavorazione"]
 
-    if not pgm_in_lav and not pgm_in_main:
+    if not pgm_in_lav:
         return False, False
 
-    # Protezione 1: progetto mai iniziato → non è interruzione
-    if not pgm_in_lav and _progetto_mai_iniziato(p_altro):
-        return False, False
-
-    # Protezione 2: progetto ha un MAIN valido su disco → i programmi in_main
-    # sono pianificati intenzionalmente, non residui di un'interruzione
-    if not pgm_in_lav and _ha_main_valido(p_altro):
-        return False, False
-
-    # Completa i programmi che stavano girando
+    # I programmi che erano in esecuzione su p_altro sono ora interrotti.
+    # Li lasciamo in "in_main" (riavviabili) oppure "completato" in base a
+    # utensili — delega a _verifica_utensili_pgm per coerenza con regola d'oro.
+    # Qui applichiamo solo la logica "chiude programma che era in_lavorazione":
+    # se utensili OK → completato, altrimenti → in_main.
     for pgm in pgm_in_lav:
-        pgm["stato"] = "completato"
-        pgm["tempoFine"] = pgm.get("tempoFine") or now_str
-        proj_dirty = True
-        updates["completato"] += 1
+        attesi = [
+            (u.get("alias") or "").upper().strip()
+            for u in (pgm.get("utensili") or [])
+            if u.get("alias")
+        ]
+        visti = [
+            (u or "").upper().strip()
+            for u in (pgm.get("_utensili_visti") or [])
+        ]
+        mancanti = [a for a in attesi if a not in visti]
 
-    if pgm_in_main:
-        # Scenario B — programmi non eseguiti → reset conservativo
-        for pgm in pgm_in_main:
-            pgm["stato"] = "da_fare"
+        if mancanti:
+            # Utensili mancanti → programma ri-eseguibile
+            pgm["stato"] = "in_main"
             pgm["tempoInizio"] = None
             pgm["tempoFine"]   = None
+        else:
+            # Tutti gli utensili visti → completato
+            pgm["stato"] = "completato"
+            pgm["tempoFine"] = pgm.get("tempoFine") or now_str
+            updates["completato"] += 1
+
+        # NOTA v2: NON pop _utensili_visti. La regola d'oro li consulta al
+        # chiusura pallet. Verranno puliti alla rigenerazione del MAIN.
         proj_dirty = True
 
-        # Pallet → GUASTO solo se non è mai passato per FINITO (multi-fase normale)
-        pid = p_altro.get("id") or ""
-        for pal in pallet_data.get("pallet", []):
-            if pal.get("progetto_id") == pid:
-                cur = (pal.get("stato") or "").upper()
-                if cur not in ("FINITO", "GUASTO"):
-                    # Se ha già avuto FINITO in precedenza → è un rientro normale (multi-fase)
-                    # Non segnare come GUASTO, torna a GREZZO
-                    if pal.get("ha_avuto_finito"):
-                        pal["stato"] = "grezzo"
-                    else:
-                        pal["stato"] = "guasto"
-                    pallet_dirty = True
-                    updates["pallet_guasto"] = updates.get("pallet_guasto", 0) + 1
-                break
-
-        n = len(pgm_in_main)
-        nome = p_altro.get("name", "?")
-        updates.setdefault("interruzioni", []).append({
-            "progetto": nome,
-            "pgm_mancanti": n,
-            "msg": f"{nome}: {n} pgm non eseguiti → pallet GUASTO"
-        })
-
-    return proj_dirty, pallet_dirty
+    return proj_dirty, False  # pallet_dirty=False: lo decide il caller
 
 
 def _verifica_utensili_pgm(
@@ -720,6 +700,13 @@ def _verifica_utensili_pgm(
 ) -> tuple[str, bool, bool]:
     """
     Verifica se tutti gli utensili attesi sono stati visti durante l'esecuzione.
+
+    v2: NON scrive più direttamente lo stato del pallet. Marca solo il programma:
+    - utensili mancanti → stato `in_main` (il programma va rifatto)
+    - utensili OK       → stato `completato`
+    La decisione pallet finito/guasto è centralizzata in
+    _chiudi_pallet_in_lavorazione, che si attiva al cambio pallet o al timeout stop.
+
     Restituisce (nuovo_stato, proj_dirty, pallet_dirty).
     """
     utensili_attesi = [
@@ -733,34 +720,24 @@ def _verifica_utensili_pgm(
     ]
     mancanti = [u for u in utensili_attesi if u not in utensili_visti]
 
-    pgm.pop("_utensili_visti", None)
+    # NOTA v2: NON pop _utensili_visti. La regola d'oro li consulta al
+    # chiusura pallet. Verranno puliti alla rigenerazione del MAIN.
 
     if utensili_attesi and mancanti:
-        # Utensili mancanti → programma non completato
         pgm["stato"] = "in_main"
         pgm["tempoInizio"] = None
         pgm["tempoFine"]   = None
-
-        pid = progetto.get("id") or ""
-        pallet_dirty = False
-        for pal in pallet_data.get("pallet", []):
-            if pal.get("progetto_id") == pid:
-                if (pal.get("stato") or "").upper() not in ("FINITO", "GUASTO"):
-                    pal["stato"] = "guasto" if not pal.get("ha_avuto_finito") else "grezzo"
-                    pallet_dirty = True
-                break
-
         updates.setdefault("interruzioni_utensile", []).append({
             "programma": pgm.get("filename", "?"),
             "mancanti":  mancanti,
-            "msg": f"{pgm.get('filename','?')}: utensili mancanti {mancanti} → GUASTO"
+            "msg": f"{pgm.get('filename','?')}: utensili mancanti {mancanti}"
         })
-        return "in_main", True, pallet_dirty
-    else:
-        pgm["stato"] = "completato"
-        pgm["tempoFine"] = pgm.get("tempoFine") or now_str
-        updates["completato"] += 1
-        return "completato", True, False
+        return "in_main", True, False
+
+    pgm["stato"] = "completato"
+    pgm["tempoFine"] = pgm.get("tempoFine") or now_str
+    updates["completato"] += 1
+    return "completato", True, False
 
 
 @router.post("/aggiorna-stati-da-log")
@@ -991,92 +968,185 @@ async def aggiorna_stati_da_log():
     }
 
     # ── Automazione 1 e 4: stato pallet ──────────────────────────────────
-    # Il log è la fonte di verità assoluta:
-    # - Macchina IN ESECUZIONE con progetto X → pallet di X = in_lavorazione,
-    #   tutti gli altri in_lavorazione → grezzo/finito (anche se impostati manualmente)
-    # - Macchina FERMA → tutti i pallet in_lavorazione → grezzo/finito
+    # Regola d'oro (feature/pallet-logic-v2):
+    # - Un pallet che era `in_lavorazione` può uscire SOLO verso `finito` o `guasto`,
+    #   mai a `grezzo`.
+    #   FINITO: tutti i programmi del MAIN (stato != da_fare) sono `completato` E
+    #           per ognuno tutti gli utensili attesi sono stati visti.
+    #   GUASTO: altrimenti.
+    # - Un pallet in stato passivo (vuoto/grezzo/finito/guasto) NON viene toccato
+    #   dall'automatismo di chiusura; la sua transizione avviene in altri punti
+    #   (assegnazione progetto, rigenerazione MAIN, reset manuale).
+    # - La rigenerazione del MAIN è l'UNICO evento che può far tornare un pallet
+    #   a `grezzo` dopo essere stato `in_lavorazione`/`finito`/`guasto` — gestito
+    #   in analisi_nc.py al momento della rigenerazione.
 
-    def _a_grezzo_o_finito(pal, projects):
+    def _chiudi_pallet_in_lavorazione(pal, projects):
         """
-        Nuova logica stati pallet allineata alla macchina:
-        - VUOTO       : progetto assegnato ma nessun programma in_main nel MAIN
-        - GREZZO      : almeno un programma in_main (= pallet in coda nella macchina)
-        - FINITO      : tutti i programmi del MAIN sono completato
-        Il GUASTO viene gestito separatamente in _gestisci_cross_pallet.
+        Applica la regola d'oro a un pallet che era `in_lavorazione`.
+        Tutti i programmi del MAIN `completato` e utensili OK → FINITO, altrimenti GUASTO.
+        Un utensile "visto per sequenza" (retro-marcato) è considerato OK.
         """
+        pid = pal.get("progetto_id")
+        if not pid:
+            # Pallet in_lavorazione senza progetto: anomalia, torna a vuoto
+            pal["stato"] = "vuoto"
+            return
+        proj = next((p for p in projects if p.get("id") == pid), None)
+        if not proj:
+            pal["stato"] = "vuoto"
+            return
+
+        pgm_fresatura = [
+            pg for s in proj.get("steps", [])
+            for t in s.get("tasks", [])
+            if t.get("text", "").strip().lower() == "fresatura"
+            for pg in t.get("programs", [])
+            if pg.get("tipoGruppo") != "ipm"
+        ]
+
+        # Solo programmi nel MAIN (in_main/completato/in_lavorazione). I `da_fare`
+        # non facevano parte di questo ciclo e vengono ignorati.
+        pgm_nel_main = [
+            pg for pg in pgm_fresatura
+            if pg.get("stato") in ("in_main", "completato", "in_lavorazione")
+        ]
+
+        if not pgm_nel_main:
+            # Anomalia: pallet era in_lavorazione ma nessun programma nel MAIN.
+            pal["stato"] = "guasto"
+            return
+
+        # Regola d'oro: TUTTI completato E utensili attesi tutti visti
+        tutti_completati = all(pg.get("stato") == "completato" for pg in pgm_nel_main)
+        if not tutti_completati:
+            pal["stato"] = "guasto"
+            return
+
+        # Check utensili per ogni programma
+        for pg in pgm_nel_main:
+            attesi = [
+                (u.get("alias") or "").upper().strip()
+                for u in (pg.get("utensili") or [])
+                if u.get("alias")
+            ]
+            visti = [
+                (u or "").upper().strip()
+                for u in (pg.get("_utensili_visti") or [])
+            ]
+            mancanti = [a for a in attesi if a not in visti]
+            if mancanti:
+                pal["stato"] = "guasto"
+                return
+
+        pal["stato"] = "finito"
+
+    def _calcola_stato_pallet_passivo(pal, projects):
+        """
+        Calcola lo stato di un pallet NON in lavorazione basandosi sui programmi
+        del progetto associato. Usato solo per pallet che non erano in_lavorazione
+        (es. cambio progetto_id, assegnazione iniziale).
+        Stati possibili: vuoto | grezzo | finito | guasto (preserva guasto).
+        """
+        cur = (pal.get("stato") or "").lower()
+        if cur in ("guasto", "finito"):
+            return  # stati terminali, non toccare
+
         pid = pal.get("progetto_id")
         if not pid:
             pal["stato"] = "vuoto"; return
         proj = next((p for p in projects if p.get("id") == pid), None)
         if not proj:
             pal["stato"] = "vuoto"; return
-        all_pgm = [pg for s in proj.get("steps",[])
-            for t in s.get("tasks",[])
-            if t.get("text","").strip().lower()=="fresatura"
-            for pg in t.get("programs",[])
-            if pg.get("tipoGruppo")!="ipm"]
-        if not all_pgm:
+        pgm_fresatura = [
+            pg for s in proj.get("steps", [])
+            for t in s.get("tasks", [])
+            if t.get("text", "").strip().lower() == "fresatura"
+            for pg in t.get("programs", [])
+            if pg.get("tipoGruppo") != "ipm"
+        ]
+        if not pgm_fresatura:
             pal["stato"] = "vuoto"; return
-        ha_in_main    = any(pg.get("stato") == "in_main"    for pg in all_pgm)
-        ha_completato = any(pg.get("stato") == "completato" for pg in all_pgm)
-        pgm_main      = [pg for pg in all_pgm if pg.get("stato") in ("in_main","completato")]
-        tutti_completati = pgm_main and all(pg.get("stato") == "completato" for pg in pgm_main)
-        if tutti_completati:
+        pgm_main = [pg for pg in pgm_fresatura if pg.get("stato") in ("in_main", "completato")]
+        if pgm_main and all(pg.get("stato") == "completato" for pg in pgm_main):
             pal["stato"] = "finito"
-            pal["ha_avuto_finito"] = True  # flag per discriminare GUASTO da multi-fase
-        elif ha_in_main:
-            pal["stato"] = "grezzo"   # in coda — ha programmi pronti nel MAIN
+        elif any(pg.get("stato") == "in_main" for pg in pgm_fresatura):
+            pal["stato"] = "grezzo"
         else:
-            pal["stato"] = "vuoto"    # progetto assegnato ma MAIN non ancora generato
+            pal["stato"] = "vuoto"
 
     if stato_pgm in (1, 3):
-        # Macchina IN ESECUZIONE
-        for pal in pallets:
-            is_attivo = (pal.get("numero") == pallet_num)
-            cur_stato = (pal.get("stato") or "").lower().replace(" ","_")
-            if is_attivo:
-                if cur_stato != "in_lavorazione":
-                    pal["stato"] = "in_lavorazione"
-                    pal["aggiornato"] = now_str
-                    pallet_dirty = True
-                    updates["pallet"] += 1
-            else:
-                # FIX: qualsiasi altro pallet in_lavorazione viene resettato
-                if cur_stato == "in_lavorazione":
-                    _a_grezzo_o_finito(pal, projects)
-                    pal["aggiornato"] = now_str
-                    pallet_dirty = True
-                    updates["pallet"] += 1
+        # Macchina IN ESECUZIONE — marca il pallet attivo come in_lavorazione.
+        # La CHIUSURA dei pallet non più attivi viene fatta DOPO l'aggiornamento
+        # dei programmi (vedi fine tick), così la regola d'oro valuta lo stato
+        # finale corretto (es. ultimo programma appena completato).
+        # G4: se pallet_num è None/0, non tocca nulla (macchina fa programma non mappato).
+        if pallet_num:
+            for pal in pallets:
+                is_attivo = (pal.get("numero") == pallet_num)
+                cur_stato = (pal.get("stato") or "").lower().replace(" ", "_")
+                if is_attivo:
+                    if cur_stato != "in_lavorazione":
+                        pal["stato"] = "in_lavorazione"
+                        pal["aggiornato"] = now_str
+                        pal.pop("stop_iniziato_ts", None)
+                        pallet_dirty = True
+                        updates["pallet"] += 1
+                    else:
+                        # già in_lavorazione: azzera il timer (macchina ripresa)
+                        if pal.get("stop_iniziato_ts"):
+                            pal.pop("stop_iniziato_ts", None)
+                            pallet_dirty = True
 
     elif stato_pgm == 2:
-        # stato 2 = ricerca blocco / JOG — non toccare i pallet:
-        # la macchina si sta solo posizionando, non è un vero fermo produttivo.
+        # stato 2 = ricerca blocco / JOG — non toccare i pallet né il timer.
         pass
 
     elif stato_pgm in (0, 5):
-        # Macchina FERMA — ma rispetta il grace period di report.py:
-        # se sc["in_pausa"] è True significa che siamo dentro i 15 min di grace
-        # (stesso programma potrebbe riprendere). In quel caso NON resettare il pallet,
-        # altrimenti la Coda mostrerebbe "GREZZO" mentre la sessione è ancora viva.
-        # Resettiamo solo su stato 0 (reset anomalo, immediato) o se grace scaduto.
+        # Macchina FERMA
+        # Comportamento:
+        # - Entro grace period (15min, gestito da report.py): NO transizione pallet,
+        #   il programma potrebbe riprendere.
+        # - Oltre 1h di stop continuo: pallet in_lavorazione → GUASTO (timeout C1).
+        # - Reset anomalo (stato_pgm=0): immediato timeout. Stop (stato_pgm=5): aspetta 1h.
         try:
             _lav_log  = _load_log(config)
             _sc       = _lav_log.get("stato_corrente", {})
             in_pausa  = _sc.get("in_pausa", False)
-            is_reset  = (stato_pgm == 0)   # reset anomalo → sempre immediato
         except Exception:
             in_pausa = False
-            is_reset = (stato_pgm == 0)
 
-        if is_reset or not in_pausa:
-            # Reset anomalo, o grace scaduto/non attivo → resetta pallet
-            for pal in pallets:
-                if (pal.get("stato") or "").lower().replace(" ","_") == "in_lavorazione":
-                    _a_grezzo_o_finito(pal, projects)
-                    pal["aggiornato"] = now_str
-                    pallet_dirty = True
-                    updates["pallet"] += 1
-        # else: in grace period → pallet rimane in_lavorazione, coerente con report.py
+        from datetime import datetime as _dt, timedelta as _td
+        TIMEOUT_STOP = _td(hours=1)
+
+        for pal in pallets:
+            cur_stato = (pal.get("stato") or "").lower().replace(" ", "_")
+            if cur_stato != "in_lavorazione":
+                continue
+
+            # Inizializza timer di stop alla prima rilevazione
+            if not pal.get("stop_iniziato_ts"):
+                pal["stop_iniziato_ts"] = now_str
+                pallet_dirty = True
+                continue  # primo tick di stop, non chiudere ancora
+
+            # Timeout check
+            try:
+                iniz = _dt.fromisoformat(pal["stop_iniziato_ts"])
+                elapsed = _dt.now() - iniz
+            except Exception:
+                elapsed = _td(0)
+
+            if elapsed >= TIMEOUT_STOP:
+                _chiudi_pallet_in_lavorazione(pal, projects)
+                pal["aggiornato"] = now_str
+                pal.pop("stop_iniziato_ts", None)
+                pallet_dirty = True
+                updates["pallet"] += 1
+                updates.setdefault("timeout_stop", []).append({
+                    "pallet": pal.get("numero"),
+                    "msg": f"Pallet {pal.get('numero')}: stop > 1h → {pal['stato'].upper()}"
+                })
 
 
     # ── Automazione 2 e 3: stati programmi ───────────────────────────────
@@ -1110,6 +1180,60 @@ async def aggiorna_stati_da_log():
                 pd, pal_d = _gestisci_cross_pallet(p_altro, pallet_data, now_str, updates)
                 if pd:   proj_dirty   = True
                 if pal_d: pallet_dirty = True
+
+        # ── Logica sequenziale (v2) ─────────────────────────────────────────
+        # Se il programma in esecuzione è alla posizione N nel MAIN, tutti i
+        # programmi del MAIN con posizione < N e stato `in_main` vengono
+        # marcati `completato`. Si fidiamo dell'ordine EXTCALL del MAIN: il log
+        # Siemens può perdere qualche notifica, e se l'operatore ha saltato
+        # un programma è sua responsabilità (il MAIN è la verità).
+        # - programmi `da_fare` (mai in MAIN) non vengono toccati
+        # - programmi `completato` restano `completato`
+        # - match case-insensitive su filename, con/senza .MPF
+        if progetto_con_match:
+            snap = progetto_con_match.get("main_snapshot") or {}
+            main_pgm_list = snap.get("main_programmi") or []
+            if main_pgm_list:
+                def _norm(fn):
+                    return (fn or "").upper().replace(".MPF", "").strip()
+                main_norm = [_norm(p) for p in main_pgm_list]
+                tgt_norm = _norm(mpf_filename)
+                try:
+                    idx_corrente = main_norm.index(tgt_norm)
+                except ValueError:
+                    idx_corrente = -1
+
+                if idx_corrente > 0:
+                    # Programmi del MAIN PRIMA del corrente, se `in_main` → completato
+                    precedenti = set(main_norm[:idx_corrente])
+                    for step in progetto_con_match.get("steps", []):
+                        for task in step.get("tasks", []):
+                            if task.get("text", "").strip().lower() != "fresatura":
+                                continue
+                            for pgm in task.get("programs", []):
+                                if pgm.get("tipoGruppo") == "ipm":
+                                    continue
+                                if pgm.get("stato") != "in_main":
+                                    continue
+                                fn_norm = _norm(pgm.get("filename"))
+                                if fn_norm in precedenti:
+                                    # Retro-marca: completato con utensili attesi
+                                    # pre-riempiti (regola d'oro considera OK)
+                                    pgm["stato"] = "completato"
+                                    pgm["tempoFine"] = pgm.get("tempoFine") or now_str
+                                    attesi = [
+                                        (u.get("alias") or "").upper().strip()
+                                        for u in (pgm.get("utensili") or [])
+                                        if u.get("alias")
+                                    ]
+                                    pgm["_utensili_visti"] = attesi
+                                    pgm["_completato_per_sequenza"] = True
+                                    proj_dirty = True
+                                    updates["completato"] += 1
+                                    updates.setdefault("sequenziali", []).append({
+                                        "programma": pgm.get("filename"),
+                                        "msg": f"{pgm.get('filename')}: retro-marcato (sequenza MAIN)"
+                                    })
 
         if progetto_con_match:
             tgt = mpf_filename.upper().replace(".MPF","").strip()
@@ -1178,6 +1302,26 @@ async def aggiorna_stati_da_log():
                         pgm, p, pallet_data, now_str, updates)
                     if pd:   proj_dirty   = True
                     if pal_d: pallet_dirty = True
+
+    # ── Chiusura DIFFERITA dei pallet uscenti (regola d'oro v2) ───────────────
+    # Dopo aver aggiornato tutti i programmi (cross-pallet, sequenziali, corrente,
+    # fratelli), i pallet che erano in_lavorazione ma non sono più attivi vengono
+    # chiusi con la regola d'oro: finito se tutto completo+utensili OK, altrimenti
+    # guasto. Questa fase è DIFFERITA rispetto a "marca nuovo pallet" così la
+    # valutazione vede lo stato finale corretto dei programmi.
+    # G4: se pallet_num è None/0 non chiude nulla.
+    # G5: pallet_num valido ma programma non mappato → chiudi comunque gli altri
+    #     in_lavorazione (è un cambio pallet verso programma orfano).
+    if stato_pgm in (1, 3) and pallet_num:
+        for pal in pallets:
+            is_attivo = (pal.get("numero") == pallet_num)
+            cur_stato = (pal.get("stato") or "").lower().replace(" ", "_")
+            if not is_attivo and cur_stato == "in_lavorazione":
+                _chiudi_pallet_in_lavorazione(pal, projects)
+                pal["aggiornato"] = now_str
+                pal.pop("stop_iniziato_ts", None)
+                pallet_dirty = True
+                updates["pallet"] += 1
 
     if proj_dirty:
         # Lock serializza con update_progetto dalla UI (stesso asyncio.Lock)

@@ -284,10 +284,54 @@ async def salva_main_snapshot(body: dict = Body(...)):
         "main_sync_ts":   datetime.now().isoformat(timespec="seconds"),
     }
 
+    # ── Hook rigenerazione MAIN (feature/pallet-logic-v2) ────────────────────
+    # La rigenerazione è un nuovo ciclo: tutti i programmi del progetto tornano
+    # a da_fare, poi quelli nel nuovo MAIN vengono marcati in_main. Il pallet
+    # eventualmente guasto/finito torna a grezzo (se il nuovo MAIN ha programmi)
+    # o vuoto (se non ne ha).
+    main_programmi_norm = set(progetto["main_snapshot"]["main_programmi"])
+    for s in progetto.get("steps", []):
+        for t in s.get("tasks", []):
+            if t.get("text", "").strip().lower() != "fresatura":
+                continue
+            for pgm in t.get("programs", []):
+                if pgm.get("tipoGruppo") == "ipm":
+                    continue
+                # Reset pulito del programma
+                pgm["tempoInizio"] = None
+                pgm["tempoFine"]   = None
+                pgm.pop("_utensili_visti", None)
+                pgm.pop("_completato_per_sequenza", None)
+                # Stato: in_main se nel nuovo MAIN, altrimenti da_fare
+                fn_norm = _norm_pgm(pgm.get("filename") or "")
+                pgm["stato"] = "in_main" if fn_norm in main_programmi_norm else "da_fare"
+
+    # Pallet associati al progetto: reset regola-d-oro-compliant
+    try:
+        from api.routers.pallet import _load as _load_pallet, _save as _save_pallet
+        pallet_data = _load_pallet(config)
+        pallet_touched = False
+        for pal in pallet_data.get("pallet", []):
+            if pal.get("progetto_id") != project_id:
+                continue
+            old_stato = (pal.get("stato") or "").lower()
+            # La rigenerazione del MAIN è l'unico evento che scarcera un pallet
+            # da finito/guasto/in_lavorazione → grezzo (o vuoto se no programmi)
+            if old_stato in ("finito", "guasto", "in_lavorazione"):
+                pal["stato"] = "grezzo" if main_programmi_norm else "vuoto"
+                pal["aggiornato"] = datetime.now().isoformat(timespec="seconds")
+                pal.pop("stop_iniziato_ts", None)
+                pal.pop("ha_avuto_finito", None)  # v2: flag legacy non più usato
+                pallet_touched = True
+        if pallet_touched:
+            _save_pallet(config, pallet_data)
+    except Exception as _e:
+        log.warning(f"main_sync: reset pallet dopo rigenerazione fallito: {_e}")
+
     async with _write_lock:
         _save_progetti(config, proj_data)
 
-    log.info(f"main_sync: snapshot salvato per {progetto.get('name')} → {main_path}")
+    log.info(f"main_sync: snapshot salvato per {progetto.get('name')} → {main_path} (ciclo resettato)")
     return {"ok": True, "n_programmi": len(programmi), "hash": hash_val}
 
 

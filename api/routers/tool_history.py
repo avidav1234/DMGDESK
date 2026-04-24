@@ -32,13 +32,16 @@ log = logging.getLogger("tool_history")
 router = APIRouter(prefix="/api/tool-history", tags=["Tool History"])
 
 # ── Costanti ──────────────────────────────────────────────────────────────────
-SOGLIA_VITA_BASSA   = 20    # % sotto cui scatta l'alert
-SOGLIA_SOSTITUZIONE = 30    # delta life_percent per rilevare sostituzione
-THROTTLE_MINUTES    = 30    # minuti tra due alert sullo stesso alias
-MAX_RECORD          = 500   # massimo record nello storico
+SOGLIA_VITA_BASSA         = 20    # % sotto cui scatta l'alert
+SOGLIA_SOSTITUZIONE_PCT   = 80    # life_percent nuovo > questa soglia → sostituzione completa
+DELTA_MIN_AUMENTO         = 1.0   # delta minimo per considerare vita "aumentata" (no noise floating)
+THROTTLE_MINUTES          = 30    # minuti tra due alert sullo stesso alias
+MAX_RECORD                = 500   # massimo record nello storico
 
 # ── Stato in memoria ─────────────────────────────────────────────────────────
-_snapshot_precedente: dict = {}   # alias → {life_percent, is_worn, is_enabled}
+# snapshot: { tool_id (int) → {alias, life_percent, life_remaining, life_total,
+#                              is_worn, is_enabled, position, magazine, duplo} }
+_snapshot_precedente: dict = {}
 _alert_inviati: dict = {}         # alias → datetime ultimo alert
 
 
@@ -49,6 +52,48 @@ def _history_path(config: dict) -> Path | None:
     if not folder:
         return None
     return Path(folder) / "tool_replacements.json"
+
+
+def _snapshot_path(config: dict) -> Path | None:
+    """Path del file di persistenza snapshot (accanto a tool_replacements.json)."""
+    folder = (config.get("tools_toa_folder") or "").strip()
+    if not folder:
+        return None
+    return Path(folder) / "tool_snapshot.json"
+
+
+def _load_snapshot_from_disk(config: dict) -> dict:
+    """Carica snapshot persistito. Chiavi JSON sono stringhe → ri-convertite in int."""
+    p = _snapshot_path(config)
+    if not p or not p.exists():
+        return {}
+    try:
+        raw = json.loads(p.read_text(encoding="utf-8"))
+        data = raw.get("snapshot", {})
+        return {int(k): v for k, v in data.items()}
+    except Exception as e:
+        log.warning(f"tool_history: impossibile caricare snapshot: {e}")
+        return {}
+
+
+def _save_snapshot_to_disk(config: dict, snap: dict):
+    """Persiste snapshot corrente su disco (così i riavvii non perdono eventi)."""
+    p = _snapshot_path(config)
+    if not p:
+        return
+    try:
+        payload = {
+            "ts":       datetime.now().isoformat(timespec="seconds"),
+            "snapshot": {str(k): v for k, v in snap.items()},
+        }
+        tmp = p.with_suffix(".tmp")
+        tmp.write_text(
+            json.dumps(payload, indent=2, ensure_ascii=False),
+            encoding="utf-8"
+        )
+        tmp.replace(p)
+    except Exception as e:
+        log.warning(f"tool_history: impossibile salvare snapshot: {e}")
 
 
 def _load_history(config: dict) -> list:
@@ -82,170 +127,239 @@ def _save_history(config: dict, records: list):
 def on_tools_updated(tools_new: dict, config: dict):
     """
     Chiamato ogni volta che tools_machine.json viene ricaricato (mtime cambiato).
-    Confronta con lo snapshot precedente e registra le sostituzioni.
+
+    Confronta lo snapshot precedente con il TOA corrente tramite `tool_id`
+    (Identnummer Sinumerik, stabile per utensile fisico).
+
+    Casi rilevati:
+      - tool_id sparito (non più in TOA, non in 9998/9999) → RIMOSSO
+      - tool_id nuovo (mai visto)                         → INSERITO
+      - tool_id comune, delta vita > 0 e life_new > 80%   → SOSTITUITO
+      - tool_id comune, delta vita > 0 e life_new ≤ 80%   → ALLUNGAMENTO_VITA
+      - tool_id comune, posizione cambiata, vita invariata/scesa → solo log
+      - tool_id comune, vita scesa (ha lavorato)          → nessun evento
     """
     global _snapshot_precedente
 
+    # Bootstrap: carica snapshot persistito al primo tick dopo un restart
     if not _snapshot_precedente:
-        # Prima volta — salva snapshot senza registrare nulla
-        _snapshot_precedente = _build_snapshot(tools_new)
-        return
+        persisted = _load_snapshot_from_disk(config)
+        if persisted:
+            _snapshot_precedente = persisted
+            log.info(f"tool_history: snapshot ripristinato da disco ({len(persisted)} utensili)")
+        else:
+            # Primissimo avvio: memorizza senza registrare eventi
+            _snapshot_precedente = _build_snapshot(tools_new)
+            _save_snapshot_to_disk(config, _snapshot_precedente)
+            return
 
     snap_old = _snapshot_precedente
     snap_new = _build_snapshot(tools_new)
     now      = datetime.now().isoformat(timespec="seconds")
     nuovi    = []
-    existing_records = _load_history(config)  # per check duplicati
+    existing_records = _load_history(config)
 
-    # Indice snap_new per alias — per ricerche veloci
-    snap_new_by_alias = {}
-    for v in snap_new.values():
-        a = (v.get("alias") or "").upper().strip()
-        snap_new_by_alias.setdefault(a, []).append(v)
+    old_ids = set(snap_old.keys())
+    new_ids = set(snap_new.keys())
 
-    # ── Rilevamento rimozioni (utensile presente prima, assente dopo) ──────────
-    for key, old_t in snap_old.items():
-        if key not in snap_new:
-            alias_up = (old_t.get("alias") or "").upper().strip()
+    spariti = old_ids - new_ids   # utensile non più in TOA
+    arrivati = new_ids - old_ids  # tool_id mai visto prima
+    comuni   = old_ids & new_ids  # stesso utensile fisico
 
-            # Salta se stava già in M9998/M9999 (era in transito)
-            mag_old = str(old_t.get("magazine") or "")
-            if mag_old in ("9998", "9999"):
-                continue
+    # Finestra anti-duplicato — guarda solo gli ultimi 50 record delle ultime 2h
+    due_ore_fa = (datetime.now() - timedelta(hours=2)).isoformat(timespec="seconds")
+    recent_tail = existing_records[-50:]
 
-            # Salta se adesso è in M9998/M9999 (ora è in mandrino/navetta)
-            in_transito = any(
-                str(v.get("magazine", "")) in ("9998", "9999")
-                for v in snap_new_by_alias.get(alias_up, [])
-            )
-            if in_transito:
-                continue
+    def _gia_registrato(tool_id: int, tipo: str) -> bool:
+        return any(
+            r.get("tool_id") == tool_id
+            and r.get("tipo") == tipo
+            and (r.get("ts") or "") >= due_ore_fa
+            for r in recent_tail
+        )
 
-            # Salta se già registrato nelle ultime 2 ore (evita duplicati dello stesso evento)
-            due_ore_fa = (datetime.now() - timedelta(hours=2)).isoformat(timespec="seconds")
-            gia_registrato = any(
-                (r.get("alias") or "").upper() == alias_up and
-                (r.get("ts") or "") >= due_ore_fa
-                for r in existing_records[-50:]
-            )
-            if gia_registrato:
-                continue
+    # ── 1. RIMOSSI: tool_id sparito dal TOA ──────────────────────────────────
+    for tid in spariti:
+        old = snap_old[tid]
+        mag_old = str(old.get("magazine") or "")
 
-            # Utensile sparito dal TOA — rimosso senza rimpiazzo
-            record = {
-                "ts":              now,
-                "alias":           old_t.get("alias", key),
-                "posizione":       old_t.get("position"),
-                "magazine":        old_t.get("magazine"),
-                "duplo":           old_t.get("duplo", 1),
-                "vita_prima":      round(old_t.get("life_percent") or 0, 1),
-                "vita_dopo":       None,
-                "tipo":            "rimosso",
-                "causa":           None,   # null = non classificato; liberare_spazio|rottura
-                "classificato_ts": None,
-            }
-            nuovi.append(record)
+        # Era in buffer/mandrino → uscita naturale, non è una rimozione reale
+        if mag_old in ("9998", "9999"):
+            continue
+
+        if _gia_registrato(tid, "rimosso"):
+            continue
+
+        record = {
+            "ts":              now,
+            "tool_id":         tid,
+            "alias":           old.get("alias", ""),
+            "posizione":       old.get("position"),
+            "magazine":        old.get("magazine"),
+            "duplo":           old.get("duplo", 1),
+            "vita_prima":      round(old.get("life_percent") or 0, 1),
+            "vita_dopo":       None,
+            "tipo":            "rimosso",
+            "causa":           None,   # popup: rottura | liberare_spazio
+            "classificato_ts": None,
+        }
+        nuovi.append(record)
+        log.info(
+            f"tool_history: rimosso — T{tid} {old.get('alias','')} "
+            f"pos.{old.get('position')} vita {old.get('life_percent') or 0:.0f}%"
+        )
+
+    # ── 2. INSERITI: tool_id nuovo ───────────────────────────────────────────
+    for tid in arrivati:
+        new = snap_new[tid]
+        mag_new = str(new.get("magazine") or "")
+
+        # Entrata in buffer/mandrino non è un vero inserimento
+        if mag_new in ("9998", "9999"):
+            continue
+
+        if _gia_registrato(tid, "inserito"):
+            continue
+
+        record = {
+            "ts":              now,
+            "tool_id":         tid,
+            "alias":           new.get("alias", ""),
+            "posizione":       new.get("position"),
+            "magazine":        new.get("magazine"),
+            "duplo":           new.get("duplo", 1),
+            "vita_prima":      None,
+            "vita_dopo":       round(new.get("life_percent") or 0, 1),
+            "tipo":            "inserito",
+            "causa":           "montaggio",   # auto-classificato
+            "classificato_ts": now,
+        }
+        nuovi.append(record)
+        log.info(
+            f"tool_history: inserito — T{tid} {new.get('alias','')} "
+            f"pos.{new.get('position')} vita {new.get('life_percent') or 0:.0f}%"
+        )
+
+    # ── 3. COMUNI: stesso tool_id, analisi indipendente di posizione e vita ──
+    for tid in comuni:
+        old = snap_old[tid]
+        new = snap_new[tid]
+
+        # 3a. Posizione cambiata → solo log, nessun record
+        pos_old = (old.get("magazine"), old.get("position"))
+        pos_new = (new.get("magazine"), new.get("position"))
+        if pos_old != pos_new:
             log.info(
-                f"tool_history: rimosso — {old_t.get('alias',key)} "
-                f"pos.{old_t.get('position')} vita {old_t.get('life_percent',0):.0f}%"
+                f"tool_history: spostato — T{tid} {new.get('alias','')} "
+                f"{pos_old} → {pos_new}"
             )
 
-    # ── Rilevamento sostituzioni e allungamenti vita ─────────────────────────
-    for key, new in snap_new.items():
-        old = snap_old.get(key)
-        if not old:
-            continue  # nuovo utensile aggiunto — non è una sostituzione
-
+        # 3b. Analisi vita (indipendente dalla posizione)
         lp_old = old.get("life_percent") or 0
         lp_new = new.get("life_percent") or 0
         delta  = lp_new - lp_old
 
-        if delta > 0 and lp_new >= 99.0:
-            # Vita tornata al 100% — sostituzione fisica o cambio inserti
-            # vita_dopo >= 99% è il segnale affidabile di reset manuale Sinumerik
-            record = {
-                "ts":              now,
-                "alias":           new["alias"],
-                "posizione":       new.get("position"),
-                "magazine":        new.get("magazine"),
-                "duplo":           new.get("duplo", 1),
-                "vita_prima":      round(lp_old, 1),
-                "vita_dopo":       round(lp_new, 1),
-                "tipo":            "sostituito",
-                "causa":           None,   # null = non classificato; rottura|usura_normale|cambio_inserti
-                "classificato_ts": None,
-            }
-            nuovi.append(record)
-            log.info(
-                f"tool_history: sostituito — {new['alias']} "
-                f"pos.{new.get('position')} "
-                f"{lp_old:.0f}% → {lp_new:.0f}%"
-            )
+        if delta < DELTA_MIN_AUMENTO:
+            continue  # vita invariata o scesa → ha lavorato, nessun evento
 
-        elif delta >= 20 and lp_new < 99.0:
-            # Allungamento vita parziale — operatore ha modificato il valore manualmente
-            # ma non ha resettato al 100% → non è una sostituzione
-            # Registrato automaticamente senza popup — dato ML prezioso
-            record = {
-                "ts":              now,
-                "alias":           new["alias"],
-                "posizione":       new.get("position"),
-                "magazine":        new.get("magazine"),
-                "vita_prima":      round(lp_old, 1),
-                "vita_dopo":       round(lp_new, 1),
-                "tipo":            "allungamento_vita",
-                "causa":           "manuale",   # classificato automaticamente
-                "classificato_ts": now,
-            }
-            nuovi.append(record)
-            log.info(
-                f"tool_history: allungamento_vita — {new['alias']} "
-                f"pos.{new.get('position')} "
-                f"{lp_old:.0f}% → {lp_new:.0f}%"
-            )
+        # Vita aumentata: sostituzione completa vs allungamento manuale
+        if lp_new > SOGLIA_SOSTITUZIONE_PCT:
+            tipo  = "sostituito"
+            causa = None       # popup: rottura | usura_normale
+            cl_ts = None
+        else:
+            tipo  = "allungamento_vita"
+            causa = "manuale"  # auto-classificato, prezioso per ML
+            cl_ts = now
 
+        if _gia_registrato(tid, tipo):
+            continue
+
+        record = {
+            "ts":              now,
+            "tool_id":         tid,
+            "alias":           new.get("alias", ""),
+            "posizione":       new.get("position"),
+            "magazine":        new.get("magazine"),
+            "duplo":           new.get("duplo", 1),
+            "vita_prima":      round(lp_old, 1),
+            "vita_dopo":       round(lp_new, 1),
+            "tipo":            tipo,
+            "causa":           causa,
+            "classificato_ts": cl_ts,
+        }
+        nuovi.append(record)
+        log.info(
+            f"tool_history: {tipo} — T{tid} {new.get('alias','')} "
+            f"pos.{new.get('position')} {lp_old:.0f}% → {lp_new:.0f}%"
+        )
+
+    # ── Persistenza ──────────────────────────────────────────────────────────
     if nuovi:
         existing = _load_history(config)
         _save_history(config, existing + nuovi)
 
-        # Notifica Telegram per ogni sostituzione
+        # Notifiche Telegram
         try:
             from telegram_monitor.notifier import send_message
             import asyncio
+            EMOJI = {
+                "rimosso":            "❌",
+                "inserito":           "🆕",
+                "sostituito":         "🔄",
+                "allungamento_vita":  "✅",
+            }
             for r in nuovi:
-                emoji   = "🔄" if r["tipo"] == "sostituito" else "✅"
-                vita_str = (
-                    f"{r['vita_prima']}% → {r['vita_dopo']}%"
-                    if r['vita_dopo'] is not None
-                    else f"{r['vita_prima']}% → rimosso"
-                )
-                msg     = (
-                    f"{emoji} *Utensile {r['tipo'].upper()}*\n"
-                    f"`{r['alias']}` pos.{r['posizione'] or '?'}\n"
+                emoji = EMOJI.get(r["tipo"], "ℹ️")
+                vp, vd = r.get("vita_prima"), r.get("vita_dopo")
+                if vp is None:
+                    vita_str = f"nuovo → {vd}%"
+                elif vd is None:
+                    vita_str = f"{vp}% → rimosso"
+                else:
+                    vita_str = f"{vp}% → {vd}%"
+                msg = (
+                    f"{emoji} *Utensile {r['tipo'].replace('_',' ').upper()}*\n"
+                    f"`{r['alias']}` T{r['tool_id']} pos.{r['posizione'] or '?'}\n"
                     f"Vita: {vita_str}"
                 )
                 asyncio.create_task(send_message(msg))
         except Exception:
             pass
 
+    # Aggiorna snapshot in RAM + persisti su disco (sempre, anche se no eventi,
+    # perché la posizione potrebbe essere cambiata)
     _snapshot_precedente = snap_new
+    _save_snapshot_to_disk(config, snap_new)
 
 
 def _build_snapshot(tools: dict) -> dict:
+    """
+    Costruisce snapshot indicizzato per tool_id (Identnummer Sinumerik).
+
+    Utensili senza tool_id valido (es. record corrotti) vengono esclusi.
+    """
     snap = {}
     for t in tools.values():
-        alias = (t.get("name") or "").upper().strip()
-        if not alias:
+        tid = t.get("tool_id")
+        if tid is None:
             continue
-        key = f"{alias}_{t.get('position', '')}_{t.get('magazine', '')}"
-        snap[key] = {
-            "alias":        alias,
-            "life_percent": t.get("life_percent"),
-            "is_worn":      t.get("is_worn", False),
-            "is_enabled":   t.get("is_enabled", True),
-            "position":     t.get("position"),
-            "magazine":     t.get("magazine"),
-            "duplo":        t.get("duplo") or t.get("edge_count") or 1,
+        try:
+            tid = int(tid)
+        except (TypeError, ValueError):
+            continue
+
+        alias = (t.get("name") or "").upper().strip()
+        snap[tid] = {
+            "alias":          alias,
+            "life_percent":   t.get("life_percent"),
+            "life_remaining": t.get("life_remaining"),
+            "life_total":     t.get("life_total"),
+            "is_worn":        t.get("is_worn", False),
+            "is_enabled":     t.get("is_enabled", True),
+            "position":       t.get("position"),
+            "magazine":       t.get("magazine"),
+            "duplo":          t.get("duplo", 1),
         }
     return snap
 

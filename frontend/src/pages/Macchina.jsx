@@ -239,24 +239,43 @@ function SetupPannel({ setupData, setupPopup, setSetupPopup, onChiudi }) {
     ? items.filter(i => i.alias?.toLowerCase().includes(q.toLowerCase()))
     : items
 
-  const Section = ({title, items, color: c, bg, renderItem}) => {
+  const Section = ({title, items, color: c, bg, renderItem, defaultCollapsed=false, severity}) => {
+    const [collapsed, setCollapsed] = useState(defaultCollapsed)
     const filtered = filter(items)
-    return filtered.length > 0 ? (
-      <div style={{marginBottom:16}}>
-        <div style={{fontSize:12,fontWeight:700,color:c,letterSpacing:'0.06em',marginBottom:8}}>
-          {title}{q.trim() && filtered.length !== items.length ? ` (${filtered.length} di ${items.length})` : ''}
+    if (filtered.length === 0) return null
+    const isCritical = severity === 'critical'
+    const containerStyle = isCritical ? {
+      marginBottom:20, padding:'14px 16px',
+      background:'#FEE2E2', border:'2px solid #DC2626', borderRadius:12,
+      boxShadow:'0 0 0 4px rgba(220,38,38,0.15)'
+    } : { marginBottom:16 }
+    const headerStyle = isCritical ? {
+      fontSize:14, fontWeight:900, color:'#991B1B', letterSpacing:'0.06em',
+      marginBottom:10, display:'flex', alignItems:'center', gap:8, cursor:'pointer'
+    } : {
+      fontSize:12, fontWeight:700, color:c, letterSpacing:'0.06em',
+      marginBottom:8, display:'flex', alignItems:'center', gap:6, cursor:'pointer',
+      userSelect:'none'
+    }
+    return (
+      <div style={containerStyle}>
+        <div style={headerStyle} onClick={()=>setCollapsed(v=>!v)}>
+          <span style={{fontSize:10,transform:collapsed?'rotate(-90deg)':'none',transition:'transform 0.15s'}}>▾</span>
+          <span style={{flex:1}}>{title}{q.trim() && filtered.length !== items.length ? ` (${filtered.length} di ${items.length})` : ''}</span>
         </div>
-        <div style={{border:'1px solid #D8D5CC',borderRadius:8,overflow:'hidden'}}>
-          {filtered.map((item,i) => (
-            <div key={item.alias} style={{display:'flex',alignItems:'center',gap:10,
-              padding:'7px 12px',background:i%2===0?'#FFFFFF':bg,
-              borderBottom:i<filtered.length-1?'1px solid #D8D5CC':'none'}}>
-              {renderItem(item)}
-            </div>
-          ))}
-        </div>
+        {!collapsed && (
+          <div style={{border:'1px solid #D8D5CC',borderRadius:8,overflow:'hidden'}}>
+            {filtered.map((item,i) => (
+              <div key={item.alias} style={{display:'flex',alignItems:'center',gap:10,
+                padding:'7px 12px',background:i%2===0?'#FFFFFF':bg,
+                borderBottom:i<filtered.length-1?'1px solid #D8D5CC':'none'}}>
+                {renderItem(item)}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
-    ) : null
+    )
   }
 
   return (
@@ -290,53 +309,6 @@ function SetupPannel({ setupData, setupPopup, setSetupPopup, onChiudi }) {
           </button>
         </div>
         <div style={{flex:1,overflowY:'auto',padding:'20px 24px',minHeight:0}}>
-          <Section title={`✗ MANCANTI / DA MONTARE — ${da_montare.length}`}
-            items={da_montare} c='#C0392B' bg='#FDECEA'
-            renderItem={item=><>
-              <div style={{flex:1}}>
-                <span style={{fontSize:13,fontFamily:'monospace',fontWeight:700,color:'#1A1814'}}>{item.alias}</span>
-                {(item.progetti||[]).slice(0,3).map((r,i)=>(
-                  <div key={i} style={{fontSize:10,color:'#5A5750',marginTop:1}}>
-                    <span style={{fontWeight:700,color:'#1D5FAD'}}>{r.progetto}</span>
-                    <span style={{color:'#9A978E',fontFamily:'monospace'}}> · {r.file?.replace(/\.MPF$/i,'')}</span>
-                  </div>
-                ))}
-              </div>
-              <span style={{fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:12,flexShrink:0,
-                color:item.provenienza==='mancante'?'#C0392B':item.provenienza==='scaffale'?'#1D5FAD':'#C2720A',
-                background:item.provenienza==='mancante'?'#FDECEA':item.provenienza==='scaffale'?'#dbeafe':'#FFF0DC'}}>
-                {item.provenienza==='scaffale'?'🏠 A scaffale':item.provenienza==='smontato'?'📦 Smontato':'✗ Non trovato'}
-              </span>
-            </>}
-          />
-          <Section title={`⚠ FINE VITA (<15%) — ${fin_vita.length}`}
-            tooltip="Utensili con vita residua sotto il 15% nel TOA Sinumerik. Sostituire prima della prossima lavorazione per evitare interruzioni."
-            items={fin_vita} c='#B45309' bg='#FEF3C7'
-            renderItem={item=><>
-              <div style={{flex:1}}>
-                <span style={{fontSize:13,fontFamily:'monospace',fontWeight:700,color:'#1A1814'}}>{item.alias}</span>
-                {(item.progetti||[]).slice(0,2).map((r,i)=>(
-                  <div key={i} style={{fontSize:10,color:'#5A5750',marginTop:1}}>
-                    <span style={{fontWeight:700,color:item.disabilitato?'#7C3AED':'#B45309'}}>{r.progetto}</span>
-                    <span style={{color:'#9A978E',fontFamily:'monospace'}}> · {r.file?.replace(/\.MPF$/i,'')}</span>
-                  </div>
-                ))}
-              </div>
-              {item.position!=null&&<span style={{fontSize:11,color:'#5A5750',fontFamily:'monospace',flexShrink:0}}>P{item.position}</span>}
-              {item.disabilitato
-                ? <span style={{fontSize:11,fontWeight:800,color:'#7C3AED',background:'#EDE9FE',padding:'1px 8px',borderRadius:10,flexShrink:0}}>⊘ Disab.</span>
-                : <span style={{fontSize:12,fontWeight:800,color:'#C0392B',flexShrink:0}}>{item.life_percent}%</span>}
-            </>}
-          />
-          <Section title={`📦 NON UTILIZZATI — ${non_utilizzati.length}`}
-            items={non_utilizzati} c='#5A5750' bg='#F0EEE8'
-            renderItem={item=><>
-              <span style={{flex:1,fontSize:13,fontFamily:'monospace',color:'#5A5750'}}>{item.alias}</span>
-              {item.magazine!=null&&<span style={{fontSize:11,color:'#9A978E',fontFamily:'monospace'}}>M{item.magazine}{item.position!=null?` P${item.position}`:''}</span>}
-              {item.life_percent!=null&&<span style={{fontSize:11,color:'#9A978E'}}>{item.life_percent}%</span>}
-            </>}
-          />
-          {/* ── PREVISIONE FINE VITA ── */}
           {previsione_vita.length>0&&(
             <div style={{marginBottom:20}}>
               <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10,padding:'8px 12px',
@@ -384,6 +356,53 @@ function SetupPannel({ setupData, setupPopup, setSetupPopup, onChiudi }) {
               })}
             </div>
           )}
+          <Section title={`✗ MANCANTI / DA MONTARE — ${da_montare.length}`}
+            items={da_montare} c='#C0392B' bg='#FDECEA'
+            renderItem={item=><>
+              <div style={{flex:1}}>
+                <span style={{fontSize:13,fontFamily:'monospace',fontWeight:700,color:'#1A1814'}}>{item.alias}</span>
+                {(item.progetti||[]).slice(0,3).map((r,i)=>(
+                  <div key={i} style={{fontSize:10,color:'#5A5750',marginTop:1}}>
+                    <span style={{fontWeight:700,color:'#1D5FAD'}}>{r.progetto}</span>
+                    <span style={{color:'#9A978E',fontFamily:'monospace'}}> · {r.file?.replace(/\.MPF$/i,'')}</span>
+                  </div>
+                ))}
+              </div>
+              <span style={{fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:12,flexShrink:0,
+                color:item.provenienza==='mancante'?'#C0392B':item.provenienza==='scaffale'?'#1D5FAD':'#C2720A',
+                background:item.provenienza==='mancante'?'#FDECEA':item.provenienza==='scaffale'?'#dbeafe':'#FFF0DC'}}>
+                {item.provenienza==='scaffale'?'🏠 A scaffale':item.provenienza==='smontato'?'📦 Smontato':'✗ Non trovato'}
+              </span>
+            </>}
+          />
+          <Section title={`⚠ FINE VITA (<15%) — ${fin_vita.length}`}
+            tooltip="Utensili con vita residua sotto il 15% nel TOA Sinumerik. Sostituire prima della prossima lavorazione per evitare interruzioni."
+            items={fin_vita} c='#B45309' bg='#FEF3C7'
+            renderItem={item=><>
+              <div style={{flex:1}}>
+                <span style={{fontSize:13,fontFamily:'monospace',fontWeight:700,color:'#1A1814'}}>{item.alias}</span>
+                {(item.progetti||[]).slice(0,2).map((r,i)=>(
+                  <div key={i} style={{fontSize:10,color:'#5A5750',marginTop:1}}>
+                    <span style={{fontWeight:700,color:item.disabilitato?'#7C3AED':'#B45309'}}>{r.progetto}</span>
+                    <span style={{color:'#9A978E',fontFamily:'monospace'}}> · {r.file?.replace(/\.MPF$/i,'')}</span>
+                  </div>
+                ))}
+              </div>
+              {item.position!=null&&<span style={{fontSize:11,color:'#5A5750',fontFamily:'monospace',flexShrink:0}}>P{item.position}</span>}
+              {item.disabilitato
+                ? <span style={{fontSize:11,fontWeight:800,color:'#7C3AED',background:'#EDE9FE',padding:'1px 8px',borderRadius:10,flexShrink:0}}>⊘ Disab.</span>
+                : <span style={{fontSize:12,fontWeight:800,color:'#C0392B',flexShrink:0}}>{item.life_percent}%</span>}
+            </>}
+          />
+          <Section title={`📦 Non utilizzati — ${non_utilizzati.length} (opzionale, non blocca l'avvio)`}
+            items={non_utilizzati} c='#5A5750' bg='#F0EEE8' defaultCollapsed={true}
+            renderItem={item=><>
+              <span style={{flex:1,fontSize:13,fontFamily:'monospace',color:'#5A5750'}}>{item.alias}</span>
+              {item.magazine!=null&&<span style={{fontSize:11,color:'#9A978E',fontFamily:'monospace'}}>M{item.magazine}{item.position!=null?` P${item.position}`:''}</span>}
+              {item.life_percent!=null&&<span style={{fontSize:11,color:'#9A978E'}}>{item.life_percent}%</span>}
+            </>}
+          />
+          {/* ── PREVISIONE FINE VITA ── */}
         </div>
         <div style={{padding:'12px 24px',borderTop:'1px solid #D8D5CC',
           display:'flex',gap:10,justifyContent:'flex-end',

@@ -37,6 +37,9 @@ SOGLIA_SOSTITUZIONE_PCT   = 80    # life_percent nuovo > questa soglia → sosti
 DELTA_MIN_AUMENTO         = 1.0   # delta minimo per considerare vita "aumentata" (no noise floating)
 THROTTLE_MINUTES          = 30    # minuti tra due alert sullo stesso alias
 MAX_RECORD                = 500   # massimo record nello storico
+DEDUP_WINDOW_HOURS        = 2     # finestra temporale per de-duplicare eventi
+SOGLIA_TOA_PARZIALE_PCT   = 30    # se >30% degli utensili "spariscono" in un tick,
+                                  # sospetta TOA parziale/corrotto e salta il ciclo
 
 # ── Stato in memoria ─────────────────────────────────────────────────────────
 # snapshot: { tool_id (int) → {alias, life_percent, life_remaining, life_total,
@@ -162,21 +165,59 @@ def on_tools_updated(tools_new: dict, config: dict):
     old_ids = set(snap_old.keys())
     new_ids = set(snap_new.keys())
 
+    # ── SAFEGUARD TOA parziale (Bug 1) ───────────────────────────────────────
+    # Se un'ampia porzione di utensili "sparisce" in un singolo tick è quasi
+    # certamente un TOA scritto a metà o una share di rete che ha fatto
+    # lettura parziale. Non registrare niente, lasciare snapshot invariato.
+    if len(old_ids) >= 10:  # soglia minima per avere statistica significativa
+        spariti_pct = 100 * len(old_ids - new_ids) / len(old_ids)
+        if spariti_pct > SOGLIA_TOA_PARZIALE_PCT:
+            log.warning(
+                f"tool_history: sospetto TOA parziale — "
+                f"{len(old_ids - new_ids)}/{len(old_ids)} utensili spariti "
+                f"({spariti_pct:.0f}%). Snapshot NON aggiornato, nessun evento."
+            )
+            return
+
     spariti = old_ids - new_ids   # utensile non più in TOA
     arrivati = new_ids - old_ids  # tool_id mai visto prima
     comuni   = old_ids & new_ids  # stesso utensile fisico
 
-    # Finestra anti-duplicato — guarda solo gli ultimi 50 record delle ultime 2h
-    due_ore_fa = (datetime.now() - timedelta(hours=2)).isoformat(timespec="seconds")
-    recent_tail = existing_records[-50:]
+    # Finestra anti-duplicato — iterazione COMPLETA su records dentro la finestra
+    # temporale (Bug 7: non più slice arbitrario sugli ultimi 50)
+    cutoff = (datetime.now() - timedelta(hours=DEDUP_WINDOW_HOURS)).isoformat(timespec="seconds")
+    recent = [r for r in existing_records if (r.get("ts") or "") >= cutoff]
 
-    def _gia_registrato(tool_id: int, tipo: str) -> bool:
-        return any(
-            r.get("tool_id") == tool_id
-            and r.get("tipo") == tipo
-            and (r.get("ts") or "") >= due_ore_fa
-            for r in recent_tail
-        )
+    def _gia_registrato(tool_id: int, tipo: str, alias: str, pos,
+                        vita_prima=None, vita_dopo=None) -> bool:
+        """
+        Dedup con match multiplo (Bug 3 — fallback per record pre-refactor senza tool_id).
+        Per allungamento_vita, il match include anche vita_prima/dopo così azioni
+        distinte non si deduplichino tra loro (Bug 5).
+        """
+        alias_up = (alias or "").upper().strip()
+        for r in recent:
+            if r.get("tipo") != tipo:
+                continue
+            # Match per tool_id (record nuovi) OPPURE alias+posizione (record vecchi)
+            match_id = (r.get("tool_id") == tool_id)
+            match_legacy = (
+                r.get("tool_id") is None
+                and (r.get("alias") or "").upper().strip() == alias_up
+                and r.get("posizione") == pos
+            )
+            if not (match_id or match_legacy):
+                continue
+            # Per allungamento_vita: considera duplicato solo se vita_prima e
+            # vita_dopo sono simili (entro ±3%). Altrimenti è un'azione distinta.
+            if tipo == "allungamento_vita" and vita_prima is not None and vita_dopo is not None:
+                rvp, rvd = r.get("vita_prima"), r.get("vita_dopo")
+                if rvp is None or rvd is None:
+                    return True
+                if abs(rvp - vita_prima) > 3 or abs(rvd - vita_dopo) > 3:
+                    continue  # delta diversi → non è duplicato
+            return True
+        return False
 
     # ── 1. RIMOSSI: tool_id sparito dal TOA ──────────────────────────────────
     for tid in spariti:
@@ -187,7 +228,7 @@ def on_tools_updated(tools_new: dict, config: dict):
         if mag_old in ("9998", "9999"):
             continue
 
-        if _gia_registrato(tid, "rimosso"):
+        if _gia_registrato(tid, "rimosso", old.get("alias",""), old.get("position")):
             continue
 
         record = {
@@ -218,7 +259,7 @@ def on_tools_updated(tools_new: dict, config: dict):
         if mag_new in ("9998", "9999"):
             continue
 
-        if _gia_registrato(tid, "inserito"):
+        if _gia_registrato(tid, "inserito", new.get("alias",""), new.get("position")):
             continue
 
         record = {
@@ -254,10 +295,14 @@ def on_tools_updated(tools_new: dict, config: dict):
                 f"{pos_old} → {pos_new}"
             )
 
-        # 3b. Analisi vita (indipendente dalla posizione)
-        lp_old = old.get("life_percent") or 0
-        lp_new = new.get("life_percent") or 0
-        delta  = lp_new - lp_old
+        # 3b. Analisi vita — skip se uno dei due è None (Bug 2: utensile senza
+        # monitoring, come sonde Renishaw/Blum). Non sappiamo se è aumentata o no.
+        lp_old = old.get("life_percent")
+        lp_new = new.get("life_percent")
+        if lp_old is None or lp_new is None:
+            continue
+
+        delta = lp_new - lp_old
 
         if delta < DELTA_MIN_AUMENTO:
             continue  # vita invariata o scesa → ha lavorato, nessun evento
@@ -272,7 +317,10 @@ def on_tools_updated(tools_new: dict, config: dict):
             causa = "manuale"  # auto-classificato, prezioso per ML
             cl_ts = now
 
-        if _gia_registrato(tid, tipo):
+        vp_r = round(lp_old, 1)
+        vd_r = round(lp_new, 1)
+        if _gia_registrato(tid, tipo, new.get("alias",""), new.get("position"),
+                           vita_prima=vp_r, vita_dopo=vd_r):
             continue
 
         record = {
@@ -282,8 +330,8 @@ def on_tools_updated(tools_new: dict, config: dict):
             "posizione":       new.get("position"),
             "magazine":        new.get("magazine"),
             "duplo":           new.get("duplo", 1),
-            "vita_prima":      round(lp_old, 1),
-            "vita_dopo":       round(lp_new, 1),
+            "vita_prima":      vp_r,
+            "vita_dopo":       vd_r,
             "tipo":            tipo,
             "causa":           causa,
             "classificato_ts": cl_ts,
@@ -312,12 +360,15 @@ def on_tools_updated(tools_new: dict, config: dict):
             for r in nuovi:
                 emoji = EMOJI.get(r["tipo"], "ℹ️")
                 vp, vd = r.get("vita_prima"), r.get("vita_dopo")
-                if vp is None:
-                    vita_str = f"nuovo → {vd}%"
-                elif vd is None:
-                    vita_str = f"{vp}% → rimosso"
+                # Format "—" quando la vita non è disponibile (sonde senza monitoring)
+                vp_s = f"{vp}%" if vp is not None else "—"
+                vd_s = f"{vd}%" if vd is not None else "—"
+                if r["tipo"] == "inserito":
+                    vita_str = f"nuovo → {vd_s}"
+                elif r["tipo"] == "rimosso":
+                    vita_str = f"{vp_s} → rimosso"
                 else:
-                    vita_str = f"{vp}% → {vd}%"
+                    vita_str = f"{vp_s} → {vd_s}"
                 msg = (
                     f"{emoji} *Utensile {r['tipo'].replace('_',' ').upper()}*\n"
                     f"`{r['alias']}` T{r['tool_id']} pos.{r['posizione'] or '?'}\n"

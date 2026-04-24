@@ -1,3 +1,4 @@
+﻿// MARKER_TEST_123456
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useEffect, useState, Component } from 'react'
 import Sidebar       from './components/Sidebar'
@@ -19,7 +20,7 @@ import AlertUtensili from './pages/AlertUtensili'
 import RiepilogoTurno from './pages/RiepilogoTurno'
 import StepAnalyzer  from './pages/StepAnalyzer'
 
-// ── Error Boundary globale ──────────────────────────────────────────────────
+// â”€â”€ Error Boundary globale â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Previene schermo bianco su eccezioni non gestite nei componenti React.
 // Mostra un messaggio di errore con pulsante per ricaricare la pagina.
 class ErrorBoundary extends Component {
@@ -41,7 +42,7 @@ class ErrorBoundary extends Component {
         justifyContent: 'center', height: '100vh', gap: 16,
         background: '#fef2f2', fontFamily: 'system-ui, sans-serif',
       }}>
-        <div style={{ fontSize: 32 }}>⚠</div>
+        <div style={{ fontSize: 32 }}>âš </div>
         <div style={{ fontSize: 18, fontWeight: 700, color: '#dc2626' }}>
           Errore imprevisto
         </div>
@@ -67,9 +68,9 @@ class ErrorBoundary extends Component {
   }
 }
 
-// ── Barra stato macchina globale ──────────────────────────────────────────────
+// â”€â”€ Barra stato macchina globale â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Striscia di 4px in cima al contenuto principale, sempre visibile.
-// Verde = in lavorazione · Giallo = JOG · Rosso pulse = FERMA/allarme · Grigio = sconosciuto
+// Verde = in lavorazione Â· Giallo = JOG Â· Rosso pulse = FERMA/allarme Â· Grigio = sconosciuto
 function GlobalStatusBar() {
   const [stato, setStato] = useState(null)
 
@@ -124,7 +125,7 @@ function GlobalStatusBar() {
   )
 }
 
-// Polling globale — gira sempre, indipendentemente dalla pagina aperta
+// Polling globale â€” gira sempre, indipendentemente dalla pagina aperta
 function GlobalPoller() {
   useEffect(() => {
     let isRunning = false
@@ -132,8 +133,8 @@ function GlobalPoller() {
       if (isRunning) return
       isRunning = true
       try {
-        // SOLO LETTURA — legge il risultato dell'ultimo ciclo del poller interno.
-        // Nessuna scrittura dal frontend — elimina race condition con N client aperti.
+        // SOLO LETTURA â€” legge il risultato dell'ultimo ciclo del poller interno.
+        // Nessuna scrittura dal frontend â€” elimina race condition con N client aperti.
         const r = await fetch('/api/macchina-live/tick')
         if (!r.ok) return
         const d = await r.json()
@@ -198,3 +199,4 @@ export default function App() {
     </ErrorBoundary>
   )
 }
+

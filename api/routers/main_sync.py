@@ -285,26 +285,41 @@ async def salva_main_snapshot(body: dict = Body(...)):
     }
 
     # ── Hook rigenerazione MAIN (feature/pallet-logic-v2) ────────────────────
-    # La rigenerazione è un nuovo ciclo: tutti i programmi del progetto tornano
-    # a da_fare, poi quelli nel nuovo MAIN vengono marcati in_main. Il pallet
-    # eventualmente guasto/finito torna a grezzo (se il nuovo MAIN ha programmi)
-    # o vuoto (se non ne ha).
+    # Regole per i programmi del progetto:
+    # - Programma nel nuovo MAIN → diventa `in_main` (l'operatore lo vuole rifare,
+    #   anche se era completato prima): reset utensili e tempi.
+    # - Programma fuori dal nuovo MAIN, era `completato` → resta `completato`
+    #   (lavoro storicamente fatto, non lo perdiamo).
+    # - Programma fuori dal nuovo MAIN, in altro stato (in_main/in_lavorazione/da_fare)
+    #   → diventa `da_fare`, reset utensili e tempi.
+    # IPM trattati come fresatura.
     main_programmi_norm = set(progetto["main_snapshot"]["main_programmi"])
     for s in progetto.get("steps", []):
         for t in s.get("tasks", []):
             if t.get("text", "").strip().lower() != "fresatura":
                 continue
             for pgm in t.get("programs", []):
-                if pgm.get("tipoGruppo") == "ipm":
-                    continue
-                # Reset pulito del programma
-                pgm["tempoInizio"] = None
-                pgm["tempoFine"]   = None
-                pgm.pop("_utensili_visti", None)
-                pgm.pop("_completato_per_sequenza", None)
-                # Stato: in_main se nel nuovo MAIN, altrimenti da_fare
                 fn_norm = _norm_pgm(pgm.get("filename") or "")
-                pgm["stato"] = "in_main" if fn_norm in main_programmi_norm else "da_fare"
+                cur_stato = pgm.get("stato")
+                if fn_norm in main_programmi_norm:
+                    # È nel nuovo MAIN → ricomincia da capo
+                    pgm["stato"]       = "in_main"
+                    pgm["tempoInizio"] = None
+                    pgm["tempoFine"]   = None
+                    pgm.pop("_utensili_visti", None)
+                    pgm.pop("_completato_per_sequenza", None)
+                else:
+                    # Fuori dal nuovo MAIN
+                    if cur_stato == "completato":
+                        # Lavoro fatto, lo manteniamo
+                        pass
+                    else:
+                        # in_main/in_lavorazione/da_fare → da_fare
+                        pgm["stato"]       = "da_fare"
+                        pgm["tempoInizio"] = None
+                        pgm["tempoFine"]   = None
+                        pgm.pop("_utensili_visti", None)
+                        pgm.pop("_completato_per_sequenza", None)
 
     # Pallet associati al progetto: reset regola-d-oro-compliant
     try:

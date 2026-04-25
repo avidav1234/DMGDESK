@@ -86,7 +86,6 @@ def simula_tick(projects, pallets, mpf_filename, stato_pgm, pallet_num,
             for t in s.get("tasks", [])
             if t.get("text", "").strip().lower() == "fresatura"
             for pg in t.get("programs", [])
-            if pg.get("tipoGruppo") != "ipm"
         ]
         pgm_nel_main = [pg for pg in pgm_fresatura
                         if pg.get("stato") in ("in_main", "completato", "in_lavorazione")]
@@ -178,12 +177,12 @@ def simula_tick(projects, pallets, mpf_filename, stato_pgm, pallet_num,
                             if t.get("text", "").strip().lower() != "fresatura":
                                 continue
                             for pgm in t.get("programs", []):
-                                if pgm.get("tipoGruppo") == "ipm":
-                                    continue
+                                # v2: IPM trattati come fresatura
                                 if pgm.get("stato") != "in_main":
                                     continue
                                 if _norm(pgm.get("filename")) in precedenti:
                                     pgm["stato"] = "completato"
+                                    pgm["tempoInizio"] = pgm.get("tempoInizio") or now_str
                                     pgm["tempoFine"] = now_str
                                     attesi = [(u.get("alias") or "").upper().strip()
                                               for u in (pgm.get("utensili") or []) if u.get("alias")]
@@ -197,16 +196,16 @@ def simula_tick(projects, pallets, mpf_filename, stato_pgm, pallet_num,
                     if task.get("text", "").strip().lower() != "fresatura":
                         continue
                     for pgm in task.get("programs", []):
-                        if pgm.get("tipoGruppo") == "ipm":
-                            continue
+                        # v2: IPM trattati come fresatura
                         fn = (pgm.get("filename") or "").upper().replace(".MPF", "").strip()
                         if fn == tgt:
                             if pgm.get("stato") != "in_lavorazione":
+                                # Transizione: reset pulito (Bug 1,2,10 fix)
                                 pgm["stato"] = "in_lavorazione"
-                                if not pgm.get("tempoInizio"):
-                                    pgm["_utensili_visti"] = []
                                 pgm["tempoInizio"] = now_str
                                 pgm["tempoFine"] = None
+                                pgm["_utensili_visti"] = []
+                                pgm.pop("_completato_per_sequenza", None)
                             if utensile_attivo:
                                 visti = pgm.get("_utensili_visti") or []
                                 u_up = utensile_attivo.upper().strip()
@@ -432,10 +431,271 @@ def test_G5_programma_non_mappato():
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# NUOVI TEST: SEQUENZE MULTI-CICLO E BUG SPECIFICI
+# ═══════════════════════════════════════════════════════════════════════════
+
+def test_BUG1_reset_visti_alla_transizione():
+    """
+    Bug 1/2: alla transizione in_main → in_lavorazione, _utensili_visti deve
+    essere AZZERATO, non preservato. Il vecchio codice aveva il bug
+    `pgm["tempoInizio"] = ... or now_str; if not pgm.get("tempoInizio"): reset`
+    che non azzera mai.
+    """
+    print("\n[BUG1] Reset _utensili_visti alla transizione")
+    # Simulo programma con visti residui da un ciclo precedente
+    pA = mk_progetto("projA", "A", [
+        mk_pgm("A_001", "in_main", utensili=["T1", "T2"], utensili_visti=["VECCHIO_T9"]),
+    ], main_programmi=["A_001.MPF"])
+    pal1 = mk_pallet(1, "projA", "grezzo")
+    simula_tick([pA], [pal1], "A_001", 1, pallet_num=1, utensile_attivo="T1")
+    pgm = pA["steps"][0]["tasks"][0]["programs"][0]
+    check("BUG1 visti vecchi azzerati", "VECCHIO_T9" not in (pgm.get("_utensili_visti") or []), True)
+    check("BUG1 visti contiene solo T1", pgm.get("_utensili_visti"), ["T1"])
+    check("BUG1 stato in_lavorazione", pgm.get("stato"), "in_lavorazione")
+
+
+def test_BUG2_visti_persistono_su_cambio_pallet():
+    """
+    Bug 2: dopo un cambio pallet i visti dei programmi completati DEVONO
+    persistere (non più poppati) per la regola d'oro.
+    """
+    print("\n[BUG2] Visti persistono dopo cambio pallet")
+    pA = mk_progetto("projA", "A", [
+        mk_pgm("A_001", "completato", utensili=["T1"], utensili_visti=["T1"]),
+        mk_pgm("A_002", "in_lavorazione", utensili=["T2"], utensili_visti=["T2"]),
+    ], main_programmi=["A_001.MPF", "A_002.MPF"])
+    pB = mk_progetto("projB", "B", [mk_pgm("B_001", "in_main", utensili=["T3"])])
+    pal1 = mk_pallet(1, "projA", "in_lavorazione")
+    pal2 = mk_pallet(2, "projB", "grezzo")
+    simula_tick([pA, pB], [pal1, pal2], "B_001", 1, pallet_num=2, utensile_attivo="T3")
+    # Dopo cambio: A_002 deve essere completato CON visti
+    pgm_002 = pA["steps"][0]["tasks"][0]["programs"][1]
+    check("BUG2 A_002 completato dopo cambio", pgm_002.get("stato"), "completato")
+    check("BUG2 A_002 visti preservati", pgm_002.get("_utensili_visti"), ["T2"])
+    check("BUG2 pallet uscente FINITO", pal1["stato"], "finito")
+
+
+def test_BUG6_progetto_solo_ipm():
+    """
+    Bug 6: un progetto con MAIN composto SOLO di programmi IPM deve funzionare.
+    Prima del fix: tutti i programmi venivano filtrati → pallet sempre guasto.
+    """
+    print("\n[BUG6] Progetto MAIN solo IPM funziona normalmente")
+    pA = mk_progetto("projA", "A", [
+        {"filename": "A_001", "stato": "in_lavorazione", "utensili": [{"alias": "T1"}],
+         "_utensili_visti": ["T1"], "tipoGruppo": "ipm"},
+    ], main_programmi=["A_001.MPF"])
+    pB = mk_progetto("projB", "B", [mk_pgm("B_001", "in_main", utensili=["T9"])])
+    pal1 = mk_pallet(1, "projA", "in_lavorazione")
+    pal2 = mk_pallet(2, "projB", "grezzo")
+    simula_tick([pA, pB], [pal1, pal2], "B_001", 1, pallet_num=2, utensile_attivo="T9")
+    check("BUG6 IPM-only va FINITO (non più guasto)", pal1["stato"], "finito")
+
+
+def test_BUG7_retro_mark_ha_tempoInizio():
+    """
+    Bug 7: la retro-marcatura sequenziale deve impostare tempoInizio
+    (anche se uguale a tempoFine) per evitare NoneType errors nei consumer.
+    """
+    print("\n[BUG7] Retro-marcatura imposta tempoInizio")
+    pA = mk_progetto("projA", "A", [
+        mk_pgm("A_001", "in_main", utensili=["T1"]),  # log perso, sarà retro-marcato
+        mk_pgm("A_002", "in_main", utensili=["T2"]),
+    ], main_programmi=["A_001.MPF", "A_002.MPF"])
+    pal1 = mk_pallet(1, "projA", "grezzo")
+    simula_tick([pA], [pal1], "A_002", 1, pallet_num=1, utensile_attivo="T2")
+    pgm_001 = pA["steps"][0]["tasks"][0]["programs"][0]
+    check("BUG7 A_001 retro-marcato completato", pgm_001.get("stato"), "completato")
+    check("BUG7 tempoInizio popolato", pgm_001.get("tempoInizio") is not None, True)
+    check("BUG7 tempoFine popolato", pgm_001.get("tempoFine") is not None, True)
+
+
+def test_BUG8_rigenerazione_main_preserva_completati_fuori_main():
+    """
+    Bug 8: alla rigenerazione MAIN, programmi `completato` che NON sono nel
+    nuovo MAIN devono restare `completato` (lavoro storico preservato).
+    Quelli nel nuovo MAIN diventano `in_main` (operatore vuole rifarli).
+    """
+    print("\n[BUG8] Rigenerazione MAIN preserva completato fuori dal nuovo MAIN")
+    # Simulo manualmente la logica del hook (non possiamo importare salva_main_snapshot
+    # senza FastAPI completo). Testiamo la logica di trasformazione.
+    pgm_list = [
+        {"filename": "A_001.MPF", "stato": "completato"},  # completato, NON nel nuovo MAIN → resta
+        {"filename": "A_002.MPF", "stato": "completato"},  # completato, NEL nuovo MAIN → in_main
+        {"filename": "A_003.MPF", "stato": "in_main"},     # in_main, NON nel nuovo MAIN → da_fare
+        {"filename": "A_004.MPF", "stato": "da_fare"},     # da_fare, NEL nuovo MAIN → in_main
+    ]
+    main_programmi_norm = {"A_002.MPF", "A_004.MPF"}
+
+    # Replica logica del hook
+    for pgm in pgm_list:
+        fn_norm = (pgm["filename"] or "").upper().strip()
+        if not fn_norm.endswith(".MPF"):
+            fn_norm += ".MPF"
+        cur = pgm.get("stato")
+        if fn_norm in main_programmi_norm:
+            pgm["stato"] = "in_main"
+        else:
+            if cur != "completato":
+                pgm["stato"] = "da_fare"
+
+    check("BUG8 A_001 completato fuori MAIN → resta completato",
+          pgm_list[0]["stato"], "completato")
+    check("BUG8 A_002 completato dentro MAIN → in_main",
+          pgm_list[1]["stato"], "in_main")
+    check("BUG8 A_003 in_main fuori MAIN → da_fare",
+          pgm_list[2]["stato"], "da_fare")
+    check("BUG8 A_004 da_fare dentro MAIN → in_main",
+          pgm_list[3]["stato"], "in_main")
+
+
+def test_E1_completo_rientro_e_completamento():
+    """
+    E1 completo: pallet guasto rientra, completa il ciclo, esce → finito.
+    Verifica sequenza multi-tick con regola d'oro.
+    """
+    print("\n[E1-FULL] Pallet guasto rientra, completa, esce FINITO")
+    # Stato iniziale: A_001 in_main (era stato interrotto), A_002 completato dal giro precedente
+    # Pallet guasto.
+    pA = mk_progetto("projA", "A", [
+        mk_pgm("A_001", "in_main", utensili=["T1"]),
+        mk_pgm("A_002", "completato", utensili=["T2"], utensili_visti=["T2"]),
+    ], main_programmi=["A_001.MPF", "A_002.MPF"])
+    pB = mk_progetto("projB", "B", [mk_pgm("B_001", "in_main", utensili=["T9"])])
+    pal1 = mk_pallet(1, "projA", "guasto")
+    pal2 = mk_pallet(2, "projB", "grezzo")
+
+    # Tick 1: A_001 parte (rientro)
+    simula_tick([pA, pB], [pal1, pal2], "A_001", 1, pallet_num=1, utensile_attivo="T1")
+    check("E1-FULL pallet guasto → in_lavorazione", pal1["stato"], "in_lavorazione")
+    pgm_001 = pA["steps"][0]["tasks"][0]["programs"][0]
+    check("E1-FULL A_001 in_lavorazione", pgm_001.get("stato"), "in_lavorazione")
+    check("E1-FULL A_001 visti freschi", pgm_001.get("_utensili_visti"), ["T1"])
+
+    # Tick 2: cambio pallet a B (A_001 chiude, dovrebbe completare visto utensili tutti visti)
+    simula_tick([pA, pB], [pal1, pal2], "B_001", 1, pallet_num=2, utensile_attivo="T9")
+    check("E1-FULL pallet uscente → FINITO", pal1["stato"], "finito")
+
+
+def test_F2_completo_rigenerazione_e_seconda_fase():
+    """
+    Multi-fase completo: pallet finito → rigenerazione MAIN per fase 2 → grezzo.
+    Poi parte fase 2 → in_lavorazione → completata → finito.
+    """
+    print("\n[F2-FULL] Multi-fase con rigenerazione")
+    # Fase 1 finita: tutti i programmi della fase 1 completati
+    pA = mk_progetto("projA", "A", [
+        mk_pgm("A_001", "completato", utensili=["T1"], utensili_visti=["T1"]),
+        mk_pgm("A_002", "completato", utensili=["T2"], utensili_visti=["T2"]),
+        # Programmi fase 2 ancora da_fare
+        mk_pgm("A_003", "da_fare", utensili=["T3"]),
+        mk_pgm("A_004", "da_fare", utensili=["T4"]),
+    ], main_programmi=["A_001.MPF", "A_002.MPF"])  # MAIN attuale = fase 1
+    pal1 = mk_pallet(1, "projA", "finito")
+
+    # Simulo rigenerazione MAIN per fase 2: A_003, A_004 entrano nel nuovo MAIN
+    nuovo_main = {"A_003.MPF", "A_004.MPF"}
+    for pgm in pA["steps"][0]["tasks"][0]["programs"]:
+        fn_norm = (pgm["filename"] or "").upper().strip()
+        if not fn_norm.endswith(".MPF"): fn_norm += ".MPF"
+        if fn_norm in nuovo_main:
+            pgm["stato"] = "in_main"
+            pgm["tempoInizio"] = None
+            pgm["tempoFine"] = None
+            pgm.pop("_utensili_visti", None)
+        elif pgm.get("stato") != "completato":
+            pgm["stato"] = "da_fare"
+    pA["main_snapshot"]["main_programmi"] = list(nuovo_main)
+    # Pallet: finito → grezzo (rigenerazione)
+    pal1["stato"] = "grezzo"
+
+    check("F2-FULL dopo rigenerazione, pallet grezzo", pal1["stato"], "grezzo")
+    check("F2-FULL A_001 completato preservato",
+          pA["steps"][0]["tasks"][0]["programs"][0].get("stato"), "completato")
+    check("F2-FULL A_003 in_main",
+          pA["steps"][0]["tasks"][0]["programs"][2].get("stato"), "in_main")
+
+    # Tick: parte A_003 (fase 2)
+    pB = mk_progetto("projB", "B", [mk_pgm("B_001", "in_main", utensili=["T9"])])
+    pal2 = mk_pallet(2, "projB", "grezzo")
+    simula_tick([pA, pB], [pal1, pal2], "A_003", 1, pallet_num=1, utensile_attivo="T3")
+    check("F2-FULL A_003 partita → pallet in_lavorazione", pal1["stato"], "in_lavorazione")
+
+    # Tick: parte A_004 (sequenziale su A_003 stesso progetto)
+    simula_tick([pA, pB], [pal1, pal2], "A_004", 1, pallet_num=1, utensile_attivo="T4")
+    pgm_003 = pA["steps"][0]["tasks"][0]["programs"][2]
+    check("F2-FULL A_003 → completato (verifica utensili)", pgm_003.get("stato"), "completato")
+
+    # Cambio pallet → fase 2 deve risultare finita
+    simula_tick([pA, pB], [pal1, pal2], "B_001", 1, pallet_num=2, utensile_attivo="T9")
+    check("F2-FULL fase 2 completata → pallet FINITO", pal1["stato"], "finito")
+
+
+def test_BUG_oscillazione_visti_tra_cicli():
+    """
+    Scenario: pallet completa ciclo, cambia pallet (visti preservati come da fix v2).
+    Poi rientra per nuovo ciclo: i visti vecchi non devono inquinare il giro nuovo.
+    Questo testa Bug 1+2 in sequenza.
+    """
+    print("\n[BUG-OSC] Visti del giro vecchio non inquinano giro nuovo")
+    pA = mk_progetto("projA", "A", [
+        mk_pgm("A_001", "in_lavorazione", utensili=["T1"], utensili_visti=["T1"]),
+    ], main_programmi=["A_001.MPF"])
+    pB = mk_progetto("projB", "B", [mk_pgm("B_001", "in_main", utensili=["T9"])])
+    pal1 = mk_pallet(1, "projA", "in_lavorazione")
+    pal2 = mk_pallet(2, "projB", "grezzo")
+
+    # Cambio: A_001 → completato + visti preservati
+    simula_tick([pA, pB], [pal1, pal2], "B_001", 1, pallet_num=2, utensile_attivo="T9")
+    pgm = pA["steps"][0]["tasks"][0]["programs"][0]
+    check("BUG-OSC A_001 dopo cambio = completato", pgm.get("stato"), "completato")
+    check("BUG-OSC pallet1 = finito", pal1["stato"], "finito")
+
+    # Operatore rigenera MAIN per rifare A_001 (nuovo ciclo)
+    pgm["stato"] = "in_main"
+    pgm["tempoInizio"] = None
+    pgm["tempoFine"] = None
+    pgm.pop("_utensili_visti", None)
+    pal1["stato"] = "grezzo"
+
+    # A_001 riparte. visti devono essere puliti.
+    simula_tick([pA, pB], [pal1, pal2], "A_001", 1, pallet_num=1, utensile_attivo="T1")
+    check("BUG-OSC riparto: A_001 in_lavorazione", pgm.get("stato"), "in_lavorazione")
+    check("BUG-OSC riparto: visti freschi (solo T1)", pgm.get("_utensili_visti"), ["T1"])
+    check("BUG-OSC riparto: tempoInizio nuovo (non None)", pgm.get("tempoInizio") is not None, True)
+
+
+def test_BUG_retro_marcatura_non_tocca_completati():
+    """
+    La retro-marcatura sequenziale deve toccare SOLO programmi `in_main`.
+    Programmi `completato` di un giro precedente non devono essere ri-toccati.
+    """
+    print("\n[BUG-RETRO] Retro-marcatura non sovrascrive programmi completato")
+    pA = mk_progetto("projA", "A", [
+        mk_pgm("A_001", "completato", utensili=["T1"], utensili_visti=["T1_VECCHIO"]),
+        mk_pgm("A_002", "in_main", utensili=["T2"]),
+        mk_pgm("A_003", "in_main", utensili=["T3"]),
+    ], main_programmi=["A_001.MPF", "A_002.MPF", "A_003.MPF"])
+    pal1 = mk_pallet(1, "projA", "grezzo")
+    # Parte A_003: A_002 deve essere retro-marcato. A_001 era già completato → non toccato.
+    simula_tick([pA], [pal1], "A_003", 1, pallet_num=1, utensile_attivo="T3")
+    pgm_001 = pA["steps"][0]["tasks"][0]["programs"][0]
+    pgm_002 = pA["steps"][0]["tasks"][0]["programs"][1]
+    check("BUG-RETRO A_001 visti preservati (non toccati)",
+          pgm_001.get("_utensili_visti"), ["T1_VECCHIO"])
+    check("BUG-RETRO A_001 senza flag _completato_per_sequenza",
+          pgm_001.get("_completato_per_sequenza"), None)
+    check("BUG-RETRO A_002 retro-marcato", pgm_002.get("stato"), "completato")
+    check("BUG-RETRO A_002 flag _completato_per_sequenza",
+          pgm_002.get("_completato_per_sequenza"), True)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # MAIN
 # ═══════════════════════════════════════════════════════════════════════════
 
 if __name__ == "__main__":
+    # Scenari originali
     test_A1_ciclo_completato_pulito()
     test_A2_ultimo_pgm_utensile_mancante()
     test_B1_interruzione_a_meta_main()
@@ -448,6 +708,17 @@ if __name__ == "__main__":
     test_F2_fase2_interrotta()
     test_G4_pallet_num_null()
     test_G5_programma_non_mappato()
+
+    # Scenari nuovi: bug specifici e sequenze multi-ciclo
+    test_BUG1_reset_visti_alla_transizione()
+    test_BUG2_visti_persistono_su_cambio_pallet()
+    test_BUG6_progetto_solo_ipm()
+    test_BUG7_retro_mark_ha_tempoInizio()
+    test_BUG8_rigenerazione_main_preserva_completati_fuori_main()
+    test_E1_completo_rientro_e_completamento()
+    test_F2_completo_rigenerazione_e_seconda_fase()
+    test_BUG_oscillazione_visti_tra_cicli()
+    test_BUG_retro_marcatura_non_tocca_completati()
 
     print(f"\n{'='*60}")
     passed = sum(_results)

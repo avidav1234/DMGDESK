@@ -472,8 +472,7 @@ async def get_live_context():
                            for step in project.get("steps", [])
                            for task in step.get("tasks", [])
                            if task.get("text","").strip().lower() == "fresatura"
-                           for pgm in task.get("programs", [])
-                           if pgm.get("tipoGruppo") != "ipm"]
+                           for pgm in task.get("programs", [])]
 
                 # Cerca il programma attivo nella lista
                 pgm_match = next(
@@ -595,14 +594,12 @@ async def get_live_context():
 # Ricevono e modificano i dati in-place; restituiscono (proj_dirty, pallet_dirty).
 
 def _itera_programmi_fresatura(progetto: dict):
-    """Genera tutti i programmi fresatura non-IPM di un progetto."""
+    """Genera tutti i programmi fresatura di un progetto (incluso IPM, v2)."""
     for s in progetto.get("steps", []):
         for t in s.get("tasks", []):
             if t.get("text", "").strip().lower() != "fresatura":
                 continue
             for pgm in t.get("programs", []):
-                if pgm.get("tipoGruppo") == "ipm":
-                    continue
                 yield pgm
 
 
@@ -1002,7 +999,6 @@ async def aggiorna_stati_da_log():
             for t in s.get("tasks", [])
             if t.get("text", "").strip().lower() == "fresatura"
             for pg in t.get("programs", [])
-            if pg.get("tipoGruppo") != "ipm"
         ]
 
         # Solo programmi nel MAIN (in_main/completato/in_lavorazione). I `da_fare`
@@ -1063,7 +1059,6 @@ async def aggiorna_stati_da_log():
             for t in s.get("tasks", [])
             if t.get("text", "").strip().lower() == "fresatura"
             for pg in t.get("programs", [])
-            if pg.get("tipoGruppo") != "ipm"
         ]
         if not pgm_fresatura:
             pal["stato"] = "vuoto"; return
@@ -1133,7 +1128,8 @@ async def aggiorna_stati_da_log():
             # Timeout check
             try:
                 iniz = _dt.fromisoformat(pal["stop_iniziato_ts"])
-                elapsed = _dt.now() - iniz
+                # Bug 11 fix: usa now_str del tick (non _dt.now() reale)
+                elapsed = _dt.fromisoformat(now_str) - iniz
             except Exception:
                 elapsed = _td(0)
 
@@ -1211,15 +1207,17 @@ async def aggiorna_stati_da_log():
                             if task.get("text", "").strip().lower() != "fresatura":
                                 continue
                             for pgm in task.get("programs", []):
-                                if pgm.get("tipoGruppo") == "ipm":
-                                    continue
+                                # v2: IPM trattati come fresatura
                                 if pgm.get("stato") != "in_main":
                                     continue
                                 fn_norm = _norm(pgm.get("filename"))
                                 if fn_norm in precedenti:
                                     # Retro-marca: completato con utensili attesi
-                                    # pre-riempiti (regola d'oro considera OK)
+                                    # pre-riempiti (regola d'oro considera OK).
+                                    # Bug 7 fix: setta anche tempoInizio = tempoFine
+                                    # (durata zero, ma evita NoneType in consumer).
                                     pgm["stato"] = "completato"
+                                    pgm["tempoInizio"] = pgm.get("tempoInizio") or now_str
                                     pgm["tempoFine"] = pgm.get("tempoFine") or now_str
                                     attesi = [
                                         (u.get("alias") or "").upper().strip()
@@ -1242,22 +1240,23 @@ async def aggiorna_stati_da_log():
                     if task.get("text","").strip().lower() != "fresatura":
                         continue
                     for pgm in task.get("programs", []):
-                        if pgm.get("tipoGruppo") == "ipm":
-                            continue
+                        # v2: IPM trattati come fresatura (operatore decide cosa mettere in MAIN)
                         fn = (pgm.get("filename") or "").upper().replace(".MPF","").strip()
                         if fn == tgt:
                             # Log dice che questo programma sta girando → forza in_lavorazione
                             if pgm.get("stato") != "in_lavorazione":
+                                # Transizione a in_lavorazione: RESET pulito (Bug 1, 2, 10)
+                                # tempoInizio e _utensili_visti partono da zero per ogni
+                                # nuova esecuzione del programma.
                                 pgm["stato"] = "in_lavorazione"
-                                pgm["tempoInizio"] = pgm.get("tempoInizio") or now_str
+                                pgm["tempoInizio"] = now_str
                                 pgm["tempoFine"]   = None
-                                # Reset utensili visti solo se è una nuova esecuzione
-                                # (tempoInizio era None → partenza fresca)
-                                if not pgm.get("tempoInizio"):
-                                    pgm["_utensili_visti"] = []
+                                pgm["_utensili_visti"] = []
+                                pgm.pop("_completato_per_sequenza", None)
                                 proj_dirty = True
                                 updates["in_macchina"] += 1
                             else:
+                                # Già in_lavorazione: nulla da resettare
                                 if not pgm.get("tempoInizio"):
                                     pgm["tempoInizio"] = now_str
                                     proj_dirty = True
@@ -1293,7 +1292,7 @@ async def aggiorna_stati_da_log():
                 for t in s.get("tasks", []):
                     if t.get("text","").strip().lower() != "fresatura": continue
                     for pgm in t.get("programs", []):
-                        if pgm.get("tipoGruppo") == "ipm": continue
+                        # v2: IPM trattati come fresatura
                         if pgm.get("stato") == "in_lavorazione":
                             pgm_in_lav.append(pgm)
             if pgm_in_lav:

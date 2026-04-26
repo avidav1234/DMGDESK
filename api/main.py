@@ -91,6 +91,48 @@ app.include_router(nc_scanner_router.router)
 async def startup():
     log.info("DMG Desk API v16.0 avviata — http://0.0.0.0:8000")
 
+    # ── Migrazione v2 one-shot (pallet-logic-v2, estensione 5) ─────────────
+    # Riconcilia stati pallet incoerenti dovuti al bug pre-v2 (es. pallet
+    # `grezzo` con programmi `completato`). Eseguita una sola volta dopo il
+    # deploy del v2; flag `migrazione_v2_eseguita` salvato per skip successivi.
+    try:
+        from database.db_handler import carica_configurazione
+        from api.routers.progetti import _load_progetti, _save_progetti
+        from api.routers.pallet import _load as _load_pallet, _save as _save_pallet
+        from api.routers.macchina_live import _riconcilia_pallet_se_incoerente
+
+        _cfg = carica_configurazione()
+        _proj = _load_progetti(_cfg)
+        _pal_data = _load_pallet(_cfg)
+
+        if not _pal_data.get("migrazione_v2_eseguita"):
+            log.info("Migrazione v2: avvio riconciliazione stati pallet (one-shot)")
+            modificati = []
+            projects = _proj.get("progetti", [])
+            for pal in _pal_data.get("pallet", []):
+                old = pal.get("stato")
+                # Riconcilia senza considerare timeout (passiamo stato_pgm=None)
+                new_stato = _riconcilia_pallet_se_incoerente(pal, projects)
+                if new_stato:
+                    modificati.append({
+                        "pallet": pal.get("numero"),
+                        "old": old, "new": new_stato
+                    })
+            _pal_data["migrazione_v2_eseguita"] = True
+            _pal_data["migrazione_v2_ts"] = __import__('datetime').datetime.now().isoformat(timespec="seconds")
+            _save_pallet(_cfg, _pal_data)
+            if modificati:
+                log.info(f"Migrazione v2 completata: {len(modificati)} pallet riconciliati")
+                for m in modificati:
+                    log.info(f"  Pallet {m['pallet']}: {m['old']} → {m['new']}")
+            else:
+                log.info("Migrazione v2 completata: nessun pallet da riconciliare")
+        else:
+            log.debug("Migrazione v2 già eseguita, skip")
+    except Exception as _e:
+        log.error(f"Migrazione v2 fallita: {_e}", exc_info=True)
+        # Non bloccare lo startup: la migrazione si può rilanciare al riavvio successivo
+
     # ── Scheduler snapshot turno ───────────────────────────────────────────
     import asyncio as _asyncio
     from api.turno_snapshot import _scheduler_loop

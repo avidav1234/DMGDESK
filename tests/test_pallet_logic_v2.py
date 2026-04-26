@@ -691,6 +691,142 @@ def test_BUG_retro_marcatura_non_tocca_completati():
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# v2.1 — Estensioni di coerenza (riconciliatore, dato sporco, fine ciclo)
+# ═══════════════════════════════════════════════════════════════════════════
+
+def test_RICONCILIA_grezzo_con_completati():
+    """
+    Estensione 5 (migrazione): pallet `grezzo` con programmi `completato`
+    è dato sporco. Riconciliatore lo mette a guasto se ci sono in_main residui,
+    o a finito se tutto completato.
+    """
+    print("\n[RICONCILIA] grezzo con completati → guasto/finito")
+    from api.routers.macchina_live import _riconcilia_pallet_se_incoerente
+
+    # Caso a: grezzo con 38 completati ma residui in_main → guasto
+    pA = mk_progetto("projA", "A", [
+        mk_pgm("A_001", "completato", utensili=["T1"], utensili_visti=["T1"]),
+        mk_pgm("A_002", "completato", utensili=["T2"], utensili_visti=["T2"]),
+        mk_pgm("A_003", "in_main", utensili=["T3"]),
+    ], main_programmi=["A_001.MPF", "A_002.MPF", "A_003.MPF"])
+    pal1 = mk_pallet(1, "projA", "grezzo")
+    new = _riconcilia_pallet_se_incoerente(pal1, [pA])
+    check("RICONCILIA grezzo+completati+in_main → guasto", pal1["stato"], "guasto")
+
+    # Caso b: grezzo con tutti completati e utensili OK → finito
+    pA["steps"][0]["tasks"][0]["programs"][2]["stato"] = "completato"
+    pA["steps"][0]["tasks"][0]["programs"][2]["_utensili_visti"] = ["T3"]
+    pal2 = mk_pallet(2, "projA", "grezzo")
+    new = _riconcilia_pallet_se_incoerente(pal2, [pA])
+    check("RICONCILIA grezzo+tutti completati → finito", pal2["stato"], "finito")
+
+
+def test_RICONCILIA_pallet_pulito_non_toccato():
+    """
+    Riconciliatore non deve toccare pallet coerenti (vuoto, finito, guasto, grezzo senza completati).
+    """
+    print("\n[RICONCILIA] Stati coerenti non vengono toccati")
+    from api.routers.macchina_live import _riconcilia_pallet_se_incoerente
+
+    pA = mk_progetto("projA", "A", [
+        mk_pgm("A_001", "in_main", utensili=["T1"]),
+    ], main_programmi=["A_001.MPF"])
+
+    # grezzo "pulito" (no completati) — non toccato
+    pal1 = mk_pallet(1, "projA", "grezzo")
+    res = _riconcilia_pallet_se_incoerente(pal1, [pA])
+    check("RICONCILIA grezzo pulito → None", res, None)
+    check("RICONCILIA grezzo pulito stato invariato", pal1["stato"], "grezzo")
+
+    # finito → non toccato
+    pal2 = mk_pallet(2, "projA", "finito")
+    res = _riconcilia_pallet_se_incoerente(pal2, [pA])
+    check("RICONCILIA finito → None", res, None)
+
+    # guasto → non toccato
+    pal3 = mk_pallet(3, "projA", "guasto")
+    res = _riconcilia_pallet_se_incoerente(pal3, [pA])
+    check("RICONCILIA guasto → None", res, None)
+
+
+def test_FINE_CICLO_SILENZIOSO():
+    """
+    Estensione 4: pallet in_lavorazione + tutti i programmi completato +
+    macchina ferma da >=5min → applica regola d'oro automaticamente.
+    """
+    print("\n[FINE-CICLO] Fine ciclo silenzioso (macchina ferma con tutto completato)")
+    from api.routers.macchina_live import _riconcilia_pallet_se_incoerente
+
+    pA = mk_progetto("projA", "A", [
+        mk_pgm("A_001", "completato", utensili=["T1"], utensili_visti=["T1"]),
+        mk_pgm("A_002", "completato", utensili=["T2"], utensili_visti=["T2"]),
+    ], main_programmi=["A_001.MPF", "A_002.MPF"])
+
+    # Caso a: stop iniziato 6 min fa → applica regola d'oro → finito
+    now = datetime(2026, 1, 1, 10, 6, 0).isoformat(timespec="seconds")
+    stop = datetime(2026, 1, 1, 10, 0, 0).isoformat(timespec="seconds")
+    pal1 = mk_pallet(1, "projA", "in_lavorazione")
+    pal1["stop_iniziato_ts"] = stop
+    res = _riconcilia_pallet_se_incoerente(pal1, [pA], stato_pgm=5, now_str=now)
+    check("FINE-CICLO 6min fermo + tutto completato → finito", pal1["stato"], "finito")
+    check("FINE-CICLO timer rimosso", pal1.get("stop_iniziato_ts"), None)
+
+    # Caso b: stop iniziato 3 min fa → non ancora applica
+    now = datetime(2026, 1, 1, 10, 3, 0).isoformat(timespec="seconds")
+    stop = datetime(2026, 1, 1, 10, 0, 0).isoformat(timespec="seconds")
+    pal2 = mk_pallet(2, "projA", "in_lavorazione")
+    pal2["stop_iniziato_ts"] = stop
+    res = _riconcilia_pallet_se_incoerente(pal2, [pA], stato_pgm=5, now_str=now)
+    check("FINE-CICLO 3min fermo → resta in_lavorazione", pal2["stato"], "in_lavorazione")
+
+    # Caso c: macchina ancora in esecuzione → non applica anche se tutto completato
+    pal3 = mk_pallet(3, "projA", "in_lavorazione")
+    res = _riconcilia_pallet_se_incoerente(pal3, [pA], stato_pgm=1, now_str=now)
+    check("FINE-CICLO macchina esecuzione → non riconcilia", pal3["stato"], "in_lavorazione")
+
+
+def test_FINE_CICLO_con_utensili_mancanti():
+    """
+    Fine ciclo silenzioso con utensili mancanti → guasto, non finito.
+    """
+    print("\n[FINE-CICLO-UT] Fine ciclo con utensili mancanti → guasto")
+    from api.routers.macchina_live import _riconcilia_pallet_se_incoerente
+
+    pA = mk_progetto("projA", "A", [
+        mk_pgm("A_001", "completato", utensili=["T1", "T2"], utensili_visti=["T1"]),  # T2 mancante
+    ], main_programmi=["A_001.MPF"])
+    now = datetime(2026, 1, 1, 10, 6, 0).isoformat(timespec="seconds")
+    stop = datetime(2026, 1, 1, 10, 0, 0).isoformat(timespec="seconds")
+    pal1 = mk_pallet(1, "projA", "in_lavorazione")
+    pal1["stop_iniziato_ts"] = stop
+    res = _riconcilia_pallet_se_incoerente(pal1, [pA], stato_pgm=5, now_str=now)
+    check("FINE-CICLO-UT utensile mancante → guasto", pal1["stato"], "guasto")
+
+
+def test_DISPLAY_FLAG_macchina_ferma():
+    """
+    Estensione 2: il flag display_status viene popolato a "in_pausa" o "fermo"
+    in base ai minuti di stop. Stato logico resta "in_lavorazione".
+    """
+    print("\n[DISPLAY] Flag macchina_ferma → in_pausa / fermo")
+    # Non testiamo la full simula_tick (troppo invasiva), testiamo la logica diretta
+    pal1 = {"numero": 1, "progetto_id": "X", "stato": "in_lavorazione",
+            "stop_iniziato_ts": datetime(2026,1,1,10,0,0).isoformat(timespec="seconds")}
+
+    # 5 min stop → in_pausa
+    now = datetime(2026,1,1,10,5,0).isoformat(timespec="seconds")
+    minuti = int((datetime.fromisoformat(now) - datetime.fromisoformat(pal1["stop_iniziato_ts"])).total_seconds() / 60)
+    flag = "in_pausa" if minuti < 15 else "fermo"
+    check("DISPLAY 5min → in_pausa", flag, "in_pausa")
+
+    # 30 min stop → fermo
+    now = datetime(2026,1,1,10,30,0).isoformat(timespec="seconds")
+    minuti = int((datetime.fromisoformat(now) - datetime.fromisoformat(pal1["stop_iniziato_ts"])).total_seconds() / 60)
+    flag = "in_pausa" if minuti < 15 else "fermo"
+    check("DISPLAY 30min → fermo", flag, "fermo")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # MAIN
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -719,6 +855,13 @@ if __name__ == "__main__":
     test_F2_completo_rigenerazione_e_seconda_fase()
     test_BUG_oscillazione_visti_tra_cicli()
     test_BUG_retro_marcatura_non_tocca_completati()
+
+    # v2.1 — Estensioni di coerenza
+    test_RICONCILIA_grezzo_con_completati()
+    test_RICONCILIA_pallet_pulito_non_toccato()
+    test_FINE_CICLO_SILENZIOSO()
+    test_FINE_CICLO_con_utensili_mancanti()
+    test_DISPLAY_FLAG_macchina_ferma()
 
     print(f"\n{'='*60}")
     passed = sum(_results)

@@ -199,13 +199,25 @@ def simula_tick(projects, pallets, mpf_filename, stato_pgm, pallet_num,
                         # v2: IPM trattati come fresatura
                         fn = (pgm.get("filename") or "").upper().replace(".MPF", "").strip()
                         if fn == tgt:
-                            if pgm.get("stato") != "in_lavorazione":
-                                # Transizione: reset pulito (Bug 1,2,10 fix)
+                            # Legge 2: applica transizioni in base allo stato
+                            stato_pre = pgm.get("stato")
+                            if stato_pre == "in_lavorazione":
+                                # Già in_lavorazione: niente reset
+                                pass
+                            elif stato_pre in ("in_main", "da_fare", None):
                                 pgm["stato"] = "in_lavorazione"
                                 pgm["tempoInizio"] = now_str
                                 pgm["tempoFine"] = None
                                 pgm["_utensili_visti"] = []
                                 pgm.pop("_completato_per_sequenza", None)
+                            elif stato_pre == "completato":
+                                # Ri-esecuzione: reset completo
+                                pgm["stato"] = "in_lavorazione"
+                                pgm["tempoInizio"] = now_str
+                                pgm["tempoFine"] = None
+                                pgm["_utensili_visti"] = []
+                                pgm.pop("_completato_per_sequenza", None)
+
                             if utensile_attivo:
                                 visti = pgm.get("_utensili_visti") or []
                                 u_up = utensile_attivo.upper().strip()
@@ -827,6 +839,174 @@ def test_DISPLAY_FLAG_macchina_ferma():
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# v2.2 — LEGGI DEFINITIVE (7 leggi)
+# ═══════════════════════════════════════════════════════════════════════════
+
+def test_LEGGE2_da_fare_diventa_in_lavorazione():
+    """
+    Legge 2: programma da_fare (fuori MAIN) viene eseguito sulla macchina
+    → in_lavorazione (Opzione Z: si fonde col flusso).
+    """
+    print("\n[LEGGE2-DAFARE] da_fare fuori MAIN → in_lavorazione")
+    pA = mk_progetto("projA", "A", [
+        mk_pgm("A_001", "in_main", utensili=["T1"]),
+        mk_pgm("A_FUORI", "da_fare", utensili=["T9"]),  # fuori MAIN
+    ], main_programmi=["A_001.MPF"])  # solo A_001 nel MAIN
+    pal1 = mk_pallet(1, "projA", "grezzo")
+    simula_tick([pA], [pal1], "A_FUORI", 1, pallet_num=1, utensile_attivo="T9")
+    pgm_fuori = pA["steps"][0]["tasks"][0]["programs"][1]
+    check("LEGGE2-DAFARE da_fare → in_lavorazione", pgm_fuori.get("stato"), "in_lavorazione")
+    check("LEGGE2-DAFARE _utensili_visti popolato", pgm_fuori.get("_utensili_visti"), ["T9"])
+    check("LEGGE2-DAFARE pallet → in_lavorazione", pal1["stato"], "in_lavorazione")
+
+
+def test_LEGGE2_completato_riesecuzione():
+    """
+    Legge 2: programma completato ri-eseguito → in_lavorazione, reset stato.
+    """
+    print("\n[LEGGE2-RIESEC] completato + esecuzione → in_lavorazione (reset)")
+    pA = mk_progetto("projA", "A", [
+        mk_pgm("A_001", "completato", utensili=["T1"], utensili_visti=["T1"]),
+    ], main_programmi=["A_001.MPF"])
+    pal1 = mk_pallet(1, "projA", "finito")
+    simula_tick([pA], [pal1], "A_001", 1, pallet_num=1, utensile_attivo="T1")
+    pgm = pA["steps"][0]["tasks"][0]["programs"][0]
+    check("LEGGE2-RIESEC completato → in_lavorazione", pgm.get("stato"), "in_lavorazione")
+    check("LEGGE2-RIESEC visti resettati a [T1]", pgm.get("_utensili_visti"), ["T1"])
+    check("LEGGE2-RIESEC pallet finito → in_lavorazione (rientro)", pal1["stato"], "in_lavorazione")
+
+
+def test_LEGGE2_in_lavorazione_resta_e_accumula():
+    """
+    Legge 2: programma in_lavorazione resta tale, accumula visti.
+    """
+    print("\n[LEGGE2-INLAV] in_lavorazione + tick → accumula visti")
+    pA = mk_progetto("projA", "A", [
+        mk_pgm("A_001", "in_lavorazione", utensili=["T1", "T2"], utensili_visti=["T1"]),
+    ], main_programmi=["A_001.MPF"])
+    pal1 = mk_pallet(1, "projA", "in_lavorazione")
+    simula_tick([pA], [pal1], "A_001", 1, pallet_num=1, utensile_attivo="T2")
+    pgm = pA["steps"][0]["tasks"][0]["programs"][0]
+    check("LEGGE2-INLAV stato resta in_lavorazione", pgm.get("stato"), "in_lavorazione")
+    check("LEGGE2-INLAV visti accumulati [T1, T2]", pgm.get("_utensili_visti"), ["T1", "T2"])
+
+
+def test_LEGGE5_fuori_main_concorre_al_verdetto():
+    """
+    Interpretazione 2: programmi fuori MAIN (in stato attivo) concorrono al verdetto.
+    Se un programma fuori MAIN è in_main (interrotto), pallet → guasto.
+    """
+    print("\n[LEGGE5-FUORI] Programma fuori MAIN interrotto → pallet guasto")
+    pA = mk_progetto("projA", "A", [
+        mk_pgm("A_001", "completato", utensili=["T1"], utensili_visti=["T1"]),
+        # Programma fuori MAIN, interrotto (in_main per Opzione Z)
+        mk_pgm("A_FUORI", "in_main", utensili=["T9"], utensili_visti=[]),
+    ], main_programmi=["A_001.MPF"])  # A_FUORI NON nel MAIN snapshot
+    pB = mk_progetto("projB", "B", [mk_pgm("B_001", "in_main", utensili=["T0"])])
+    pal1 = mk_pallet(1, "projA", "in_lavorazione")
+    pal2 = mk_pallet(2, "projB", "grezzo")
+    # Cambio pallet → regola d'oro su projA
+    simula_tick([pA, pB], [pal1, pal2], "B_001", 1, pallet_num=2, utensile_attivo="T0")
+    check("LEGGE5-FUORI pallet uscente → guasto (A_FUORI in_main)", pal1["stato"], "guasto")
+
+
+def test_LEGGE5_fuori_main_completato_va_finito():
+    """
+    Programma fuori MAIN completato pulito → pallet finito.
+    """
+    print("\n[LEGGE5-OK] Programma fuori MAIN completato OK → pallet finito")
+    pA = mk_progetto("projA", "A", [
+        mk_pgm("A_001", "completato", utensili=["T1"], utensili_visti=["T1"]),
+        mk_pgm("A_FUORI", "completato", utensili=["T9"], utensili_visti=["T9"]),
+    ], main_programmi=["A_001.MPF"])
+    pB = mk_progetto("projB", "B", [mk_pgm("B_001", "in_main", utensili=["T0"])])
+    pal1 = mk_pallet(1, "projA", "in_lavorazione")
+    pal2 = mk_pallet(2, "projB", "grezzo")
+    simula_tick([pA, pB], [pal1, pal2], "B_001", 1, pallet_num=2, utensile_attivo="T0")
+    check("LEGGE5-OK pallet uscente → finito", pal1["stato"], "finito")
+
+
+def test_LEGGE6_sync_non_modifica_stati():
+    """
+    Legge 6: il job sync periodico NON deve modificare lo stato dei programmi
+    anche se il file MAIN su disco è cambiato.
+    """
+    print("\n[LEGGE6-SYNC] _sync_progetto NON degrada stati programmi")
+    import tempfile
+    import hashlib
+    from pathlib import Path as _Path
+    from api.routers.main_sync import _sync_progetto
+
+    # Crea un file MAIN fake su disco
+    tmpdir = tempfile.mkdtemp()
+    main_file = _Path(tmpdir) / "0_MAIN_TEST.MPF"
+    main_file.write_text("EXTCALL \"A_001.MPF\"\nM30")
+    hash_originale = hashlib.sha256(main_file.read_bytes()).hexdigest()
+
+    progetto = {
+        "id": "test",
+        "main_snapshot": {
+            "main_path": str(main_file),
+            "main_hash": hash_originale,
+            "main_programmi": ["A_001.MPF", "A_002.MPF"],
+        },
+        "steps": [{
+            "tasks": [{
+                "text": "fresatura",
+                "programs": [
+                    # A_001 è in_main, A_002 è in_main MA non più nel MAIN su disco
+                    {"filename": "A_001.MPF", "stato": "in_main"},
+                    {"filename": "A_002.MPF", "stato": "in_main"},
+                ],
+            }],
+        }],
+    }
+
+    # Modifica file (rimuove A_002 dal MAIN su disco)
+    main_file.write_text("EXTCALL \"A_001.MPF\"\nM30")  # A_002 sparito
+    # (il contenuto è uguale, hash resta lo stesso, ma simuliamo il cambio
+    # forzando l'hash diverso nello snapshot)
+    progetto["main_snapshot"]["main_hash"] = "hash_diverso_per_forzare_warning"
+
+    # Chiama _sync_progetto
+    dirty = _sync_progetto(progetto, log_index={})
+
+    # I programmi NON devono essere stati modificati
+    pgm_001 = progetto["steps"][0]["tasks"][0]["programs"][0]
+    pgm_002 = progetto["steps"][0]["tasks"][0]["programs"][1]
+    check("LEGGE6 A_001 in_main preservato", pgm_001["stato"], "in_main")
+    check("LEGGE6 A_002 NON degradato a da_fare", pgm_002["stato"], "in_main")
+    check("LEGGE6 main_programmi NON cambiato",
+          progetto["main_snapshot"]["main_programmi"], ["A_001.MPF", "A_002.MPF"])
+
+    import shutil
+    shutil.rmtree(tmpdir)
+
+
+def test_LEGGE7_in_main_non_torna_a_da_fare_via_poller():
+    """
+    Legge 7: in_main NON deve tornare a da_fare via poller log.
+    Solo rigenerazione MAIN può fare quella transizione.
+    """
+    print("\n[LEGGE7] in_main resta in_main durante normale operatività")
+    pA = mk_progetto("projA", "A", [
+        mk_pgm("A_001", "in_main", utensili=["T1"]),
+        mk_pgm("A_002", "in_main", utensili=["T2"]),
+    ], main_programmi=["A_001.MPF", "A_002.MPF"])
+    pB = mk_progetto("projB", "B", [mk_pgm("B_001", "in_main", utensili=["T9"])])
+    pal1 = mk_pallet(1, "projA", "grezzo")
+    pal2 = mk_pallet(2, "projB", "grezzo")
+
+    # Tick: parte A_001 (entra in_lavorazione)
+    simula_tick([pA, pB], [pal1, pal2], "A_001", 1, pallet_num=1, utensile_attivo="T1")
+    # Tick: cambio pallet (A_001 si chiude, A_002 resta in_main)
+    simula_tick([pA, pB], [pal1, pal2], "B_001", 1, pallet_num=2, utensile_attivo="T9")
+
+    pgm_002 = pA["steps"][0]["tasks"][0]["programs"][1]
+    check("LEGGE7 A_002 NON degradato a da_fare", pgm_002["stato"], "in_main")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # MAIN
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -862,6 +1042,15 @@ if __name__ == "__main__":
     test_FINE_CICLO_SILENZIOSO()
     test_FINE_CICLO_con_utensili_mancanti()
     test_DISPLAY_FLAG_macchina_ferma()
+
+    # v2.2 — Le 7 leggi definitive
+    test_LEGGE2_da_fare_diventa_in_lavorazione()
+    test_LEGGE2_completato_riesecuzione()
+    test_LEGGE2_in_lavorazione_resta_e_accumula()
+    test_LEGGE5_fuori_main_concorre_al_verdetto()
+    test_LEGGE5_fuori_main_completato_va_finito()
+    test_LEGGE6_sync_non_modifica_stati()
+    test_LEGGE7_in_main_non_torna_a_da_fare_via_poller()
 
     print(f"\n{'='*60}")
     passed = sum(_results)

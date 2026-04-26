@@ -140,8 +140,19 @@ def _build_log_index(config: dict) -> dict[str, str]:
 
 def _sync_progetto(progetto: dict, log_index: dict[str, str]) -> bool:
     """
-    Applica la formula MAIN + LOG agli stati dei programmi del progetto.
-    Ritorna True se ha modificato qualcosa.
+    LEGGE 6 (pallet-logic-v2): Il job sync periodico NON modifica gli stati
+    dei programmi. La sua funzione è solo:
+    1. Aggiornare main_snapshot.main_sync_ts (timestamp di "ho controllato")
+    2. Log WARNING se il file 0_MAIN.MPF su disco ha hash diverso dallo
+       snapshot (operatore deve esplicitamente rigenerare MAIN dall'UI per
+       applicare le modifiche).
+
+    Le transizioni di stato avvengono SOLO via:
+    - rigenerazione MAIN dall'UI (salva_main_snapshot)
+    - poller del log (aggiorna_stati_da_log) che applica la legge dei trigger
+    - logica sequenziale e regola d'oro (macchina_live)
+
+    Restituisce True se ha aggiornato il timestamp dello snapshot.
     """
     snap = progetto.get("main_snapshot")
     if not snap:
@@ -156,55 +167,23 @@ def _sync_progetto(progetto: dict, log_index: dict[str, str]) -> bool:
         log.warning(f"main_sync: MAIN non trovato su disco: {main_path}")
         return False
 
-    # Rileggi il MAIN — se è cambiato su disco, aggiorna lo snapshot
+    # Verifica hash — se diverso, segnala ma NON modificare niente
     try:
-        contenuto = mp.read_text(encoding="utf-8", errors="replace")
+        hash_attuale = _hash_file(mp)
     except Exception as e:
-        log.warning(f"main_sync: errore lettura MAIN {main_path}: {e}")
+        log.warning(f"main_sync: errore hash MAIN {main_path}: {e}")
         return False
 
-    hash_attuale = _hash_file(mp)
     if hash_attuale != snap.get("main_hash"):
-        # MAIN cambiato su disco — aggiorna snapshot
-        pgm_nel_main = _parse_extcall(contenuto)
-        snap["main_hash"]         = hash_attuale
-        snap["main_programmi"]    = pgm_nel_main
-        snap["main_sync_ts"]      = datetime.now().isoformat(timespec="seconds")
-        log.info(f"main_sync: MAIN aggiornato {mp.name} ({len(pgm_nel_main)} pgm)")
+        log.warning(
+            f"main_sync: MAIN modificato su disco ma snapshot invariato "
+            f"({mp.name}). Operatore deve rigenerare dall'UI per applicare. "
+            f"hash_disk={hash_attuale[:8]} hash_snap={(snap.get('main_hash') or '')[:8]}"
+        )
 
-    pgm_nel_main_set = {f.upper() for f in snap.get("main_programmi", [])}
-
-    dirty = False
-    for s in progetto.get("steps", []):
-        for t in s.get("tasks", []):
-            if t.get("text", "").strip().lower() != "fresatura":
-                continue
-            for pgm in t.get("programs", []):
-                fname = (pgm.get("filename") or "").upper()
-                stato_attuale = pgm.get("stato", "da_fare")
-
-                # Mai degradare completato
-                if stato_attuale == "completato":
-                    continue
-
-                # Determina nuovo stato dalla formula
-                if fname not in pgm_nel_main_set:
-                    nuovo = "da_fare"
-                elif log_index.get(fname) == "in_lavorazione":
-                    nuovo = "in_lavorazione"
-                elif log_index.get(fname) == "completato":
-                    nuovo = "completato"
-                else:
-                    nuovo = "in_main"
-
-                if nuovo != stato_attuale:
-                    pgm["stato"] = nuovo
-                    # Pulisci tempi se torna in_main da da_fare
-                    if nuovo == "in_main" and stato_attuale == "da_fare":
-                        pgm["tempoInizio"] = pgm.get("tempoInizio")  # preserva se c'era
-                    dirty = True
-
-    return dirty
+    # Aggiorna solo il timestamp del controllo
+    snap["main_sync_ts"] = datetime.now().isoformat(timespec="seconds")
+    return True
 
 
 # ── Job periodico ─────────────────────────────────────────────────────────────

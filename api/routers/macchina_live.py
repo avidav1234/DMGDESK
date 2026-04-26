@@ -1314,11 +1314,19 @@ async def aggiorna_stati_da_log():
                         # v2: IPM trattati come fresatura (operatore decide cosa mettere in MAIN)
                         fn = (pgm.get("filename") or "").upper().replace(".MPF","").strip()
                         if fn == tgt:
-                            # Log dice che questo programma sta girando → forza in_lavorazione
-                            if pgm.get("stato") != "in_lavorazione":
-                                # Transizione a in_lavorazione: RESET pulito (Bug 1, 2, 10)
-                                # tempoInizio e _utensili_visti partono da zero per ogni
-                                # nuova esecuzione del programma.
+                            # Legge 2: il log è il trigger, applica transizioni in base allo stato
+                            stato_pre = pgm.get("stato")
+
+                            if stato_pre == "in_lavorazione":
+                                # Già in_lavorazione: nulla da resettare, accumula visti
+                                if not pgm.get("tempoInizio"):
+                                    pgm["tempoInizio"] = now_str
+                                    proj_dirty = True
+
+                            elif stato_pre in ("in_main", "da_fare", None):
+                                # Transizione legale: in_main → in_lavorazione (caso normale)
+                                # oppure da_fare → in_lavorazione (programma fuori MAIN
+                                # eseguito manualmente, Opzione Z: si fonde col flusso normale)
                                 pgm["stato"] = "in_lavorazione"
                                 pgm["tempoInizio"] = now_str
                                 pgm["tempoFine"]   = None
@@ -1326,11 +1334,28 @@ async def aggiorna_stati_da_log():
                                 pgm.pop("_completato_per_sequenza", None)
                                 proj_dirty = True
                                 updates["in_macchina"] += 1
-                            else:
-                                # Già in_lavorazione: nulla da resettare
-                                if not pgm.get("tempoInizio"):
-                                    pgm["tempoInizio"] = now_str
-                                    proj_dirty = True
+                                if stato_pre == "da_fare":
+                                    _log_v2.info(
+                                        f"poller: programma fuori MAIN eseguito → in_lavorazione "
+                                        f"({pgm.get('filename')}) [progetto {progetto_con_match.get('id')}]"
+                                    )
+
+                            elif stato_pre == "completato":
+                                # Ri-esecuzione di un programma già completato.
+                                # Legge 2: stato e tempi resettati, durata primo giro persa.
+                                # Log WARNING perché è anomalia degna di nota.
+                                _log_v2.warning(
+                                    f"poller: ri-esecuzione programma già completato "
+                                    f"({pgm.get('filename')}) → reset stato. "
+                                    f"Durata primo giro persa."
+                                )
+                                pgm["stato"] = "in_lavorazione"
+                                pgm["tempoInizio"] = now_str
+                                pgm["tempoFine"]   = None
+                                pgm["_utensili_visti"] = []
+                                pgm.pop("_completato_per_sequenza", None)
+                                proj_dirty = True
+                                updates["in_macchina"] += 1
 
                             # Accumula utensile corrente nei visti (dedup)
                             utensile_corrente = (data.get("utensile_attivo") or "").upper().strip()

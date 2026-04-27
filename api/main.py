@@ -108,7 +108,7 @@ async def startup():
         if not _pal_data.get("migrazione_v2_eseguita"):
             log.info("Migrazione v2: avvio riconciliazione stati pallet (one-shot)")
             modificati = []
-            projects = _proj.get("progetti", [])
+            projects = _proj.get("progetti", []) or _proj.get("projects", [])
             for pal in _pal_data.get("pallet", []):
                 old = pal.get("stato")
                 # Riconcilia senza considerare timeout (passiamo stato_pgm=None)
@@ -129,6 +129,31 @@ async def startup():
                 log.info("Migrazione v2 completata: nessun pallet da riconciliare")
         else:
             log.debug("Migrazione v2 già eseguita, skip")
+
+        # ── Migrazione v2.3 one-shot — Pulizia programmi orfani + tipoGruppo ──
+        # Q4: rimuove programmi 'da_fare' fantasma e ricalcola tipoGruppo.
+        # Flag separato dalla migrazione pallet così possiamo deployare
+        # indipendentemente.
+        if not _pal_data.get("migrazione_v23_eseguita"):
+            log.info("Migrazione v2.3: pulizia orfani + ricalcolo tipoGruppo")
+            try:
+                from api.routers.nc_scanner import scansiona_directory, _mtime_cache
+                _mtime_cache.clear()  # forza rilettura completa per ricalcolare tipoGruppo
+                result = scansiona_directory(_cfg)
+                log.info(
+                    f"Migrazione v2.3 completata: "
+                    f"{result.get('aggiornati', 0)} programmi aggiornati, "
+                    f"{result.get('rimossi_orfani', 0)} orfani rimossi"
+                )
+                # Riserva il flag SOLO se la scansione è andata bene
+                if result.get("ok"):
+                    _pal_data["migrazione_v23_eseguita"] = True
+                    _pal_data["migrazione_v23_ts"] = __import__('datetime').datetime.now().isoformat(timespec="seconds")
+                    _save_pallet(_cfg, _pal_data)
+            except Exception as _e2:
+                log.error(f"Migrazione v2.3 fallita: {_e2}", exc_info=True)
+        else:
+            log.debug("Migrazione v2.3 già eseguita, skip")
     except Exception as _e:
         log.error(f"Migrazione v2 fallita: {_e}", exc_info=True)
         # Non bloccare lo startup: la migrazione si può rilanciare al riavvio successivo

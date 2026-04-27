@@ -189,10 +189,18 @@ def _parse_mpf_metadati(path: Path) -> dict:
                 tempo_tot += parse_tempo(m.group(1))
 
     # ── Tipo IPM ───────────────────────────────────────────────────────
+    # Regola primaria: filename contiene "_IPM_" → ipm
+    # Fallback (Q3 v2): se utensile principale è RENISHAW E la lista utensili
+    # contiene SOLO RENISHAW (programma di sola misurazione, no fresatura)
+    # → ipm. Programmi di fresatura che usano RENISHAW per misurazione
+    # preliminare seguita da fresatura mantengono tipo=fresatura.
     tipo = "ipm" if "_IPM_" in path.name.upper() else "fresatura"
-    # Fallback: se utensile contiene RENISHAW è IPM
-    if not tipo == "ipm" and "RENISHAW" in utensile.upper():
-        tipo = "ipm"
+    if tipo != "ipm" and "RENISHAW" in (utensile or "").upper():
+        # Lista utensili: se contiene SOLO RENISHAW (uno o più, ma tutti sonde)
+        # è programma di sola misurazione → IPM.
+        utensili_set = {(u or "").upper().strip() for u in utensili_lista}
+        if utensili_set and all("RENISHAW" in u for u in utensili_set):
+            tipo = "ipm"
 
     # ── tipoOp: parte dal PRIMO M6 e risale cercando il commento operazione ─
     # L'intestazione generale del file (CIMATRON, DOCUMENTO NC, NOME POST...)
@@ -367,6 +375,7 @@ def scansiona_directory(config: dict) -> dict:
         "orfani":      0,
         "ignorati":    0,   # già presenti con stato avanzato
         "saltati":     0,   # non modificati (mtime cache)
+        "rimossi_orfani": 0,  # Q1 v2: programmi nel JSON ma file non più su disco
         "errori":      [],
     }
     dirty = False
@@ -377,6 +386,34 @@ def scansiona_directory(config: dict) -> dict:
         "ipm.wpd", "machine server", "mcis", "oem", "opc", "tabella_utensili",
         "test", "tool_sync", "vbs", "wzv.dir", "xp_scripts_dmgdesk",
     }
+
+    # Q1 v2 — Enumerazione file su disco per rilevare orfani
+    # Costruisce un set di filename normalizzati (UPPER) per ogni progetto.
+    # Verrà usato dopo il loop principale per rimuovere programmi nel JSON
+    # che non hanno più corrispondenza su disco.
+    file_su_disco_per_progetto: dict[str, set[str]] = {}
+    try:
+        for mpf_path in base.rglob("*.[Mm][Pp][Ff]"):
+            if mpf_path.name.upper().startswith("0_MAIN_"):
+                continue
+            try:
+                _parts = mpf_path.relative_to(base).parts
+            except ValueError:
+                continue
+            if len(_parts) < 3:
+                continue
+            _top = _parts[0].lower()
+            if _top in IGNORE_DIRS or _top.startswith("."):
+                continue
+            _commessa = _parts[0]
+            _posizione = _parts[1]
+            _nome_proj = _nome_progetto(_commessa, _posizione)
+            file_su_disco_per_progetto.setdefault(
+                _nome_proj.upper(), set()
+            ).add(mpf_path.name.upper())
+    except Exception as _e:
+        log.warning(f"nc_scanner: errore enumerazione disco per orfani: {_e}")
+        file_su_disco_per_progetto = {}  # fallback: niente pulizia
 
     # Scansione: commessa/posizione/fase/*.MPF
     for mpf_path in base.rglob("*.MPF"):
@@ -409,6 +446,30 @@ def scansiona_directory(config: dict) -> dict:
         commessa   = parts[0]   # es. 4298
         posizione  = parts[1]   # es. 0005, P0005
         nome_proj  = _nome_progetto(commessa, posizione)
+
+        # Q2 fix v2: validazione filename vs cartella.
+        # La cartella è la verità. Se il filename contiene una commessa diversa
+        # (es. typo: 4360_*.mpf nella cartella 4360 → OK; 43460_*.mpf nella
+        # cartella 4360 → REJECT), il file viene rifiutato.
+        # Eccezione: file 0_MAIN_*.mpf, file di servizio _scar.mpf e simili
+        # non sono soggetti alla validazione (non hanno commessa nel formato
+        # standard nel filename).
+        info_fname = _estrai_info_filename(mpf_path.name)
+        commessa_fname = (info_fname.get("commessa") or "").strip()
+        is_servizio = (
+            mpf_path.name.upper().startswith("0_MAIN")
+            or "SCAR" in mpf_path.stem.upper()
+            or "_IPM_" in mpf_path.name.upper()
+        )
+        if commessa_fname and not is_servizio:
+            if commessa_fname.upper() != commessa.upper():
+                log.warning(
+                    f"nc_scanner: file rifiutato (commessa mismatch): "
+                    f"cartella={commessa} filename={commessa_fname} → {mpf_path.name}"
+                )
+                stats["orfani"] += 1
+                stats.setdefault("rifiutati_mismatch", []).append(str(mpf_path))
+                continue
 
         # Fase: la cartella tra posizione e file
         # Se len==3: commessa/posizione/file.MPF → nessuna fase esplicita
@@ -481,6 +542,15 @@ def scansiona_directory(config: dict) -> dict:
                     if meta.get(c) and not existing.get(c):
                         existing[c] = meta[c]
                         meta_changed = True
+                # Q3 fix v2: ricalcola tipoGruppo anche per programmi attivi
+                if meta.get("tipoGruppo") and existing.get("tipoGruppo") != meta["tipoGruppo"]:
+                    old_tipo = existing.get("tipoGruppo")
+                    existing["tipoGruppo"] = meta["tipoGruppo"]
+                    meta_changed = True
+                    log.info(
+                        f"nc_scanner: tipoGruppo corretto per {existing.get('filename')}: "
+                        f"{old_tipo} → {meta['tipoGruppo']} (stato={stato})"
+                    )
                 if meta_changed:
                     stats["aggiornati"] += 1
                     dirty = True
@@ -498,6 +568,17 @@ def scansiona_directory(config: dict) -> dict:
                 existing["utensili"]       = meta.get("utensili", [])
                 existing["num_m6"]         = meta.get("num_m6", 0)
                 changed = True
+            # Q3 fix v2: ricalcola tipoGruppo ad ogni scansione per programmi
+            # esistenti, così gli IPM storici sbagliati (es. fresatura con
+            # RENISHAW erroneamente marcato ipm) vengono corretti.
+            if meta.get("tipoGruppo") and existing.get("tipoGruppo") != meta["tipoGruppo"]:
+                old_tipo = existing.get("tipoGruppo")
+                existing["tipoGruppo"] = meta["tipoGruppo"]
+                changed = True
+                log.info(
+                    f"nc_scanner: tipoGruppo corretto per {existing.get('filename')}: "
+                    f"{old_tipo} → {meta['tipoGruppo']}"
+                )
             if changed:
                 stats["aggiornati"] += 1
                 dirty = True
@@ -531,10 +612,50 @@ def scansiona_directory(config: dict) -> dict:
         # Aggiorna cache mtime — file processato correttamente
         _mtime_cache[path_key] = mtime
 
+    # ── Q1 v2: Pulizia orfani ────────────────────────────────────────────
+    # Rimuove dal JSON i programmi con stato `da_fare` che NON esistono più
+    # su disco. Programmi con stato attivo (in_main/in_lavorazione/completato)
+    # sono mantenuti per preservare la storia (Legge 1 v2.2).
+    # Solo se l'enumerazione disco è andata a buon fine.
+    if file_su_disco_per_progetto:
+        for project in projects:
+            nome_proj = (project.get("name") or "").upper().strip()
+            file_disco = file_su_disco_per_progetto.get(nome_proj, set())
+            if not file_disco:
+                # Nessun file su disco per questo progetto: sospetto. Skip pulizia
+                # per evitare cancellazioni accidentali se la share è offline.
+                continue
+
+            for step in project.get("steps", []):
+                for task in step.get("tasks", []):
+                    if task.get("text", "").strip().lower() != "fresatura":
+                        continue
+                    programs = task.get("programs", [])
+                    nuova_lista = []
+                    for pgm in programs:
+                        fname = (pgm.get("filename") or "").upper().strip()
+                        stato = pgm.get("stato", "da_fare")
+                        if stato == "da_fare" and fname and fname not in file_disco:
+                            # Orfano da_fare: rimuovi
+                            stats["rimossi_orfani"] += 1
+                            log.info(
+                                f"nc_scanner: rimosso orfano da_fare {fname} "
+                                f"da progetto {nome_proj}"
+                            )
+                            dirty = True
+                            continue
+                        nuova_lista.append(pgm)
+                    if len(nuova_lista) != len(programs):
+                        task["programs"] = nuova_lista
+
     if dirty:
         _save_progetti(config, proj_data)
         _invalidate_analisi_cache()
-        log.info(f"nc_scanner: salvato — +{stats['aggiunti']} aggiunti, {stats['aggiornati']} aggiornati")
+        log.info(
+            f"nc_scanner: salvato — +{stats['aggiunti']} aggiunti, "
+            f"{stats['aggiornati']} aggiornati, "
+            f"-{stats['rimossi_orfani']} orfani da_fare rimossi"
+        )
 
     stats["ok"] = True
     return stats
@@ -584,6 +705,92 @@ async def riscansiona_tutto():
         result = scansiona_directory(config)
     result["cache_reset"] = True
     return result
+
+
+@router.post("/cleanup-orphans")
+async def cleanup_orphans(progetto_id: str | None = None):
+    """
+    Q4 v2: Pulizia mirata dei programmi orfani.
+
+    Per progetto_id specifico (o tutti se None): rimuove dal JSON i programmi
+    con stato `da_fare` il cui filename non esiste più sulla cartella su disco.
+    Programmi con stato attivo (in_main/in_lavorazione/completato) sono SEMPRE
+    preservati per coerenza con la Legge 1 v2.2.
+
+    Restituisce statistiche dei programmi rimossi.
+    """
+    config = carica_configurazione()
+    nc_base = (config.get("percorso_nc_base") or "").strip()
+    if not nc_base:
+        return {"ok": False, "errore": "percorso_nc_base non configurato"}
+
+    base = Path(nc_base)
+    if not base.exists():
+        return {"ok": False, "errore": f"Percorso non trovato: {nc_base}"}
+
+    IGNORE_DIRS = {
+        "allegati", "attrezzatura_interna", "db_toolmanager", "dnc",
+        "ipm.wpd", "machine server", "mcis", "oem", "opc", "tabella_utensili",
+        "test", "tool_sync", "vbs", "wzv.dir", "xp_scripts_dmgdesk",
+    }
+
+    async with _write_lock:
+        proj_data = _load_progetti(config)
+        projects = proj_data.get("projects", [])
+
+        # Enumera file su disco per ogni progetto
+        file_su_disco_per_progetto: dict[str, set[str]] = {}
+        for mpf_path in base.rglob("*.[Mm][Pp][Ff]"):
+            if mpf_path.name.upper().startswith("0_MAIN_"):
+                continue
+            try:
+                _parts = mpf_path.relative_to(base).parts
+            except ValueError:
+                continue
+            if len(_parts) < 3:
+                continue
+            _top = _parts[0].lower()
+            if _top in IGNORE_DIRS or _top.startswith("."):
+                continue
+            _nome_proj = _nome_progetto(_parts[0], _parts[1])
+            file_su_disco_per_progetto.setdefault(
+                _nome_proj.upper(), set()
+            ).add(mpf_path.name.upper())
+
+        rimossi = []
+        for project in projects:
+            nome_proj = (project.get("name") or "").upper().strip()
+            if progetto_id and project.get("id") != progetto_id:
+                continue
+            file_disco = file_su_disco_per_progetto.get(nome_proj, set())
+            if not file_disco:
+                continue
+            for step in project.get("steps", []):
+                for task in step.get("tasks", []):
+                    if task.get("text", "").strip().lower() != "fresatura":
+                        continue
+                    programs = task.get("programs", [])
+                    nuova_lista = []
+                    for pgm in programs:
+                        fname = (pgm.get("filename") or "").upper().strip()
+                        stato = pgm.get("stato", "da_fare")
+                        if stato == "da_fare" and fname and fname not in file_disco:
+                            rimossi.append({
+                                "progetto": project.get("name"),
+                                "filename": pgm.get("filename"),
+                                "step":     step.get("title"),
+                            })
+                            continue
+                        nuova_lista.append(pgm)
+                    if len(nuova_lista) != len(programs):
+                        task["programs"] = nuova_lista
+
+        if rimossi:
+            _save_progetti(config, proj_data)
+            _invalidate_analisi_cache()
+            log.info(f"cleanup-orphans: rimossi {len(rimossi)} programmi orfani da_fare")
+
+    return {"ok": True, "rimossi": rimossi, "totale": len(rimossi)}
 
 
 @router.get("/anteprima")

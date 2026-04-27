@@ -1007,6 +1007,75 @@ def test_LEGGE7_in_main_non_torna_a_da_fare_via_poller():
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# v2.3 — Fix nc_scanner: RENISHAW classification + orphan cleanup
+# ═══════════════════════════════════════════════════════════════════════════
+
+def test_NC_renishaw_solo_e_ipm():
+    """
+    Q3 v2.3: file con SOLO RENISHAW → ipm (fallback corretto).
+    """
+    print("\n[NC-RENISHAW-SOLO] file con solo RENISHAW → ipm")
+    from unittest.mock import patch
+    from pathlib import Path
+    fake_path = Path("4360_7221_02_001.mpf")
+    with patch('api.routers.nc_scanner._leggi_file_mpf') as m:
+        m.return_value = "; fake\nM6"
+        with patch('logic.nc_analyzer.estrai_tutti_utensili_da_file') as eu:
+            eu.return_value = [("RENISHAW", "T1")]
+            from api.routers.nc_scanner import _parse_mpf_metadati
+            r = _parse_mpf_metadati(fake_path)
+            check("NC-RENISHAW-SOLO tipo=ipm", r.get("tipoGruppo"), "ipm")
+
+
+def test_NC_renishaw_con_fresa_e_fresatura():
+    """
+    Q3 v2.3 (cruciale): file con RENISHAW + altri utensili → fresatura
+    (NO fallback). È il bug del progetto 4360_7221.
+    """
+    print("\n[NC-RENISHAW-FRESA] RENISHAW + altri utensili → fresatura")
+    from unittest.mock import patch
+    from pathlib import Path
+    fake_path = Path("4360_7221_02_001.mpf")
+    with patch('api.routers.nc_scanner._leggi_file_mpf') as m:
+        m.return_value = "; fake\nM6"
+        with patch('logic.nc_analyzer.estrai_tutti_utensili_da_file') as eu:
+            eu.return_value = [("RENISHAW", "T1"), ("FS25R2L85", "T2")]
+            from api.routers.nc_scanner import _parse_mpf_metadati
+            r = _parse_mpf_metadati(fake_path)
+            check("NC-RENISHAW-FRESA tipo=fresatura", r.get("tipoGruppo"), "fresatura")
+
+
+def test_NC_ipm_esplicito_rimane_ipm():
+    """File con _IPM_ esplicito nel nome → sempre ipm."""
+    print("\n[NC-IPM-EXPLICIT] _IPM_ → ipm sempre")
+    from unittest.mock import patch
+    from pathlib import Path
+    fake_path = Path("4298_005_01_IPM_001.mpf")
+    with patch('api.routers.nc_scanner._leggi_file_mpf') as m:
+        m.return_value = "; fake\nM6"
+        with patch('logic.nc_analyzer.estrai_tutti_utensili_da_file') as eu:
+            eu.return_value = [("RENISHAW", "T1")]
+            from api.routers.nc_scanner import _parse_mpf_metadati
+            r = _parse_mpf_metadati(fake_path)
+            check("NC-IPM-EXPLICIT tipo=ipm", r.get("tipoGruppo"), "ipm")
+
+
+def test_NC_solo_fresatura_normale():
+    """File con utensili normali → fresatura."""
+    print("\n[NC-FRESA] utensili normali → fresatura")
+    from unittest.mock import patch
+    from pathlib import Path
+    fake_path = Path("4360_7221_02_005.mpf")
+    with patch('api.routers.nc_scanner._leggi_file_mpf') as m:
+        m.return_value = "; fake\nM6"
+        with patch('logic.nc_analyzer.estrai_tutti_utensili_da_file') as eu:
+            eu.return_value = [("FS25R2L85", "T1")]
+            from api.routers.nc_scanner import _parse_mpf_metadati
+            r = _parse_mpf_metadati(fake_path)
+            check("NC-FRESA tipo=fresatura", r.get("tipoGruppo"), "fresatura")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # MAIN
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -1051,6 +1120,12 @@ if __name__ == "__main__":
     test_LEGGE5_fuori_main_completato_va_finito()
     test_LEGGE6_sync_non_modifica_stati()
     test_LEGGE7_in_main_non_torna_a_da_fare_via_poller()
+
+    # v2.3 — Fix nc_scanner classificazione IPM
+    test_NC_renishaw_solo_e_ipm()
+    test_NC_renishaw_con_fresa_e_fresatura()
+    test_NC_ipm_esplicito_rimane_ipm()
+    test_NC_solo_fresatura_normale()
 
     print(f"\n{'='*60}")
     passed = sum(_results)

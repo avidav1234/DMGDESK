@@ -154,6 +154,80 @@ async def startup():
                 log.error(f"Migrazione v2.3 fallita: {_e2}", exc_info=True)
         else:
             log.debug("Migrazione v2.3 già eseguita, skip")
+
+        # ── Migrazione v2.4 one-shot — Riparazione bug riconciliatore ─────────
+        # Il riconciliatore v2.1 aveva una regola "grezzo + completato → guasto"
+        # troppo aggressiva che ha rovinato pallet legittimamente grezzo dopo
+        # rigenerazione MAIN multi-fase.
+        # Riparazione: se un pallet è 'guasto' ma il MAIN snapshot ha programmi
+        # in_main TUTTI con _utensili_visti vuoti (mai eseguiti) → ripristina
+        # a 'grezzo'.
+        if not _pal_data.get("migrazione_v24_eseguita"):
+            log.info("Migrazione v2.4: riparazione pallet guastati erroneamente dal riconciliatore")
+            riparati = []
+            projects = _proj.get("progetti", []) or _proj.get("projects", [])
+            for pal in _pal_data.get("pallet", []):
+                if (pal.get("stato") or "").lower() != "guasto":
+                    continue
+                pid = pal.get("progetto_id")
+                if not pid:
+                    continue
+                proj = next((p for p in projects if p.get("id") == pid), None)
+                if not proj:
+                    continue
+                snap = proj.get("main_snapshot") or {}
+                main_set = set(snap.get("main_programmi") or [])
+                if not main_set:
+                    continue
+
+                def _norm(fn):
+                    n = (fn or "").upper().strip()
+                    if not n.endswith(".MPF"): n += ".MPF"
+                    return n
+
+                # Trova programmi del progetto che sono nel MAIN
+                pgm_in_main_attivi = []
+                for s in proj.get("steps", []):
+                    for t in s.get("tasks", []):
+                        if t.get("text", "").strip().lower() != "fresatura":
+                            continue
+                        for pgm in t.get("programs", []):
+                            if _norm(pgm.get("filename")) in main_set:
+                                pgm_in_main_attivi.append(pgm)
+
+                if not pgm_in_main_attivi:
+                    continue
+
+                # Tutti i programmi del nuovo MAIN sono in_main con _utensili_visti vuoti?
+                # Allora il MAIN è stato rigenerato e nessuno l'ha ancora eseguito.
+                # Pallet doveva essere grezzo, non guasto.
+                tutti_in_main_freschi = all(
+                    pgm.get("stato") == "in_main"
+                    and not pgm.get("_utensili_visti")
+                    and not pgm.get("tempoInizio")
+                    for pgm in pgm_in_main_attivi
+                )
+
+                if tutti_in_main_freschi:
+                    pal["stato"] = "grezzo"
+                    pal["aggiornato"] = __import__('datetime').datetime.now().isoformat(timespec="seconds")
+                    riparati.append({
+                        "pallet": pal.get("numero"),
+                        "progetto": proj.get("name"),
+                    })
+
+            _pal_data["migrazione_v24_eseguita"] = True
+            _pal_data["migrazione_v24_ts"] = __import__('datetime').datetime.now().isoformat(timespec="seconds")
+            _save_pallet(_cfg, _pal_data)
+
+            if riparati:
+                log.info(f"Migrazione v2.4 completata: {len(riparati)} pallet riparati guasto→grezzo")
+                for r in riparati:
+                    log.info(f"  Pallet {r['pallet']} ({r['progetto']}): guasto → grezzo")
+            else:
+                log.info("Migrazione v2.4 completata: nessun pallet da riparare")
+        else:
+            log.debug("Migrazione v2.4 già eseguita, skip")
     except Exception as _e:
         log.error(f"Migrazione v2 fallita: {_e}", exc_info=True)
         # Non bloccare lo startup: la migrazione si può rilanciare al riavvio successivo

@@ -707,17 +707,18 @@ def _riconcilia_pallet_se_incoerente(pal: dict, projects: list,
     """
     Estensione 1: riconciliatore di coerenza istantanea.
 
-    Applica la regola d'oro a stati incoerenti senza generare nuovi eventi.
-    Restituisce il nuovo stato se modificato, None altrimenti.
+    NOTA v2.4: Il CASO 2 originale ("grezzo con programmi completato → DATO
+    SPORCO") è stato RIMOSSO. Era in conflitto con la Legge 1 (preservazione):
+    dopo rigenerazione MAIN multi-fase, i programmi completato di fase
+    precedente vengono mantenuti volutamente. Pallet grezzo + completato è
+    quindi uno stato LEGITTIMO, non sporco.
 
-    Casi rilevati:
+    Casi rilevati ora:
     1. Pallet `in_lavorazione` ma 0 programmi `in_lavorazione` nel progetto
        e tutti completato + macchina ferma da >=5min → fine ciclo silenzioso
        (estensione 4) → applica regola d'oro
-    2. Pallet `grezzo` ma esistono programmi `completato` → DATO SPORCO da
-       bug pre-v2 → applica regola d'oro
 
-    Non tocca pallet vuoti, finiti, guasti — sono stati coerenti per definizione.
+    Non tocca pallet vuoti, finiti, guasti, grezzo — sono stati coerenti.
     """
     cur = (pal.get("stato") or "").lower().replace(" ", "_")
     pid = pal.get("progetto_id")
@@ -732,51 +733,30 @@ def _riconcilia_pallet_se_incoerente(pal: dict, projects: list,
     if not pgm_fresatura:
         return None
 
-    has_in_lav   = any(p.get("stato") == "in_lavorazione" for p in pgm_fresatura)
-    has_completato = any(p.get("stato") == "completato" for p in pgm_fresatura)
-    has_in_main = any(p.get("stato") == "in_main" for p in pgm_fresatura)
+    has_in_lav = any(p.get("stato") == "in_lavorazione" for p in pgm_fresatura)
     pgm_main = [p for p in pgm_fresatura
                 if p.get("stato") in ("in_main", "completato", "in_lavorazione")]
     tutti_completati_main = pgm_main and all(p.get("stato") == "completato" for p in pgm_main)
 
-    # CASO 1: in_lavorazione + 0 in_lavorazione effettivi
-    if cur == "in_lavorazione" and not has_in_lav:
-        # 1a. Tutti completato (fine ciclo silenzioso, estensione 4)
-        if tutti_completati_main:
-            # Se la macchina è ferma da >=5min → applica regola d'oro
-            # Calcoliamo il fermo dal flag stop_iniziato_ts del pallet
-            if stato_pgm in (0, 5):
-                stop_ts = pal.get("stop_iniziato_ts")
-                if stop_ts and now_str:
-                    try:
-                        from datetime import datetime as _dt, timedelta as _td
-                        elapsed = _dt.fromisoformat(now_str) - _dt.fromisoformat(stop_ts)
-                        if elapsed >= _td(minutes=5):
-                            new_stato = _applica_regola_oro(pal, projects)
-                            _log_v2.info(
-                                f"riconcilia: pallet {pal.get('numero')} fine ciclo silenzioso "
-                                f"({int(elapsed.total_seconds()/60)}min stop) → {new_stato.upper()}"
-                            )
-                            pal.pop("stop_iniziato_ts", None)
-                            return new_stato
-                    except Exception as _e:
-                        _log_v2.debug(f"riconcilia: errore calcolo stop {_e}")
-            return None  # macchina in esecuzione o fermo recente: aspetta
-        # 1b. Mix in_main + completato + 0 in_lavorazione → stato anomalo
-        # Lo lasciamo ad altri trigger (timeout 1h, cambio pallet) per evitare
-        # falsi positivi durante il caricamento di programmi nuovi.
-        return None
-
-    # CASO 2: grezzo con programmi completato → DATO SPORCO
-    if cur == "grezzo" and has_completato:
-        # Il pallet ha lavorato in passato ma è tornato a grezzo per il bug v1.
-        # Applica regola d'oro per allineare lo stato.
-        new_stato = _applica_regola_oro(pal, projects)
-        _log_v2.warning(
-            f"riconcilia: pallet {pal.get('numero')} dato sporco (grezzo con completati) "
-            f"→ {new_stato.upper()}"
-        )
-        return new_stato
+    # CASO 1: in_lavorazione + 0 in_lavorazione effettivi + tutti completato
+    # + macchina ferma da >=5min → fine ciclo silenzioso
+    if cur == "in_lavorazione" and not has_in_lav and tutti_completati_main:
+        if stato_pgm in (0, 5):
+            stop_ts = pal.get("stop_iniziato_ts")
+            if stop_ts and now_str:
+                try:
+                    from datetime import datetime as _dt, timedelta as _td
+                    elapsed = _dt.fromisoformat(now_str) - _dt.fromisoformat(stop_ts)
+                    if elapsed >= _td(minutes=5):
+                        new_stato = _applica_regola_oro(pal, projects)
+                        _log_v2.info(
+                            f"riconcilia: pallet {pal.get('numero')} fine ciclo silenzioso "
+                            f"({int(elapsed.total_seconds()/60)}min stop) → {new_stato.upper()}"
+                        )
+                        pal.pop("stop_iniziato_ts", None)
+                        return new_stato
+                except Exception as _e:
+                    _log_v2.debug(f"riconcilia: errore calcolo stop {_e}")
 
     return None
 

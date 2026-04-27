@@ -301,28 +301,29 @@ async def salva_main_snapshot(body: dict = Body(...)):
                         pgm.pop("_completato_per_sequenza", None)
 
     # Pallet associati al progetto: reset regola-d-oro-compliant
-    try:
-        from api.routers.pallet import _load as _load_pallet, _save as _save_pallet
-        pallet_data = _load_pallet(config)
-        pallet_touched = False
-        for pal in pallet_data.get("pallet", []):
-            if pal.get("progetto_id") != project_id:
-                continue
-            old_stato = (pal.get("stato") or "").lower()
-            # La rigenerazione del MAIN è l'unico evento che scarcera un pallet
-            # da finito/guasto/in_lavorazione → grezzo (o vuoto se no programmi)
-            if old_stato in ("finito", "guasto", "in_lavorazione"):
-                pal["stato"] = "grezzo" if main_programmi_norm else "vuoto"
-                pal["aggiornato"] = datetime.now().isoformat(timespec="seconds")
-                pal.pop("stop_iniziato_ts", None)
-                pal.pop("ha_avuto_finito", None)  # v2: flag legacy non più usato
-                pallet_touched = True
-        if pallet_touched:
-            _save_pallet(config, pallet_data)
-    except Exception as _e:
-        log.warning(f"main_sync: reset pallet dopo rigenerazione fallito: {_e}")
-
+    # Tutto dentro async with _write_lock per evitare race con altri router.
     async with _write_lock:
+        try:
+            from api.routers.pallet import _load as _load_pallet, _save as _save_pallet
+            pallet_data = _load_pallet(config)
+            pallet_touched = False
+            for pal in pallet_data.get("pallet", []):
+                if pal.get("progetto_id") != project_id:
+                    continue
+                old_stato = (pal.get("stato") or "").lower()
+                # La rigenerazione del MAIN è l'unico evento che scarcera un pallet
+                # da finito/guasto/in_lavorazione → grezzo (o vuoto se no programmi)
+                if old_stato in ("finito", "guasto", "in_lavorazione"):
+                    pal["stato"] = "grezzo" if main_programmi_norm else "vuoto"
+                    pal["aggiornato"] = datetime.now().isoformat(timespec="seconds")
+                    pal.pop("stop_iniziato_ts", None)
+                    pal.pop("ha_avuto_finito", None)  # v2: flag legacy non più usato
+                    pallet_touched = True
+            if pallet_touched:
+                _save_pallet(config, pallet_data)
+        except Exception as _e:
+            log.warning(f"main_sync: reset pallet dopo rigenerazione fallito: {_e}")
+
         _save_progetti(config, proj_data)
 
     log.info(f"main_sync: snapshot salvato per {progetto.get('name')} → {main_path} (ciclo resettato)")

@@ -708,29 +708,24 @@ def test_BUG_retro_marcatura_non_tocca_completati():
 
 def test_RICONCILIA_grezzo_con_completati():
     """
-    Estensione 5 (migrazione): pallet `grezzo` con programmi `completato`
-    è dato sporco. Riconciliatore lo mette a guasto se ci sono in_main residui,
-    o a finito se tutto completato.
+    v2.4: il riconciliatore NON tocca più 'grezzo + completato' perché è uno
+    stato LEGITTIMO dopo rigenerazione MAIN multi-fase (Legge 1 preservazione).
     """
-    print("\n[RICONCILIA] grezzo con completati → guasto/finito")
+    print("\n[RICONCILIA] grezzo con completati è LEGITTIMO (post-rigenerazione MAIN)")
     from api.routers.macchina_live import _riconcilia_pallet_se_incoerente
 
-    # Caso a: grezzo con 38 completati ma residui in_main → guasto
+    # Caso: pallet grezzo dopo rigenerazione MAIN, programmi fase precedente
+    # restano completato (preservazione storia)
     pA = mk_progetto("projA", "A", [
-        mk_pgm("A_001", "completato", utensili=["T1"], utensili_visti=["T1"]),
-        mk_pgm("A_002", "completato", utensili=["T2"], utensili_visti=["T2"]),
-        mk_pgm("A_003", "in_main", utensili=["T3"]),
-    ], main_programmi=["A_001.MPF", "A_002.MPF", "A_003.MPF"])
+        mk_pgm("A_001", "completato", utensili=["T1"], utensili_visti=["T1"]),  # storia fase 1
+        mk_pgm("A_002", "completato", utensili=["T2"], utensili_visti=["T2"]),  # storia fase 1
+        mk_pgm("A_003", "in_main", utensili=["T3"]),  # nuovo MAIN fase 2
+    ], main_programmi=["A_003.MPF"])  # solo A_003 nel nuovo MAIN
     pal1 = mk_pallet(1, "projA", "grezzo")
     new = _riconcilia_pallet_se_incoerente(pal1, [pA])
-    check("RICONCILIA grezzo+completati+in_main → guasto", pal1["stato"], "guasto")
-
-    # Caso b: grezzo con tutti completati e utensili OK → finito
-    pA["steps"][0]["tasks"][0]["programs"][2]["stato"] = "completato"
-    pA["steps"][0]["tasks"][0]["programs"][2]["_utensili_visti"] = ["T3"]
-    pal2 = mk_pallet(2, "projA", "grezzo")
-    new = _riconcilia_pallet_se_incoerente(pal2, [pA])
-    check("RICONCILIA grezzo+tutti completati → finito", pal2["stato"], "finito")
+    check("RICONCILIA grezzo+completati post-rigen NON toccato",
+          pal1["stato"], "grezzo")
+    check("RICONCILIA return None (stato legittimo)", new, None)
 
 
 def test_RICONCILIA_pallet_pulito_non_toccato():
@@ -1076,6 +1071,58 @@ def test_NC_solo_fresatura_normale():
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# v2.4 — Bug rigenerazione MAIN → guasto (riconciliatore aggressivo)
+# ═══════════════════════════════════════════════════════════════════════════
+
+def test_BUG_v24_rigen_main_pallet_resta_grezzo():
+    """
+    Bug osservato: dopo rigenerazione MAIN, pallet → grezzo (regola d'oro).
+    Al primo tick il riconciliatore vedeva 'grezzo + completati storici'
+    e applicava regola d'oro mandando il pallet a guasto.
+    Fix v2.4: il riconciliatore non gestisce più 'grezzo + completato'.
+    """
+    print("\n[BUG-V24] Post-rigen MAIN: pallet resta grezzo anche con completati storici")
+    from api.routers.macchina_live import _riconcilia_pallet_se_incoerente
+
+    # Stato dopo rigenerazione MAIN multi-fase:
+    # - Programmi fase 1 (completato): preservati
+    # - Programmi nuovo MAIN (in_main): freschi, mai eseguiti
+    pA = mk_progetto("projA", "A", [
+        # Storia fase 1 (5 programmi completati)
+        *[mk_pgm(f"A_01_{i:03d}", "completato",
+                 utensili=[f"T{i}"], utensili_visti=[f"T{i}"]) for i in range(1, 6)],
+        # Nuovo MAIN fase 2 (3 programmi in_main, mai eseguiti)
+        *[mk_pgm(f"A_02_{i:03d}", "in_main", utensili=[f"T{i+10}"]) for i in range(1, 4)],
+    ], main_programmi=["A_02_001.MPF", "A_02_002.MPF", "A_02_003.MPF"])
+    pal1 = mk_pallet(1, "projA", "grezzo")  # appena rigenerato
+
+    # Tick con macchina ferma (situazione tipica subito dopo rigenerazione)
+    new = _riconcilia_pallet_se_incoerente(pal1, [pA], stato_pgm=5,
+                                            now_str="2026-04-27T12:00:00")
+    check("BUG-V24 pallet resta grezzo dopo rigen", pal1["stato"], "grezzo")
+    check("BUG-V24 riconciliatore return None", new, None)
+
+    # Anche con macchina in esecuzione su altro pallet, non deve toccare
+    new = _riconcilia_pallet_se_incoerente(pal1, [pA], stato_pgm=1,
+                                            now_str="2026-04-27T12:01:00")
+    check("BUG-V24 pallet resta grezzo durante esecuzione altri", pal1["stato"], "grezzo")
+
+
+def test_BUG_v24_grezzo_solo_da_fare_resta_grezzo():
+    """Pallet grezzo con solo programmi da_fare → riconciliatore non tocca."""
+    print("\n[BUG-V24] grezzo con solo da_fare resta invariato")
+    from api.routers.macchina_live import _riconcilia_pallet_se_incoerente
+    pA = mk_progetto("projA", "A", [
+        mk_pgm("A_001", "in_main", utensili=["T1"]),
+        mk_pgm("A_002", "da_fare", utensili=["T2"]),
+    ], main_programmi=["A_001.MPF"])
+    pal1 = mk_pallet(1, "projA", "grezzo")
+    new = _riconcilia_pallet_se_incoerente(pal1, [pA])
+    check("BUG-V24 grezzo pulito → invariato", pal1["stato"], "grezzo")
+    check("BUG-V24 return None", new, None)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # MAIN
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -1126,6 +1173,10 @@ if __name__ == "__main__":
     test_NC_renishaw_con_fresa_e_fresatura()
     test_NC_ipm_esplicito_rimane_ipm()
     test_NC_solo_fresatura_normale()
+
+    # v2.4 — Fix bug rigenerazione MAIN
+    test_BUG_v24_rigen_main_pallet_resta_grezzo()
+    test_BUG_v24_grezzo_solo_da_fare_resta_grezzo()
 
     print(f"\n{'='*60}")
     passed = sum(_results)

@@ -1488,6 +1488,13 @@ async def aggiorna_stati_da_log():
         async with _proj_lock:
             _save_progetti(config, proj_data)
             _invalidate_analisi_cache()
+    # Sanity-check: max 1 pallet in_lavorazione. Rete di sicurezza per casi
+    # in cui la chiusura differita non sia scattata (es. macchina ferma con
+    # 2 pallet in_lavorazione transitori). Spostato qui dal GET /api/pallet/
+    # per evitare write sulla share di rete a ogni read.
+    from api.routers.pallet import _sanity_unico_in_lavorazione as _sanity
+    if _sanity(pallet_data):
+        pallet_dirty = True
     if pallet_dirty:
         _save_pallet(config, pallet_data)
 
@@ -1513,6 +1520,11 @@ async def aggiorna_stati_da_log():
     # Salva l'ultimo tick per il frontend (GET /tick)
     from datetime import datetime as _dtnow
     updates["ts"] = _dtnow.now().isoformat(timespec="seconds")
+    # Includi snapshot pallet nel tick: il frontend lo legge dall'evento
+    # `dmgdesk:stati-aggiornati` evitando un fetch separato di /api/pallet/.
+    # `pallets` è già la lista letta/aggiornata in questo tick (post _save_pallet
+    # se dirty), quindi riflette lo stato persistito.
+    updates["pallets"] = pallets
     _last_tick.update(updates)
 
     return updates

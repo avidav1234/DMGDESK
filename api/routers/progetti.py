@@ -41,7 +41,17 @@ _progetti_cache: dict = {"data": None, "path": None, "mtime": 0}
 
 
 def _load_progetti(config: dict) -> dict:
+    """
+    Carica i progetti dalla share. Cache invalidata da mtime del file.
+
+    IMPORTANTE: ritorna sempre una **deep copy** del dict cached. I caller
+    mutano frequentemente in-place (`pgm["stato"]=...`, iniezione di campi,
+    ecc.) e senza copia ogni mutazione corromperebbe la cache, rendendola
+    visibile a richieste parallele e desync con il file su disco se
+    `_save_progetti` fallisce o non viene chiamato.
+    """
     import os as _os
+    import copy as _copy
     path = _progetti_path(config)
     if path.exists():
         try:
@@ -49,7 +59,7 @@ def _load_progetti(config: dict) -> dict:
             if (_progetti_cache["path"] == str(path) and
                     _progetti_cache["mtime"] == mtime and
                     _progetti_cache["data"] is not None):
-                return _progetti_cache["data"]
+                return _copy.deepcopy(_progetti_cache["data"])
             data = json.loads(path.read_text(encoding="utf-8"))
             # Verifica integrità struttura minima
             if not isinstance(data, dict):
@@ -61,7 +71,7 @@ def _load_progetti(config: dict) -> dict:
             _progetti_cache["data"]  = data
             _progetti_cache["path"]  = str(path)
             _progetti_cache["mtime"] = mtime
-            return data
+            return _copy.deepcopy(data)
         except (json.JSONDecodeError, ValueError) as e:
             from utils.logger import get_logger as _get_log
             _get_log("routers.progetti").error(

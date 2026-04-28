@@ -66,6 +66,15 @@ def _default_state() -> dict:
 _pallet_cache: dict = {"data": None, "mtime": 0.0}
 
 def _load(config: dict) -> dict:
+    """
+    Carica pallet_state.json. Cache invalidata da mtime.
+
+    IMPORTANTE: ritorna una **deep copy** del dict cached. Il poller e i
+    router mutano in-place i singoli pallet (`p["stato"]=...`,
+    `p["stop_iniziato_ts"]=...`, ecc.). Senza copia ogni mutazione
+    corromperebbe la cache prima del salvataggio.
+    """
+    import copy as _copy
     path = _pallet_path(config)
     try:
         mtime = path.stat().st_mtime if path.exists() else 0.0
@@ -73,7 +82,7 @@ def _load(config: dict) -> dict:
         mtime = 0.0
 
     if _pallet_cache["data"] is not None and mtime == _pallet_cache["mtime"]:
-        return _pallet_cache["data"]
+        return _copy.deepcopy(_pallet_cache["data"])
 
     if path.exists():
         try:
@@ -87,7 +96,7 @@ def _load(config: dict) -> dict:
                 p.setdefault("pct_avanzamento", None)
             _pallet_cache["data"]  = data
             _pallet_cache["mtime"] = mtime
-            return data
+            return _copy.deepcopy(data)
         except (json.JSONDecodeError, ValueError) as e:
             from utils.logger import get_logger as _get_log
             _get_log("routers.pallet").error(
@@ -244,34 +253,42 @@ def check_pallet_completati(config: dict) -> int:
         return 0
 
 
+def _sanity_unico_in_lavorazione(state: dict) -> bool:
+    """
+    Garantisce che al massimo 1 pallet sia in_lavorazione: se ce ne sono di
+    più (inconsistenza), tiene il più recente e rimette gli altri a grezzo.
+    Modifica `state` in-place. Ritorna True se ha cambiato qualcosa.
+
+    Il poller (macchina_live.aggiorna_stati_da_log) la chiama prima del
+    save: in condizioni normali è no-op, ma fa da rete di sicurezza per
+    casi di chiusura differita non scattata (es. macchina ferma con 2
+    pallet in_lavorazione transitori).
+    """
+    pallets = state.get("pallet", [])
+    in_lav = [p for p in pallets if (p.get("stato") or "").lower() == "in_lavorazione"]
+    if len(in_lav) <= 1:
+        return False
+    in_lav_sorted = sorted(in_lav, key=lambda p: p.get("aggiornato") or "", reverse=True)
+    ids_reset = {p.get("numero") for p in in_lav_sorted[1:]}
+    for p in pallets:
+        if p.get("numero") in ids_reset:
+            p["stato"] = "grezzo"
+    return True
+
+
 @router.get("/")
 async def get_pallet():
-    """Restituisce lo stato attuale di tutti i pallet.
-    Garantisce che al massimo 1 pallet sia in_lavorazione —
-    se ce ne sono più di uno (inconsistenza), tieni il più recente.
+    """Restituisce lo stato attuale di tutti i pallet — read-only.
+
+    Il sanity-check (max 1 pallet in_lavorazione) è eseguito sul state
+    ricevuto solo per la response: NON viene fatto un write sulla share
+    di rete a ogni GET. Il poller backend ha la responsabilità di
+    persistire correzioni al massimo entro 5s (vedi
+    aggiorna_stati_da_log → _sanity_unico_in_lavorazione + _save_pallet).
     """
     config = carica_configurazione()
-    state  = _load(config)
-    pallets = state.get("pallet", [])
-
-    # Trova tutti i pallet in_lavorazione
-    in_lav = [p for p in pallets if (p.get("stato") or "").lower() == "in_lavorazione"]
-
-    if len(in_lav) > 1:
-        # Tieni solo quello con aggiornato più recente, rimetti gli altri a grezzo
-        in_lav_sorted = sorted(
-            in_lav,
-            key=lambda p: p.get("aggiornato") or "",
-            reverse=True
-        )
-        da_resettare = in_lav_sorted[1:]  # tutti tranne il più recente
-        ids_reset = {p.get("numero") for p in da_resettare}
-        for p in pallets:
-            if p.get("numero") in ids_reset:
-                p["stato"] = "grezzo"
-        # Salva la correzione
-        _save(config, state)
-
+    state  = _load(config)  # già una deepcopy, modifiche in-place safe
+    _sanity_unico_in_lavorazione(state)
     return state
 
 @router.get("/debug-path")

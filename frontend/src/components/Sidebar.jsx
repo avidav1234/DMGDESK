@@ -21,8 +21,8 @@ const ICONS = {
 
 const NAV_PRIMARY = [
   { to: '/home',       icon: 'home',      label: 'Home',      title: 'Home' },
-  { to: '/progetti',   icon: 'lavori',    label: 'Lavori',    title: 'Lavori' },
-  { to: '/coda',       icon: 'macchina',  label: 'Coda',      title: 'Coda Lavorazione' },
+  { to: '/progetti',   icon: 'lavori',    label: 'Progetti',  title: 'Progetti' },
+  { to: '/coda',       icon: 'macchina',  label: 'Macchina',  title: 'Macchina' },
   { to: '/analisi-nc', icon: 'analisi',   label: 'Analisi',   title: 'Analisi NC', alertKey: 'analisi' },
   { to: '/macchina',   icon: 'utensili',  label: 'Utensili',  title: 'Utensili', alertKey: 'utensili' },
   { to: '/report',     icon: 'report',    label: 'Report',    title: 'Report Lavorazioni' },

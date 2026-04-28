@@ -1,7 +1,7 @@
 // Progetti.jsx — WorkTrack porting fedele COMPLETO per DMGDesk
 // Persistenza su file via /api/progetti — identico all'app originale
 
-import React, { useState, useEffect, useCallback, useRef, createContext, useContext } from 'react'
+import React, { useState, useEffect, useCallback, useRef, useMemo, createContext, useContext } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import TabDocumenti from './TabDocumenti'
 
@@ -42,6 +42,33 @@ function getNextTask(project) {
   return null
 }
 function reorder(arr,from,to){const r=[...arr];const[item]=r.splice(from,1);r.splice(to,0,item);return r}
+// Confronto strutturale veloce di due alberi di steps.
+// Limitato ai campi che il poller backend modifica (stato programmi, tempi,
+// flag done dei task). Early-exit al primo mismatch — niente JSON.stringify
+// che alloca migliaia di char per progetto a ogni silentRefresh (8s).
+function stepsEqual(a,b){
+  if(a===b) return true
+  if(!a||!b) return false
+  if(a.length!==b.length) return false
+  for(let i=0;i<a.length;i++){
+    const ta=a[i].tasks||[], tb=b[i].tasks||[]
+    if(ta.length!==tb.length) return false
+    for(let j=0;j<ta.length;j++){
+      if(ta[j].done!==tb[j].done||ta[j].doneAt!==tb[j].doneAt) return false
+      const pa=ta[j].programs||[], pb=tb[j].programs||[]
+      if(pa.length!==pb.length) return false
+      for(let k=0;k<pa.length;k++){
+        const A=pa[k], B=pb[k]
+        if(A.stato!==B.stato) return false
+        if(A.tempoInizio!==B.tempoInizio||A.tempoFine!==B.tempoFine) return false
+        if((A._utensili_visti||[]).length!==(B._utensili_visti||[]).length) return false
+        if((A.utensili||[]).length!==(B.utensili||[]).length) return false
+        if(!!A._completato_per_sequenza!==!!B._completato_per_sequenza) return false
+      }
+    }
+  }
+  return true
+}
 function cloneTemplateToSteps(tmpl){
   return tmpl.steps.map(s=>({...s,id:uid(),tasks:s.tasks.map(t=>({...t,id:uid(),done:false,notes:[],note:'',doneAt:null}))}))
 }
@@ -3488,7 +3515,7 @@ export default function Progetti(){
           // Non toccare il progetto aperto (selectedId) — l'utente potrebbe star editando
           if(cp.id===selectedId) return cp
           // Aggiorna solo se il server ha una versione diversa
-          if(JSON.stringify(cp.steps)!==JSON.stringify(sp.steps)){
+          if(!stepsEqual(cp.steps,sp.steps)){
             changed=true
             return sp
           }
@@ -3502,27 +3529,31 @@ export default function Progetti(){
   useEffect(()=>{
     load()
 
-    // Polling consolidato: pallet disponibili + stato ogni 15s
-    // (era duplicato: 10s + 15s separati → ora un solo fetch ogni 15s)
-    function caricaPallet(){
-      fetch('/api/pallet/').then(r=>r.ok?r.json():{pallet:[]})
-        .then(d=>{
-          setPalletState(d.pallet||[])
-          // disponibili = pallet non in_lavorazione
-          setPalletDisponibili((d.pallet||[]).filter(p=>
-            (p.stato||'').toLowerCase().replace(' ','_') !== 'in_lavorazione'
-          ))
-        }).catch(()=>{})
+    // Pallet: leggi direttamente dall'evento del GlobalPoller (payload `pallets`).
+    // Fallback con un fetch ogni 60s per allineamento iniziale e in caso il tick
+    // del backend sia in stato stale (log macchina fermo).
+    const applicaPallet = (lista) => {
+      setPalletState(lista || [])
+      setPalletDisponibili((lista||[]).filter(p =>
+        (p.stato||'').toLowerCase().replace(' ','_') !== 'in_lavorazione'
+      ))
     }
-    caricaPallet()
-    const t=setInterval(caricaPallet, 15000)
+    function caricaPalletFallback(){
+      fetch('/api/pallet/').then(r=>r.ok?r.json():{pallet:[]})
+        .then(d=>applicaPallet(d.pallet||[])).catch(()=>{})
+    }
+    caricaPalletFallback()  // bootstrap
+    const t = setInterval(caricaPalletFallback, 60000)
 
     // Polling sync dal desktop ogni 8s — usa evento GlobalPoller se disponibile
     // per evitare doppio fetch quando GlobalPoller è già attivo
     const t3=setInterval(silentRefresh, 8000)
 
-    // Reagisce all'evento del GlobalPoller (App.jsx) — aggiorna pallet senza polling separato
-    const onUpdate = () => caricaPallet()
+    // Reagisce all'evento del GlobalPoller — pallets sono già nel payload
+    const onUpdate = (e) => {
+      const p = e?.detail?.pallets
+      if(Array.isArray(p)) applicaPallet(p)
+    }
     window.addEventListener('dmgdesk:stati-aggiornati', onUpdate)
 
     // Carica setup data per utensili critici (una tantum)
@@ -3717,20 +3748,60 @@ export default function Progetti(){
   }
 
   // ── Dati derivati ────────────────────────────────────────────────────────────
-  const selectedProject=projects.find(p=>p.id===selectedId)
-  const isOnEditor=page==='templateEditor'&&editingTemplate
-  const isOnProject=!!selectedProject
-  const activeProjects=projects.filter(p=>!p.archived&&(search===''||p.name.toLowerCase().includes(search.toLowerCase())||(p.description||'').toLowerCase().includes(search.toLowerCase())))
-  const archivedProjects=projects.filter(p=>p.archived)
-  const inProgress=activeProjects.filter(p=>getProgress(p)<100).sort((a,b)=>{
-    const da=getDelivery(a.id);const db=getDelivery(b.id)
-    const daysA=da&&da.dueDate&&!da.delivered?daysUntil(da.dueDate):9999
-    const daysB=db&&db.dueDate&&!db.delivered?daysUntil(db.dueDate):9999
-    if(daysA!==daysB) return daysA-daysB
-    return getProgress(a)-getProgress(b)
-  })
-  const completed=activeProjects.filter(p=>getProgress(p)===100)
-  const urgentProjects=inProgress.filter(p=>{const d=getDelivery(p.id);const days=d&&d.dueDate&&!d.delivered?daysUntil(d.dueDate):null;return days!==null&&days<=7})
+  // Memoizzati: con polling 8s + eventi pallet, questa funzione viene chiamata
+  // molte volte al minuto. Senza useMemo, filter+sort+filter su tutta la lista
+  // ad ogni render, e getDelivery() chiamata O(n²) volte nel sort.
+  const selectedProject = projects.find(p => p.id === selectedId)
+  const isOnEditor      = page === 'templateEditor' && editingTemplate
+  const isOnProject     = !!selectedProject
+
+  // Map progettoId → delivery per lookup O(1) nel sort/filter
+  const deliveryMap = useMemo(() => {
+    const m = new Map()
+    for (const d of deliveries) m.set(d.projectId, d)
+    return m
+  }, [deliveries])
+
+  const activeProjects = useMemo(() => {
+    const q = search.toLowerCase()
+    return projects.filter(p => !p.archived && (
+      q === '' ||
+      p.name.toLowerCase().includes(q) ||
+      (p.description||'').toLowerCase().includes(q)
+    ))
+  }, [projects, search])
+
+  const archivedProjects = useMemo(
+    () => projects.filter(p => p.archived),
+    [projects]
+  )
+
+  const inProgress = useMemo(() => {
+    return activeProjects
+      .filter(p => getProgress(p) < 100)
+      .sort((a, b) => {
+        const da = deliveryMap.get(a.id)
+        const db = deliveryMap.get(b.id)
+        const daysA = da && da.dueDate && !da.delivered ? daysUntil(da.dueDate) : 9999
+        const daysB = db && db.dueDate && !db.delivered ? daysUntil(db.dueDate) : 9999
+        if (daysA !== daysB) return daysA - daysB
+        return getProgress(a) - getProgress(b)
+      })
+  }, [activeProjects, deliveryMap])
+
+  const completed = useMemo(
+    () => activeProjects.filter(p => getProgress(p) === 100),
+    [activeProjects]
+  )
+
+  const urgentProjects = useMemo(
+    () => inProgress.filter(p => {
+      const d = deliveryMap.get(p.id)
+      const days = d && d.dueDate && !d.delivered ? daysUntil(d.dueDate) : null
+      return days !== null && days <= 7
+    }),
+    [inProgress, deliveryMap]
+  )
 
   const NavBtn=({id,label,badge})=>(
     <button onClick={()=>{setPage(id);setSelectedId(null);setEditingTemplate(null)}}
@@ -3746,23 +3817,44 @@ export default function Progetti(){
     <div style={{height:'100%',display:'flex',flexDirection:'column',background:T.bg,fontFamily:"var(--font-display)",color:T.text}}>
       <style>{`*{box-sizing:border-box}input,textarea,select{font-family:inherit}@keyframes pulse-dot{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.85)}}`}</style>
 
-      {/* TOP BAR */}
-      {!isOnProject&&!isOnEditor&&(
-        <div style={{borderBottom:`1px solid ${T.border}`,padding:'0 28px',display:'flex',alignItems:'center',gap:0,flexShrink:0,background:T.surface,boxShadow:'0 1px 0 rgba(0,0,0,0.06)'}}>
-          <div style={{fontSize:20,fontWeight:800,color:T.text,letterSpacing:'-0.02em',padding:'16px 16px 16px 0',marginRight:4,borderRight:`1px solid ${T.border}`}}><span style={{color:T.accent}}>◈</span> DMGDesk</div>
-          <NavBtn id='projects' label='Lavori'/>
-          <NavBtn id='archived' label='Archivio' badge={archivedProjects.length}/>
-          <NavBtn id='templates' label={`Template (${templates.length})`}/>
-          <NavBtn id='consegne' label='Consegne' badge={deliveries.filter(d=>!d.delivered&&daysUntil(d.dueDate)!==null&&daysUntil(d.dueDate)<=7).length}/>
-          <NavBtn id='backup' label='Backup'/>
-          {page==='projects'&&!isOnProject&&(
-            <div style={{marginLeft:'auto',display:'flex',gap:12,alignItems:'center'}}>
-              <input value={search} onChange={e=>setSearch(e.target.value)} placeholder='Cerca progetto...'
-                style={{background:T.surface2,border:`1px solid ${T.border}`,borderRadius:8,padding:'8px 14px',color:T.text,fontSize:14,outline:'none',width:200}}/>
-              <span style={{fontSize:14,color:T.textSub,fontWeight:600}}>{inProgress.length} attivi</span>
-              <button onClick={()=>{setPreselectedTemplate(null);setShowNewProject(true)}} style={{background:T.accent,border:'none',borderRadius:8,color:'#fff',fontWeight:700,fontSize:14,padding:'9px 20px',cursor:'pointer'}}>+ Nuovo Progetto</button>
-            </div>
-          )}
+      {/* TOP BAR — sempre visibile (anche in dettaglio progetto / editor) */}
+      <div style={{borderBottom:`1px solid ${T.border}`,padding:'0 28px',display:'flex',alignItems:'center',gap:0,flexShrink:0,background:T.surface,boxShadow:'0 1px 0 rgba(0,0,0,0.06)'}}>
+        <div style={{fontSize:20,fontWeight:800,color:T.text,letterSpacing:'-0.02em',padding:'16px 16px 16px 0',marginRight:4,borderRight:`1px solid ${T.border}`}}><span style={{color:T.accent}}>◈</span> DMGDesk</div>
+        <NavBtn id='projects' label='Progetti'/>
+        <NavBtn id='archived' label='Archivio' badge={archivedProjects.length}/>
+        <NavBtn id='templates' label={`Template (${templates.length})`}/>
+        <NavBtn id='consegne' label='Consegne' badge={deliveries.filter(d=>!d.delivered&&daysUntil(d.dueDate)!==null&&daysUntil(d.dueDate)<=7).length}/>
+        <NavBtn id='backup' label='Backup'/>
+        {page==='projects'&&!isOnProject&&!isOnEditor&&(
+          <div style={{marginLeft:'auto',display:'flex',gap:12,alignItems:'center'}}>
+            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder='Cerca progetto...'
+              style={{background:T.surface2,border:`1px solid ${T.border}`,borderRadius:8,padding:'8px 14px',color:T.text,fontSize:14,outline:'none',width:200}}/>
+            <span style={{fontSize:14,color:T.textSub,fontWeight:600}}>{inProgress.length} attivi</span>
+            <button onClick={()=>{setPreselectedTemplate(null);setShowNewProject(true)}} style={{background:T.accent,border:'none',borderRadius:8,color:'#fff',fontWeight:700,fontSize:14,padding:'9px 20px',cursor:'pointer'}}>+ Nuovo Progetto</button>
+          </div>
+        )}
+      </div>
+
+      {/* BREADCRUMB — visibile solo quando si è dentro a un progetto / editor template */}
+      {(isOnProject||isOnEditor)&&(
+        <div style={{borderBottom:`1px solid ${T.border}`,padding:'8px 28px',background:T.surface2,
+          display:'flex',alignItems:'center',gap:8,fontSize:13,flexShrink:0}}>
+          <button onClick={()=>{
+            if(isOnEditor){ setEditingTemplate(null); setPage('templates') }
+            else          { setSelectedId(null) }
+          }}
+            style={{background:'none',border:'none',cursor:'pointer',color:T.textSub,
+              fontSize:13,fontWeight:600,padding:'2px 0',textDecoration:'underline',
+              textDecorationColor:'transparent',textUnderlineOffset:'3px',transition:'all 0.12s'}}
+            onMouseEnter={e=>e.currentTarget.style.textDecorationColor=T.textSub}
+            onMouseLeave={e=>e.currentTarget.style.textDecorationColor='transparent'}>
+            {isOnEditor?'Template':(page==='archived'?'Archivio':'Progetti')}
+          </button>
+          <span style={{color:T.textMuted}}>›</span>
+          <span style={{color:T.text,fontWeight:700,overflow:'hidden',
+            textOverflow:'ellipsis',whiteSpace:'nowrap',minWidth:0}}>
+            {isOnEditor?(editingTemplate?.name||'Nuovo template'):(selectedProject?.name||'')}
+          </span>
         </div>
       )}
 

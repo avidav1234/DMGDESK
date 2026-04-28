@@ -31,19 +31,28 @@ from pathlib import Path
 
 # ── Logging ────────────────────────────────────────────────────────────────────
 LOG_DIR = Path(__file__).parent
+# RotatingFileHandler: max 1MB per file, 5 backup → 6MB totali invece di
+# crescita illimitata (era ~50KB/giorno → ~18MB/anno senza rotation).
+from logging.handlers import RotatingFileHandler as _RotHandler
+_log_handler = _RotHandler(
+    LOG_DIR / "cam_tracker.log",
+    maxBytes=1024 * 1024,   # 1 MB
+    backupCount=5,
+    encoding="utf-8",
+)
+_log_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
+_stream_handler = logging.StreamHandler(sys.stdout)
+_stream_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[
-        logging.FileHandler(LOG_DIR / "cam_tracker.log", encoding="utf-8"),
-        logging.StreamHandler(sys.stdout),
-    ],
+    handlers=[_log_handler, _stream_handler],
 )
 log = logging.getLogger("cam_tracker")
 
 # ── Config ─────────────────────────────────────────────────────────────────────
 CONFIG_FILE = Path(__file__).parent / "cam_tracker_config.ini"
 SESSIONS_FILE = Path(__file__).parent / "cam_sessions_pending.json"
+STATE_FILE = Path(__file__).parent / "cam_tracker_state.json"
 
 DEFAULT_CONFIG = {
     "dmgdesk": {
@@ -594,6 +603,9 @@ class CAMTracker:
         self._gui_thread = None
         self._init_gui()
 
+        # Recovery da crash/shutdown precedente
+        self._load_state()
+
     def _init_gui(self):
         """Avvia la finestra di stato in un thread separato (solo se tkinter disponibile)."""
         try:
@@ -672,15 +684,18 @@ class CAMTracker:
         # Gestione pausa/ripresa
         if self.current_project:
             if self.session_start and not active and not self.is_paused:
-                # Entra in pausa
+                # Entra in pausa — accumula sempre, anche micro-burst.
+                # I cicli foreground/background da pochi secondi sono lavoro
+                # reale: scartarli sotto soglia produce perdita aggregata.
                 elapsed = now - self.session_start
                 pid = self._project_id(self.current_project)
-                if elapsed >= self.min_session_sec:
+                if elapsed > 0:
                     self.accumulated[pid] = self.accumulated.get(pid, 0) + elapsed
                     self.project_meta[pid] = self.current_project
+                    self._persist_state()
                 self.session_start = None
                 self.is_paused = True
-                log.info(f"[Tracker] PAUSA — {reason}")
+                log.info(f"[Tracker] PAUSA — {reason} (+{elapsed:.1f}s)")
                 self._gui("set_progetto", pid, False)
                 self._gui("add_log", f"Pausa — {pid}", "info")
 
@@ -698,16 +713,15 @@ class CAMTracker:
             if self.current_project and self.session_start and not self.is_paused:
                 elapsed = now - self.session_start
                 pid = self._project_id(self.current_project)
-                if elapsed >= self.min_session_sec:
+                if elapsed > 0:
                     self.accumulated[pid] = self.accumulated.get(pid, 0) + elapsed
                     self.project_meta[pid] = self.current_project
+                    self._persist_state()
                     log.info(
                         f"[Tracker] {pid}: "
                         f"+{elapsed/60:.1f} min "
                         f"(tot oggi: {self.accumulated[pid]/3600:.2f}h)"
                     )
-                else:
-                    log.debug(f"[Tracker] Sessione troppo breve: {pid} ({elapsed:.0f}s)")
 
             self.current_project = proj
             self.is_paused = not active
@@ -734,6 +748,21 @@ class CAMTracker:
             else:
                 log.debug("[Tracker] Nessun progetto Cimatron")
                 self._gui("set_progetto", "—", False)
+
+        # ── Tick incrementale: consolida la sessione attiva ad ogni poll ──────
+        # Senza questo, i secondi della sessione in corso (tra una pausa e
+        # l'altra, o tra due flush) vivrebbero solo in `session_start` e
+        # andrebbero persi su crash. Spostando il delta in `accumulated` ad
+        # ogni tick e ri-azzerando `session_start`, lo state persistito su
+        # disco rimane sempre allineato al secondo.
+        if self.current_project and self.session_start and not self.is_paused:
+            elapsed = now - self.session_start
+            if elapsed > 0:
+                pid = self._project_id(self.current_project)
+                self.accumulated[pid] = self.accumulated.get(pid, 0) + elapsed
+                self.project_meta[pid] = self.current_project
+                self.session_start = now
+                self._persist_state()
 
     def _analizza_step_background(self, project_id: str, full_path: str):
         """
@@ -780,7 +809,7 @@ class CAMTracker:
         if self.current_project and self.session_start:
             elapsed = now - self.session_start
             pid = self._project_id(self.current_project)
-            if elapsed >= self.min_session_sec:
+            if elapsed > 0:
                 self.accumulated[pid] = self.accumulated.get(pid, 0) + elapsed
                 self.project_meta[pid] = self.current_project
             self.session_start = now
@@ -807,17 +836,23 @@ class CAMTracker:
         }
 
         ok = self.client.send_sessions(payload)
+        if not ok:
+            # Salva localmente per retry — _retry_pending() lo manderà più tardi
+            self._save_pending(payload)
+            log.warning("[Tracker] Payload salvato localmente — retry al prossimo flush")
+
+        # In ogni caso (ok o pending), i secondi sono ora "consolidati" nel payload.
+        # Pulire accumulated evita il doppio conteggio quando il pending viene
+        # rinviato e nel frattempo nuovi secondi sono stati cumulati e flushati.
+        self.accumulated.clear()
+        self._persist_state()
+
         if ok:
-            self.accumulated.clear()
             ts = datetime.now().strftime("%H:%M:%S")
             n  = len(payload["sessions"])
             self._gui("set_ultimo_invio", ts, n)
             self._gui("add_log", f"Inviati {n} record a DMGDesk", "ok")
             self._gui("set_ore", {})
-        else:
-            # Salva localmente per retry al prossimo flush
-            self._save_pending(payload)
-            log.warning("[Tracker] Payload salvato localmente — retry al prossimo flush")
 
     def _save_pending(self, payload: dict):
         existing = []
@@ -830,6 +865,86 @@ class CAMTracker:
         existing.append(payload)
         with open(SESSIONS_FILE, "w", encoding="utf-8") as f:
             json.dump(existing, f, indent=2, ensure_ascii=False)
+
+    def _persist_state(self):
+        """
+        Salva accumulated su disco — recovery dopo crash/shutdown forzato.
+        Senza questo, fino a flush_interval secondi (e tutti i progetti in
+        accumulated) verrebbero persi su taskkill, BSOD, riavvio Windows.
+        """
+        try:
+            state = {
+                "date": date.today().isoformat(),
+                "accumulated": dict(self.accumulated),
+                "project_meta": {k: dict(v) if v else {} for k, v in self.project_meta.items()},
+            }
+            tmp = STATE_FILE.with_suffix(".tmp")
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(state, f, indent=2, ensure_ascii=False)
+            tmp.replace(STATE_FILE)
+        except Exception as e:
+            log.debug(f"[Tracker] persist_state fallito: {e}")
+
+    def _load_state(self):
+        """
+        Recupera accumulated all'avvio. Se il salvataggio è di un giorno
+        precedente, il payload viene messo in pending (per essere inviato
+        col date corretto), altrimenti ricaricato in memoria.
+        """
+        if not STATE_FILE.exists():
+            return
+        try:
+            with open(STATE_FILE, encoding="utf-8") as f:
+                state = json.load(f)
+        except Exception as e:
+            log.warning(f"[Tracker] state file corrotto, ignoro: {e}")
+            try: STATE_FILE.unlink(missing_ok=True)
+            except Exception: pass
+            return
+
+        saved_date = state.get("date", "")
+        accumulated = state.get("accumulated", {}) or {}
+        project_meta = state.get("project_meta", {}) or {}
+
+        if not accumulated:
+            try: STATE_FILE.unlink(missing_ok=True)
+            except Exception: pass
+            return
+
+        today = date.today().isoformat()
+        if saved_date == today:
+            # Stesso giorno — recovery diretto in memoria
+            self.accumulated = {k: float(v) for k, v in accumulated.items()}
+            self.project_meta = project_meta
+            tot_min = sum(self.accumulated.values()) / 60
+            log.info(f"[Tracker] Recovery state — {len(self.accumulated)} progetti, {tot_min:.1f} min recuperati")
+        else:
+            # Giorno precedente — costruisce payload pending con la data corretta
+            payload = {
+                "source": "cimatron",
+                "workstation": self.workstation,
+                "date": saved_date,
+                "flushed_at": datetime.now().isoformat(),
+                "sessions": [
+                    {
+                        "project":    pid,
+                        "commessa":   project_meta.get(pid, {}).get("commessa", pid),
+                        "operazione": project_meta.get(pid, {}).get("operazione", ""),
+                        "full_path":  project_meta.get(pid, {}).get("full_path"),
+                        "seconds":    int(secs),
+                        "hours":      round(secs / 3600, 3),
+                    }
+                    for pid, secs in accumulated.items()
+                ],
+            }
+            self._save_pending(payload)
+            log.info(
+                f"[Tracker] Recovery cross-day — {len(accumulated)} progetti di {saved_date} "
+                f"salvati come pending (saranno inviati al primo flush)"
+            )
+
+        try: STATE_FILE.unlink(missing_ok=True)
+        except Exception: pass
 
     def _retry_pending(self):
         if not SESSIONS_FILE.exists():

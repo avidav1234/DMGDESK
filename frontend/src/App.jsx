@@ -125,16 +125,19 @@ function GlobalStatusBar() {
   )
 }
 
-// Polling globale â€” gira sempre, indipendentemente dalla pagina aperta
+// Polling globale — gira solo quando il tab è visibile.
+// Su un client multi-tab (es. ufficio + officina), N tab nascosti continuavano
+// a polleggiare ogni 5s aumentando il carico server senza valore aggiunto.
+// Ora i tab in background sono silenziati; tornando in primo piano fanno una
+// catch-up immediata.
 function GlobalPoller() {
   useEffect(() => {
     let isRunning = false
     const tick = async () => {
+      if (document.hidden) return        // tab nascosto → skip
       if (isRunning) return
       isRunning = true
       try {
-        // SOLO LETTURA â€” legge il risultato dell'ultimo ciclo del poller interno.
-        // Nessuna scrittura dal frontend â€” elimina race condition con N client aperti.
         const r = await fetch('/api/macchina-live/tick')
         if (!r.ok) return
         const d = await r.json()
@@ -144,7 +147,13 @@ function GlobalPoller() {
     }
     tick()
     const t = setInterval(tick, 5000)
-    return () => clearInterval(t)
+    // Catch-up immediato quando il tab torna visibile
+    const onVis = () => { if (!document.hidden) tick() }
+    document.addEventListener('visibilitychange', onVis)
+    return () => {
+      clearInterval(t)
+      document.removeEventListener('visibilitychange', onVis)
+    }
   }, [])
   return null
 }

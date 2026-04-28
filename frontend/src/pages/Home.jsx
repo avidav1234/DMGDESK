@@ -102,18 +102,26 @@ export default function Home(){
     // Refresh ore progetto ogni 5min
     const t5=setInterval(()=>{ progettoCorrenteRef.current = null }, 300000)
 
-    // Pallet: ascolta GlobalPoller invece di poll separato (era ogni 15s)
-    // GlobalPoller già gira ogni 5s → nessuna richiesta aggiuntiva
-    const onStati = () => {
+    // Pallet: leggi direttamente dal payload del GlobalPoller — niente fetch
+    // separato. /api/macchina-live/tick include `pallets` (snapshot allineato
+    // al tick del backend), quindi /api/pallet/ non serve qui.
+    const onStati = (e) => {
       if(sig.aborted) return
-      fetch('/api/pallet/').then(r=>r.ok?r.json():{pallet:[]})
-        .then(d=>{ if(!sig.aborted) setPallet(d.pallet||[]) }).catch(()=>{})
+      const p = e?.detail?.pallets
+      if(Array.isArray(p)) setPallet(p)
     }
     window.addEventListener('dmgdesk:stati-aggiornati', onStati)
 
+    // Fallback ogni 60s: in caso il backend sia in stato stale (log macchina
+    // congelato), il tick non aggiorna `pallets` e il client resterebbe indietro.
+    const t9 = setInterval(()=>{
+      fetch('/api/pallet/').then(r=>r.ok?r.json():{pallet:[]})
+        .then(d=>{ if(!sig.aborted) setPallet(d.pallet||[]) }).catch(()=>{})
+    }, 60000)
+
     return()=>{
       ac.abort()
-      clearInterval(t2); clearInterval(t3); clearInterval(t4); clearInterval(t5); clearInterval(t6); clearInterval(t7); clearInterval(t8)
+      clearInterval(t2); clearInterval(t3); clearInterval(t4); clearInterval(t5); clearInterval(t6); clearInterval(t7); clearInterval(t8); clearInterval(t9)
       window.removeEventListener('dmgdesk:stati-aggiornati', onStati)
     }
   },[])
@@ -426,15 +434,25 @@ export default function Home(){
       const h=Math.floor(sec/3600), m=Math.round((sec%3600)/60)
       return m>0?`~${h}h ${m}m`:`~${h}h`
     }
+    // Priorità tempi (rivista): il valore TEORICO M6/CAM è la fonte primaria.
+    // La media reale dei cicli registrati può essere falsata da esecuzioni
+    // parziali/interrotte (es. programma riavviato → durata_sec di pochi
+    // secondi che gonfia la media verso il basso). Usandola come priorità
+    // primaria si generano ETA assurde (es. 5 min teorici → <1 min mostrato).
+    // Ora: tempoStimato sempre primo se presente; media reale solo come
+    // fallback per programmi senza M6 valorizzato.
     const calcolaTempi=(lista)=>{
       let sec=0, haStima=false
       for(const p of lista){
-        const fn=(p.filename||'').toUpperCase()
-        const tc=tempiCiclo[fn]
-        if(tc?.n>=2){ sec+=tc.media_sec; haStima=true }
-        else if(p.tempoStimato){ sec+=parseInt(p.tempoStimato)*60; haStima=true }
-        else if(mediaLocale){ sec+=mediaLocale; haStima=true }
-        else if(mediaGlobale){ sec+=mediaGlobale }
+        const stim = p.tempoStimato ? parseInt(p.tempoStimato) : 0
+        if(stim > 0){ sec += stim*60; haStima=true }
+        else {
+          const fn = (p.filename||'').toUpperCase()
+          const tc = tempiCiclo[fn]
+          if(tc?.n>=2){ sec+=tc.media_sec; haStima=true }
+          else if(mediaLocale){ sec+=mediaLocale; haStima=true }
+          else if(mediaGlobale){ sec+=mediaGlobale }
+        }
       }
       return { sec, haStima }
     }
@@ -961,7 +979,7 @@ export default function Home(){
                 const isVuoto=c.label==='VUOTO'
                 return(
                   <div key={n}
-                    onClick={info?()=>nav('/progetti',{state:{openId:info.proj.id}}):undefined}
+                    onClick={info?()=>{sessionStorage.setItem('dmgdesk_apri_progetto_id',info.proj.id);nav('/progetti')}:undefined}
                     style={{
                       background: isVuoto ? '#fafafa' : c.bg,
                       border: `1.5px solid ${isVuoto ? '#e8ecf0' : c.border}`,
@@ -1230,7 +1248,7 @@ export default function Home(){
                   {palletAttivi.map(({n,info,eta,colors},i)=>{
                     const isLive=colors.label==='LIVE'
                     return(
-                      <div key={n} onClick={()=>nav('/progetti',{state:{openId:info.proj.id}})}
+                      <div key={n} onClick={()=>{sessionStorage.setItem('dmgdesk_apri_progetto_id',info.proj.id);nav('/progetti')}}
                         style={{display:'flex',alignItems:'center',gap:8,
                           padding:'7px 0',cursor:'pointer',
                           borderTop:i>0?'1px solid #ede9fe':'none'}}>

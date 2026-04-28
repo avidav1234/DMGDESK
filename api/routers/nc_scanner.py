@@ -456,20 +456,29 @@ def scansiona_directory(config: dict) -> dict:
         # standard nel filename).
         info_fname = _estrai_info_filename(mpf_path.name)
         commessa_fname = (info_fname.get("commessa") or "").strip()
+        # File "0_*": template macchina (0_MAIN_, 0_UT_, 0_M6_, …). Non sono
+        # programmi di lavorazione e parsano commessa="0" → falso mismatch.
+        # Stessa logica per SCAR e IPM. Saltati silenziosamente, niente log
+        # rumoroso che blocca lo stream sync su share di rete.
         is_servizio = (
-            mpf_path.name.upper().startswith("0_MAIN")
+            mpf_path.name.upper().startswith("0_")
             or "SCAR" in mpf_path.stem.upper()
             or "_IPM_" in mpf_path.name.upper()
         )
         if commessa_fname and not is_servizio:
             if commessa_fname.upper() != commessa.upper():
-                log.warning(
-                    f"nc_scanner: file rifiutato (commessa mismatch): "
+                # Aggregato: incrementa contatore + lista, log singolo a fine scansione.
+                # Logging sync su share di rete con N warning blocca per minuti.
+                stats.setdefault("rifiutati_mismatch", []).append(
                     f"cartella={commessa} filename={commessa_fname} → {mpf_path.name}"
                 )
                 stats["orfani"] += 1
-                stats.setdefault("rifiutati_mismatch", []).append(str(mpf_path))
                 continue
+        elif is_servizio and mpf_path.name.upper().startswith("0_") and \
+             not mpf_path.name.upper().startswith("0_MAIN"):
+            # File di servizio (0_UT_, 0_M6_, ecc.) NON sono programmi di
+            # lavorazione veri. Salta del tutto la registrazione come programma.
+            continue
 
         # Fase: la cartella tra posizione e file
         # Se len==3: commessa/posizione/file.MPF → nessuna fase esplicita
@@ -657,6 +666,15 @@ def scansiona_directory(config: dict) -> dict:
             f"-{stats['rimossi_orfani']} orfani da_fare rimossi"
         )
 
+    # Log aggregato dei mismatch (max 5 esempi nel testo, count totale)
+    rifiutati = stats.get("rifiutati_mismatch") or []
+    if rifiutati:
+        esempi = "; ".join(rifiutati[:5])
+        suffix = f" (+{len(rifiutati)-5} altri)" if len(rifiutati) > 5 else ""
+        log.warning(
+            f"nc_scanner: {len(rifiutati)} file rifiutati per commessa mismatch — {esempi}{suffix}"
+        )
+
     stats["ok"] = True
     return stats
 
@@ -664,11 +682,20 @@ def scansiona_directory(config: dict) -> dict:
 # ── Job periodico ──────────────────────────────────────────────────────────────
 
 async def job_nc_scanner():
-    """Chiamato ogni 10 minuti dallo scheduler in main.py."""
+    """Chiamato dallo scheduler in main.py.
+
+    `scansiona_directory` è una funzione SINCRONA che fa rglob ricorsivo +
+    stat su ogni file su una share di rete (potenzialmente migliaia di file)
+    e parse di MPF. Eseguita inline nell'event loop bloccava per decine di
+    secondi tutto il backend (poller, GET pallet/tick, ecc.).
+    Spostata in un thread executor per non bloccare l'asyncio loop.
+    """
+    import asyncio as _aio
     config = carica_configurazione()
+    loop = _aio.get_running_loop()
     try:
         async with _write_lock:
-            result = scansiona_directory(config)
+            result = await loop.run_in_executor(None, scansiona_directory, config)
         if result.get("aggiunti") or result.get("aggiornati"):
             log.info(
                 f"nc_scanner: {result['scansionati']} file, "
@@ -685,10 +712,13 @@ async def job_nc_scanner():
 @router.post("/scansiona")
 @router.get("/scansiona")
 async def scansiona_ora():
-    """Esegue la scansione immediatamente (senza attendere lo scheduler)."""
+    """Esegue la scansione immediatamente (senza attendere lo scheduler).
+    Eseguita in thread executor: non blocca l'event loop asyncio."""
+    import asyncio as _aio
     config = carica_configurazione()
+    loop = _aio.get_running_loop()
     async with _write_lock:
-        result = scansiona_directory(config)
+        result = await loop.run_in_executor(None, scansiona_directory, config)
     return result
 
 
@@ -697,12 +727,15 @@ async def riscansiona_tutto():
     """
     Forza la riscansione di tutti i file (reset cache mtime).
     Utile dopo aggiornamenti al parser per riacquisire metadati mancanti.
+    Eseguita in thread executor: non blocca l'event loop asyncio.
     """
+    import asyncio as _aio
     global _mtime_cache
     _mtime_cache = {}
     config = carica_configurazione()
+    loop = _aio.get_running_loop()
     async with _write_lock:
-        result = scansiona_directory(config)
+        result = await loop.run_in_executor(None, scansiona_directory, config)
     result["cache_reset"] = True
     return result
 

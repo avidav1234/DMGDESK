@@ -158,36 +158,55 @@ def simula_tick(projects, pallets, mpf_filename, stato_pgm, pallet_num,
                     continue
                 _gestisci_cross_pallet(p_altro, pallet_data, now_str, updates)
 
-            # Logica sequenziale: marca completato i programmi del MAIN prima del corrente
+            # Logica sequenziale v2.5: ignora IPM
             snap = progetto_con_match.get("main_snapshot") or {}
             main_list = snap.get("main_programmi") or []
             if main_list:
                 def _norm(fn):
                     return (fn or "").upper().replace(".MPF", "").strip()
-                main_norm = [_norm(p) for p in main_list]
+
+                # Indice tipoGruppo per filename
+                tipo_per_fn = {}
+                for s_pre in progetto_con_match.get("steps", []):
+                    for t_pre in s_pre.get("tasks", []):
+                        if t_pre.get("text", "").strip().lower() != "fresatura":
+                            continue
+                        for pgm_pre in t_pre.get("programs", []):
+                            fn_n = _norm(pgm_pre.get("filename"))
+                            if fn_n:
+                                tipo_per_fn[fn_n] = pgm_pre.get("tipoGruppo", "fresatura")
+
+                main_norm_fresatura = [
+                    _norm(p) for p in main_list
+                    if tipo_per_fn.get(_norm(p), "fresatura") != "ipm"
+                ]
                 tgt_norm = _norm(mpf_filename)
-                try:
-                    idx = main_norm.index(tgt_norm)
-                except ValueError:
-                    idx = -1
-                if idx > 0:
-                    precedenti = set(main_norm[:idx])
-                    for s in progetto_con_match.get("steps", []):
-                        for t in s.get("tasks", []):
-                            if t.get("text", "").strip().lower() != "fresatura":
-                                continue
-                            for pgm in t.get("programs", []):
-                                # v2: IPM trattati come fresatura
-                                if pgm.get("stato") != "in_main":
+                tgt_tipo = tipo_per_fn.get(tgt_norm, "fresatura")
+
+                if tgt_tipo != "ipm":
+                    try:
+                        idx = main_norm_fresatura.index(tgt_norm)
+                    except ValueError:
+                        idx = -1
+                    if idx > 0:
+                        precedenti = set(main_norm_fresatura[:idx])
+                        for s in progetto_con_match.get("steps", []):
+                            for t in s.get("tasks", []):
+                                if t.get("text", "").strip().lower() != "fresatura":
                                     continue
-                                if _norm(pgm.get("filename")) in precedenti:
-                                    pgm["stato"] = "completato"
-                                    pgm["tempoInizio"] = pgm.get("tempoInizio") or now_str
-                                    pgm["tempoFine"] = now_str
-                                    attesi = [(u.get("alias") or "").upper().strip()
-                                              for u in (pgm.get("utensili") or []) if u.get("alias")]
-                                    pgm["_utensili_visti"] = attesi
-                                    pgm["_completato_per_sequenza"] = True
+                                for pgm in t.get("programs", []):
+                                    if pgm.get("tipoGruppo") == "ipm":
+                                        continue
+                                    if pgm.get("stato") != "in_main":
+                                        continue
+                                    if _norm(pgm.get("filename")) in precedenti:
+                                        pgm["stato"] = "completato"
+                                        pgm["tempoInizio"] = pgm.get("tempoInizio") or now_str
+                                        pgm["tempoFine"] = now_str
+                                        attesi = [(u.get("alias") or "").upper().strip()
+                                                  for u in (pgm.get("utensili") or []) if u.get("alias")]
+                                        pgm["_utensili_visti"] = attesi
+                                        pgm["_completato_per_sequenza"] = True
 
             # Marca corrente in_lavorazione, verifica fratelli
             tgt = mpf_filename.upper().replace(".MPF", "").strip()
@@ -1123,6 +1142,100 @@ def test_BUG_v24_grezzo_solo_da_fare_resta_grezzo():
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# v2.5 — Bug logica sequenziale con IPM in fondo al MAIN (4298_0007)
+# ═══════════════════════════════════════════════════════════════════════════
+
+def test_BUG_v25_ipm_non_triggera_sequenza():
+    """
+    Bug osservato sul progetto 4298_0007:
+    Il MAIN ha 47 fresature seguite da 4 IPM (indici 47-50).
+    Quando l'operatore lancia un IPM intermedio (es. IPM_001 a indice 47),
+    la vecchia logica sequenziale marcava completato TUTTI i programmi
+    con indice <47, includendo le 13 fresature in_main residue.
+    Fix v2.5: gli IPM NON triggerano la retro-marcatura sequenziale.
+    """
+    print("\n[BUG-V25] IPM lanciato non triggera retro-marcatura")
+    pA = mk_progetto("projA", "A", [
+        # 5 fresature, alcune già completate, alcune ancora in_main
+        mk_pgm("A_001", "completato", utensili=["T1"], utensili_visti=["T1"]),
+        mk_pgm("A_002", "completato", utensili=["T2"], utensili_visti=["T2"]),
+        mk_pgm("A_003", "in_main", utensili=["T3"]),  # NON deve diventare completato
+        mk_pgm("A_004", "in_main", utensili=["T4"]),  # NON deve diventare completato
+        # IPM in fondo al MAIN (come in 4298_0007)
+        {"filename": "A_IPM_001", "stato": "in_main", "tipoGruppo": "ipm",
+         "utensili": [{"alias": "RENISHAW"}]},
+    ], main_programmi=[
+        "A_001.MPF", "A_002.MPF", "A_003.MPF", "A_004.MPF", "A_IPM_001.MPF"
+    ])
+    pal1 = mk_pallet(1, "projA", "in_lavorazione")
+
+    # L'operatore lancia l'IPM (per misurazione intermedia)
+    simula_tick([pA], [pal1], "A_IPM_001", 1, pallet_num=1, utensile_attivo="RENISHAW")
+
+    pgm_003 = pA["steps"][0]["tasks"][0]["programs"][2]
+    pgm_004 = pA["steps"][0]["tasks"][0]["programs"][3]
+    pgm_ipm  = pA["steps"][0]["tasks"][0]["programs"][4]
+
+    check("BUG-V25 A_003 NON retro-marcato (era in_main)", pgm_003.get("stato"), "in_main")
+    check("BUG-V25 A_004 NON retro-marcato (era in_main)", pgm_004.get("stato"), "in_main")
+    check("BUG-V25 A_003 senza flag _completato_per_sequenza",
+          pgm_003.get("_completato_per_sequenza"), None)
+    check("BUG-V25 IPM corrente è in_lavorazione", pgm_ipm.get("stato"), "in_lavorazione")
+
+
+def test_BUG_v25_fresatura_retromarca_solo_fresature_precedenti():
+    """
+    Quando una fresatura N parte, retro-marca solo le fresature precedenti
+    nel MAIN, mai gli IPM (anche se l'IPM era prima di N nel MAIN per
+    qualche motivo di ordinamento).
+    """
+    print("\n[BUG-V25b] Fresatura N retro-marca solo fresature precedenti")
+    pA = mk_progetto("projA", "A", [
+        mk_pgm("A_001", "in_main", utensili=["T1"]),
+        # IPM mischiato in mezzo (caso patologico)
+        {"filename": "A_IPM_X", "stato": "in_main", "tipoGruppo": "ipm",
+         "utensili": [{"alias": "RENISHAW"}]},
+        mk_pgm("A_002", "in_main", utensili=["T2"]),
+        mk_pgm("A_003", "in_main", utensili=["T3"]),  # corrente
+    ], main_programmi=[
+        "A_001.MPF", "A_IPM_X.MPF", "A_002.MPF", "A_003.MPF"
+    ])
+    pal1 = mk_pallet(1, "projA", "grezzo")
+
+    # Parte A_003 (fresatura)
+    simula_tick([pA], [pal1], "A_003", 1, pallet_num=1, utensile_attivo="T3")
+
+    pgm_001 = pA["steps"][0]["tasks"][0]["programs"][0]
+    pgm_ipm = pA["steps"][0]["tasks"][0]["programs"][1]
+    pgm_002 = pA["steps"][0]["tasks"][0]["programs"][2]
+
+    check("BUG-V25b A_001 retro-marcato (fresatura precedente)",
+          pgm_001.get("stato"), "completato")
+    check("BUG-V25b A_002 retro-marcato (fresatura precedente)",
+          pgm_002.get("stato"), "completato")
+    check("BUG-V25b A_IPM_X NON toccato (è IPM)",
+          pgm_ipm.get("stato"), "in_main")
+    check("BUG-V25b A_IPM_X senza flag sequenza",
+          pgm_ipm.get("_completato_per_sequenza"), None)
+
+
+def test_BUG_v25_solo_fresature_invariato():
+    """Senza IPM nel MAIN, la sequenza funziona come prima (regressione)."""
+    print("\n[BUG-V25c] Progetto solo fresature: sequenza funziona normalmente")
+    pA = mk_progetto("projA", "A", [
+        mk_pgm("A_001", "in_main", utensili=["T1"]),
+        mk_pgm("A_002", "in_main", utensili=["T2"]),
+        mk_pgm("A_003", "in_main", utensili=["T3"]),
+    ], main_programmi=["A_001.MPF", "A_002.MPF", "A_003.MPF"])
+    pal1 = mk_pallet(1, "projA", "grezzo")
+    simula_tick([pA], [pal1], "A_003", 1, pallet_num=1, utensile_attivo="T3")
+    pgm_001 = pA["steps"][0]["tasks"][0]["programs"][0]
+    pgm_002 = pA["steps"][0]["tasks"][0]["programs"][1]
+    check("BUG-V25c A_001 retro-marcato", pgm_001.get("stato"), "completato")
+    check("BUG-V25c A_002 retro-marcato", pgm_002.get("stato"), "completato")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # MAIN
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -1177,6 +1290,11 @@ if __name__ == "__main__":
     # v2.4 — Fix bug rigenerazione MAIN
     test_BUG_v24_rigen_main_pallet_resta_grezzo()
     test_BUG_v24_grezzo_solo_da_fare_resta_grezzo()
+
+    # v2.5 — Bug logica sequenziale con IPM (4298_0007)
+    test_BUG_v25_ipm_non_triggera_sequenza()
+    test_BUG_v25_fresatura_retromarca_solo_fresature_precedenti()
+    test_BUG_v25_solo_fresature_invariato()
 
     print(f"\n{'='*60}")
     passed = sum(_results)

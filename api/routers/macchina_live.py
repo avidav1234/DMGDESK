@@ -1228,61 +1228,94 @@ async def aggiorna_stati_da_log():
                 if pd:   proj_dirty   = True
                 if pal_d: pallet_dirty = True
 
-        # ── Logica sequenziale (v2) ─────────────────────────────────────────
-        # Se il programma in esecuzione è alla posizione N nel MAIN, tutti i
-        # programmi del MAIN con posizione < N e stato `in_main` vengono
-        # marcati `completato`. Si fidiamo dell'ordine EXTCALL del MAIN: il log
-        # Siemens può perdere qualche notifica, e se l'operatore ha saltato
-        # un programma è sua responsabilità (il MAIN è la verità).
-        # - programmi `da_fare` (mai in MAIN) non vengono toccati
-        # - programmi `completato` restano `completato`
-        # - match case-insensitive su filename, con/senza .MPF
+        # ── Logica sequenziale (v2.5) ───────────────────────────────────────
+        # Se il programma di FRESATURA in esecuzione è alla posizione N nel
+        # MAIN (considerando solo le fresature, ignorando gli IPM), tutti i
+        # programmi di FRESATURA del MAIN con posizione < N e stato `in_main`
+        # vengono marcati `completato`.
+        #
+        # IPM ESCLUSI dalla logica sequenziale:
+        # - Quando un IPM viene eseguito, non triggera retro-marcatura
+        #   (l'operatore può lanciare un IPM in qualsiasi momento per
+        #   misurazione intermedia).
+        # - Quando una fresatura N parte, retro-marca solo le fresature
+        #   precedenti del MAIN, mai gli IPM.
+        # Bug fix: in passato, gli IPM in fondo al MAIN snapshot causavano
+        # retro-marcatura erronea di tutte le fresature precedenti quando
+        # l'operatore lanciava un IPM intermedio.
         if progetto_con_match:
             snap = progetto_con_match.get("main_snapshot") or {}
             main_pgm_list = snap.get("main_programmi") or []
             if main_pgm_list:
                 def _norm(fn):
                     return (fn or "").upper().replace(".MPF", "").strip()
-                main_norm = [_norm(p) for p in main_pgm_list]
-                tgt_norm = _norm(mpf_filename)
-                try:
-                    idx_corrente = main_norm.index(tgt_norm)
-                except ValueError:
-                    idx_corrente = -1
 
-                if idx_corrente > 0:
-                    # Programmi del MAIN PRIMA del corrente, se `in_main` → completato
-                    precedenti = set(main_norm[:idx_corrente])
-                    for step in progetto_con_match.get("steps", []):
-                        for task in step.get("tasks", []):
-                            if task.get("text", "").strip().lower() != "fresatura":
-                                continue
-                            for pgm in task.get("programs", []):
-                                # v2: IPM trattati come fresatura
-                                if pgm.get("stato") != "in_main":
+                # Indice rapido: filename normalizzato → tipoGruppo del programma
+                # nel progetto. Usato per filtrare IPM dalla lista MAIN.
+                tipo_per_filename: dict[str, str] = {}
+                for step_pre in progetto_con_match.get("steps", []):
+                    for task_pre in step_pre.get("tasks", []):
+                        if task_pre.get("text", "").strip().lower() != "fresatura":
+                            continue
+                        for pgm_pre in task_pre.get("programs", []):
+                            fn_n = _norm(pgm_pre.get("filename"))
+                            if fn_n:
+                                tipo_per_filename[fn_n] = pgm_pre.get("tipoGruppo", "fresatura")
+
+                # Costruisci main_norm SOLO con fresature, escludendo IPM
+                main_norm_fresatura = [
+                    _norm(p) for p in main_pgm_list
+                    if tipo_per_filename.get(_norm(p), "fresatura") != "ipm"
+                ]
+
+                tgt_norm = _norm(mpf_filename)
+                tgt_tipo = tipo_per_filename.get(tgt_norm, "fresatura")
+
+                # Se il programma corrente è IPM, NON retro-marcare niente.
+                # Gli IPM sono lavorazioni indipendenti che non implicano il
+                # completamento delle fresature precedenti nel MAIN.
+                if tgt_tipo == "ipm":
+                    pass  # skip retro-marcatura
+                else:
+                    try:
+                        idx_corrente = main_norm_fresatura.index(tgt_norm)
+                    except ValueError:
+                        idx_corrente = -1
+
+                    if idx_corrente > 0:
+                        # Programmi di FRESATURA del MAIN PRIMA del corrente,
+                        # se `in_main` → completato.
+                        precedenti = set(main_norm_fresatura[:idx_corrente])
+                        for step in progetto_con_match.get("steps", []):
+                            for task in step.get("tasks", []):
+                                if task.get("text", "").strip().lower() != "fresatura":
                                     continue
-                                fn_norm = _norm(pgm.get("filename"))
-                                if fn_norm in precedenti:
-                                    # Retro-marca: completato con utensili attesi
-                                    # pre-riempiti (regola d'oro considera OK).
-                                    # Bug 7 fix: setta anche tempoInizio = tempoFine
-                                    # (durata zero, ma evita NoneType in consumer).
-                                    pgm["stato"] = "completato"
-                                    pgm["tempoInizio"] = pgm.get("tempoInizio") or now_str
-                                    pgm["tempoFine"] = pgm.get("tempoFine") or now_str
-                                    attesi = [
-                                        (u.get("alias") or "").upper().strip()
-                                        for u in (pgm.get("utensili") or [])
-                                        if u.get("alias")
-                                    ]
-                                    pgm["_utensili_visti"] = attesi
-                                    pgm["_completato_per_sequenza"] = True
-                                    proj_dirty = True
-                                    updates["completato"] += 1
-                                    updates.setdefault("sequenziali", []).append({
-                                        "programma": pgm.get("filename"),
-                                        "msg": f"{pgm.get('filename')}: retro-marcato (sequenza MAIN)"
-                                    })
+                                for pgm in task.get("programs", []):
+                                    # Salta IPM: mai retro-marcati
+                                    if pgm.get("tipoGruppo") == "ipm":
+                                        continue
+                                    if pgm.get("stato") != "in_main":
+                                        continue
+                                    fn_norm = _norm(pgm.get("filename"))
+                                    if fn_norm in precedenti:
+                                        # Retro-marca: completato con utensili attesi
+                                        # pre-riempiti (regola d'oro considera OK).
+                                        pgm["stato"] = "completato"
+                                        pgm["tempoInizio"] = pgm.get("tempoInizio") or now_str
+                                        pgm["tempoFine"] = pgm.get("tempoFine") or now_str
+                                        attesi = [
+                                            (u.get("alias") or "").upper().strip()
+                                            for u in (pgm.get("utensili") or [])
+                                            if u.get("alias")
+                                        ]
+                                        pgm["_utensili_visti"] = attesi
+                                        pgm["_completato_per_sequenza"] = True
+                                        proj_dirty = True
+                                        updates["completato"] += 1
+                                        updates.setdefault("sequenziali", []).append({
+                                            "programma": pgm.get("filename"),
+                                            "msg": f"{pgm.get('filename')}: retro-marcato (sequenza MAIN)"
+                                        })
 
         if progetto_con_match:
             tgt = mpf_filename.upper().replace(".MPF","").strip()

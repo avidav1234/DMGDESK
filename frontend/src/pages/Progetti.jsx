@@ -1615,7 +1615,7 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
   useEffect(()=>{
     const nome = project.name?.toUpperCase()
     if(!nome) return
-    fetch(`/api/step/simili/${encodeURIComponent(nome)}?top=3&soglia=60`)
+    fetch(`/api/step/simili/${encodeURIComponent(nome)}?top=3&soglia=80`)
       .then(r=>r.ok?r.json():null)
       .then(d=>{ if(d) setSchedaPredittiva(d) })
       .catch(()=>{})

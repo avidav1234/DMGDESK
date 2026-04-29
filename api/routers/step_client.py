@@ -7,7 +7,7 @@ con il microservizio.
 
 GET  /api/step/stato
 POST /api/step/analizza        { commessa, path_step }
-GET  /api/step/simili/{commessa}?top=5&soglia=60
+GET  /api/step/simili/{commessa}?top=5&soglia=80
 GET  /api/step/storico
 """
 
@@ -91,7 +91,7 @@ async def analizza_upload(
 
 
 @router.get("/simili/{commessa}")
-async def simili(commessa: str, top: int = 5, soglia: float = 60.0):
+async def simili(commessa: str, top: int = 5, soglia: float = 80.0):
     try:
         return await _call("get", f"/simili/{commessa}",
                            params={"top": top, "soglia": soglia})

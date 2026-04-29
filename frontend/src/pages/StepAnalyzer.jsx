@@ -76,7 +76,7 @@ export default function StepAnalyzer() {
   const handleSimili = async (nome) => {
     setCommessaSim(nome); setSimili(null); setError(null)
     try {
-      const r = await API(`/simili/${encodeURIComponent(nome)}?top=5&soglia=50`)
+      const r = await API(`/simili/${encodeURIComponent(nome)}?top=5&soglia=80`)
       const d = await r.json()
       if (!r.ok) throw new Error(d.detail || 'Errore')
       setSimili(d)
@@ -95,7 +95,7 @@ export default function StepAnalyzer() {
           <div style={{fontSize:16,fontWeight:800,color:'#0d2d5e'}}>STEP Analyzer</div>
           <div style={{fontSize:11,color:'#94a3b8',display:'flex',alignItems:'center',gap:4}}>
             Similarità geometrica tra commesse · microservizio porta 8002
-            <InfoTooltip text={"Analisi geometrica STEP: confronta le commesse in base a forma, topologia e volume.\n\nPesi del punteggio di similarità:\n• Topologia 40% — numero di facce, cilindri, bordi\n• Forma 35% — rapporti geometrici e proporzioni\n• Volume/Area 25% — dimensioni assolute\n\nSoglia minima: 50% per comparire nei risultati.\nUtile per stimare tempi di lavorazione di nuove commesse simili a quelle già eseguite."} />
+            <InfoTooltip text={"Analisi geometrica STEP: confronta le commesse in base a forma, topologia e volume.\n\nPesi del punteggio di similarità:\n• Topologia 40% — numero di facce, cilindri, bordi\n• Forma 35% — rapporti geometrici e proporzioni\n• Volume/Area 25% — dimensioni assolute\n\nSoglia minima: 80% per comparire nei risultati (sotto questa soglia i pezzi sono troppo diversi per essere riferimento attendibile).\nUtile per stimare tempi di lavorazione di nuove commesse simili a quelle già eseguite."} />
           </div>
         </div>
         {stato && (
@@ -209,7 +209,7 @@ export default function StepAnalyzer() {
               </div>
               {simili.simili.length === 0 ? (
                 <div style={{color:'#94a3b8',fontSize:12,padding:'20px 0',textAlign:'center'}}>
-                  Nessuna commessa simile trovata (soglia 50%)
+                  Nessuna commessa simile trovata (soglia 80%)
                 </div>
               ) : (
                 <div style={{display:'flex',flexDirection:'column',gap:8}}>

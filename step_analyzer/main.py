@@ -186,7 +186,11 @@ def aggiorna_dati(commessa: str, req: AggiornaDatiRequest):
 
 
 @app.get("/simili/{commessa}")
-def simili(commessa: str, top: int=5, soglia: float=60.0):
+def simili(commessa: str, top: int=5, soglia: float=80.0):
+    # Soglia 80%: sotto questa percentuale i pezzi sono troppo diversi
+    # geometricamente per essere usati come riferimento di tempo lavorazione.
+    # Mostrare match al 60-70% creava aspettative sbagliate (pezzi solo
+    # vagamente simili presentati come "modello simile").
     db = _load_features()
     if commessa not in db:
         return {"commessa_ref": commessa, "n_totale": 0, "simili": [], "non_in_storico": True}

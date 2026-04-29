@@ -1296,6 +1296,16 @@ async def aggiorna_stati_da_log():
                                         continue
                                     if pgm.get("stato") != "in_main":
                                         continue
+                                    # Retro-marca SOLO se questo programma è
+                                    # transitato almeno una volta da `in_lavorazione`
+                                    # nel log (flag _visto_in_log = True). Se
+                                    # l'operatore ha saltato dei programmi che
+                                    # non sono mai entrati in macchina, restano
+                                    # in_main → pallet finirà guasto a fine ciclo
+                                    # → intervento manuale, evitando di registrare
+                                    # come "lavorato" qualcosa che non lo è stato.
+                                    if not pgm.get("_visto_in_log"):
+                                        continue
                                     fn_norm = _norm(pgm.get("filename"))
                                     if fn_norm in precedenti:
                                         # Retro-marca: completato con utensili attesi
@@ -1344,6 +1354,11 @@ async def aggiorna_stati_da_log():
                                 pgm["tempoInizio"] = now_str
                                 pgm["tempoFine"]   = None
                                 pgm["_utensili_visti"] = []
+                                # Marker: questo programma è stato visto dal log come attivo.
+                                # Persiste anche se torna a in_main per utensili mancanti.
+                                # Usato dalla logica sequenziale per evitare retro-marcatura
+                                # di programmi che l'operatore ha saltato.
+                                pgm["_visto_in_log"] = True
                                 pgm.pop("_completato_per_sequenza", None)
                                 proj_dirty = True
                                 updates["in_macchina"] += 1
@@ -1366,6 +1381,7 @@ async def aggiorna_stati_da_log():
                                 pgm["tempoInizio"] = now_str
                                 pgm["tempoFine"]   = None
                                 pgm["_utensili_visti"] = []
+                                pgm["_visto_in_log"] = True
                                 pgm.pop("_completato_per_sequenza", None)
                                 proj_dirty = True
                                 updates["in_macchina"] += 1

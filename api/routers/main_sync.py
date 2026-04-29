@@ -287,6 +287,10 @@ async def salva_main_snapshot(body: dict = Body(...)):
                     pgm["tempoFine"]   = None
                     pgm.pop("_utensili_visti", None)
                     pgm.pop("_completato_per_sequenza", None)
+                    # Reset marker "visto nel log": è un nuovo ciclo del MAIN,
+                    # le esecuzioni precedenti non contano. Solo un reale
+                    # passaggio da in_lavorazione lo riattiverà.
+                    pgm.pop("_visto_in_log", None)
                 else:
                     # Fuori dal nuovo MAIN
                     if cur_stato == "completato":
@@ -299,6 +303,7 @@ async def salva_main_snapshot(body: dict = Body(...)):
                         pgm["tempoFine"]   = None
                         pgm.pop("_utensili_visti", None)
                         pgm.pop("_completato_per_sequenza", None)
+                        pgm.pop("_visto_in_log", None)
 
     # Pallet associati al progetto: reset regola-d-oro-compliant
     # Tutto dentro async with _write_lock per evitare race con altri router.

@@ -53,14 +53,15 @@ jobs:
           cache: pip               # Cache dipendenze → build più veloci
 
       # 3. Installa dipendenze
-      #    customtkinter richiede display → in CI usiamo solo le lib headless
+      #    Usa requirements.txt per coprire tutte le librerie di runtime
+      #    (fastapi, pydantic, ecc. sono importate da api/routers/* che a sua
+      #    volta sono importati dai test in tests/test_pallet_logic_v2.py).
+      #    customtkinter richiede Tk a runtime ma si installa headless su
+      #    windows-latest senza problemi.
       - name: Installa dipendenze
         run: |
           python -m pip install --upgrade pip
-          pip install pytest pytest-cov
-          pip install pandas numpy
-          # customtkinter ha bisogno di Tk — in CI testiamo solo la logica pura
-          pip install customtkinter || echo "customtkinter non disponibile in CI (atteso)"
+          pip install -r requirements.txt
 
       # 4. Esegui i test con coverage
       - name: Esegui test pytest

@@ -539,18 +539,29 @@ def scansiona_directory(config: dict) -> dict:
         if existing:
             stato = existing.get("stato", "da_fare")
             if stato in ("in_main", "in_lavorazione", "completato", "in_macchina"):
-                # Non cambiamo lo stato, ma aggiorniamo i metadati
-                # tipoOp/diametro/dataPost/utensili sono nuovi — sempre aggiorna se mancanti
-                # utensile/tempoStimato — aggiorna solo se il nuovo valore è migliore
+                # Programma in stato attivo: NON cambiamo lo stato, ma i metadati
+                # del file MPF (CAM) sì — il file può essere rigenerato dal CAM
+                # con tempi o utensili diversi e il JSON deve allinearsi.
+                # BUG storico (pre-fix 2026-04-30): `utensile/tempoStimato/num_m6`
+                # venivano aggiornati solo se mancanti (`not existing.get(c)`),
+                # quindi un primo parse con valore sbagliato (es. tempoStimato=2)
+                # restava per sempre anche se il file MPF veniva ri-CAMmato con
+                # tempo corretto (es. 65 min). Causa visibile: ETA pallet
+                # mostrava "<1 min" su programmi con TEMPO: 01:04:48 nel MPF.
+                # NON tocchiamo `tempoInizio/tempoFine` perché sono storia reale.
                 meta_changed = False
-                for c in ["tipoOp", "diametro", "dataPost", "utensili", "utensili_lista"]:
+                for c in ["tipoOp", "diametro", "dataPost", "utensili",
+                          "utensili_lista", "utensile", "tempoStimato", "num_m6"]:
                     if meta.get(c) and existing.get(c) != meta[c]:
+                        old_v = existing.get(c)
                         existing[c] = meta[c]
                         meta_changed = True
-                for c in ["utensile", "tempoStimato", "num_m6"]:
-                    if meta.get(c) and not existing.get(c):
-                        existing[c] = meta[c]
-                        meta_changed = True
+                        if c == "tempoStimato":
+                            log.info(
+                                f"nc_scanner: tempoStimato aggiornato per "
+                                f"{existing.get('filename')}: {old_v} → {meta[c]} "
+                                f"(stato={stato})"
+                            )
                 # Q3 fix v2: ricalcola tipoGruppo anche per programmi attivi
                 if meta.get("tipoGruppo") and existing.get("tipoGruppo") != meta["tipoGruppo"]:
                     old_tipo = existing.get("tipoGruppo")

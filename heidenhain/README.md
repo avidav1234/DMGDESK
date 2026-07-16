@@ -7,9 +7,17 @@ Vedi il report completo: [`../REPORT_HEIDENHAIN_TNC640_REMOTE.md`](../REPORT_HEI
 > **Branch dedicato**: `feature/heidenhain-tnc640`. Non ancora integrato nel
 > backend/frontend principale.
 
-## Verifica sul campo (2026-07-16) — Mikron P800
+## Verifica sul campo (2026-07-16) — 2 × Mikron P800
 
-Macchina reale: **Mikron P800 (GF)**, TNC 640, **NC SW 340590-08 SP7**, IP `192.168.244.149`.
+Due macchine, **configurazione identica** (in `config.py`):
+
+| id | nome | IP | esito |
+|---|---|---|---|
+| `p800-1` | Mikron P800 #1 | `192.168.244.149` | ✅ VNC + LSV2/DNC ok |
+| `p800-2` | Mikron P800 #2 | `192.168.244.150` | ✅ VNC + LSV2/DNC ok |
+
+Entrambe: TNC 640, **NC SW 340590-08 SP7**, VNC aperto senza password, opzione 18
+(DNC) attiva, dati strutturati live. Dettaglio sotto (rilevato su `p800-1`):
 
 | Canale | Porta | Esito | Note |
 |---|---|---|---|
@@ -47,24 +55,24 @@ con._known_logins = tuple(set(con._known_logins) | {pyLSV2.Login.DNC})  # solo l
 ## Avvio
 
 ```sh
-# dalla root del repo
-# PowerShell:  $env:TNC_IP = "192.168.244.149"
-# bash:        export TNC_IP=192.168.244.149
+# dalla root del repo (le macchine sono in config.py; override via env TNC_MACHINES)
 py -m uvicorn heidenhain.bridge:app --host 0.0.0.0 --port 8010
 ```
 
-Poi apri `http://localhost:8010/` → visualizzatore live (auto-refresh).
+Poi apri `http://localhost:8010/` → elenco macchine → clic su una → visualizzatore live.
 
-Endpoint:
-- `GET /` — visualizzatore (immagine che si aggiorna ogni ~700 ms, regolabile)
-- `GET /screenshot.png` — un fotogramma PNG dello schermo (via VNC/RFB)
-- `GET /api/info` — versione + messaggi attivi + `dnc_attivo` (via LSV2)
-- `GET /api/connettivita` — check porte 5900/19000
+Endpoint (multi-macchina, `{mid}` = `p800-1` | `p800-2`):
+- `GET /` — elenco macchine
+- `GET /m/{mid}` — visualizzatore live (immagine auto-refresh, regolabile)
+- `GET /m/{mid}/screenshot.png` — un fotogramma PNG dello schermo (via VNC/RFB)
+- `GET /api/machines` — lista macchine configurate
+- `GET /api/m/{mid}/info` — stato live (versione, assi, programma+riga, override)
+- `GET /api/m/{mid}/connettivita` — check porte 5900/19000
 - `GET /healthz`
 
 Diagnosi rapida da PowerShell (senza avviare il bridge):
 ```powershell
-.\heidenhain\tools\Test-TncVnc.ps1 -Ip 192.168.244.149
+.\heidenhain\tools\Test-TncVnc.ps1 -Ip 192.168.244.149   # oppure .150
 ```
 
 ## Limiti attuali (onestà)

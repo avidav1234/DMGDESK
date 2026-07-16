@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>TNC 640 — Live ({{TNC_IP}})</title>
+  <title>{{NOME}} — Live TNC 640</title>
   <style>
     :root { color-scheme: light dark; }
     body { margin: 0; background: #111; color: #eee; font-family: system-ui, sans-serif; }
@@ -21,7 +21,8 @@
 <body>
   <header>
     <span id="dot" class="dot"></span>
-    <h1>TNC 640 &middot; {{TNC_IP}}</h1>
+    <a href="/" style="color:#58a6ff;text-decoration:none">&larr;</a>
+    <h1>{{NOME}} &middot; {{IP}}</h1>
     <label>refresh <span id="ms">700</span> ms
       <input id="rate" type="range" min="300" max="3000" step="100" value="700" />
     </label>
@@ -44,7 +45,7 @@
       const next = new Image();
       next.onload = () => { img.src = next.src; dot.className = 'dot ok'; };
       next.onerror = () => { dot.className = 'dot ko'; };
-      next.src = '/screenshot.png?t=' + Date.now();  // cache-busting
+      next.src = '/m/{{MID}}/screenshot.png?t=' + Date.now();  // cache-busting
     }
     function schedule() {
       if (timer) clearInterval(timer);

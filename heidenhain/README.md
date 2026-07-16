@@ -66,8 +66,14 @@ Tutte le pagine/endpoint macchina sono protetti dalla **master key `DMG_API_KEY`
 ```sh
 # PowerShell:  $env:DMG_API_KEY = "la-tua-master-key"   (oppure $env:DMG_BRIDGE_KEY)
 ```
-Vie d'accesso: browser `/login?api_key=LA_CHIAVE` (imposta un cookie), header
-`X-API-Key: LA_CHIAVE`, o query `?api_key=LA_CHIAVE`. `GET /healthz` resta aperto.
+Vie d'accesso: aprendo una pagina qualsiasi senza cookie compare un **form di
+login** (digiti la chiave → cookie impostato → torni alla pagina richiesta).
+In alternativa: header `X-API-Key: LA_CHIAVE` o query `?api_key=LA_CHIAVE`.
+`GET /healthz` resta aperto.
+
+**Integrazione nel frontend yellow hub**: pagina React pronta in
+`frontend/src/pages/Macchine.jsx` (iframe al bridge) — istruzioni di aggancio in
+[WIRING.md](WIRING.md). Non ancora collegata al router (frontend in lavorazione).
 
 ## Avvio
 

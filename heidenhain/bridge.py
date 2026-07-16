@@ -91,13 +91,38 @@ def _ip(mid: str) -> str:
 # ── Login / healthz (aperti) ─────────────────────────────────────────────────
 
 
+def _login_page(next_url: str = "/", error: str = "") -> str:
+    err = f'<p style="color:#f85149;margin:0;font-size:.85rem">{error}</p>' if error else ""
+    safe_next = next_url if next_url.startswith("/") else "/"
+    return (
+        "<!doctype html><meta charset='utf-8'><title>Accesso — TNC 640</title>"
+        "<style>body{font-family:system-ui,sans-serif;background:#111;color:#eee;"
+        "display:flex;height:100vh;margin:0;align-items:center;justify-content:center}"
+        "form{background:#1c1c1c;padding:1.6rem;border-radius:10px;border:1px solid #333;"
+        "display:flex;flex-direction:column;gap:.7rem;min-width:260px}"
+        "input{padding:.5rem;border-radius:6px;border:1px solid #444;background:#0d0d0d;color:#eee}"
+        "button{padding:.5rem;border-radius:6px;border:none;background:#2563eb;color:#fff;"
+        "font-weight:600;cursor:pointer}h1{font-size:1rem;margin:0}</style>"
+        "<form method='get' action='/login'>"
+        "<h1>Accesso admin — TNC 640</h1>" + err +
+        f"<input type='hidden' name='next' value='{safe_next}'>"
+        "<input name='api_key' type='password' placeholder='chiave admin' autofocus>"
+        "<button>Accedi</button></form>"
+    )
+
+
 @app.get("/login")
-def login(api_key: str = "") -> Response:
-    if _ADMIN_KEY and api_key and secrets.compare_digest(api_key, _ADMIN_KEY):
-        resp = RedirectResponse("/", status_code=303)
+def login(api_key: str = "", next: str = "/") -> Response:
+    safe_next = next if next.startswith("/") else "/"
+    if not _ADMIN_KEY:
+        raise HTTPException(status_code=503, detail="bridge chiuso: DMG_API_KEY non configurata")
+    if not api_key:
+        return HTMLResponse(_login_page(safe_next))
+    if secrets.compare_digest(api_key, _ADMIN_KEY):
+        resp = RedirectResponse(safe_next, status_code=303)
         resp.set_cookie(_COOKIE, api_key, httponly=True, samesite="lax")
         return resp
-    raise HTTPException(status_code=403, detail="chiave non valida")
+    return HTMLResponse(_login_page(safe_next, "chiave non valida"), status_code=401)
 
 
 @app.get("/healthz")
@@ -108,14 +133,16 @@ def healthz() -> dict:
 # ── Pagine e API (protette admin) ────────────────────────────────────────────
 
 
-@app.get("/", response_class=HTMLResponse, dependencies=[Depends(require_admin)])
-def index() -> str:
+@app.get("/", response_class=HTMLResponse)
+def index(request: Request) -> Response:
+    if not _is_admin(request.headers, request.query_params, request.cookies):
+        return HTMLResponse(_login_page("/"))
     righe = "\n".join(
         f'<li><a href="/m/{mid}">{m["nome"]}</a> '
         f'<span class="muted">{m["ip"]}</span></li>'
         for mid, m in MACHINES.items()
     )
-    return (
+    return HTMLResponse(
         "<!doctype html><meta charset='utf-8'>"
         "<title>TNC 640 — macchine</title>"
         "<style>body{font-family:system-ui,sans-serif;background:#111;color:#eee;"
@@ -125,12 +152,14 @@ def index() -> str:
     )
 
 
-@app.get("/m/{mid}", response_class=HTMLResponse, dependencies=[Depends(require_admin)])
-def live(mid: str) -> str:
+@app.get("/m/{mid}", response_class=HTMLResponse)
+def live(mid: str, request: Request) -> Response:
     m = MACHINES.get(mid)
     if not m:
         raise HTTPException(status_code=404, detail=f"macchina '{mid}' sconosciuta")
-    return (
+    if not _is_admin(request.headers, request.query_params, request.cookies):
+        return HTMLResponse(_login_page(f"/m/{mid}"))
+    return HTMLResponse(
         _LIVE_TPL.replace("{{MID}}", mid).replace("{{NOME}}", m["nome"]).replace("{{IP}}", m["ip"])
     )
 

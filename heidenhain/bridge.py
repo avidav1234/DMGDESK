@@ -1,15 +1,19 @@
 """Bridge HTTP di sola lettura per le macchine TNC 640 — app FastAPI standalone.
 
+Componente dell'ambiente **Yellow Hub** (le Mikron P800 / TNC 640 sono di YH,
+NON di DMG desk). Nessun accoppiamento con DMG desk: chiave e auth sono proprie
+del bridge. In futuro sara' integrato/proxato dentro Yellow Hub.
+
 Avvio (dalla root del repo):
-    # PowerShell: $env:DMG_API_KEY = "la-tua-master-key"
+    # PowerShell: $env:TNC_BRIDGE_KEY = "la-chiave-del-bridge"
     py -m uvicorn heidenhain.bridge:app --host 0.0.0.0 --port 8010
 
-ACCESSO ADMIN: tutte le pagine/endpoint macchina sono protetti dalla master key
-`DMG_API_KEY` (la stessa "admin" del backend principale). Vie ammesse:
+ACCESSO ADMIN: tutte le pagine/endpoint macchina sono protetti dalla chiave
+propria del bridge `TNC_BRIDGE_KEY`. Vie ammesse:
   - browser: apri  /login?api_key=LA_CHIAVE  (imposta un cookie e poi naviga)
   - header:  X-API-Key: LA_CHIAVE
   - query:   ?api_key=LA_CHIAVE
-Se DMG_API_KEY non e' configurata, il bridge e' CHIUSO (nessun accesso).
+Se TNC_BRIDGE_KEY non e' configurata, il bridge e' CHIUSO (nessun accesso).
 
 Endpoint (multi-macchina, `{mid}` = p800-1 | p800-2):
     GET  /                          -> elenco macchine (admin)
@@ -47,9 +51,9 @@ _HERE = Path(__file__).parent
 _LIVE_TPL = (_HERE / "live.html").read_text(encoding="utf-8")
 _NOVNC_DIR = _HERE / "vendor" / "noVNC"
 
-# ── Gate admin (master key DMG_API_KEY) ──────────────────────────────────────
-_ADMIN_KEY = (os.environ.get("DMG_BRIDGE_KEY") or os.environ.get("DMG_API_KEY") or "").strip()
-_COOKIE = "dmg_bridge_admin"
+# ── Gate admin (chiave propria del bridge, ambiente Yellow Hub) ──────────────
+_ADMIN_KEY = (os.environ.get("TNC_BRIDGE_KEY") or "").strip()
+_COOKIE = "tnc_bridge_admin"
 
 
 def _key_from(headers, query, cookies) -> str | None:
@@ -71,7 +75,7 @@ def require_admin(request: Request) -> None:
     """Dependency: blocca l'accesso se l'admin non e' 'acceso' (master key)."""
     if not _is_admin(request.headers, request.query_params, request.cookies):
         if not _ADMIN_KEY:
-            raise HTTPException(status_code=503, detail="bridge chiuso: DMG_API_KEY non configurata")
+            raise HTTPException(status_code=503, detail="bridge chiuso: TNC_BRIDGE_KEY non configurata")
         raise HTTPException(status_code=403, detail="accesso admin richiesto (/login?api_key=...)")
 
 
@@ -115,7 +119,7 @@ def _login_page(next_url: str = "/", error: str = "") -> str:
 def login(api_key: str = "", next: str = "/") -> Response:
     safe_next = next if next.startswith("/") else "/"
     if not _ADMIN_KEY:
-        raise HTTPException(status_code=503, detail="bridge chiuso: DMG_API_KEY non configurata")
+        raise HTTPException(status_code=503, detail="bridge chiuso: TNC_BRIDGE_KEY non configurata")
     if not api_key:
         return HTMLResponse(_login_page(safe_next))
     if secrets.compare_digest(api_key, _ADMIN_KEY):

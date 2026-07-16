@@ -1,58 +1,48 @@
-# Aggancio della pagina "Macchine TNC 640" al frontend yellow hub
+# Integrazione della pagina "Macchine TNC 640" in **Yellow Hub**
 
-La pagina React `frontend/src/pages/Macchine.jsx` è pronta ma **non ancora
-agganciata** al router/nav, perché `App.jsx` e `Sidebar.jsx` sono in mezzo a
-modifiche non committate (feature auth + altro). Applicare queste 2 modifiche
-**quando il lavoro sul frontend è committato/stabile** (oppure chiedimi di farlo).
+> ⚠️ Le macchine TNC 640 (Mikron P800) sono ambiente **Yellow Hub**, NON DMG desk.
+> Questo progetto è staged nella repo DMG desk solo su branch (`feature/heidenhain-tnc640`)
+> in attesa di essere spostato/integrato in Yellow Hub. **Non agganciare a DMG desk.**
 
-## 1. `frontend/src/App.jsx`
+Il codice di Yellow Hub **non è in questa repo**, quindi l'aggancio va fatto là.
+Qui trovi il **template** pronto e le indicazioni.
 
-Import (accanto agli altri import di pagina):
-```jsx
-import Macchine from './pages/Macchine'
-```
+## Componenti pronti (in questa cartella)
 
-Rotta (dentro `<Routes>` in `MainContent`):
-```jsx
-<Route path="/macchine" element={<Wrap><Macchine /></Wrap>} />
-```
+- `bridge.py` + `tnc_client.py` + `config.py` + `live.html` + `vendor/noVNC` — il
+  **bridge** (servizio FastAPI standalone) che fa schermo live + dati. Portabile.
+- `frontend/Macchine.jsx` — **template React** della pagina (iframe al bridge).
 
-Full-bleed (la pagina usa un iframe a tutta altezza) — aggiungere `/macchine`
-alla lista `FULL_PAGES`:
-```jsx
-const FULL_PAGES = ['/home', '/coda', ..., '/macchine']
-```
+## Passi per integrare in Yellow Hub
 
-## 2. `frontend/src/components/Sidebar.jsx`
+1. **Bridge**: far girare `heidenhain/bridge.py` come servizio (o montarlo nell'app
+   di Yellow Hub) raggiungibile dal browser. Chiave propria:
+   ```sh
+   # PowerShell:  $env:TNC_BRIDGE_KEY = "una-chiave"
+   py -m uvicorn heidenhain.bridge:app --host 0.0.0.0 --port 8010
+   ```
+   Client noVNC: `git clone --depth 1 https://github.com/novnc/noVNC heidenhain/vendor/noVNC`.
 
-Voce di menu (in `NAV_UTILITA`, oppure `NAV_PRIMARY` se la si vuole in alto):
-```jsx
-{ to: '/macchine', icon: 'macchina', label: 'TNC 640' },
-```
+2. **Frontend Yellow Hub**: copiare `frontend/Macchine.jsx` nel frontend di YH e
+   aggiungerla al router + menu di **Yellow Hub** (non di DMG desk). L'iframe punta
+   al bridge (URL configurabile nell'header della pagina, persistito in
+   `localStorage['tnc_bridge_base']`).
 
-## 3. Gating admin
+3. **Auth / admin**: gestione a carico di **Yellow Hub**. Due opzioni:
+   - la pagina è visibile solo agli admin di YH (gating lato YH), e il bridge ha la
+     sua `TNC_BRIDGE_KEY` come secondo livello;
+   - oppure YH proxa il bridge dietro la propria auth.
+   Il bridge di suo è **read-only** e default **sola visione** (comando esplicito).
 
-- **Per il momento** l'accesso è protetto dal **bridge** stesso: la pagina mostra
-  il form di login del bridge (master key `DMG_API_KEY`) finché non si è admin.
-  Quindi il contenuto è già "solo admin" anche senza gating nel frontend.
-- Quando il frontend avrà un flag admin esplicito, si può nascondere anche la
-  **voce di menu** ai non-admin (filtrando `NAV_*`).
+## Integrazione same-origin (consigliata, quando si è dentro Yellow Hub)
 
-## 4. Requisiti runtime
+Se YH ha una CSP stretta (`default-src 'self'`), un iframe cross-origin al bridge
+(`:8010`) verrebbe bloccato. Per l'integrazione definitiva conviene **montare il
+bridge dentro l'app di Yellow Hub** sotto un path (es. `/heidenhain`), servendolo
+same-origin. In quel caso servono, sul bridge:
+- CSP propria sulle pagine (per lo script inline del viewer + WebSocket same-origin);
+- path **relativi** in `live.html` (per funzionare sotto il prefisso di mount);
+- delega dell'auth a Yellow Hub (token di sessione di YH), NON a DMG desk.
 
-- Il **bridge** deve girare (default `http://<host>:8010`):
-  ```sh
-  # PowerShell:  $env:DMG_API_KEY = "..."   (o DMG_BRIDGE_KEY)
-  py -m uvicorn heidenhain.bridge:app --host 0.0.0.0 --port 8010
-  ```
-- L'URL del bridge è configurabile nell'intestazione della pagina (persistito in
-  `localStorage['tnc_bridge_base']`), utile se in produzione gira su altra
-  porta/host.
-- Client noVNC: `git clone --depth 1 https://github.com/novnc/noVNC heidenhain/vendor/noVNC`.
-
-## Alternativa (futura): integrazione same-origin
-
-Per evitare il servizio separato e il doppio login, si può **montare** il bridge
-dentro l'app FastAPI principale (`api/main.py`) sotto `/heidenhain`, così eredita
-l'auth del backend e la pagina può usare `src="/heidenhain/"` (stessa origine).
-Richiede però una modifica a `api/main.py` (ora in volo).
+Questi adattamenti sono rapidi ma dipendono dall'auth/CSP reali di Yellow Hub, che
+non sono in questa repo — si fanno in fase di integrazione in YH.

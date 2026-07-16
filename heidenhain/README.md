@@ -1,11 +1,14 @@
-# Heidenhain TNC 640 — bridge di visualizzazione/monitoraggio (yellow hub)
+# Heidenhain TNC 640 — bridge di visualizzazione/monitoraggio (ambiente Yellow Hub)
 
-Scaffold per collegare una macchina con controllo **HEIDENHAIN TNC 640** (HEROS)
-al sistema yellow hub, sul modello dell'integrazione Sinumerik/OPC UA esistente.
+Bridge per vedere e monitorare da remoto le macchine con controllo **HEIDENHAIN
+TNC 640** (HEROS) — le **Mikron P800**, che sono ambiente **Yellow Hub**.
 Vedi il report completo: [`../REPORT_HEIDENHAIN_TNC640_REMOTE.md`](../REPORT_HEIDENHAIN_TNC640_REMOTE.md).
 
-> **Branch dedicato**: `feature/heidenhain-tnc640`. Non ancora integrato nel
-> backend/frontend principale.
+> ⚠️ **Yellow Hub ≠ DMG desk.** Queste macchine (TNC 640) sono di **Yellow Hub**,
+> NON di DMG desk (l'app di questa repo, per la DMG DMC 160U con Sinumerik). Il
+> bridge è **standalone e senza alcun aggancio a DMG desk**: è staged qui solo sul
+> branch `feature/heidenhain-tnc640` in attesa di essere integrato in Yellow Hub
+> (vedi [WIRING.md](WIRING.md)).
 
 ## Verifica sul campo (2026-07-16) — 2 × Mikron P800
 
@@ -61,19 +64,21 @@ git clone --depth 1 https://github.com/novnc/noVNC heidenhain/vendor/noVNC
 
 ## Accesso admin (richiesto)
 
-Tutte le pagine/endpoint macchina sono protetti dalla **master key `DMG_API_KEY`**
-(la stessa "admin" del backend). Se non è configurata, il bridge è **chiuso**.
+Tutte le pagine/endpoint macchina sono protetti dalla **chiave propria del bridge
+`TNC_BRIDGE_KEY`** (nessun aggancio a DMG desk). Se non è configurata, il bridge è
+**chiuso**.
 ```sh
-# PowerShell:  $env:DMG_API_KEY = "la-tua-master-key"   (oppure $env:DMG_BRIDGE_KEY)
+# PowerShell:  $env:TNC_BRIDGE_KEY = "la-chiave-del-bridge"
 ```
 Vie d'accesso: aprendo una pagina qualsiasi senza cookie compare un **form di
 login** (digiti la chiave → cookie impostato → torni alla pagina richiesta).
 In alternativa: header `X-API-Key: LA_CHIAVE` o query `?api_key=LA_CHIAVE`.
-`GET /healthz` resta aperto.
+`GET /healthz` resta aperto. In fase di integrazione, l'auth vera sarà quella di
+**Yellow Hub** (vedi [WIRING.md](WIRING.md)).
 
-**Integrazione nel frontend yellow hub**: pagina React pronta in
-`frontend/src/pages/Macchine.jsx` (iframe al bridge) — istruzioni di aggancio in
-[WIRING.md](WIRING.md). Non ancora collegata al router (frontend in lavorazione).
+**Integrazione nel frontend Yellow Hub**: template React pronto in
+`heidenhain/frontend/Macchine.jsx` (iframe al bridge) — istruzioni in
+[WIRING.md](WIRING.md). Il codice di YH non è in questa repo.
 
 ## Avvio
 

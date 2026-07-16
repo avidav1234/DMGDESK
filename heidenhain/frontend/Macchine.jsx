@@ -1,12 +1,14 @@
 import { useState } from 'react'
 
 // Pagina "Macchine TNC 640" — schermo live (noVNC) + pannello dati.
-// Incapsula il bridge FastAPI separato (heidenhain/bridge.py) via iframe: il
-// bridge gestisce login admin, elenco macchine, schermo live e dati. Nessuna
-// dipendenza aggiuntiva nel frontend (niente noVNC in bundle).
 //
-// Il bridge gira come servizio separato (default porta 8010). L'URL e'
-// configurabile qui sotto e persistito in localStorage.
+// TEMPLATE per il frontend di **Yellow Hub** (le TNC 640 sono ambiente YH).
+// NON e' una pagina di DMG desk: va copiata/adattata nel frontend di Yellow Hub.
+//
+// Incapsula il bridge FastAPI (heidenhain/bridge.py) via iframe: il bridge
+// gestisce login, elenco macchine, schermo live e dati. Nessuna dipendenza
+// aggiuntiva nel frontend (niente noVNC nel bundle). Il bridge gira come servizio
+// separato (default porta 8010); l'URL e' configurabile e persistito in localStorage.
 
 const DEFAULT_BRIDGE = `${window.location.protocol}//${window.location.hostname}:8010`
 

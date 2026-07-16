@@ -14,8 +14,19 @@
     .dot.ok { background: #3fb950; } .dot.ko { background: #f85149; }
     .muted { font-size: .8rem; opacity: .65; }
     label { font-size: .82rem; }
-    #screen { width: 100%; height: calc(100vh - 48px); }
+    #main { display: flex; height: calc(100vh - 49px); }
+    #screen { flex: 1; min-width: 0; background: #000; }
+    #data { width: 280px; flex-shrink: 0; overflow: auto; background: #161616; border-left: 1px solid #333; padding: .6rem .8rem; font-size: .85rem; }
+    #data h2 { font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; opacity: .55; margin: 1rem 0 .35rem; }
+    #data h2:first-child { margin-top: 0; }
+    .kv { display: flex; justify-content: space-between; gap: .5rem; padding: .12rem 0; }
+    .kv b { font-weight: 600; }
+    .mono { font-family: ui-monospace, monospace; }
+    .badge { padding: .05rem .4rem; border-radius: .35rem; font-size: .72rem; }
+    .badge.run { background: #12331c; color: #3fb950; }
+    .badge.idle { background: #33210f; color: #f0a020; }
     #ctrl:checked ~ span { color: #f0a020; }
+    .prog { word-break: break-all; opacity: .9; }
   </style>
 </head>
 <body>
@@ -26,27 +37,91 @@
     <label><input type="checkbox" id="ctrl" /> abilita comando (mouse/tastiera)</label>
     <span id="status" class="muted">connessione…</span>
   </header>
-  <div id="screen"></div>
+
+  <div id="main">
+    <div id="screen"></div>
+    <aside id="data">
+      <h2>Stato</h2>
+      <div class="kv"><span>programma</span><b id="d-stato" class="badge idle">—</b></div>
+      <div class="kv"><span>esecuzione</span><b id="d-esec">—</b></div>
+      <div class="kv"><span>controllo</span><b id="d-ctrl" class="mono">—</b></div>
+
+      <h2>Programma</h2>
+      <div class="prog mono" id="d-main">—</div>
+      <div class="kv"><span>in esecuzione</span><b id="d-corrente" class="mono">—</b></div>
+      <div class="kv"><span>riga</span><b id="d-linea" class="mono">—</b></div>
+
+      <h2>Assi</h2>
+      <div id="d-assi" class="mono"></div>
+
+      <h2>Override</h2>
+      <div class="kv"><span>feed</span><b id="d-feed" class="mono">—</b></div>
+      <div class="kv"><span>rapid</span><b id="d-rapid" class="mono">—</b></div>
+      <div class="kv"><span>spindle</span><b id="d-spindle" class="mono">—</b></div>
+
+      <h2>Messaggi</h2>
+      <div id="d-msg" class="muted">—</div>
+    </aside>
+  </div>
 
   <script type="module">
     import RFB from '/novnc/core/rfb.js';
+    const MID = '{{MID}}';
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    const url = `${proto}://${location.host}/m/{{MID}}/vnc`;
+    const url = `${proto}://${location.host}/m/${MID}/vnc`;
     const dot = document.getElementById('dot');
     const st = document.getElementById('status');
 
+    // ── Schermo live (noVNC) ──
     const rfb = new RFB(document.getElementById('screen'), url);
-    rfb.viewOnly = true;          // DEFAULT: sola visione, nessun comando alla macchina
-    rfb.scaleViewport = true;     // adatta lo schermo alla finestra
+    rfb.viewOnly = true;            // DEFAULT: sola visione
+    rfb.scaleViewport = true;
     rfb.resizeSession = false;
-
     rfb.addEventListener('connect', () => { dot.className = 'dot ok'; st.textContent = 'sola visione'; });
     rfb.addEventListener('disconnect', () => { dot.className = 'dot ko'; st.textContent = 'disconnesso'; });
-
     document.getElementById('ctrl').addEventListener('change', (e) => {
       rfb.viewOnly = !e.target.checked;
       st.textContent = e.target.checked ? '⚠ CONTROLLO ATTIVO' : 'sola visione';
     });
+
+    // ── Pannello dati (polling /api/m/{mid}/info) ──
+    const $ = (id) => document.getElementById(id);
+    const fmt = (v, d = 3) => (typeof v === 'number' ? v.toFixed(d) : (v ?? '—'));
+    const shortPgm = (p) => (p ? String(p).split(/[\\/]/).pop() : '—');
+
+    async function poll() {
+      try {
+        const r = await fetch(`/api/m/${MID}/info`, { cache: 'no-store' });
+        if (!r.ok) return;
+        const j = await r.json();
+        const running = j.stato_programma === 'STARTED';
+        const b = $('d-stato');
+        b.textContent = j.stato_programma ?? '—';
+        b.className = 'badge ' + (running ? 'run' : 'idle');
+        $('d-esec').textContent = j.stato_esecuzione ?? '—';
+        $('d-ctrl').textContent = j.versione ?? j.controllo ?? '—';
+
+        const pc = j.programma_corrente || {};
+        $('d-main').textContent = shortPgm(pc.main);
+        $('d-corrente').textContent = shortPgm(pc.corrente);
+        $('d-linea').textContent = pc.linea ?? '—';
+
+        const assi = j.assi || {};
+        $('d-assi').innerHTML = Object.keys(assi).length
+          ? Object.entries(assi).map(([k, v]) => `<div class="kv"><span>${k}</span><b>${fmt(v)}</b></div>`).join('')
+          : '<span class="muted">—</span>';
+
+        const o = j.override || {};
+        $('d-feed').textContent = o.feed != null ? o.feed + '%' : '—';
+        $('d-rapid').textContent = o.rapid != null ? o.rapid + '%' : '—';
+        $('d-spindle').textContent = o.spindle != null ? o.spindle + '%' : '—';
+
+        $('d-msg').textContent = (j.messaggi_attivi && j.messaggi_attivi.length)
+          ? j.messaggi_attivi.join(' · ') : 'nessuno';
+      } catch (e) { /* rete: riprova al prossimo tick */ }
+    }
+    poll();
+    setInterval(poll, 2000);
   </script>
 </body>
 </html>

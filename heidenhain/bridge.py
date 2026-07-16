@@ -13,10 +13,8 @@ Se DMG_API_KEY non e' configurata, il bridge e' CHIUSO (nessun accesso).
 
 Endpoint (multi-macchina, `{mid}` = p800-1 | p800-2):
     GET  /                          -> elenco macchine (admin)
-    GET  /m/{mid}                   -> viewer a screenshot (auto-refresh)
-    GET  /m/{mid}/live              -> viewer LIVE fluido (noVNC via WebSocket)
+    GET  /m/{mid}                   -> viewer LIVE fluido (noVNC) + pannello dati
     WS   /m/{mid}/vnc               -> relay WebSocket <-> VNC 5900 del controllo
-    GET  /m/{mid}/screenshot.png    -> un fotogramma PNG (via VNC/RFB)
     GET  /api/machines              -> lista macchine
     GET  /api/m/{mid}/info          -> stato live (versione, assi, programma, override)
     GET  /api/m/{mid}/connettivita  -> check porte 5900/19000
@@ -46,7 +44,6 @@ except ImportError:  # esecuzione come script diretto
     from config import MACHINES  # type: ignore
 
 _HERE = Path(__file__).parent
-_VIEWER_TPL = (_HERE / "viewer.html").read_text(encoding="utf-8")
 _LIVE_TPL = (_HERE / "live.html").read_text(encoding="utf-8")
 _NOVNC_DIR = _HERE / "vendor" / "noVNC"
 
@@ -114,9 +111,8 @@ def healthz() -> dict:
 @app.get("/", response_class=HTMLResponse, dependencies=[Depends(require_admin)])
 def index() -> str:
     righe = "\n".join(
-        f'<li><a href="/m/{mid}/live">{m["nome"]}</a> '
-        f'<span class="muted">{m["ip"]}</span> '
-        f'&middot; <a href="/m/{mid}">screenshot</a></li>'
+        f'<li><a href="/m/{mid}">{m["nome"]}</a> '
+        f'<span class="muted">{m["ip"]}</span></li>'
         for mid, m in MACHINES.items()
     )
     return (
@@ -130,33 +126,13 @@ def index() -> str:
 
 
 @app.get("/m/{mid}", response_class=HTMLResponse, dependencies=[Depends(require_admin)])
-def viewer(mid: str) -> str:
-    m = MACHINES.get(mid)
-    if not m:
-        raise HTTPException(status_code=404, detail=f"macchina '{mid}' sconosciuta")
-    return _fill(_VIEWER_TPL, mid, m)
-
-
-@app.get("/m/{mid}/live", response_class=HTMLResponse, dependencies=[Depends(require_admin)])
 def live(mid: str) -> str:
     m = MACHINES.get(mid)
     if not m:
         raise HTTPException(status_code=404, detail=f"macchina '{mid}' sconosciuta")
-    return _fill(_LIVE_TPL, mid, m)
-
-
-def _fill(tpl: str, mid: str, m: dict) -> str:
-    return tpl.replace("{{MID}}", mid).replace("{{NOME}}", m["nome"]).replace("{{IP}}", m["ip"])
-
-
-@app.get("/m/{mid}/screenshot.png", dependencies=[Depends(require_admin)])
-def screenshot(mid: str) -> Response:
-    ip = _ip(mid)
-    try:
-        png = tnc_client.screenshot_png(ip)
-        return Response(content=png, media_type="image/png", headers={"Cache-Control": "no-store"})
-    except Exception as e:  # noqa: BLE001
-        return JSONResponse(status_code=502, content={"errore": f"{type(e).__name__}: {e}"})
+    return (
+        _LIVE_TPL.replace("{{MID}}", mid).replace("{{NOME}}", m["nome"]).replace("{{IP}}", m["ip"])
+    )
 
 
 @app.get("/api/machines", dependencies=[Depends(require_admin)])

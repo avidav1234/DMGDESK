@@ -78,19 +78,20 @@ py -m uvicorn heidenhain.bridge:app --host 0.0.0.0 --port 8010
 
 1. Apri `http://localhost:8010/login?api_key=LA_CHIAVE` → imposta il cookie admin.
 2. Vai su `http://localhost:8010/` → elenco macchine.
-3. Clic su una macchina → **schermo live fluido (noVNC)**.
+3. Clic su una macchina → **schermo live fluido (noVNC) + pannello dati**.
 
 Endpoint (multi-macchina, `{mid}` = `p800-1` | `p800-2`; tutti admin salvo dove indicato):
 - `GET /` — elenco macchine
-- `GET /m/{mid}/live` — **viewer LIVE fluido** (noVNC via WebSocket) — default *sola visione*
+- `GET /m/{mid}` — **viewer LIVE fluido** (noVNC) + pannello dati — default *sola visione*
 - `WS  /m/{mid}/vnc` — relay WebSocket ↔ VNC 5900
-- `GET /m/{mid}` — viewer a screenshot (auto-refresh, fallback)
-- `GET /m/{mid}/screenshot.png` — un fotogramma PNG (via VNC/RFB)
 - `GET /api/machines` — lista macchine
 - `GET /api/m/{mid}/info` — stato live (versione, assi, programma+riga, override)
 - `GET /api/m/{mid}/connettivita` — check porte 5900/19000
 - `GET /login?api_key=...` — imposta cookie admin (aperto)
 - `GET /healthz` — stato bridge (aperto)
+
+> Lo screenshot statico è stato rimosso: si usa solo la vista live. La funzione di
+> cattura resta come utility in `tnc_client.screenshot_png` (usata per diagnostica).
 
 Diagnosi rapida da PowerShell (senza avviare il bridge):
 ```powershell

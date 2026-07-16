@@ -1,0 +1,7 @@
+# Bridge TNC 640 — dipendenze
+pyLSV2>=1.5          # canale LSV2 (info, file, screen dump). Gia' presente in ambiente.
+fastapi>=0.109       # gia' usato dal backend principale
+uvicorn>=0.27        # gia' presente
+
+# Fase live noVNC (🟡 prossimo passo):
+# websockify>=0.11   # proxy WebSocket<->TCP verso la porta VNC 5900 del controllo

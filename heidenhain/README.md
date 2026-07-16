@@ -14,14 +14,24 @@ Macchina reale: **Mikron P800 (GF)**, TNC 640, **NC SW 340590-08 SP7**, IP `192.
 | Canale | Porta | Esito | Note |
 |---|---|---|---|
 | **VNC (schermo)** | 5900 | ✅ **funziona** | Handshake `RFB 003.008`, desktop `HEROS5:0` 1280×1024, **auth None (nessuna password)**. Screenshot completo catturato con client RFB stdlib. |
-| **LSV2 (dati/file)** | 19000 | ✅ **parziale** | `versions`, `error_messages`, lista/trasferimento file, `grab_screen_dump` OK. |
-| Dati strutturati LSV2 | 19000 | 🟡 **assenti** | Assi/override/stato programma richiedono **opzione 18 (DNC)**, non attiva. Login DNC rifiutato. |
-| OPC UA NC Server | — | ❌ **non disponibile** | Richiede NC SW ≥ `-10`; qui `-08`. |
+| **LSV2 (dati/file)** | 19000 | ✅ **funziona** | `versions`, lista/trasferimento file, `grab_screen_dump` OK. |
+| **Dati strutturati LSV2 (DNC)** | 19000 | ✅ **disponibili** | **Opzione 18 (DNC) ATTIVA** (la usa anche il MES). Assi, override feed/rapid/spindle, stato programma/esecuzione, programma+sottoprogramma+riga. Serve `safe_mode=False` **oppure** aggiungere il login DNC ai login noti (vedi sotto). |
+| OPC UA NC Server | — | ❌ non disponibile | Richiede NC SW ≥ `-10`; qui `-08`. Ma non serve: LSV2+DNC basta. |
 
-**Conseguenza pratica**: su questa macchina il *dato strutturato* via LSV2/OPC UA
-non è disponibile senza spesa (opzione 18 e/o aggiornamento firmware). Ma **lo
-schermo (VNC)** e **file/screenshot/messaggi (LSV2)** funzionano già — ed è ciò che
-serviva per sostituire il software OEM a pagamento.
+**Conseguenza pratica**: su questa macchina **lo schermo (VNC)** e i **dati
+strutturati (LSV2+DNC)** funzionano entrambi, gratis con codice nostro — copre sia
+il "vedere/comandare lo schermo" sia il monitoraggio numerico (come il Sinumerik).
+
+### ⚠️ Nota importante sul login DNC (pyLSV2 safe_mode)
+Con `pyLSV2.LSV2(..., safe_mode=True)` la libreria **esclude DNC** dai login noti
+(whitelist: INSPECT/FILETRANSFER/MONITOR) e i dati di stato tornano vuoti → si
+poteva credere erroneamente che l'opzione 18 non fosse attiva. In realtà lo è.
+Il collector mantiene `safe_mode=True` (comandi di scrittura bloccati) e aggiunge
+**solo** il login DNC per la lettura:
+```python
+con = pyLSV2.LSV2(ip, port=19000, safe_mode=True); con.connect()
+con._known_logins = tuple(set(con._known_logins) | {pyLSV2.Login.DNC})  # solo lettura
+```
 
 ## Cosa c'è in questo scaffold (tutto testato, salvo 🟡)
 
@@ -64,7 +74,10 @@ Diagnosi rapida da PowerShell (senza avviare il bridge):
 - Quando il monitor del controllo va in **standby**, lo screenshot è **nero**: è il
   comportamento reale del framebuffer. Risvegliarlo richiederebbe un input (che
   qui NON inviamo, per sicurezza).
-- **Dati strutturati** (assi/override/programma) 🟡 assenti senza opzione 18.
+- `spindle_tool_status` (numero utensile) torna `None` su questo controllo: il
+  numero utensile va letto altrimenti (es. PLC diretto) — da fare.
+- `get_error_messages` logga un warning "does not work for all control types" ma
+  non blocca (torna lista vuota).
 
 ## 🟡 Prossimo passo — schermo live fluido con noVNC
 

@@ -158,7 +158,7 @@ def lsv2_info(ip: str, port: int = 19000, timeout: float = 6.0) -> dict:
         "controllo": None,
         "dnc_attivo": None,
         "messaggi_attivi": [],
-        # 🟡 richiedono opzione 18 (DNC): su questa macchina None
+        # richiedono login DNC (opzione 18) — attiva su questa macchina
         "stato_programma": None,
         "stato_esecuzione": None,
         "programma_corrente": None,
@@ -179,10 +179,20 @@ def lsv2_info(ip: str, port: int = 19000, timeout: float = 6.0) -> dict:
         con.connect()
         out["connesso"] = True
 
+        # safe_mode=True mantiene bloccati i comandi di sistema/scrittura pericolosi.
+        # Abilitiamo SOLO il login DNC (opzione 18) per la LETTURA dei dati di stato
+        # (assi/override/programma). pyLSV2 in safe_mode esclude DNC dai login noti,
+        # quindi lo aggiungiamo esplicitamente. Nessun metodo di scrittura/comando
+        # viene mai invocato da questo modulo.
+        try:
+            con._known_logins = tuple(set(con._known_logins) | {pyLSV2.Login.DNC})
+        except Exception:  # noqa: BLE001
+            out["note"].append("impossibile abilitare login DNC in lettura")
+
         try:
             ver = con.versions  # property
-            out["versione"] = str(getattr(ver, "control", ver))
-            out["controllo"] = str(getattr(ver, "type", "") or getattr(ver, "control", ""))
+            out["versione"] = str(ver.nc_sw)
+            out["controllo"] = str(ver.control)
         except Exception as e:  # noqa: BLE001
             out["note"].append(f"versione non letta: {e}")
 
@@ -192,31 +202,47 @@ def lsv2_info(ip: str, port: int = 19000, timeout: float = 6.0) -> dict:
         except Exception as e:  # noqa: BLE001
             out["note"].append(f"messaggi non letti: {e}")
 
-        # Dati strutturati: sono METODI di pyLSV2; presenti solo con opzione 18
-        # (DNC). Senza opzione tornano None/UNDEFINED. Serializziamo a str/None.
-        def _s(v):
-            return None if v is None else str(v)
+        # Dati strutturati (richiedono login DNC / opzione 18). Su questa macchina
+        # l'opzione 18 e' ATTIVA (la usa anche il MES) -> dati disponibili e live.
+        def _name(v):
+            if v is None:
+                return None
+            return getattr(v, "name", None) or str(v)
 
         try:
+            out["stato_programma"] = _name(con.program_status())
+            out["stato_esecuzione"] = _name(con.execution_state())
+            out["assi"] = con.axes_location()
+
             stack = con.program_stack()
-            axes = con.axes_location()
-            out["stato_programma"] = _s(con.program_status())
-            out["stato_esecuzione"] = _s(con.execution_state())
-            out["programma_corrente"] = _s(stack)
-            out["assi"] = _s(axes)
-            out["override"] = _s(con.override_state())
-            out["utensile"] = _s(con.spindle_tool_status())
-            if axes is None and stack is None:
-                out["dnc_attivo"] = False
+            if stack is not None:
+                out["programma_corrente"] = {
+                    "main": getattr(stack, "main", None),
+                    "corrente": getattr(stack, "current", None),
+                    "linea": getattr(stack, "line_no", None),
+                }
+
+            ovr = con.override_state()
+            if ovr is not None:
+                out["override"] = {
+                    "feed": getattr(ovr, "feed", None),
+                    "rapid": getattr(ovr, "rapid", None),
+                    "spindle": getattr(ovr, "spindle", None),
+                }
+
+            tool = con.spindle_tool_status()  # None su alcuni controlli (incl. questo)
+            out["utensile"] = _name(tool)
+            if tool is None:
+                out["note"].append("utensile via spindle_tool_status non disponibile su questo controllo")
+
+            out["dnc_attivo"] = out["assi"] is not None
+            if not out["dnc_attivo"]:
                 out["note"].append(
-                    "Dati strutturati assenti: opzione 18 (DNC) non attiva sul controllo. "
-                    "Usa il canale VNC per la lettura visiva, oppure abilita l'opzione 18."
+                    "Login DNC ok ma dati assenti: verificare stato macchina o sessioni concorrenti."
                 )
-            else:
-                out["dnc_attivo"] = True
         except Exception as e:  # noqa: BLE001
             out["dnc_attivo"] = False
-            out["note"].append(f"dati DNC non letti (opzione 18?): {e}")
+            out["note"].append(f"dati DNC non letti: {e}")
     except Exception as e:  # noqa: BLE001
         out["errore"] = f"{type(e).__name__}: {e}"
     finally:

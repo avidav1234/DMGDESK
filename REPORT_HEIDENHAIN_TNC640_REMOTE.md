@@ -206,7 +206,13 @@ macchina, senza opzioni a pagamento**.
 > - **Cattura di un fotogramma completo dello schermo riuscita** con un mini-client
 >   RFB in Python (solo stdlib, encoding Raw) — schermo di controllo reale acquisito
 >   perfettamente, **senza alcun software OEM**. Script: `scratchpad/vnc_grab.py`.
-> - Porta **19000 (LSV2) aperta** → pyLSV2 disponibile per i dati.
+> - Porta **19000 (LSV2) aperta**. Firmware **`340590 08 SP7`** (NC SW `-08`).
+> - **Opzione 18 (DNC) ATTIVA** (confermato: la usa anche il MES): via pyLSV2 si
+>   leggono **dati strutturati live** — assi (X/Y/Z/A/C), override feed/rapid/spindle,
+>   stato programma (`STARTED`/`AUTOMATIC`), programma+sottoprogramma+riga. Nota: in
+>   `pyLSV2` con `safe_mode=True` il login DNC è escluso dai login noti → sembra
+>   inattivo; va aggiunto esplicitamente (solo lettura). **OPC UA non serve** (e non
+>   c'è: richiede NC SW ≥ `-10`).
 > - ⚠️ **Security**: VNC senza password sulla LAN = chiunque in rete può vedere **e
 >   comandare** la macchina. Valutare password VNC (Settings → VNC), segmentazione
 >   rete, e gating del "prendi il controllo" a livello app.

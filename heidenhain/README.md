@@ -52,23 +52,45 @@ con._known_logins = tuple(set(con._known_logins) | {pyLSV2.Login.DNC})  # solo l
 | `tools/Test-TncVnc.ps1` | Diagnosi porte + handshake RFB da PowerShell | ✅ testato |
 | `tools/Test-TncVncAuth.ps1` | Rileva se il VNC richiede password | ✅ testato |
 
+## Setup (una volta) — client noVNC
+
+Il client noVNC (per lo schermo live) NON è versionato (come i node_modules). Clonalo:
+```sh
+git clone --depth 1 https://github.com/novnc/noVNC heidenhain/vendor/noVNC
+```
+
+## Accesso admin (richiesto)
+
+Tutte le pagine/endpoint macchina sono protetti dalla **master key `DMG_API_KEY`**
+(la stessa "admin" del backend). Se non è configurata, il bridge è **chiuso**.
+```sh
+# PowerShell:  $env:DMG_API_KEY = "la-tua-master-key"   (oppure $env:DMG_BRIDGE_KEY)
+```
+Vie d'accesso: browser `/login?api_key=LA_CHIAVE` (imposta un cookie), header
+`X-API-Key: LA_CHIAVE`, o query `?api_key=LA_CHIAVE`. `GET /healthz` resta aperto.
+
 ## Avvio
 
 ```sh
-# dalla root del repo (le macchine sono in config.py; override via env TNC_MACHINES)
+# dalla root del repo (macchine in config.py; override via env TNC_MACHINES)
 py -m uvicorn heidenhain.bridge:app --host 0.0.0.0 --port 8010
 ```
 
-Poi apri `http://localhost:8010/` → elenco macchine → clic su una → visualizzatore live.
+1. Apri `http://localhost:8010/login?api_key=LA_CHIAVE` → imposta il cookie admin.
+2. Vai su `http://localhost:8010/` → elenco macchine.
+3. Clic su una macchina → **schermo live fluido (noVNC)**.
 
-Endpoint (multi-macchina, `{mid}` = `p800-1` | `p800-2`):
+Endpoint (multi-macchina, `{mid}` = `p800-1` | `p800-2`; tutti admin salvo dove indicato):
 - `GET /` — elenco macchine
-- `GET /m/{mid}` — visualizzatore live (immagine auto-refresh, regolabile)
-- `GET /m/{mid}/screenshot.png` — un fotogramma PNG dello schermo (via VNC/RFB)
-- `GET /api/machines` — lista macchine configurate
+- `GET /m/{mid}/live` — **viewer LIVE fluido** (noVNC via WebSocket) — default *sola visione*
+- `WS  /m/{mid}/vnc` — relay WebSocket ↔ VNC 5900
+- `GET /m/{mid}` — viewer a screenshot (auto-refresh, fallback)
+- `GET /m/{mid}/screenshot.png` — un fotogramma PNG (via VNC/RFB)
+- `GET /api/machines` — lista macchine
 - `GET /api/m/{mid}/info` — stato live (versione, assi, programma+riga, override)
 - `GET /api/m/{mid}/connettivita` — check porte 5900/19000
-- `GET /healthz`
+- `GET /login?api_key=...` — imposta cookie admin (aperto)
+- `GET /healthz` — stato bridge (aperto)
 
 Diagnosi rapida da PowerShell (senza avviare il bridge):
 ```powershell

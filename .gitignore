@@ -19,6 +19,14 @@ ENV/
 *.csv
 config.json
 calibra_only_settings.json
+auth_accounts.json
+auth_accounts.tmp
+.env
+.env.local
+.env.*.local
+frontend/.env
+frontend/.env.local
+frontend/.env.*.local
 
 # ─── Log (generati automaticamente) ────────────────────────
 logs/
@@ -39,4 +47,32 @@ Thumbs.db
 # ─── Test cache ─────────────────────────────────────────────
 .pytest_cache/
 .coverage
+coverage.xml
 htmlcov/
+
+# ─── Node / frontend build ──────────────────────────────────
+node_modules/
+frontend/dist/
+
+# ─── File di stato runtime (generati/aggiornati dall'app) ───
+# NON versionare: cambiano di continuo → il `git pull` del launcher di
+# produzione andava in conflitto ad ogni avvio (audit 2026-07-02).
+*.pid
+cam_tracker_data.json
+cam_tracker/cam_tracker_state.json
+cartelle_recenti.json
+turni_snapshot.json
+step_analyzer/step_features.json
+tool_snapshot.json
+
+# ─── Backup (destinazione locale, non codice) ───────────────
+backup/
+
+# ─── Archivi / snapshot / file legacy ───────────────────────
+*.zip
+*.old
+*.pyold*
+Progetto5/
+dmgdesk_complete/
+dmgdesk_update/
+archive/

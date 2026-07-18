@@ -121,9 +121,9 @@ Alternativa (senza proxy): `uvicorn ... --ssl-keyfile key.pem --ssl-certfile cer
 - 🔜 **4b** *(opzionale)* — Purge della history dei segreti (`git filter-repo` /
   BFG). Da fare in finestra dedicata perché riscrive la history; coordinare con
   eventuali cloni.
-- 🔜 **4c** — `frontend/.env.example`: rimuovere/segnare come deprecata la riga che
-  invita a copiare la master key in `VITE_API_KEY` (footgun latente; oggi il bundle
-  è **pulito**, verificato).
+- ✅ **4c** *(2026-07-19)* — `frontend/.env.example` bonificato: invertita la guida —
+  `VITE_API_KEY` va lasciata **vuota** (gli operatori usano il PIN → token runtime;
+  la master key nel bundle sarebbe pubblica). Il bundle resta **pulito**, verificato.
 
 ---
 

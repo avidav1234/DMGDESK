@@ -2,8 +2,11 @@
 // Persistenza su file via /api/progetti — identico all'app originale
 
 import React, { useState, useEffect, useCallback, useRef, useMemo, createContext, useContext } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate, useLocation } from 'react-router-dom'
 import TabDocumenti from './TabDocumenti'
+import { isRipresaFilename, RIPRESA_BADGE } from '../utils/ripresa'
+import { apiUrl } from '../utils/apiAuth'
 
 const API = '/api/progetti'
 
@@ -209,31 +212,188 @@ function ConfirmDialog({message,onConfirm,onCancel}){
     </div>
   )
 }
+// ── Badge parametri CAM (estrattore Cimatron — Fase 1/2 classificazione) ──────
+// Dati grezzi come suggerimento all'operatore: nessuna regola, solo i valori
+// veri dal CAM. Se il matching non ha dati per il file, non si mostra nulla.
+const CAM_SIGLA=[
+  [/sgrossatura/i,{sigla:'SGR',color:'#B45309'}],
+  [/ripresa/i,    {sigla:'RIP',color:'#C2410C'}],
+  [/finitura/i,   {sigla:'FIN',color:'#166534'}],
+  [/foratura/i,   {sigla:'FOR',color:'#1D4ED8'}],
+  [/misurazione/i,{sigla:'MISURA',color:'#64748B'}],
+  [/profilatura/i,{sigla:'PROF',color:'#0E7490'}],
+  [/multi asse/i, {sigla:'5X',color:'#7C3AED'}],
+]
+function camSigla(s){
+  for(const[re,v]of CAM_SIGLA){if(re.test(s||''))return v}
+  return{sigla:(s||'?').split(' ')[0].toUpperCase().slice(0,6),color:'#475569'}
+}
+// Classi del classificatore (config/regole_classificazione.json) → chip
+const CLASSE_CHIP={
+  SGROSSATURA:        {label:'SGR',        color:'#B45309'},
+  SGROSSATURA_FIGURA: {label:'SGR FIG',    color:'#B45309'},
+  PREFINITURA:        {label:'PREF',       color:'#C2410C'},
+  PREFINITURA_PIANI:  {label:'PREF PIANI', color:'#C2410C'},
+  PREFINITURA_FIGURA: {label:'PREF FIG',   color:'#C2410C'},
+  FINITURA:           {label:'FIN',        color:'#166534'},
+  FINITURA_PIANI:     {label:'FIN PIANI',  color:'#166534'},
+  FINITURA_PARETI:    {label:'FIN PARETI', color:'#166534'},
+  FINITURA_FIGURA:    {label:'FIN FIG',    color:'#166534'},
+  FINITURA_CHIUSURE:  {label:'FIN CHIUSURE',color:'#DC2626'},
+  FINITURA_TOLLERANZA:{label:'FIN H7/g6',  color:'#DC2626'},
+  FINITURA_NON_CRITICA:{label:'FIN ›VELOCE',color:'#64748B'},
+  FINITURA_SMUSSO:    {label:'SMUSSO',     color:'#64748B'},
+  SMUSSO:             {label:'SMUSSO',     color:'#64748B'},
+  // Ripresa = categoria propria (viola); sottocategoria legata all'offset
+  RIPRESA:            {label:'RIPRESA',    color:'#7C3AED'},
+  RIPRESA_SGROSSATURA:{label:'RIP SGR',    color:'#7C3AED'},
+  RIPRESA_PREFINITURA:{label:'RIP PREF',   color:'#7C3AED'},
+  RIPRESA_FINITURA:   {label:'RIP FIN',    color:'#7C3AED'},
+  SEDE_GUARNIZIONE:   {label:'GUARNIZ.',   color:'#64748B'},
+  ALESATURA:          {label:'ALESATURA',  color:'#0E7490'},
+  FORATURA:           {label:'FOR',        color:'#1D4ED8'},
+  MISURA:             {label:'MISURA',     color:'#64748B'},
+}
+function CamBadge({info}){
+  const procs=info?.procedure||[]
+  if(!procs.length)return null
+  const p0=procs[0], par=p0.parametri||{}
+  // chip = CLASSE dal classificatore quando c'è; fallback = strategia grezza
+  const cl=p0.classe
+  const chip=cl&&cl.operazione&&CLASSE_CHIP[cl.operazione]
+  const {sigla,color}=chip
+    ?{sigla:chip.label,color:chip.color}
+    :camSigla(par.sotto_strategia||par.strategia)
+  const daVerificare=cl&&cl.esito==='da_verificare'
+  const daClassificare=cl&&cl.esito==='da_classificare'
+  const tollOn=cl&&cl.tolleranza==='ON'
+  const presidioSi=cl&&cl.presidio==='SI'
+  const num=(v,d=2)=>{
+    if(v==null)return null
+    const n=typeof v==='number'?v:parseFloat(v)
+    return Number.isFinite(n)?+n.toFixed(d):v
+  }
+  // Offset: semantica esplicita — "Offset" quando unico o parete=fondo,
+  // "Off.par"/"Off.fon" quando splittati e diversi, "Off.cont" sui contorni
+  const offP=num(par.offset_parete), offF=num(par.offset_fondo)
+  const coppie=[]
+  if(offP!=null&&(offF==null||offF===offP))coppie.push(['Offset',offP])
+  else{
+    if(offP!=null)coppie.push(['Off.par',offP])
+    if(offF!=null)coppie.push(['Off.fon',offF])
+  }
+  if(par.offset_contorno)coppie.push(['Off.cont',num(par.offset_contorno,3)])
+  if(par.vc)coppie.push(['Vc',Math.round(par.vc)])
+  if(par.fz)coppie.push(['fz',num(par.fz,3)])
+  if(par.ap)coppie.push(['ap',num(par.ap)])
+  if(par.ae)coppie.push(['ae',num(par.ae,1)])
+  if(par.fori&&par.fori.length)coppie.push(['Fori',par.fori.join(',')])
+  const recupero=procs.some(p=>p.numero_commento_errato)
+  const tip=[p0.nome,
+    cl?`classe ${cl.operazione||'?'} (conf. ${cl.confidenza??'—'}%, ${cl.riga||'—'})`:null,
+    cl&&cl.motivo?`nota: ${cl.motivo}`:null,
+    par.pu?`PU ${par.pu}`:null,par.commento,
+    par.toll_superfici?`toll ${par.toll_superfici}`:null,
+    par.sr?`SR ${par.sr}`:null,par.alias?`utensile ${par.alias}`:null,
+    procs.length>1?`+${procs.length-1} procedure in questo file`:null,
+    recupero?'⚠ numero commento MPF errato (match recuperato)':null].filter(Boolean).join(' · ')
+  return(
+    <div title={tip} style={{display:'flex',alignItems:'center',gap:9,marginTop:3,overflow:'hidden'}}>
+      <span style={{fontSize:9.5,fontWeight:800,color:'#fff',background:color,
+        padding:'1.5px 7px',borderRadius:4,letterSpacing:'0.05em',flexShrink:0,lineHeight:1.5,
+        opacity:daClassificare?0.55:1}}>{sigla}{daClassificare?' ?':''}</span>
+      {daVerificare&&<span title={cl.motivo||'conferme discordi'}
+        style={{fontSize:9,fontWeight:800,color:'#B45309',background:'#FEF3C7',
+          padding:'1px 6px',borderRadius:4,flexShrink:0}}>⚠ VERIFICA</span>}
+      {tollOn&&<span title="Lavorazione a tolleranza"
+        style={{fontSize:9,fontWeight:800,color:'#DC2626',background:'#FEE2E2',
+          padding:'1px 6px',borderRadius:4,flexShrink:0}}>TOLL</span>}
+      {presidioSi&&<span title="Da eseguire in presenza (taratura/verifica in corso)"
+        style={{fontSize:9,fontWeight:800,color:'#7C3AED',background:'#EDE9FE',
+          padding:'1px 6px',borderRadius:4,flexShrink:0}}>PRESIDIO</span>}
+      {coppie.map(([l,v],i)=>(
+        <span key={i} style={{display:'inline-flex',alignItems:'baseline',gap:3,whiteSpace:'nowrap',flexShrink:0}}>
+          <span style={{fontSize:9,color:'#8A867C',fontWeight:700,letterSpacing:'0.02em'}}>{l}</span>
+          <span style={{fontSize:11.5,fontWeight:800,color:'#1E293B',fontFamily:'monospace'}}>{v}</span>
+        </span>
+      ))}
+      {procs.length>1&&<span style={{fontSize:9,color:'#94A3B8',fontWeight:700,flexShrink:0}}>+{procs.length-1}</span>}
+      {recupero&&<span style={{fontSize:11,color:'#B45309',flexShrink:0}}>⚠</span>}
+    </div>
+  )
+}
 // ── ProgramRow ─────────────────────────────────────────────────────────────────
-function ProgramRow({pgm,gruppo,onStato,onOperatore,onTempo,onRemove,toolStatus,selected,onSelect}){
+function ProgramRow({pgm,gruppo,onStato,onOperatore,onTempo,onRemove,toolStatus,selected,onSelect,camInfo}){
   const[expanded,setExpanded]=useState(false)
+  const[menuStato,setMenuStato]=useState(false)
   const[editTempo,setEditTempo]=useState(pgm.tempoStimato||'')
   const[editingT,setEditingT]=useState(false)
   const sc=_sc(pgm.stato)
   const opClean=(pgm.tipoOp||'').replace(/[-–]\s*NESSUN TESTO\s*/gi,'').replace(/MISURAZIONE NEL PROCESSO[-–]?/gi,'MISURA ').trim()
   // isIpm: viola se nel gruppo TASTATURA (key=ipm) OPPURE se RENISHAW inline in FRESATURA
   const isIpm = gruppo.key==='ipm' || (pgm.tipoGruppo==='ipm' && !/_IPM_/i.test(pgm.filename||''))
+  // isRip: programma di ripresa (post-cam manuale) - bordo arancione, badge esplicito
+  const isRip = isRipresaFilename(pgm.filename||'')
+  // v2 (2026-07-11): bordo sinistro = UNA semantica per priorità
+  // (selezione > ripresa > ipm); fondo riga = SOLO stato lavorazione.
+  const leftBorder = selected ? '3px solid #0d2d5e'
+    : isRip ? `3px solid ${RIPRESA_BADGE.color}`
+    : isIpm ? '3px solid #8B2FC9' : '3px solid transparent'
+  const rowBg = pgm.stato==='completato' ? '#F4FBF5'
+    : ['in_main','in_lavorazione','in_macchina'].includes(pgm.stato) ? '#FDF8EC'
+    : T.surface
   return(
-    <div style={{borderBottom:`1px solid ${T.border}`,borderLeft:isIpm?'3px solid #8B2FC9':'3px solid transparent',background:selected?'#EFF6FF':pgm.stato==='completato'?'#f0fdf4':['in_main','in_lavorazione','in_macchina'].includes(pgm.stato)?'#eff6ff':isIpm?'#F3E8FF':T.surface,opacity:pgm.stato==='completato'&&!selected?0.75:1,transition:'background 0.15s'}}>
-      <div style={{display:'flex',alignItems:'center',minHeight:38}}>
+    <div style={{borderBottom:`1px solid ${T.border}`,borderLeft:leftBorder,background:rowBg,opacity:pgm.stato==='completato'&&!selected?0.8:1,transition:'box-shadow 0.12s'}}
+      onMouseEnter={e=>{e.currentTarget.style.boxShadow='inset 0 0 0 999px rgba(13,45,94,0.035)'}}
+      onMouseLeave={e=>{e.currentTarget.style.boxShadow='none'}}>
+      <div style={{display:'flex',alignItems:'center',minHeight:50}}>
         {/* Checkbox */}
-        <div onClick={e=>{e.stopPropagation();onSelect&&onSelect()}}
-          style={{flexShrink:0,width:32,display:'flex',alignItems:'center',justifyContent:'center',alignSelf:'stretch',borderRight:`1px solid ${T.border}`,cursor:'pointer',background:selected?'#DBEAFE':'transparent'}}>
-          <div style={{width:16,height:16,borderRadius:4,border:selected?'none':'2px solid #B0ADA4',background:selected?'#0d2d5e':'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+        <div onClick={e=>{e.stopPropagation();onSelect&&onSelect(e)}}
+          style={{flexShrink:0,width:34,display:'flex',alignItems:'center',justifyContent:'center',alignSelf:'stretch',borderRight:`1px solid ${T.border}`,cursor:'pointer',background:selected?'#DBEAFE':'transparent',userSelect:'none'}}>
+          <div style={{width:17,height:17,borderRadius:4,border:selected?'none':'2px solid #B0ADA4',background:selected?'#0d2d5e':'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
             {selected&&<span style={{color:'#fff',fontSize:11,fontWeight:800,lineHeight:1}}>✓</span>}
           </div>
         </div>
-        <div onClick={()=>onStato(STATO_NEXT[pgm.stato])} title={`→ ${_scNext(pgm.stato).label}`}
-          style={{flexShrink:0,width:110,display:'flex',alignItems:'center',justifyContent:'center',gap:5,padding:'0 10px',cursor:'pointer',borderRight:`1px solid ${T.border}`,background:toolStatus==='mancante'?'#FEE2E2':toolStatus==='fin_vita'?'#FEF9C3':sc.bg,color:toolStatus==='mancante'?'#DC2626':toolStatus==='fin_vita'?'#D97706':sc.color,fontWeight:700,fontSize:12,userSelect:'none',alignSelf:'stretch',transition:'all 0.12s'}}>
-          <span style={{fontSize:14}}>{sc.dot}</span>{sc.short}
+        {/* STATO — click = menu con i 4 stati, renderizzato in PORTAL sul
+            body: le righe hanno opacity/stacking context che intrappolerebbero
+            un menu inline dietro le righe successive (bug "menu trasparente"). */}
+        <div onClick={e=>{const r=e.currentTarget.getBoundingClientRect();setMenuStato(m=>m?null:{x:r.left,y:r.bottom+2})}}
+          title="Cambia stato"
+          style={{flexShrink:0,width:96,display:'flex',alignItems:'center',justifyContent:'center',gap:5,padding:'0 8px',cursor:'pointer',borderRight:`1px solid ${T.border}`,background:sc.bg,color:sc.color,fontWeight:800,fontSize:12,userSelect:'none',alignSelf:'stretch'}}>
+          <span style={{fontSize:13}}>{sc.dot}</span>{sc.short}
         </div>
-        <div style={{flexShrink:0,width:52,textAlign:'center',borderRight:`1px solid ${T.border}`,alignSelf:'stretch',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:2}}>
-          <span style={{fontSize:13,fontWeight:800,color:gruppo.color,fontFamily:'monospace'}}>{pgm.numPgm}</span>
+        {menuStato&&createPortal(
+          <>
+            <div onClick={()=>setMenuStato(null)}
+              style={{position:'fixed',inset:0,zIndex:9998,cursor:'default'}}/>
+            <div style={{position:'fixed',left:menuStato.x,top:menuStato.y,zIndex:9999,background:'#fff',
+              border:`1px solid ${T.border}`,borderRadius:8,boxShadow:'0 10px 28px rgba(0,0,0,0.25)',
+              padding:4,display:'flex',flexDirection:'column',gap:2,minWidth:160}}>
+              {Object.entries(STATO_CFG).filter(([k])=>k!=='in_macchina').map(([key,s])=>{
+                const attivo=pgm.stato===key||(key==='in_lavorazione'&&pgm.stato==='in_macchina')
+                return(
+                  <button key={key} onClick={()=>{if(!attivo)onStato(key);setMenuStato(null)}}
+                    style={{display:'flex',alignItems:'center',gap:7,padding:'7px 11px',borderRadius:6,
+                      border:`1px solid ${attivo?s.border:'transparent'}`,cursor:'pointer',
+                      background:attivo?s.bg:'#fff',color:s.color,fontSize:12.5,fontWeight:700,
+                      textAlign:'left',whiteSpace:'nowrap'}}
+                    onMouseEnter={e=>{if(!attivo)e.currentTarget.style.background='#F4F2ED'}}
+                    onMouseLeave={e=>{if(!attivo)e.currentTarget.style.background='#fff'}}>
+                    <span>{s.dot}</span>{s.label}{attivo&&<span style={{marginLeft:'auto'}}>✓</span>}
+                  </button>
+                )
+              })}
+            </div>
+          </>, document.body)}
+        <div style={{flexShrink:0,width:50,textAlign:'center',borderRight:`1px solid ${T.border}`,alignSelf:'stretch',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:2}}>
+          <span style={{fontSize:13,fontWeight:800,color:isRip?RIPRESA_BADGE.color:gruppo.color,fontFamily:'monospace'}}>{pgm.numPgm}</span>
+          {isRip&&(
+            <span title="Programma di ripresa post-cam — escluso da selezione automatica"
+              style={{fontSize:8,fontWeight:800,color:RIPRESA_BADGE.color,background:RIPRESA_BADGE.bg,
+                padding:'1px 4px',borderRadius:3,display:'block',lineHeight:1.3,
+                letterSpacing:'0.04em',whiteSpace:'nowrap',
+                border:`1px solid ${RIPRESA_BADGE.color}33`}}>⚠ {RIPRESA_BADGE.label}</span>
+          )}
           {toolStatus&&toolStatus!=='ok'&&(()=>{
             const cfg={
               mancante: {dot:'✗',label:'MANCANTE',c:'#DC2626',bg:'#FEE2E2'},
@@ -246,25 +406,27 @@ function ProgramRow({pgm,gruppo,onStato,onOperatore,onTempo,onRemove,toolStatus,
               whiteSpace:'nowrap'}}>{b.dot} {b.label}</span>:null
           })()}
         </div>
-        <div style={{flexShrink:0,width:140,borderRight:`1px solid ${T.border}`,padding:'0 10px',alignSelf:'stretch',display:'flex',flexDirection:'column',justifyContent:'center'}}>
+        {/* OPERAZIONE + PARAMETRI CAM — adiacente allo stato: la coppia
+            decisionale per comporre il MAIN (richiesta esperto 2026-07-11) */}
+        <div style={{flex:1,padding:'3px 10px',alignSelf:'stretch',display:'flex',flexDirection:'column',justifyContent:'center',gap:1,overflow:'hidden'}}>
+          <span title={opClean} style={{fontSize:12,color:T.textSub,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{opClean||'—'}</span>
+          <div style={{minHeight:17}}>{camInfo&&<CamBadge info={camInfo}/>}</div>
+        </div>
+        <div style={{flexShrink:0,width:132,borderLeft:`1px solid ${T.border}`,padding:'0 10px',alignSelf:'stretch',display:'flex',flexDirection:'column',justifyContent:'center'}}>
           <span style={{fontSize:12,fontWeight:700,color:T.text,fontFamily:'monospace',lineHeight:1.2}}>{pgm.utensile||'—'}</span>
           {pgm.diametro&&<span style={{fontSize:10,color:T.textMuted}}>Ø {pgm.diametro}</span>}
         </div>
-        <div style={{flex:1,padding:'0 10px',alignSelf:'stretch',display:'flex',alignItems:'center',overflow:'hidden'}}>
-          <span style={{fontSize:12,color:T.textSub,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{opClean||'—'}</span>
+        {/* INIZIO/FINE — colonna SEMPRE presente (griglia fissa, niente salti) */}
+        <div style={{flexShrink:0,width:96,padding:'0 8px',borderLeft:`1px solid ${T.border}`,alignSelf:'stretch',display:'flex',flexDirection:'column',justifyContent:'center'}}>
+          {pgm.tempoInizio&&<span style={{fontSize:10,color:'#0d2d5e',fontFamily:'monospace',whiteSpace:'nowrap'}}>▶ {pgm.tempoInizio}</span>}
+          {pgm.tempoFine&&<span style={{fontSize:10,color:'#166534',fontFamily:'monospace',whiteSpace:'nowrap'}}>■ {pgm.tempoFine}</span>}
         </div>
-        {(pgm.tempoInizio||pgm.tempoFine)&&(
-          <div style={{flexShrink:0,padding:'0 8px',borderLeft:`1px solid ${T.border}`,alignSelf:'stretch',display:'flex',flexDirection:'column',justifyContent:'center'}}>
-            {pgm.tempoInizio&&<span style={{fontSize:10,color:'#0d2d5e',fontFamily:'monospace',whiteSpace:'nowrap'}}>▶ {pgm.tempoInizio}</span>}
-            {pgm.tempoFine&&<span style={{fontSize:10,color:'#166534',fontFamily:'monospace',whiteSpace:'nowrap'}}>■ {pgm.tempoFine}</span>}
-          </div>
-        )}
-        {/* Tempo stimato + data post — sempre visibili */}
-        <div style={{flexShrink:0,padding:'0 8px',borderLeft:`1px solid ${T.border}`,alignSelf:'stretch',display:'flex',flexDirection:'column',justifyContent:'center',minWidth:60,alignItems:'flex-end'}}>
-          {pgm.tempoStimato&&<span style={{fontSize:11,fontWeight:700,color:'#475569',whiteSpace:'nowrap'}}>⏱ {pgm.tempoStimato}m</span>}
-          {pgm.dataPost&&<span style={{fontSize:9,color:T.textMuted,fontFamily:'monospace',whiteSpace:'nowrap'}}>📅 {pgm.dataPost}</span>}
+        {/* STIMA — dataPost spostata nel pannello espanso (già presente lì) */}
+        <div style={{flexShrink:0,width:64,padding:'0 8px',borderLeft:`1px solid ${T.border}`,alignSelf:'stretch',display:'flex',alignItems:'center',justifyContent:'flex-end'}}>
+          {pgm.tempoStimato&&<span style={{fontSize:12,fontWeight:700,color:'#475569',whiteSpace:'nowrap'}}>{pgm.tempoStimato}m</span>}
         </div>
-        <div onClick={()=>setExpanded(v=>!v)} style={{flexShrink:0,width:28,borderLeft:`1px solid ${T.border}`,alignSelf:'stretch',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',color:T.textMuted,fontSize:11}}>{expanded?'▲':'▼'}</div>
+        <div onClick={()=>setExpanded(v=>!v)} title="Dettagli / modifica"
+          style={{flexShrink:0,width:32,borderLeft:`1px solid ${T.border}`,alignSelf:'stretch',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',color:T.textMuted,fontSize:11}}>{expanded?'▲':'▼'}</div>
       </div>
       {expanded&&(
         <div style={{padding:'10px 14px',background:T.surface2,borderTop:`1px solid ${T.border}`,
@@ -377,6 +539,28 @@ function FresaturaPanel({task,onUpdateTask,toolsDB,projectId,projectName}){
   const[uploadMsg,setUploadMsg]=useState(null)
   const[uploadWarn,setUploadWarn]=useState(null)  // warning file progetto sbagliato
   const { selectedIds: selected, setSelectedIds: setSelected } = useContext(PgmSelContext)
+  // ── Parametri CAM (estrattore Cimatron): matching per filename ──────────────
+  // Fetch best-effort: se non c'è estrazione (404) o il nome progetto non è
+  // "commessa_posizione", nessun badge — la pagina funziona come prima.
+  const[camMap,setCamMap]=useState(null)
+  useEffect(()=>{
+    let vivo=true
+    const tok=(projectName||'').trim().split('_')
+    if(tok.length!==2||!tok[0]||!tok[1]){setCamMap(null);return}
+    fetch(`/api/cam-params/${encodeURIComponent(tok[0])}/${encodeURIComponent(tok[1])}/matching`)
+      .then(r=>r.ok?r.json():null)
+      .then(d=>{
+        if(!vivo||!d)return
+        const m={}
+        for(const r of d.programmi||[]){
+          if((r.metodo==='diretto'||r.metodo==='recupero'||r.metodo==='parziale')&&(r.procedure||[]).length)
+            m[(r.filename||'').toUpperCase()]=r
+        }
+        setCamMap(Object.keys(m).length?m:null)
+      })
+      .catch(()=>{if(vivo)setCamMap(null)})
+    return()=>{vivo=false}
+  },[projectName])
   const TOOL_BADGE={
     ok:          {dot:'✓',color:'#166534',bg:'#dcfce7'},
     fin_vita:    {dot:'⚠',color:'#B45309',bg:'#FEF3C7'},
@@ -385,13 +569,22 @@ function FresaturaPanel({task,onUpdateTask,toolsDB,projectId,projectName}){
   }
   // Gruppo TASTATURA: solo file con _IPM_ nel nome
   // RENISHAW senza _IPM_ restano in FRESATURA (colorati viola)
+  // RIPRESA: programmi post-cam manuali → in CODA al gruppo fresatura
+  // (separati visivamente per evitare che _rip_001 finisca prima di _002).
   const _pgmSort=(a,b)=>{
     const ia=/_IPM_/i.test(a.filename||''), ib=/_IPM_/i.test(b.filename||'')
     if(ia!==ib) return ia?-1:1
+    const ra=isRipresaFilename(a.filename||''), rb=isRipresaFilename(b.filename||'')
+    if(ra!==rb) return ra?1:-1   // ripresa in coda
+    if(ra && rb){
+      // Tra riprese: ordine alfabetico (allineato a backend _build_main_content)
+      return (a.filename||'').localeCompare(b.filename||'',undefined,{sensitivity:'base'})
+    }
     return (a.numPgm||'').localeCompare(b.numPgm||'',undefined,{numeric:true})
   }
   const ipmPrograms=[...programs.filter(p=>/_IPM_/i.test(p.filename||''))].sort(_pgmSort)
   const fresPrograms=[...programs.filter(p=>!/_IPM_/i.test(p.filename||''))].sort(_pgmSort)
+  const fresRiprese=fresPrograms.filter(p=>isRipresaFilename(p.filename||''))
   const doneTotal=programs.filter(p=>p.stato==='completato').length
   const inMacchina=programs.filter(p=>['in_main','in_lavorazione','in_macchina'].includes(p.stato)).length
   const total=programs.length
@@ -485,6 +678,20 @@ function FresaturaPanel({task,onUpdateTask,toolsDB,projectId,projectName}){
   function toggleSelect(id){ setSelected(s=>{ const n=new Set(s); n.has(id)?n.delete(id):n.add(id); return n }) }
   function selTutti(lista){ setSelected(s=>{ const n=new Set(s); lista.forEach(p=>n.add(p.id)); return n }) }
   function deselTutti(){ setSelected(new Set()) }
+  // Shift+click = selezione a intervallo dall'ultima riga cliccata (v2)
+  const lastSelIdx=useRef(null)
+  function handleSelect(pgm,e){
+    const flat=gruppi.flatMap(g=>g.list)
+    const idx=flat.findIndex(p=>p.id===pgm.id)
+    if(e&&e.shiftKey&&lastSelIdx.current!=null&&idx>=0){
+      const a=Math.min(idx,lastSelIdx.current), b=Math.max(idx,lastSelIdx.current)
+      const ids=flat.slice(a,b+1).map(p=>p.id)
+      setSelected(s=>{const n=new Set(s);ids.forEach(i=>n.add(i));return n})
+    }else{
+      toggleSelect(pgm.id)
+    }
+    lastSelIdx.current=idx
+  }
   function massaStato(stato){
     updatePrograms(programs.map(p=>{
       if(!selected.has(p.id)) return p
@@ -639,7 +846,23 @@ function FresaturaPanel({task,onUpdateTask,toolsDB,projectId,projectName}){
           <div style={{display:'flex',gap:10,alignItems:'center',padding:'10px 14px',borderBottom:`1px solid ${T.border}`}}>
             <input ref={fileInputRef} type='file' accept='.mpf,.MPF' multiple style={{display:'none'}} onChange={handleFileUpload}/>
             <button onClick={()=>fileInputRef.current.click()} style={{background:'#0d2d5e',border:'none',borderRadius:7,color:'#fff',fontWeight:700,fontSize:13,padding:'7px 14px',cursor:'pointer'}}>📂 Carica .mpf</button>
-            {total>0&&<span style={{fontSize:12,color:T.textMuted}}>{ipmPrograms.length>0&&`📏 ${ipmPrograms.length} IPM · `}⚙️ {fresPrograms.length} fresatura</span>}
+            {total>0&&(
+              <span style={{fontSize:12,color:T.textMuted,display:'flex',alignItems:'center',gap:6}}>
+                {ipmPrograms.length>0&&<span>📏 {ipmPrograms.length} IPM</span>}
+                {ipmPrograms.length>0&&<span>·</span>}
+                <span>⚙️ {fresPrograms.length-fresRiprese.length} fresatura</span>
+                {fresRiprese.length>0&&(
+                  <>
+                    <span>·</span>
+                    <span style={{fontWeight:800,color:RIPRESA_BADGE.color,
+                      background:RIPRESA_BADGE.bg,padding:'1px 6px',borderRadius:4,
+                      fontSize:11,letterSpacing:'0.04em'}}>
+                      ⚠ {fresRiprese.length} RIPRESA
+                    </span>
+                  </>
+                )}
+              </span>
+            )}
             {uploadMsg&&<span style={{fontSize:12,fontWeight:700,color:'#166534',background:'#dcfce7',padding:'3px 10px',borderRadius:6}}>✓ {uploadMsg}</span>}
           </div>
 
@@ -704,12 +927,15 @@ function FresaturaPanel({task,onUpdateTask,toolsDB,projectId,projectName}){
               boxShadow:'0 2px 8px rgba(13,45,94,0.12)'}}>
               <span style={{fontSize:12,fontWeight:700,color:'#0d2d5e',marginRight:4}}>{selected.size} selezionati</span>
               <span style={{fontSize:11,color:'#0d2d5e',marginRight:8}}>→ Segna come:</span>
-              {[['da_fare','○ Da fare','#f8fafc','#475569'],['in_macchina','⚙ In macchina','#DBEAFE','#0d2d5e'],['completato','✓ Completato','#DCFCE7','#166534']].map(([stato,label,bg,color])=>(
-                <button key={stato} onClick={()=>massaStato(stato)}
-                  style={{background:bg,border:`1.5px solid ${color}44`,borderRadius:6,color,fontSize:11,fontWeight:700,padding:'4px 10px',cursor:'pointer'}}>
-                  {label}
-                </button>
-              ))}
+              {['da_fare','in_main','in_lavorazione','completato'].map(key=>{
+                const s=STATO_CFG[key]
+                return(
+                  <button key={key} onClick={()=>massaStato(key)}
+                    style={{background:s.bg,border:`1.5px solid ${s.border}`,borderRadius:6,color:s.color,fontSize:11.5,fontWeight:700,padding:'4px 11px',cursor:'pointer'}}>
+                    {s.dot} {s.label}
+                  </button>
+                )
+              })}
               <div style={{width:1,background:'#0d2d5e33',alignSelf:'stretch',margin:'0 4px'}}/>
               <button onClick={eliminaSelezionati}
                 style={{background:'#fef2f2',border:'1.5px solid #fca5a5',borderRadius:6,
@@ -721,18 +947,104 @@ function FresaturaPanel({task,onUpdateTask,toolsDB,projectId,projectName}){
           )}
 
           {total===0&&<div style={{textAlign:'center',padding:24,color:T.textMuted,fontSize:13}}>Nessun programma · clicca "Carica .mpf"</div>}
+          {/* ── Selezione per stato (v2): seleziona tutti i programmi con
+              stato X, combinabile (X o Y). Escluse le riprese, coerente con
+              la selezione automatica del MAIN — si aggiungono a mano. ── */}
+          {total>0&&(()=>{
+            const STATI_SEL=[['da_fare','○','Da fare'],['in_main','📋','In Main'],['in_lavorazione','⚙','In Lav.'],['completato','✓','Fatti']]
+            const norm=s=>s==='in_macchina'?'in_lavorazione':(s||'da_fare')
+            const perStato=Object.fromEntries(STATI_SEL.map(([k])=>[k,programs.filter(p=>norm(p.stato)===k&&!isRipresaFilename(p.filename||''))]))
+            // ── Selezione per CLASSE (Fase 4 — il traguardo dichiarato):
+            // macro-gruppi dal classificatore, stessa semantica dei chip stato
+            // Grana fine per zona (richiesta esperto 2026-07-13): piani /
+            // pareti / figura selezionabili separatamente. I chip a conteggio
+            // zero non vengono renderizzati, la barra resta compatta.
+            const MACRO=[
+              ['SGR','SGROSSATURE','#B45309',['SGROSSATURA','SGROSSATURA_FIGURA']],
+              ['PREF_P','PREF. PIANI','#C2410C',['PREFINITURA_PIANI']],
+              ['PREF_F','PREF. FIGURA','#C2410C',['PREFINITURA_FIGURA']],
+              ['PREF','PREF. ALTRE','#C2410C',['PREFINITURA']],
+              ['FIN_P','FIN. PIANI','#166534',['FINITURA_PIANI']],
+              ['FIN_PA','FIN. PARETI','#166534',['FINITURA_PARETI']],
+              ['FIN_F','FIN. FIGURA','#166534',['FINITURA_FIGURA']],
+              ['FIN','FIN. ALTRE','#166534',['FINITURA']],
+              ['TOLL','FIN. TOLLERANZA','#DC2626',['FINITURA_TOLLERANZA','FINITURA_CHIUSURE']],
+              // Ripresa = categoria propria, sottocategoria legata all'offset
+              ['RIP','RIPRESE','#7C3AED',['RIPRESA','RIPRESA_SGROSSATURA','RIPRESA_PREFINITURA','RIPRESA_FINITURA']],
+              ['NC','NON CRITICHE','#64748B',['FINITURA_NON_CRITICA','FINITURA_SMUSSO','SMUSSO','SEDE_GUARNIZIONE']],
+              ['FOR','FORATURE','#1D4ED8',['FORATURA','ALESATURA']],
+              ['MIS','MISURE','#64748B',['MISURA']],
+            ]
+            const classeDi=p=>{
+              const m=camMap&&camMap[(p.filename||'').toUpperCase()]
+              return m&&m.procedure&&m.procedure[0]&&m.procedure[0].classe&&m.procedure[0].classe.operazione||null
+            }
+            const perClasse=MACRO.map(([sig,label,color,classi])=>{
+              const lista=programs.filter(p=>!isRipresaFilename(p.filename||'')&&classi.includes(classeDi(p)))
+              return[sig,label,color,lista]
+            }).filter(([,,,lista])=>lista.length>0)
+            return(
+              <div style={{display:'flex',alignItems:'center',gap:6,padding:'7px 10px',background:T.surface2,borderBottom:`1px solid ${T.border}`,flexWrap:'wrap'}}>
+                <span style={{fontSize:10,fontWeight:800,color:T.textMuted,letterSpacing:'0.06em',marginRight:2}}>SELEZIONA:</span>
+                {STATI_SEL.map(([key,dot,label])=>{
+                  const lista=perStato[key]
+                  const attivo=lista.length>0&&lista.every(p=>selected.has(p.id))
+                  const cfg=STATO_CFG[key]
+                  return(
+                    <button key={key} disabled={!lista.length}
+                      title={attivo?`Deseleziona i ${lista.length} "${label}"`:`Aggiungi alla selezione i ${lista.length} programmi "${label}" (escluse riprese)`}
+                      onClick={()=>{setSelected(prev=>{const n=new Set(prev);lista.forEach(p=>attivo?n.delete(p.id):n.add(p.id));return n})}}
+                      style={{display:'inline-flex',alignItems:'center',gap:5,padding:'4px 11px',borderRadius:14,cursor:lista.length?'pointer':'default',
+                        border:`1.5px solid ${attivo?cfg.border:T.border}`,
+                        background:attivo?cfg.bg:'transparent',color:attivo?cfg.color:(lista.length?T.textSub:T.border),
+                        fontSize:11.5,fontWeight:700,opacity:lista.length?1:0.55}}>
+                      <span>{dot}</span>{label}
+                      <span style={{fontSize:10,fontWeight:800,background:attivo?'rgba(255,255,255,0.6)':T.surface2,padding:'0 6px',borderRadius:8}}>{lista.length}</span>
+                    </button>
+                  )
+                })}
+                {perClasse.length>0&&<span style={{width:1,alignSelf:'stretch',background:T.border,margin:'0 4px'}}/>}
+                {perClasse.length>0&&<span style={{fontSize:10,fontWeight:800,color:T.textMuted,letterSpacing:'0.06em'}}>CLASSE:</span>}
+                {perClasse.map(([sig,label,color,lista])=>{
+                  const attivo=lista.every(p=>selected.has(p.id))
+                  return(
+                    <button key={sig}
+                      title={attivo?`Deseleziona le ${lista.length} ${label}`:`Aggiungi alla selezione: ${lista.length} ${label} (classificate dal CAM, escluse riprese)`}
+                      onClick={()=>{setSelected(prev=>{const n=new Set(prev);lista.forEach(p=>attivo?n.delete(p.id):n.add(p.id));return n})}}
+                      style={{display:'inline-flex',alignItems:'center',gap:5,padding:'4px 11px',borderRadius:14,cursor:'pointer',
+                        border:`1.5px solid ${attivo?color:T.border}`,
+                        background:attivo?color:'transparent',color:attivo?'#fff':T.textSub,
+                        fontSize:11.5,fontWeight:800}}>
+                      {label}
+                      <span style={{fontSize:10,fontWeight:800,background:attivo?'rgba(255,255,255,0.28)':T.surface2,padding:'0 6px',borderRadius:8}}>{lista.length}</span>
+                    </button>
+                  )
+                })}
+                {selected.size>0&&(
+                  <button onClick={deselTutti}
+                    style={{marginLeft:'auto',display:'inline-flex',alignItems:'center',gap:4,padding:'4px 11px',borderRadius:14,cursor:'pointer',
+                      border:`1.5px solid ${T.border}`,background:'transparent',color:T.textSub,fontSize:11.5,fontWeight:700}}>
+                    ✕ Nessuno <span style={{fontSize:10,fontWeight:800,background:T.surface2,padding:'0 6px',borderRadius:8}}>{selected.size}</span>
+                  </button>
+                )}
+              </div>
+            )
+          })()}
           {total>0&&(
             <div style={{display:'flex',background:T.surface2,borderBottom:`1px solid ${T.border}`,fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:'0.07em'}}>
-              <div style={{width:32,padding:'5px 8px',borderRight:`1px solid ${T.border}`,display:'flex',alignItems:'center',justifyContent:'center'}}>
+              <div style={{width:34,padding:'5px 8px',borderRight:`1px solid ${T.border}`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
                 <input type='checkbox' checked={selected.size>0&&programs.every(p=>selected.has(p.id))}
                   ref={el=>{if(el) el.indeterminate=selected.size>0&&!programs.every(p=>selected.has(p.id))}}
                   onChange={e=>e.target.checked?selTutti(programs):deselTutti()}
                   onClick={e=>e.stopPropagation()} style={{cursor:'pointer',accentColor:'#0d2d5e'}}/>
               </div>
-              <div style={{width:110,padding:'5px 10px',borderRight:`1px solid ${T.border}`}}>STATO</div>
-              <div style={{width:52,padding:'5px 4px',borderRight:`1px solid ${T.border}`,textAlign:'center'}}>#</div>
-              <div style={{width:140,padding:'5px 10px',borderRight:`1px solid ${T.border}`}}>UTENSILE</div>
-              <div style={{flex:1,padding:'5px 10px'}}>OPERAZIONE</div>
+              <div style={{width:96,padding:'5px 8px',borderRight:`1px solid ${T.border}`,flexShrink:0}}>STATO</div>
+              <div style={{width:50,padding:'5px 4px',borderRight:`1px solid ${T.border}`,textAlign:'center',flexShrink:0}}>#</div>
+              <div style={{flex:1,padding:'5px 10px'}}>OPERAZIONE · PARAMETRI CAM</div>
+              <div style={{width:132,padding:'5px 10px',borderLeft:`1px solid ${T.border}`,flexShrink:0}}>UTENSILE</div>
+              <div style={{width:96,padding:'5px 8px',borderLeft:`1px solid ${T.border}`,flexShrink:0}}>INIZIO / FINE</div>
+              <div style={{width:64,padding:'5px 8px',borderLeft:`1px solid ${T.border}`,textAlign:'right',flexShrink:0}}>STIMA</div>
+              <div style={{width:32,borderLeft:`1px solid ${T.border}`,flexShrink:0}}></div>
             </div>
           )}
           {gruppi.map(gruppo=>(
@@ -747,16 +1059,40 @@ function FresaturaPanel({task,onUpdateTask,toolsDB,projectId,projectName}){
                   <span style={{fontSize:10,color:gruppo.color}}>{collapsedGroups[gruppo.key]?'▼':'▲'}</span>
                 </div>
               )}
-              {(gruppi.length===1||!collapsedGroups[gruppo.key])&&gruppo.list.map(pgm=>(
-                <ProgramRow key={pgm.id} pgm={pgm} gruppo={gruppo}
+              {(gruppi.length===1||!collapsedGroups[gruppo.key])&&gruppo.list.map((pgm,idx)=>{
+                // Separatore visivo prima del 1o programma RIPRESA del gruppo:
+                // evidenzia il confine fra programmi normali e riprese post-cam
+                // (allineato al delimitatore presente nel file MAIN generato).
+                const _isRip = isRipresaFilename(pgm.filename||'')
+                const _prevIsRip = idx>0 ? isRipresaFilename(gruppo.list[idx-1].filename||'') : false
+                const showRipDivider = _isRip && !_prevIsRip
+                return (
+                <React.Fragment key={pgm.id}>
+                {showRipDivider && (
+                  <div style={{display:'flex',alignItems:'center',gap:8,padding:'6px 14px',
+                    background:RIPRESA_BADGE.bg, borderTop:`2px dashed ${RIPRESA_BADGE.color}66`,
+                    borderBottom:`1px solid ${RIPRESA_BADGE.color}33`,
+                    fontSize:11,fontWeight:800,color:RIPRESA_BADGE.color,letterSpacing:'0.06em'}}>
+                    <span style={{fontSize:13}}>⚠</span>
+                    <span>PROGRAMMI DI RIPRESA — post-cam, eseguire DOPO i normali</span>
+                    <span style={{marginLeft:'auto',background:'rgba(255,255,255,0.55)',
+                      padding:'1px 8px',borderRadius:4,fontSize:10}}>
+                      {gruppo.list.filter(p=>isRipresaFilename(p.filename||'')).length} file
+                    </span>
+                  </div>
+                )}
+                <ProgramRow pgm={pgm} gruppo={gruppo}
                   selected={selected.has(pgm.id)}
-                  onSelect={()=>toggleSelect(pgm.id)}
+                  onSelect={e=>handleSelect(pgm,e)}
                   onStato={stato=>updatePgm(pgm.id,{stato})}
                   onOperatore={operatore=>updatePgm(pgm.id,{operatore})}
                   onTempo={tempoStimato=>updatePgm(pgm.id,{tempoStimato})}
                   onRemove={()=>updatePrograms(programs.filter(p=>p.id!==pgm.id))}
-                  toolStatus={['in_macchina','in_main','in_lavorazione'].includes(pgm.stato)?classifyTool(pgm.utensile,toolsDB):null}/>
-              ))}
+                  toolStatus={['in_macchina','in_main','in_lavorazione'].includes(pgm.stato)?classifyTool(pgm.utensile,toolsDB):null}
+                  camInfo={camMap?camMap[(pgm.filename||'').toUpperCase()]:null}/>
+                </React.Fragment>
+                )
+              })}
             </div>
           ))}
         </div>
@@ -1130,11 +1466,17 @@ function LancioNCModal({project, toolsDB, initialSelectedIds, onLancia, onClose}
   // Costruisce mappa fase → programmi, IPM INCLUSI (sezione separata)
   // pgmsIpm: SOLO file con _IPM_ nel nome (separati in sezione dedicata)
   // pgms: tutti gli altri, inclusi RENISHAW senza _IPM_ (restano in lista, colorati viola)
+  // Sort numerico per filename: garantisce ordine crescente stabile
+  // (es. 001, 002, ..., 049). Senza questo i file appaiono nell'ordine
+  // di append/insert nel JSON — caotico dopo recovery o cambio stati.
+  const _cmpPgm = (a, b) => (a.filename || '').localeCompare(
+    b.filename || '', undefined, { numeric: true, sensitivity: 'base' }
+  )
   const fasi = (project.steps||[]).map(step=>{
     const fres = (step.tasks||[]).find(t=>t.text?.trim().toLowerCase()==='fresatura')
     const pgmsAll = fres ? (fres.programs||[]) : []
-    const pgmsFres = pgmsAll.filter(p=>!/_IPM_/i.test(p.filename||''))
-    const pgmsIpm  = pgmsAll.filter(p=> /_IPM_/i.test(p.filename||''))
+    const pgmsFres = pgmsAll.filter(p=>!/_IPM_/i.test(p.filename||'')).sort(_cmpPgm)
+    const pgmsIpm  = pgmsAll.filter(p=> /_IPM_/i.test(p.filename||'')).sort(_cmpPgm)
     return { stepId: step.id, stepTitle: step.title, pgms: pgmsFres, pgmsIpm }
   }).filter(f=>f.pgms.length>0||f.pgmsIpm.length>0)
 
@@ -1602,8 +1944,56 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
   const[showSaveTemplate,setShowSaveTemplate]=useState(false)
   const[showMoreMenu,setShowMoreMenu]=useState(false)
   const[schedaPredittiva,setSchedaPredittiva]=useState(null)
-  const[pannelliCollassati,setPannelliCollassati]=useState(false)
+  // Default: pannelli analisi (predizione geometria + storico ore) chiusi.
+  // Preferenza per-progetto memorizzata in localStorage: l'operatore decide
+  // se vederli e la scelta persiste fra refresh e aperture successive.
+  const[pannelliCollassati,setPannelliCollassati]=useState(()=>{
+    try {
+      const v = localStorage.getItem(`dmgdesk:panel-analisi-collapsed:${project.id}`)
+      if(v === null) return true       // default: chiuso
+      return v === '1'
+    } catch(e){ return true }
+  })
+  useEffect(()=>{
+    try { localStorage.setItem(`dmgdesk:panel-analisi-collapsed:${project.id}`, pannelliCollassati ? '1' : '0') } catch(e){}
+  },[pannelliCollassati, project.id])
   const[rendiconto,setRendiconto]=useState(null)
+  const[cartelleInfo,setCartelleInfo]=useState(null)
+  const[apriCartellaErr,setApriCartellaErr]=useState(null)
+  const[showEltModal,setShowEltModal]=useState(false)
+  const[eltPathInput,setEltPathInput]=useState('')
+  const[savingEltPath,setSavingEltPath]=useState(false)
+  const[eltModalErr,setEltModalErr]=useState(null)
+  const[creaMpfBusy,setCreaMpfBusy]=useState(false)
+  const[backupBusy,setBackupBusy]=useState(false)
+
+  async function eseguiBackupArchivio(){
+    if(backupBusy) return
+    setBackupBusy(true)
+    setApriCartellaErr(null)
+    try {
+      const r = await fetch(`/api/backup/archivi/progetto/${project.id}`, {method:'POST'})
+      const data = await r.json().catch(()=>({}))
+      if(!r.ok){
+        alert(`Errore backup: ${data.detail || r.statusText}`)
+        return
+      }
+      const msg = (
+        `Backup completato per ${data.progetto}\n\n` +
+        `Sorgente: ${data.src}\n` +
+        `Destinazione: ${data.dst}\n\n` +
+        `File copiati: ${data.file_copiati}\n` +
+        `File invariati: ${data.file_invariati}\n` +
+        `Errori: ${data.errori}\n` +
+        `Durata: ${data.durata_sec}s`
+      )
+      alert(msg)
+    } catch(e){
+      alert(`Errore di rete: ${e.message}`)
+    } finally {
+      setBackupBusy(false)
+    }
+  }
 
   useEffect(()=>{
     fetch(`/api/report/rendiconto-progetto?project_id=${project.id}`)
@@ -1620,6 +2010,123 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
       .then(d=>{ if(d) setSchedaPredittiva(d) })
       .catch(()=>{})
   },[project.name])
+
+  async function ricaricaCartelleInfo(){
+    try {
+      const r = await fetch(`/api/progetti/${project.id}/cartelle-info`)
+      if(r.ok) setCartelleInfo(await r.json())
+    } catch(e){}
+  }
+
+  useEffect(()=>{ ricaricaCartelleInfo() },[project.id])
+
+  // Apre un path locale sul client tramite il protocollo dmgopen:// (URL handler
+  // registrato dal file scripts/dmgdesk-apertura-cartelle.reg). L'azione avviene
+  // SUL CLIENT, non sul server: ogni utente deve installare il .reg una volta.
+  function apriPathLocale(path){
+    if(!path){ return }
+    // encodeURIComponent codifica anche '\' e ':' che PS riconverte con UnescapeDataString
+    const url = 'dmgopen://' + encodeURIComponent(path)
+    window.location.href = url
+  }
+
+  function onClickElt(){
+    setApriCartellaErr(null)
+    const elt = cartelleInfo?.elt
+    if(elt?.exists){
+      apriPathLocale(elt.path)
+    } else {
+      // Cartella non trovata: chiedi all'operatore dove si trova
+      setEltPathInput(elt?.path || '')
+      setEltModalErr(null)
+      setShowEltModal(true)
+    }
+  }
+
+  function onClickEditElt(e){
+    if(e){ e.stopPropagation() }
+    setApriCartellaErr(null)
+    setEltPathInput(cartelleInfo?.elt?.path || '')
+    setEltModalErr(null)
+    setShowEltModal(true)
+  }
+
+  async function salvaEltPath(path){
+    setEltModalErr(null)
+    setSavingEltPath(true)
+    try {
+      const r = await fetch(`/api/progetti/${project.id}/cartella-elt`, {
+        method:'PUT',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({path: path})
+      })
+      const data = await r.json().catch(()=>({}))
+      if(!r.ok){
+        setEltModalErr(data.detail || 'Errore salvataggio path ELT')
+        return null
+      }
+      await ricaricaCartelleInfo()
+      return data
+    } catch(e){
+      setEltModalErr('Errore di rete: ' + e.message)
+      return null
+    } finally {
+      setSavingEltPath(false)
+    }
+  }
+
+  async function onConfermaEltPath(){
+    const trim = eltPathInput.trim()
+    if(!trim){
+      setEltModalErr('Inserisci un path')
+      return
+    }
+    const result = await salvaEltPath(trim)
+    if(result){
+      setShowEltModal(false)
+      if(result.exists){
+        // Subito apri la cartella appena memorizzata
+        apriPathLocale(result.cartella_elt_path)
+      } else {
+        setApriCartellaErr(`Path memorizzato ma cartella non trovata: ${result.cartella_elt_path}`)
+        setTimeout(()=>setApriCartellaErr(null), 7000)
+      }
+    }
+  }
+
+  async function onClickMpf(){
+    setApriCartellaErr(null)
+    const mpf = cartelleInfo?.mpf
+    if(mpf?.exists){
+      apriPathLocale(mpf.path)
+      return
+    }
+    if(!mpf?.path){
+      setApriCartellaErr(mpf?.error || 'Cartella MPF non disponibile')
+      setTimeout(()=>setApriCartellaErr(null), 5000)
+      return
+    }
+    if(!window.confirm(`La cartella MPF non esiste ancora:\n\n${mpf.path}\n\nVuoi crearla ora?`)){
+      return
+    }
+    setCreaMpfBusy(true)
+    try {
+      const r = await fetch(`/api/progetti/${project.id}/crea-cartella-mpf`, {method:'POST'})
+      const data = await r.json().catch(()=>({}))
+      if(!r.ok){
+        setApriCartellaErr(data.detail || 'Errore creazione cartella MPF')
+        setTimeout(()=>setApriCartellaErr(null), 5000)
+        return
+      }
+      await ricaricaCartelleInfo()
+      apriPathLocale(data.path)
+    } catch(e){
+      setApriCartellaErr('Errore di rete: ' + e.message)
+      setTimeout(()=>setApriCartellaErr(null), 5000)
+    } finally {
+      setCreaMpfBusy(false)
+    }
+  }
   const logRef=useRef(null)
   const next=getNextTask(project)
   const progress=getProgress(project)
@@ -1740,6 +2247,78 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
             📊
           </button>
 
+          {/* Apri cartella ELT (file CAM, path personalizzabile per progetto) */}
+          {(()=>{
+            const elt = cartelleInfo?.elt
+            const exists = elt?.exists === true
+            const isMemo = elt?.source === 'memorizzato'
+            let tooltip
+            if(exists){
+              tooltip = `Apri ${elt.path}${isMemo?' (path memorizzato)':' (path di default)'}`
+            } else if(elt?.path){
+              tooltip = `Cartella non trovata: ${elt.path} — click per indicarla`
+            } else {
+              tooltip = elt?.error || 'Nessun path ELT — click per indicarlo'
+            }
+            return (
+              <div style={{display:'flex',alignItems:'center',gap:0,flexShrink:0}}>
+                <button onClick={onClickElt}
+                  title={tooltip}
+                  style={{background:'none',
+                    border:`1px solid ${T.border}`,
+                    borderRight:'none',borderTopRightRadius:0,borderBottomRightRadius:0,
+                    borderRadius:6,
+                    color: exists?'#1D5FAD':'#b45309',
+                    fontSize:12, padding:'5px 8px 5px 10px',
+                    cursor:'pointer', fontWeight:600,
+                    opacity: exists?1:0.8}}>
+                  📁 ELT {isMemo && exists && <span style={{fontSize:9,opacity:0.6,marginLeft:2}}>●</span>}
+                  {!exists && <span style={{fontSize:10,marginLeft:3}}>⚠</span>}
+                </button>
+                <button onClick={onClickEditElt}
+                  title="Indica/modifica path cartella ELT"
+                  style={{background:'none',
+                    border:`1px solid ${T.border}`,
+                    borderTopLeftRadius:0,borderBottomLeftRadius:0,
+                    borderRadius:6,
+                    color:T.textMuted, fontSize:10, padding:'5px 6px',
+                    cursor:'pointer', fontWeight:600}}>
+                  ✏️
+                </button>
+              </div>
+            )
+          })()}
+
+          {/* Apri cartella MPF (programmi NC in P:\DMG_DMC_160U) */}
+          {(()=>{
+            const mpf = cartelleInfo?.mpf
+            const exists = mpf?.exists === true
+            let tooltip
+            if(exists){ tooltip = `Apri ${mpf.path}` }
+            else if(mpf?.path){ tooltip = `Cartella non trovata: ${mpf.path} — click per crearla` }
+            else { tooltip = mpf?.error || 'Cartella MPF non disponibile' }
+            return (
+              <button onClick={onClickMpf}
+                disabled={creaMpfBusy || !mpf?.path}
+                title={tooltip}
+                style={{background:'none',border:`1px solid ${T.border}`,borderRadius:6,
+                  color: exists?'#1D5FAD':'#b45309',
+                  fontSize:12, padding:'5px 10px',
+                  cursor: (creaMpfBusy||!mpf?.path)?'not-allowed':'pointer',
+                  fontWeight:600, flexShrink:0,
+                  opacity: mpf?.path?1:0.4}}>
+                📁 MPF {creaMpfBusy ? <span style={{fontSize:10}}>…</span> : (!exists && mpf?.path && <span style={{fontSize:10,marginLeft:3}}>+</span>)}
+              </button>
+            )
+          })()}
+
+          {apriCartellaErr && (
+            <span style={{fontSize:11,fontWeight:700,color:'#dc2626',background:'#fef2f2',
+              border:'1px solid #fca5a5',borderRadius:6,padding:'4px 10px',flexShrink:0}}>
+              ⚠ {apriCartellaErr}
+            </span>
+          )}
+
           {/* Menu ⋯ — secondari nascosti */}
           <div style={{position:'relative',flexShrink:0}}>
             <button onClick={()=>setShowMoreMenu(v=>!v)}
@@ -1753,14 +2332,29 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
                 boxShadow:'0 4px 16px rgba(0,0,0,0.12)',zIndex:50,minWidth:160,overflow:'hidden'}}>
                 {[
                   {label:'💾 Salva come template', action:()=>{setShowSaveTemplate(true);setShowMoreMenu(false)}},
+                  {label: backupBusy ? '⏳ Backup in corso…' : '🗄️ Esegui backup archivio ora',
+                   disabled: backupBusy,
+                   action:()=>{ setShowMoreMenu(false); eseguiBackupArchivio() }},
+                  {label:'⚙️ Installa apertura cartelle (.reg)', action:()=>{
+                    // Scarica e suggerisce installazione del protocol handler dmgopen://
+                    const a = document.createElement('a')
+                    a.href = '/api/scripts/dmgdesk-apertura-cartelle.reg'
+                    a.download = 'dmgdesk-apertura-cartelle.reg'
+                    document.body.appendChild(a); a.click(); a.remove()
+                    setShowMoreMenu(false)
+                    setTimeout(()=>{
+                      alert('Scaricato dmgdesk-apertura-cartelle.reg.\n\nFai doppio click sul file scaricato e accetta la modifica del registro.\nSi installa solo per l\'utente corrente (no admin).\n\nDopo l\'installazione i bottoni 📁 ELT / 📁 MPF apriranno Esplora Risorse sul tuo PC.')
+                    }, 300)
+                  }},
                   {label:project.archived?'📤 Riattiva':'📦 Archivia', action:()=>{setConfirm('archive');setShowMoreMenu(false)}},
                   {label:'🗑️ Elimina', action:()=>{setConfirm('delete');setShowMoreMenu(false)}, danger:true},
                 ].map((item,i)=>(
-                  <button key={i} onClick={item.action}
+                  <button key={i} onClick={item.disabled?undefined:item.action} disabled={!!item.disabled}
                     style={{display:'block',width:'100%',textAlign:'left',
                       background:'none',border:'none',borderTop:i>0?`1px solid ${T.border}`:'none',
-                      color:item.danger?T.red:T.text,fontSize:13,padding:'10px 16px',
-                      cursor:'pointer',fontWeight:item.danger?600:400}}>
+                      color:item.danger?T.red:(item.disabled?T.textMuted:T.text),fontSize:13,padding:'10px 16px',
+                      cursor:item.disabled?'wait':'pointer',fontWeight:item.danger?600:400,
+                      opacity:item.disabled?0.6:1}}>
                     {item.label}
                   </button>
                 ))}
@@ -2144,6 +2738,22 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
             ):(
               <button onClick={()=>setAddingStep(true)} style={{background:'none',border:`2px dashed ${T.border}`,borderRadius:10,color:T.textMuted,fontSize:14,padding:'12px',cursor:'pointer',width:'100%',fontWeight:500,marginTop:4}}>+ Aggiungi fase</button>
             )}
+
+            {/* Azione rapida: esegui backup archivio (in fondo alla lista task) */}
+            <div style={{marginTop:18,paddingTop:14,borderTop:`1px solid ${T.border}`}}>
+              <button onClick={eseguiBackupArchivio} disabled={backupBusy}
+                title="Copia la cartella ELT su H:\\Backup Archivi (solo file nuovi/modificati)"
+                style={{background:'none',border:`1px solid ${T.border}`,borderRadius:8,
+                  color: backupBusy ? T.textMuted : T.textSub,
+                  fontSize:13, padding:'8px 16px',
+                  cursor: backupBusy ? 'wait' : 'pointer', fontWeight:600,
+                  opacity: backupBusy ? 0.7 : 1}}>
+                {backupBusy ? '⏳ Backup in corso…' : '🗄️ Esegui backup archivio ora'}
+              </button>
+              <span style={{fontSize:11,color:T.textMuted,marginLeft:12}}>
+                Backup automatico ogni notte all'01:00
+              </span>
+            </div>
           </div>
         )}
         {activeTab==='documenti'&&(
@@ -2167,6 +2777,64 @@ function ProjectDetail({project,onBack,onUpdate,onDelete,onArchive,templates,onS
       </div>
       {confirm==='delete'&&<ConfirmDialog message={`Eliminare il progetto "${project.name}"? L'operazione è irreversibile.`} onConfirm={()=>{onDelete(project.id);setConfirm(null)}} onCancel={()=>setConfirm(null)}/>}
       {confirm==='archive'&&<ConfirmDialog message={project.archived?`Riportare "${project.name}" tra i progetti attivi?`:`Archiviare "${project.name}"?`} onConfirm={()=>{onArchive(project.id);setConfirm(null)}} onCancel={()=>setConfirm(null)}/>}
+      {showEltModal && (
+        <div onClick={()=>{if(!savingEltPath) setShowEltModal(false)}}
+          style={{position:'fixed',inset:0,background:'rgba(15,23,42,0.55)',
+            display:'flex',alignItems:'center',justifyContent:'center',zIndex:200}}>
+          <div onClick={e=>e.stopPropagation()}
+            style={{background:T.surface,borderRadius:12,padding:24,minWidth:480,maxWidth:'90vw',
+              boxShadow:'0 10px 40px rgba(0,0,0,0.3)',border:`1px solid ${T.border}`}}>
+            <div style={{fontSize:16,fontWeight:800,color:T.text,marginBottom:8}}>
+              Indica cartella ELT di {project.name}
+            </div>
+            <div style={{fontSize:13,color:T.textSub,marginBottom:14,lineHeight:1.5}}>
+              Inserisci il path completo della cartella che contiene i file di lavoro CAM (.elt).<br/>
+              Esempio: <code style={{background:T.surface2,padding:'1px 6px',borderRadius:4}}>C:\Lavoro\{project.name?.replace('_','\\')}</code>
+            </div>
+            <input type="text" autoFocus value={eltPathInput}
+              onChange={e=>{setEltPathInput(e.target.value); setEltModalErr(null)}}
+              onKeyDown={e=>{
+                if(e.key==='Enter' && !savingEltPath) onConfermaEltPath()
+                if(e.key==='Escape' && !savingEltPath) setShowEltModal(false)
+              }}
+              placeholder={`C:\\Lavoro\\${project.name?.replace('_','\\')||''}`}
+              style={{width:'100%',fontSize:13,padding:'8px 12px',
+                background:T.surface2,color:T.text,
+                border:`2px solid ${eltModalErr?'#dc2626':T.border}`,
+                borderRadius:8,outline:'none',fontFamily:'monospace'}}/>
+            {eltModalErr && (
+              <div style={{fontSize:12,color:'#dc2626',marginTop:8}}>⚠ {eltModalErr}</div>
+            )}
+            <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:18}}>
+              <button onClick={async ()=>{
+                  // Reset al default (path vuoto)
+                  if(savingEltPath) return
+                  const result = await salvaEltPath('')
+                  if(result){ setShowEltModal(false) }
+                }}
+                disabled={savingEltPath}
+                title="Reimposta al path di default (C:\Lavoro\COMMESSA\ODP)"
+                style={{background:'none',border:`1px solid ${T.border}`,borderRadius:7,
+                  color:T.textSub,fontSize:12,padding:'7px 12px',
+                  cursor:savingEltPath?'wait':'pointer',marginRight:'auto'}}>
+                Reset default
+              </button>
+              <button onClick={()=>{if(!savingEltPath) setShowEltModal(false)}}
+                disabled={savingEltPath}
+                style={{background:'none',border:`1px solid ${T.border}`,borderRadius:7,
+                  color:T.textSub,fontSize:13,padding:'8px 16px',cursor:savingEltPath?'wait':'pointer'}}>
+                Annulla
+              </button>
+              <button onClick={onConfermaEltPath} disabled={savingEltPath}
+                style={{background:'#0d2d5e',border:'none',borderRadius:7,
+                  color:'#fff',fontSize:13,fontWeight:700,padding:'8px 18px',
+                  cursor:savingEltPath?'wait':'pointer'}}>
+                {savingEltPath ? 'Salvataggio…' : 'Salva e apri'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {showSaveTemplate&&<SaveAsTemplateModal project={project} templates={templates} onSave={tmpl=>{onSaveAsTemplate(tmpl);setShowSaveTemplate(false)}} onClose={()=>setShowSaveTemplate(false)}/>}
       {showLancioModal&&<LancioNCModal
         project={project}
@@ -2739,6 +3407,86 @@ function TemplateEditor({template,onSave,onCancel}){
         ))}
         <button onClick={addStep} style={{background:'none',border:`2px dashed ${color}66`,borderRadius:10,color,fontSize:14,padding:'14px',cursor:'pointer',width:'100%',fontWeight:600}}>+ Aggiungi fase</button>
       </div>
+    </div>
+  )
+}
+
+// ── BackupArchiviPanel — pannello backup on-demand archivi su H: ─────────────
+// Lancia il job di sync C:\Lavoro\* -> H:\...\Backup Archivi\* per TUTTI i
+// progetti attivi. Stesso lavoro del loop notturno (01:00) ma on-demand.
+function BackupArchiviPanel(){
+  const T = useTheme()
+  const [busy, setBusy] = useState(false)
+  const [lastResult, setLastResult] = useState(null)
+  const [errorMsg, setErrorMsg] = useState(null)
+
+  async function esegui(){
+    if(busy) return
+    setBusy(true)
+    setErrorMsg(null)
+    try {
+      const r = await fetch('/api/backup/archivi', {method:'POST'})
+      const data = await r.json().catch(()=>({}))
+      if(!r.ok || data.ok === false){
+        setErrorMsg(data.detail || 'Errore esecuzione backup')
+        setLastResult(null)
+      } else {
+        setLastResult(data)
+      }
+    } catch(e){
+      setErrorMsg('Errore di rete: ' + e.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:12,padding:20,marginBottom:16}}>
+      <div style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:6}}>📦 Backup archivi su H:</div>
+      <div style={{fontSize:13,color:T.textMuted,marginBottom:16,lineHeight:1.6}}>
+        Sincronizza le cartelle di lavoro di tutti i progetti attivi su <code>H:\0CellaMikron\0Cella_DMG-Test\Backup Archivi</code>.<br/>
+        Copia solo i file nuovi/modificati, non cancella mai nulla in destinazione.<br/>
+        <span style={{fontSize:12,color:T.textSub}}>Automatico ogni notte all'01:00 (retry 03:00 se H: non raggiungibile).</span>
+      </div>
+      <button onClick={esegui} disabled={busy}
+        style={{background: busy ? T.textMuted : T.blue, border:'none', borderRadius:8,
+          color:'#fff', fontWeight:700, fontSize:13, padding:'9px 18px',
+          cursor: busy ? 'wait' : 'pointer'}}>
+        {busy ? '⏳ Backup in corso…' : '▶ Esegui backup ora'}
+      </button>
+      {errorMsg && (
+        <div style={{marginTop:12,padding:'10px 14px',borderRadius:8,
+          background:T.redBg, border:`1px solid ${T.red}55`, color:T.red, fontSize:13}}>
+          ⚠ {errorMsg}
+        </div>
+      )}
+      {lastResult && (
+        <div style={{marginTop:12,padding:'12px 16px',borderRadius:8,
+          background:T.greenBg, border:`1px solid ${T.green}55`, fontSize:13, color:T.text}}>
+          <div style={{fontWeight:700,marginBottom:4,color:T.green}}>✓ Backup completato</div>
+          <div style={{fontSize:12,color:T.textSub,marginBottom:8}}>
+            Eseguito alle {lastResult.timestamp?.slice(11,19) || '—'} · durata {lastResult.durata_sec}s
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8,marginBottom:8}}>
+            <div><div style={{fontSize:11,color:T.textMuted}}>Progetti</div><div style={{fontWeight:700}}>{lastResult.progetti_processati}</div></div>
+            <div><div style={{fontSize:11,color:T.textMuted}}>Skip</div><div style={{fontWeight:700}}>{lastResult.progetti_skip}</div></div>
+            <div><div style={{fontSize:11,color:T.textMuted}}>File copiati</div><div style={{fontWeight:700,color:T.green}}>{lastResult.file_copiati}</div></div>
+            <div><div style={{fontSize:11,color:T.textMuted}}>Errori</div><div style={{fontWeight:700,color: (lastResult.errori>0?T.red:T.textMuted)}}>{lastResult.errori}</div></div>
+          </div>
+          {lastResult.dettagli?.some(d=>d.skip) && (
+            <details style={{marginTop:6,fontSize:12}}>
+              <summary style={{cursor:'pointer',color:T.textSub,fontWeight:600}}>
+                Progetti saltati ({lastResult.dettagli.filter(d=>d.skip).length})
+              </summary>
+              <div style={{marginTop:6,paddingLeft:8,color:T.textSub,lineHeight:1.5}}>
+                {lastResult.dettagli.filter(d=>d.skip).map((d,i)=>(
+                  <div key={i}>• <b>{d.progetto}</b>: {d.motivo}</div>
+                ))}
+              </div>
+            </details>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -3696,7 +4444,7 @@ export default function Progetti(){
     }catch(err){setImportMsg(`⚠ ${err.message}`)}
     e.target.value=''
   }
-  function handleExport(){window.open(`${API}/export`,'_blank')}
+  function handleExport(){window.open(apiUrl(`${API}/export`),'_blank')}
 
   // ── Lancia NC ───────────────────────────────────────────────────────────────
   function lanciaNC(project, pgmSelezionati){
@@ -3904,6 +4652,8 @@ export default function Progetti(){
                   <div style={{fontSize:13,color:T.textMuted,marginBottom:16}}>Scarica tutti i progetti e template come file JSON compatibile con WorkTrack.</div>
                   <button onClick={handleExport} style={{background:T.blue,border:'none',borderRadius:8,color:'#fff',fontWeight:700,fontSize:13,padding:'9px 18px',cursor:'pointer'}}>💾 Scarica backup completo</button>
                 </div>
+
+                <BackupArchiviPanel/>
                 <div style={{background:T.blueBg,border:`1px solid ${T.blue}33`,borderRadius:10,padding:'14px 18px',display:'flex',gap:12,alignItems:'flex-start'}}>
                   <span style={{fontSize:20,flexShrink:0}}>💡</span>
                   <div style={{fontSize:13,color:T.blue,lineHeight:1.7}}>I dati vengono salvati in tempo reale su <code>P:\DMG_DMC_160U\worktrack_projects.json</code> condiviso tra web e desktop.</div>

@@ -37,14 +37,32 @@ from pathlib import Path
 
 # ── Configurazione ────────────────────────────────────────────────────────────
 
-PIN_MIN_LEN = 4
-PIN_MAX_LEN = 10
+def _env_int(nome: str, default: int, lo: int, hi: int) -> int:
+    """Legge un intero da env con clamp [lo, hi]; default se assente/non valido."""
+    try:
+        v = int(os.environ.get(nome, str(default)))
+    except (ValueError, TypeError):
+        v = default
+    return max(lo, min(hi, v))
+
+
+# Lunghezza PIN — configurabile via env (default 4-10 invariati). Alzare
+# DMG_PIN_MIN a 6 quando gli operatori sono avvisati: i PIN esistenti continuano a
+# funzionare (la verifica non controlla la lunghezza), il vincolo scatta solo
+# all'impostazione di un PIN NUOVO.
+PIN_MIN_LEN = _env_int("DMG_PIN_MIN", 4, 4, 12)
+PIN_MAX_LEN = _env_int("DMG_PIN_MAX", 10, PIN_MIN_LEN, 12)
 _PBKDF2_ITER = 200_000            # iterazioni PBKDF2 (rallenta il brute-force offline)
 _LOCKOUT_SOGLIA = 5               # tentativi errati prima del primo blocco
 _LOCKOUT_BASE_SEC = 60            # durata primo blocco; poi raddoppia
 _LOCKOUT_MAX_SEC = 3600           # tetto al blocco progressivo
 
 _ACCOUNTS_FILE = "auth_accounts.json"   # locale (cwd, accanto a config.json)
+
+# Ruoli operatore. Modello semplice (no RBAC per-endpoint): "admin" gestisce gli
+# operatori; "operatore" è l'uso normale (login, vista e controllo macchina).
+RUOLI_VALIDI = ("admin", "operatore")
+RUOLO_DEFAULT = "operatore"
 
 DEFAULT_OPERATORI = [
     {"id": "op1", "nome": "Operatore 1"},
@@ -147,6 +165,18 @@ def _verifica_hash(pin: str, hash_hex: str, salt_hex: str) -> bool:
     return hmac.compare_digest(calc, hash_hex or "")
 
 
+def _pin_in_uso(data: dict, pin: str, escludi_op_id: str | None = None) -> bool:
+    """True se un ALTRO operatore ha già questo PIN. I PIN devono essere UNICI:
+    il login-solo-PIN identifica l'operatore dal PIN, quindi due operatori non
+    possono condividerlo."""
+    for o in data.get("operatori", []):
+        if o.get("id") == escludi_op_id:
+            continue
+        if o.get("pin_hash") and _verifica_hash(pin, o.get("pin_hash", ""), o.get("pin_salt", "")):
+            return True
+    return False
+
+
 # ── Lockout anti-forza-bruta ──────────────────────────────────────────────────
 
 def _tempo_blocco(op_id: str) -> int:
@@ -184,13 +214,14 @@ def _prune_sessioni() -> None:
 def _crea_sessione(op: dict) -> dict:
     token = secrets.token_urlsafe(32)
     scade = _now() + _session_durata()
-    _sessions[token] = {"op_id": op["id"], "nome": op.get("nome"), "scade": scade}
+    _sessions[token] = {"op_id": op["id"], "nome": op.get("nome"),
+                        "ruolo": op.get("ruolo", RUOLO_DEFAULT), "scade": scade}
     return {"token": token, "scade": scade.isoformat(timespec="seconds")}
 
 
 def valida_token(token: str | None) -> dict | None:
-    """Ritorna {op_id, nome, scade} se il token è valido e non scaduto, else None.
-    Usata dal middleware su ogni richiesta protetta."""
+    """Ritorna {op_id, nome, ruolo, scade} se il token è valido e non scaduto,
+    else None. Usata dal middleware su ogni richiesta protetta."""
     if not token:
         return None
     with _lock:
@@ -199,6 +230,7 @@ def valida_token(token: str | None) -> dict | None:
         if not s:
             return None
         return {"op_id": s["op_id"], "nome": s["nome"],
+                "ruolo": s.get("ruolo", RUOLO_DEFAULT),
                 "scade": s["scade"].isoformat(timespec="seconds")}
 
 
@@ -217,7 +249,8 @@ def lista_operatori() -> list[dict]:
         data = _carica()
         return [
             {"id": o["id"], "nome": o.get("nome", o["id"]),
-             "pin_impostato": bool(o.get("pin_hash"))}
+             "pin_impostato": bool(o.get("pin_hash")),
+             "ruolo": o.get("ruolo", RUOLO_DEFAULT)}
             for o in data.get("operatori", [])
         ]
 
@@ -237,6 +270,9 @@ def imposta_pin(op_id: str, nuovo_pin: str) -> dict:
         op = _trova_op(data, op_id)
         if not op:
             return {"ok": False, "motivo": "operatore_sconosciuto"}
+        if _pin_in_uso(data, nuovo_pin, escludi_op_id=op_id):
+            return {"ok": False, "motivo": "pin_duplicato",
+                    "detail": "PIN già usato da un altro operatore — scegline un altro"}
         h, s = _hash_pin(nuovo_pin)
         op["pin_hash"] = h
         op["pin_salt"] = s
@@ -287,6 +323,9 @@ def login(op_id: str, pin: str) -> dict:
             if not _pin_valido(pin):
                 return {"ok": False, "motivo": "pin_non_valido",
                         "detail": f"Scegli un PIN di {PIN_MIN_LEN}-{PIN_MAX_LEN} cifre"}
+            if _pin_in_uso(data, pin, escludi_op_id=op_id):
+                return {"ok": False, "motivo": "pin_duplicato",
+                        "detail": "PIN già usato da un altro operatore — scegline un altro"}
             h, s = _hash_pin(pin)
             op["pin_hash"] = h
             op["pin_salt"] = s
@@ -311,6 +350,35 @@ def login(op_id: str, pin: str) -> dict:
             res["motivo"] = "bloccato"
             res["riprova_sec"] = bloccato
         return res
+
+
+def login_con_pin(pin: str, ip: str | None = None) -> dict:
+    """Login SOLO col PIN: identifica l'operatore dal PIN (unico). Nessuna
+    selezione operatore. Il lockout è per IP (prima del match non c'è un op_id
+    a cui attribuire il tentativo). Ritorna {ok, token, nome, ruolo, scade} |
+    {ok:False, motivo, riprova_sec?}."""
+    chiave = f"ip:{ip or '?'}"
+    with _lock:
+        bloccato = _tempo_blocco(chiave)
+        if bloccato > 0:
+            return {"ok": False, "motivo": "bloccato", "riprova_sec": bloccato}
+
+        if _pin_valido(pin):
+            data = _carica()
+            for op in data.get("operatori", []):
+                if op.get("pin_hash") and _verifica_hash(pin, op.get("pin_hash", ""),
+                                                         op.get("pin_salt", "")):
+                    _reset_fail(chiave)
+                    sess = _crea_sessione(op)
+                    return {"ok": True, "token": sess["token"], "scade": sess["scade"],
+                            "nome": op.get("nome"), "ruolo": op.get("ruolo", RUOLO_DEFAULT)}
+
+        # PIN non valido o nessun operatore corrisponde → tentativo fallito.
+        _registra_fail(chiave)
+        bloccato = _tempo_blocco(chiave)
+        if bloccato > 0:
+            return {"ok": False, "motivo": "bloccato", "riprova_sec": bloccato}
+        return {"ok": False, "motivo": "credenziali_non_valide"}
 
 
 def cambia_pin(op_id: str, pin_vecchio: str, pin_nuovo: str) -> dict:
@@ -352,10 +420,12 @@ def aggiungi_operatore(nome: str) -> dict:
                for o in data.get("operatori", [])):
             return {"ok": False, "motivo": "nome_duplicato"}
         op_id = _genera_id(data)
-        data.setdefault("operatori", []).append({"id": op_id, "nome": nome})
+        data.setdefault("operatori", []).append(
+            {"id": op_id, "nome": nome, "ruolo": RUOLO_DEFAULT})
         _salva(data)
         return {"ok": True,
-                "operatore": {"id": op_id, "nome": nome, "pin_impostato": False}}
+                "operatore": {"id": op_id, "nome": nome, "pin_impostato": False,
+                              "ruolo": RUOLO_DEFAULT}}
 
 
 def rinomina_operatore(op_id: str, nuovo_nome: str) -> dict:
@@ -394,3 +464,53 @@ def elimina_operatore(op_id: str) -> dict:
             _sessions.pop(t, None)
         _reset_fail(op_id)
         return {"ok": True}
+
+
+def imposta_ruolo(op_id: str, ruolo: str) -> dict:
+    """Cambia il ruolo di un operatore. Non permette di rimuovere l'ultimo admin
+    (altrimenti nessuno potrebbe più gestire gli operatori dal pannello)."""
+    if ruolo not in RUOLI_VALIDI:
+        return {"ok": False, "motivo": "ruolo_non_valido"}
+    with _lock:
+        data = _carica()
+        op = _trova_op(data, op_id)
+        if not op:
+            return {"ok": False, "motivo": "operatore_sconosciuto"}
+        if op.get("ruolo") == "admin" and ruolo != "admin":
+            n_admin = sum(1 for o in data.get("operatori", []) if o.get("ruolo") == "admin")
+            if n_admin <= 1:
+                return {"ok": False, "motivo": "ultimo_admin"}
+        op["ruolo"] = ruolo
+        _salva(data)
+        # allinea le sessioni attive dell'operatore (il ruolo cambia subito)
+        for s in _sessions.values():
+            if s["op_id"] == op_id:
+                s["ruolo"] = ruolo
+        return {"ok": True,
+                "operatore": {"id": op_id, "nome": op.get("nome"), "ruolo": ruolo}}
+
+
+def is_admin(op_id: str) -> bool:
+    with _lock:
+        op = _trova_op(_carica(), op_id)
+        return bool(op and op.get("ruolo") == "admin")
+
+
+def assicura_admin_bootstrap() -> str | None:
+    """Se NESSUN operatore è admin, promuove ad admin il primo con PIN impostato
+    (fallback: il primo in lista). Così il primo operatore registrato diventa
+    admin in autonomia, senza master key. Ritorna l'id promosso, o None."""
+    with _lock:
+        data = _carica()
+        ops = data.get("operatori", [])
+        if any(o.get("ruolo") == "admin" for o in ops):
+            return None
+        target = next((o for o in ops if o.get("pin_hash")), ops[0] if ops else None)
+        if not target:
+            return None
+        target["ruolo"] = "admin"
+        _salva(data)
+        for s in _sessions.values():
+            if s["op_id"] == target["id"]:
+                s["ruolo"] = "admin"
+        return target["id"]

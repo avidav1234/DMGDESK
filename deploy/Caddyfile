@@ -1,0 +1,48 @@
+# DMG Desk — TLS termination + reverse proxy (via consigliata su Windows)
+# ========================================================================
+# Caddy è un singolo eseguibile (caddy.exe). Termina il TLS su :443 e inoltra al
+# backend su 127.0.0.1:8000. Così:
+#   - il traffico browser↔server è cifrato (PIN, token, master key non più in chiaro);
+#   - il backend torna a bindare SOLO localhost → sparisce l'esposizione su 0.0.0.0;
+#   - le chiamate interne (cam_tracker, self-call su http://localhost:8000) NON si rompono
+#     (il TLS è terminato al bordo, i servizi interni restano in http locale).
+#
+# Passi:
+#   1) Backend in ascolto solo su localhost:
+#        uvicorn api.main:app --host 127.0.0.1 --port 8000
+#   2) Sul backend, in .env:  DMG_TRUST_PROXY=1   (il rate-limit vede il vero IP client)
+#   3) Avviare Caddy:  caddy.exe run --config deploy/Caddyfile
+#   4) I client aprono  https://<hostname-o-IP>/   (non più http://...:8000)
+#
+# Scarica caddy.exe da https://caddyserver.com/download (nessuna installazione).
+
+{
+	# LAN interna, non Internet: niente ACME/Let's Encrypt.
+	auto_https disable_redirects
+}
+
+# ⇩ Sostituire con hostname e/o IP reali del server DMG Desk.
+dmgdesk.local:443, 10.95.20.50:443 {
+	# Opzione A (consigliata LAN): CA interna di Caddy. Importare UNA volta il root
+	# CA sui client per togliere l'avviso browser: `caddy trust` sul server, oppure
+	# distribuire il root da  %AppData%\Caddy\pki\authorities\local\root.crt
+	tls internal
+
+	# Opzione B: cert self-signed generato da scripts/genera_cert_tls.py
+	#   (commentare la riga `tls internal` qui sopra e scommentare la successiva)
+	# tls ../certs/cert.pem ../certs/key.pem
+
+	encode zstd gzip
+
+	# reverse_proxy gestisce automaticamente l'upgrade WebSocket del relay VNC
+	# (/api/schermo/vnc).
+	reverse_proxy 127.0.0.1:8000 {
+		header_up X-Forwarded-For {remote_host}
+		header_up X-Real-IP {remote_host}
+	}
+}
+
+# Redirect esplicito HTTP → HTTPS (in caso qualcuno usi ancora http://)
+http://dmgdesk.local, http://10.95.20.50 {
+	redir https://{host}{uri} permanent
+}

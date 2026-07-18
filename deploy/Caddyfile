@@ -21,16 +21,16 @@
 	auto_https disable_redirects
 }
 
-# ⇩ Sostituire con hostname e/o IP reali del server DMG Desk.
-dmgdesk.local:443, 10.95.20.50:443 {
+# Host reali del server DMG Desk (CAM35). Aggiungere altri IP/hostname se serve.
+CAM35:443, 192.168.244.132:443 {
 	# Opzione A (consigliata LAN): CA interna di Caddy. Importare UNA volta il root
 	# CA sui client per togliere l'avviso browser: `caddy trust` sul server, oppure
 	# distribuire il root da  %AppData%\Caddy\pki\authorities\local\root.crt
 	tls internal
 
-	# Opzione B: cert self-signed generato da scripts/genera_cert_tls.py
+	# Opzione B: cert self-signed già generato da scripts/genera_cert_tls.py
 	#   (commentare la riga `tls internal` qui sopra e scommentare la successiva)
-	# tls ../certs/cert.pem ../certs/key.pem
+	# tls C:/Tool_App/tool_manager_v2/ToolManager_V14_Fase1/tool_manager/certs/cert.pem C:/Tool_App/tool_manager_v2/ToolManager_V14_Fase1/tool_manager/certs/key.pem
 
 	encode zstd gzip
 
@@ -43,6 +43,6 @@ dmgdesk.local:443, 10.95.20.50:443 {
 }
 
 # Redirect esplicito HTTP → HTTPS (in caso qualcuno usi ancora http://)
-http://dmgdesk.local, http://10.95.20.50 {
+http://CAM35, http://192.168.244.132 {
 	redir https://{host}{uri} permanent
 }

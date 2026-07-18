@@ -21,6 +21,10 @@ config.json
 calibra_only_settings.json
 auth_accounts.json
 auth_accounts.tmp
+# Certificati TLS — le chiavi private non vanno MAI committate
+certs/
+*.pem
+*.key
 .env
 .env.local
 .env.*.local

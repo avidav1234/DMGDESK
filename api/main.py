@@ -262,7 +262,7 @@ class DMGSecurityMiddleware:
         # Dietro reverse proxy fidato, il vero IP client è in X-Forwarded-For
         # (il primo della lista). Opt-in: senza proxy l'header è falsificabile.
         if _TRUST_PROXY:
-            _xff = headers.get(b"x-forwarded-for", b"").decode()
+            _xff = headers.get(b"x-forwarded-for", b"").decode("latin-1")
             if _xff:
                 ip = _xff.split(",")[0].strip()
 
@@ -287,9 +287,9 @@ class DMGSecurityMiddleware:
             return
 
         # ── 1. Body size ─────────────────────────────────────
-        cl = headers.get(b"content-length", b"").decode()
+        cl = headers.get(b"content-length", b"").decode("latin-1")
         if cl.isdigit() and int(cl) > _MAX_UPLOAD_BYTES:
-            log.warning(f"body_size: rifiutata richiesta {method.decode()} {path} "
+            log.warning(f"body_size: rifiutata richiesta {method.decode('latin-1')} {path} "
                         f"da {ip} — Content-Length {int(cl)/1024/1024:.1f}MB > "
                         f"limite {_MAX_UPLOAD_MB}MB")
             status, hdrs, body = _build_error_response(
@@ -329,9 +329,9 @@ class DMGSecurityMiddleware:
                 # a) API key: header X-API-Key oppure query string ?api_key=
                 api_ok = False
                 if _API_KEY:
-                    provided = headers.get(b"x-api-key", b"").decode()
+                    provided = headers.get(b"x-api-key", b"").decode("latin-1")
                     if not provided:
-                        qs = scope.get("query_string", b"").decode()
+                        qs = scope.get("query_string", b"").decode("latin-1")
                         for pair in qs.split("&"):
                             if pair.startswith("api_key="):
                                 provided = pair[len("api_key="):]
@@ -345,13 +345,13 @@ class DMGSecurityMiddleware:
                 sess_ok = False
                 if _auth_enabled and not api_ok:
                     tok = ""
-                    _authz = headers.get(b"authorization", b"").decode()
+                    _authz = headers.get(b"authorization", b"").decode("latin-1")
                     if _authz.lower().startswith("bearer "):
                         tok = _authz[7:].strip()
                     if not tok:
-                        tok = headers.get(b"x-session-token", b"").decode()
+                        tok = headers.get(b"x-session-token", b"").decode("latin-1")
                     if not tok:
-                        qs = scope.get("query_string", b"").decode()
+                        qs = scope.get("query_string", b"").decode("latin-1")
                         for pair in qs.split("&"):
                             if pair.startswith("token="):
                                 from urllib.parse import unquote as _unq

@@ -9,23 +9,25 @@ Modifiche minime e **reversibili** (vedi Rollback in fondo).
 
 ---
 
-## Passo 1 — Pre-impostare i PIN operatori (PRIMA di attivare l'auth)
+## Passo 1 — PIN operatori: auto-registrazione al primo accesso
 
-Sul **server del backend**, dalla cartella del progetto:
+Non serve pre-impostarli. Con l'auth attiva, la pagina di login mostra gli
+operatori; ognuno, al **primo accesso**, sceglie il proprio PIN (che diventa il
+suo). Nessuna azione admin.
 
-```sh
-py scripts/reset_pin.py --lista                 # mostra op1/op2 (ora "da impostare")
-py scripts/reset_pin.py op1 --pin 4917          # scegli un PIN reale (4-10 cifre)
-py scripts/reset_pin.py op2 --pin 6285          # PIN diverso per il secondo operatore
-py scripts/reset_pin.py --lista                 # verifica: entrambi "impostato"
-```
+Accorgimento: gli account nascono "vuoti" → vale *"il primo che accede rivendica
+lo slot"*. Su LAN interna con operatori noti il rischio è piccolo se:
+- si attiva **quando gli operatori sono presenti** (rivendicano subito il loro slot);
+- si usano **nomi reali** (vedi pannello sotto), così è chiaro chi prende quale slot.
 
-Perché prima: gli account `op1`/`op2` nascono **senza PIN** e "il primo che accede
-sceglie il PIN". Impostandoli da console si evita che qualcuno sulla LAN li rivendichi.
-Comunica i PIN agli operatori a voce, non via chat/email.
+**Gestione operatori dalla UI** (nuova scheda **Utilità → Operatori**, dietro
+master key): aggiungere/rinominare operatori, azzerare o impostare PIN, eliminare.
+Riserva da console sempre disponibile: `py scripts/reset_pin.py --lista` /
+`op1 --pin <cifre>` / `op1 --clear`.
 
-*(Opzionale: per rinominare gli operatori, modifica `auth_accounts.json` — campo
-`nome` — dopo questo passo.)*
+> Nota: il pannello e l'auto-registrazione diventano operativi **dopo** il riavvio
+> del backend (Passo 4) e con `DMG_API_KEY` configurata (le mutazioni admin la
+> richiedono).
 
 ---
 
@@ -45,17 +47,17 @@ Gli umani entrano col PIN (Bearer token), la chiave serve solo ai servizi.
 
 ---
 
-## Passo 3 — Propagare la STESSA chiave al cam_tracker
+## Passo 3 — Propagare la chiave al cam_tracker — AUTOMATICO
 
-Sulla macchina dell'estrattore (CAM35), una delle due:
+Se il cam_tracker è sulla **stessa macchina** del backend (deploy attuale): niente
+da fare. `cam_tracker.py` ora carica il `.env` del progetto all'avvio, quindi
+`DMG_API_KEY` arriva sia all'agente sia al subprocess estrattore. Basta
+**riavviare il cam_tracker** (Passo 4) perché prenda la chiave.
 
-- in `cam_tracker/cam_tracker_config.ini`, sezione `[dmgdesk]`:
-  ```ini
-  api_key = <LA_TUA_CHIAVE>
-  ```
-- **oppure** variabile d'ambiente `DMG_API_KEY=<LA_TUA_CHIAVE>` per il processo agente.
-
-Deve essere **identica** a quella del backend, altrimenti l'upload CAM riceverà 401.
+Deploy **separato** (cam_tracker su un'altra macchina, senza il `.env` accanto):
+imposta `DMG_API_KEY=<LA_TUA_CHIAVE>` come variabile d'ambiente del processo, o
+`[dmgdesk] api_key = <LA_TUA_CHIAVE>` in `cam_tracker_config.ini` (che però è
+tracciato da git: non committarlo con il segreto dentro).
 
 ---
 

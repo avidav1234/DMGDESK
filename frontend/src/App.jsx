@@ -1,6 +1,6 @@
-﻿// MARKER_TEST_123456
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
+﻿import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useEffect, useState, Component } from 'react'
+import AuthGate      from './components/AuthGate'
 import Sidebar       from './components/Sidebar'
 import Home          from './pages/Home'
 import CodaLavorazione from './pages/CodaLavorazione'
@@ -19,6 +19,8 @@ import AnalyticsCommesse from './pages/AnalyticsCommesse'
 import AlertUtensili from './pages/AlertUtensili'
 import RiepilogoTurno from './pages/RiepilogoTurno'
 import StepAnalyzer  from './pages/StepAnalyzer'
+import SchermoLive   from './pages/SchermoLive'
+import GestioneOperatori from './pages/GestioneOperatori'
 
 // â”€â”€ Error Boundary globale â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Previene schermo bianco su eccezioni non gestite nei componenti React.
@@ -77,7 +79,10 @@ function GlobalStatusBar() {
   useEffect(() => {
     const onUpdate = (e) => {
       const d = e.detail || {}
-      if (d.log_stale) {
+      if (d.backend_down) {
+        setStato('backend_down')
+      } else if (d.log_stale || d.stato_macchina === -1) {
+        // -1 = tick saltato lato server (log macchina o share non leggibili)
         setStato('stale')
       } else if (d.stato_macchina !== undefined) {
         if ([1, 3].includes(d.stato_macchina)) setStato('attiva')
@@ -105,16 +110,31 @@ function GlobalStatusBar() {
     jog:    { color: '#3b82f6', label: 'JOG',            animate: false },
     ferma:  { color: '#ef4444', label: 'FERMA',          animate: true  },
     stale:  { color: '#ef4444', label: 'CONNESSIONE PERSA', animate: true },
+    backend_down: { color: '#7c3aed', label: 'BACKEND NON RAGGIUNGIBILE', animate: true },
   }[stato] || { color: '#475569', label: '', animate: false }
 
+  // Stati critici: oltre alla striscia colorata serve un testo esplicito,
+  // 4px di colore non bastano per un operatore a distanza braccio.
+  const critico = stato === 'backend_down' || stato === 'stale'
+
   return (
-    <div style={{
-      height: 4, flexShrink: 0,
-      background: cfg.color,
-      transition: 'background 0.4s ease',
-      animation: cfg.animate ? 'statusPulse 2s ease-in-out infinite' : 'none',
-      position: 'relative', zIndex: 10,
-    }}>
+    <div style={{ flexShrink: 0, position: 'relative', zIndex: 10 }}>
+      <div style={{
+        height: 4,
+        background: cfg.color,
+        transition: 'background 0.4s ease',
+        animation: cfg.animate ? 'statusPulse 2s ease-in-out infinite' : 'none',
+      }} />
+      {critico && (
+        <div style={{
+          background: cfg.color, color: '#fff', textAlign: 'center',
+          fontSize: 13, fontWeight: 800, letterSpacing: '0.08em',
+          padding: '4px 0',
+          animation: 'statusPulse 2s ease-in-out infinite',
+        }}>
+          ⚠ {cfg.label} — DATI NON AGGIORNATI
+        </div>
+      )}
       <style>{`
         @keyframes statusPulse {
           0%, 100% { opacity: 1; }
@@ -133,16 +153,29 @@ function GlobalStatusBar() {
 function GlobalPoller() {
   useEffect(() => {
     let isRunning = false
+    // Tick falliti consecutivi: dopo BACKEND_DOWN_SOGLIA (~15s) emette un
+    // evento dedicato — senza, la UI resterebbe congelata sull'ultimo stato
+    // buono mostrandolo come "live" a tempo indeterminato (audit 2026-07-02).
+    let failCount = 0
+    const BACKEND_DOWN_SOGLIA = 3
     const tick = async () => {
       if (document.hidden) return        // tab nascosto → skip
       if (isRunning) return
       isRunning = true
       try {
         const r = await fetch('/api/macchina-live/tick')
-        if (!r.ok) return
+        if (!r.ok) throw new Error(`HTTP ${r.status}`)
         const d = await r.json()
+        failCount = 0
         window.dispatchEvent(new CustomEvent('dmgdesk:stati-aggiornati', { detail: d }))
-      } catch {}
+      } catch {
+        failCount += 1
+        if (failCount >= BACKEND_DOWN_SOGLIA) {
+          window.dispatchEvent(new CustomEvent('dmgdesk:stati-aggiornati', {
+            detail: { backend_down: true, stato_macchina: -1 },
+          }))
+        }
+      }
       finally { isRunning = false }
     }
     tick()
@@ -158,12 +191,16 @@ function GlobalPoller() {
   return null
 }
 
-const FULL_PAGES = ['/home', '/coda', '/analisi-nc', '/macchina', '/progetti', '/report', '/cam-tracker', '/analytics', '/alert-utensili', '/turno']
+const FULL_PAGES = ['/home', '/coda', '/analisi-nc', '/macchina', '/progetti', '/report', '/cam-tracker', '/analytics', '/alert-utensili', '/turno', '/schermo']
+
+// A livello modulo, NON dentro MainContent: ridefinito a ogni render creava
+// una nuova identità di componente → React smontava e rimontava l'intera
+// pagina a ogni navigazione (doppio load(), interval ricreati, flash UI).
+const Wrap = ({ children }) => <ErrorBoundary>{children}</ErrorBoundary>
 
 function MainContent() {
   const loc = useLocation()
   const isFull = FULL_PAGES.some(p => loc.pathname.startsWith(p))
-  const Wrap = ({ children }) => <ErrorBoundary>{children}</ErrorBoundary>
   return (
     <main style={{ flex:1, overflow:'auto', background:'var(--bg-base)',
       padding: 0, display:'flex', flexDirection:'column' }}>
@@ -189,6 +226,8 @@ function MainContent() {
         <Route path="/alert-utensili" element={<Wrap><AlertUtensili /></Wrap>} />
         <Route path="/turno"          element={<Wrap><RiepilogoTurno /></Wrap>} />
         <Route path="/step-analyzer"  element={<Wrap><StepAnalyzer /></Wrap>} />
+        <Route path="/schermo"        element={<Wrap><SchermoLive /></Wrap>} />
+        <Route path="/operatori"      element={<Wrap><GestioneOperatori /></Wrap>} />
       </Routes>
       </div>
     </main>
@@ -198,13 +237,15 @@ function MainContent() {
 export default function App() {
   return (
     <ErrorBoundary>
-      <BrowserRouter>
-        <GlobalPoller />
-        <div style={{ display:'flex', height:'100vh', overflow:'hidden', background:'var(--bg-base)' }}>
-          <Sidebar />
-          <MainContent />
-        </div>
-      </BrowserRouter>
+      <AuthGate>
+        <BrowserRouter>
+          <GlobalPoller />
+          <div style={{ display:'flex', height:'100vh', overflow:'hidden', background:'var(--bg-base)' }}>
+            <Sidebar />
+            <MainContent />
+          </div>
+        </BrowserRouter>
+      </AuthGate>
     </ErrorBoundary>
   )
 }

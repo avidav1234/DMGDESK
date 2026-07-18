@@ -109,6 +109,13 @@ Alternativa (senza proxy): `uvicorn ... --ssl-keyfile key.pem --ssl-certfile cer
   rete uffici e cella macchina (PCU XP non aggiornabile, server :9999). È la voce
   che manca per poter dichiarare "conforme 62443 zone & conduits". Richiede l'IT
   di rete aziendale.
+- ✅ **3d** *(2026-07-19)* — **Allowlist IP applicativa, gestita da UI** (restrizione
+  del condotto lato app): con filtro attivo solo i PC in lista usano DMG Desk; gli
+  altri vedono **solo la pagina di login**. Un login **admin** auto-ammette il suo
+  IP (basta loggarsi da un PC per autorizzarlo); **registro dei tentativi bloccati**
+  con "autorizza" al volo. Gestione in **Operatori → Accesso per IP**. Loopback
+  sempre ammesso; riserva CLI `scripts/ip_allowlist.py` (`--disable` per sblocco).
+  `api/ip_allowlist.py` + middleware + endpoint admin + UI. Default: disattivo.
 
 ---
 

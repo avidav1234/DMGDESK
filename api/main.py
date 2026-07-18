@@ -154,6 +154,7 @@ _MAX_UPLOAD_MB = int(_os.environ.get("DMG_MAX_UPLOAD_MB", "50"))
 _MAX_UPLOAD_BYTES = _MAX_UPLOAD_MB * 1024 * 1024
 # Config API key + autenticazione operatori (PIN)
 from api import auth as _dmg_auth
+from api import ip_allowlist as _ip_allow
 _API_KEY = (_os.environ.get("DMG_API_KEY") or "").strip()
 
 import hmac as _hmac
@@ -184,6 +185,12 @@ _AUTH_PUBLIC_PATHS = {
     "/", "/health", "/docs", "/redoc", "/openapi.json",
     "/api/auth/status", "/api/auth/login", "/api/auth/login-pin", "/api/auth/operatori",
     "/api/auth/admin/reset-pin",
+}
+# Endpoint del flusso di LOGIN raggiungibili da QUALSIASI IP anche col filtro IP
+# attivo: servono a fare login da un PC non ancora autorizzato (che così vede solo
+# la pagina di login). Tutte le altre API dati sono filtrate per IP.
+_IP_LOGIN_PATHS = {
+    "/api/auth/status", "/api/auth/login", "/api/auth/login-pin", "/api/auth/operatori",
 }
 
 if _API_KEY:
@@ -258,6 +265,26 @@ class DMGSecurityMiddleware:
             _xff = headers.get(b"x-forwarded-for", b"").decode()
             if _xff:
                 ip = _xff.split(",")[0].strip()
+
+        # ── 0. IP allowlist (difesa in profondità: solo PC noti usano le API) ──
+        # La SPA e il flusso di LOGIN restano visibili da qualsiasi IP (un PC non
+        # autorizzato vede solo la pagina di login); tutte le ALTRE API dati sono
+        # bloccate se l'IP non è ammesso. Gli endpoint di gestione allowlist sono
+        # esentati (l'admin non si chiude mai fuori). Loopback sempre ammesso
+        # (dentro is_consentito). I tentativi bloccati vengono registrati.
+        _ip_filtrato = (
+            path.startswith("/api/")
+            and path not in _IP_LOGIN_PATHS
+            and not path.startswith("/api/auth/admin/ip-allowlist")
+        )
+        if _ip_filtrato and not _ip_allow.is_consentito(ip):
+            _ip_allow.registra_tentativo(ip, path)
+            log.warning(f"ip-allowlist: bloccato {ip} su {path}")
+            status, hdrs, body = _build_error_response(
+                403, "Accesso non consentito da questo dispositivo")
+            await send({"type": "http.response.start", "status": status, "headers": hdrs})
+            await send({"type": "http.response.body", "body": body})
+            return
 
         # ── 1. Body size ─────────────────────────────────────
         cl = headers.get(b"content-length", b"").decode()

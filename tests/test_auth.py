@@ -322,3 +322,53 @@ def test_relay_vnc_deny_by_default(monkeypatch):
     finally:
         monkeypatch.delenv("DMG_ALLOW_INSECURE", raising=False)
         importlib.reload(sl)
+
+
+# ── Allowlist IP (accesso ristretto ai PC noti) ───────────────────────────────
+
+def test_ip_allowlist_logica(monkeypatch, tmp_path):
+    monkeypatch.setenv("DMG_IP_ALLOWLIST_FILE", str(tmp_path / "ipal.json"))
+    import api.ip_allowlist as m
+    importlib.reload(m)
+    assert m.is_consentito("8.8.8.8") is True             # disabilitato → tutti
+    m.imposta_abilitato(True)
+    assert m.is_consentito("8.8.8.8") is True             # lista vuota → safety
+    m.aggiungi("192.168.1.10")
+    assert m.is_consentito("192.168.1.10") is True
+    assert m.is_consentito("127.0.0.1") is True           # loopback sempre ok
+    assert m.is_consentito("8.8.8.8") is False            # non in lista → bloccato
+    m.aggiungi("10.0.0.0/24")
+    assert m.is_consentito("10.0.0.9") is True            # dentro CIDR
+    assert m.is_consentito("10.0.1.9") is False
+    assert m.aggiungi("non-un-ip")["ok"] is False
+    m.registra_tentativo("8.8.8.8", "/api/progetti")
+    m.registra_tentativo("8.8.8.8", "/api/pallet")
+    assert m.tentativi()[0]["ip"] == "8.8.8.8" and m.tentativi()[0]["count"] == 2
+    m.rimuovi("192.168.1.10")
+    assert m.is_consentito("192.168.1.10") is False
+
+
+def test_login_admin_auto_ammette_ip(auth, monkeypatch, tmp_path):
+    """Un login ADMIN aggiunge automaticamente il proprio IP all'allowlist."""
+    monkeypatch.setenv("DMG_IP_ALLOWLIST_FILE", str(tmp_path / "ipal.json"))
+    import api.ip_allowlist as ipa
+    importlib.reload(ipa)
+    import api.routers.auth_router as ar
+    importlib.reload(ar)
+
+    auth.assicura_admin_bootstrap()          # op1 → admin
+    auth.imposta_pin("op1", "4917")
+    ipa.imposta_abilitato(True)
+    ipa.aggiungi("127.0.0.1")                 # solo loopback all'inizio
+
+    class FakeReq:
+        def __init__(self, ip):
+            self.headers = {}
+            self.client = type("C", (), {"host": ip})()
+
+    # Prima del login l'IP esterno è bloccato
+    assert ipa.is_consentito("203.0.113.7") is False
+    res = asyncio.run(ar.post_login_pin(FakeReq("203.0.113.7"), {"pin": "4917"}))
+    assert res["ok"] and res["ruolo"] == "admin"
+    # Dopo il login admin, l'IP è stato auto-ammesso
+    assert ipa.is_consentito("203.0.113.7") is True

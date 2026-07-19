@@ -9,6 +9,10 @@ uvicorn[standard]>=0.27.0
 python-multipart>=0.0.9      # upload file NC
 httpx>=0.27.0                # chiamate HTTP interne (export PDF)
 
+# ── OPC UA diretto verso la macchina (R3, opzionale, OFF di default) ──
+# Import guardato in api/opcua_live.py: se assente il modulo è inerte.
+asyncua>=1.1.0               # client OPC UA async (opc.tcp://PCU:4840)
+
 # ── Sviluppo / test ──────────────────────────────────────────
 pytest>=7.4.0
 pytest-cov>=4.1.0

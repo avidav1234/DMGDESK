@@ -485,6 +485,12 @@ app.include_router(schermo_live_router.router, prefix="/api/schermo",
                    tags=["Schermo Live"])
 
 
+# Registro dei task di background fire-and-forget: serve per cancellarli allo
+# shutdown, altrimenti (in particolare il long-poll Telegram) non terminano e lo
+# stop di uvicorn si impianta lasciando un processo zombie. Vedi _shutdown_pulito.
+_bg_tasks: list = []
+
+
 @app.on_event("startup")
 async def startup():
     log.info("DMG Desk API v16.0 avviata — http://0.0.0.0:8000")
@@ -644,7 +650,7 @@ async def startup():
     # ── Scheduler snapshot turno ───────────────────────────────────────────
     import asyncio as _asyncio
     from api.turno_snapshot import _scheduler_loop
-    _asyncio.create_task(_scheduler_loop())
+    _bg_tasks.append(_asyncio.create_task(_scheduler_loop()))
     log.info("Scheduler snapshot turno avviato (07:30 notte / 16:30 giorno)")
 
     # ── Poller macchina interno ────────────────────────────────────────────
@@ -667,7 +673,7 @@ async def startup():
                 _log.warning(f"Machine poller: {_e}", exc_info=True)
             await _aio.sleep(5)
 
-    _asyncio.create_task(_machine_poller_loop())
+    _bg_tasks.append(_asyncio.create_task(_machine_poller_loop()))
     log.info("Machine poller interno avviato — frontend non deve più chiamare aggiorna-stati-da-log")
 
     # ── Main sync job — ogni 5 minuti ─────────────────────────────────────
@@ -687,7 +693,7 @@ async def startup():
                 _log.warning(f"Main sync error: {_e}")
             await _aio.sleep(300)  # 5 minuti
 
-    _asyncio.create_task(_main_sync_loop())
+    _bg_tasks.append(_asyncio.create_task(_main_sync_loop()))
     log.info("Main sync job avviato (MAIN+LOG → stati programmi, ogni 5 min)")
 
     # ── Backup giornaliero ────────────────────────────────────────────────
@@ -704,7 +710,7 @@ async def startup():
                 _log.warning(f"Backup error: {_e}")
             await _aio.sleep(86400)  # 24 ore
 
-    _asyncio.create_task(_backup_loop())
+    _bg_tasks.append(_asyncio.create_task(_backup_loop()))
     log.info("Backup giornaliero avviato")
 
     # ── Backup notturno archivi (cartelle ELT su H:) ──────────────────────
@@ -796,7 +802,7 @@ async def startup():
                 # Evita tight loop in caso di errori ripetuti
                 await _aio.sleep(300)
 
-    _asyncio.create_task(_backup_notturno_archivi_loop())
+    _bg_tasks.append(_asyncio.create_task(_backup_notturno_archivi_loop()))
 
     # ── NC Scanner — ogni 60 secondi ──────────────────────────────────────
     async def _nc_scanner_loop():
@@ -816,7 +822,7 @@ async def startup():
                 _log.warning(f"NC Scanner tick #{tick_n} eccezione: {_e}", exc_info=True)
             await _aio.sleep(60)  # 1 minuto fra l'inizio di due tick consecutivi
 
-    _asyncio.create_task(_nc_scanner_loop())
+    _bg_tasks.append(_asyncio.create_task(_nc_scanner_loop()))
     log.info("NC Scanner avviato (scansione directory NC ogni 60 s)")
 
     # Pulizia file .tmp orfani da atomic write interrotti (crash/spegnimento)
@@ -900,14 +906,37 @@ async def startup():
             get_report_fn        = _get_report,
         )
 
-        _asyncio.create_task(_monitor.run())
-        _asyncio.create_task(_listener.run())
+        _bg_tasks.append(_asyncio.create_task(_monitor.run()))
+        _bg_tasks.append(_asyncio.create_task(_listener.run()))
         log.info(f"Telegram Monitor + BotListener avviati — check ogni {tg_cfg['interval_sec']}s")
     else:
         log.warning(
             "Telegram Monitor disabilitato — "
             "aggiungi TELEGRAM_BOT_TOKEN e TELEGRAM_CHAT_ID nel file .env"
         )
+
+
+@app.on_event("shutdown")
+async def _shutdown_pulito():
+    """Cancella i task di background allo stop, così uvicorn non resta appeso.
+
+    Senza questo, il long-poll Telegram (e i loop `while True`) non terminavano
+    da soli: uvicorn chiudeva il socket 8000 ma il processo restava vivo (zombie)
+    in attesa infinita. Backstop indipendente: run_service avvia uvicorn con
+    --timeout-graceful-shutdown 10. Best-effort: non deve mai sollevare."""
+    import asyncio as _aio
+    if not _bg_tasks:
+        return
+    for _t in _bg_tasks:
+        if not _t.done():
+            _t.cancel()
+    try:
+        # Attesa breve e limitata: se un task non si cancella (I/O sync bloccante)
+        # ci pensa il --timeout-graceful-shutdown a chiudere comunque il processo.
+        await _aio.wait(_bg_tasks, timeout=5)
+    except Exception as _e:
+        log.warning(f"Shutdown: attesa task interrotta: {_e}")
+    log.info(f"Shutdown: {len(_bg_tasks)} task di background cancellati")
 
 
 # ── Exception handler globale ─────────────────────────────────────────────────
